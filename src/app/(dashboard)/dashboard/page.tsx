@@ -48,7 +48,7 @@ import { useRouter } from "next/navigation";
 import { analyzeWebsiteContent } from "@/ai/flows/analyze-website-content-flow";
 
 export default function DashboardPage() {
-  const { db } = useFirestore();
+  const db = useFirestore();
   const { tenantId } = useTenant();
   const { toast } = useToast();
   const router = useRouter();
@@ -173,7 +173,7 @@ export default function DashboardPage() {
         }
       });
       
-      toast({ title: "Radar gerado!", description: `As melhores ${topN.length} oportunidades estão listas.` });
+      toast({ title: "Radar gerado!", description: `As mejores ${topN.length} oportunidades estão listas.` });
     } catch (e) {
       console.error(e);
       toast({ variant: "destructive", title: "Erro ao gerar radar" });

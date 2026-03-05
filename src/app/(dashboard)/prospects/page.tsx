@@ -44,7 +44,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/firebase";
 
 export default function ProspectsPage() {
-  const { db } = useFirestore();
+  const db = useFirestore();
   const { tenantId } = useTenant();
   const { user } = useUser();
   const { toast } = useToast();
@@ -229,7 +229,6 @@ export default function ProspectsPage() {
       </div>
 
       <div className="bg-card rounded-lg border shadow-sm overflow-hidden">
-        {/* Filtros y Barra de Acciones */}
         <div className="p-4 bg-muted/20 border-b space-y-4">
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
             <div className="flex flex-1 items-center gap-3 w-full">
@@ -261,7 +260,6 @@ export default function ProspectsPage() {
             </div>
           </div>
 
-          {/* Acciones en Masa */}
           {selectedIds.length > 0 && (
             <div className="flex items-center justify-between bg-primary/5 p-2 rounded-lg border border-primary/20 animate-in fade-in slide-in-from-top-2">
               <div className="flex items-center gap-3 ml-2">

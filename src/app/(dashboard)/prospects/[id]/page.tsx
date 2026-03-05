@@ -28,7 +28,7 @@ import { deriveDomain, extractEmailsFromText } from "@/lib/utils/email-domain";
 
 export default function ProspectDetailPage() {
   const { id } = useParams();
-  const { db } = useFirestore();
+  const db = useFirestore();
   const { tenantId } = useTenant();
   const { user } = useUser();
   const { toast } = useToast();
@@ -291,7 +291,7 @@ export default function ProspectDetailPage() {
       });
       toast({ title: "Contato adicionado!", description: `E-mail ${email} foi adicionado à lista.` });
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro", description: "Não foi possível guardar el contacto." });
+      toast({ variant: "destructive", title: "Erro", description: "Não foi posible guardar el contacto." });
     } finally {
       setIsUpdating(false);
     }

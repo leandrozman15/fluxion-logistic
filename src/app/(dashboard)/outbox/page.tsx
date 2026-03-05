@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState } from "react";
@@ -17,7 +16,7 @@ import Link from "next/link";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export default function OutboxPage() {
-  const { db } = useFirestore();
+  const db = useFirestore();
   const { tenantId } = useTenant();
   const { toast } = useToast();
   
@@ -62,11 +61,8 @@ export default function OutboxPage() {
         updatedAt: serverTimestamp()
       };
       
-      // Si estamos reintentando, reseteamos errores y intentos
       if (newState === 'queued') {
         updates.lastError = null;
-        // Solo el backend debería resetear attempts en producción, 
-        // pero aquí lo permitimos para la lógica de reintento manual
       }
 
       await updateDoc(msgRef, updates);

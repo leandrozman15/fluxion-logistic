@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo } from "react";
@@ -13,7 +12,7 @@ import { EmailTemplate } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 
 export default function TemplatesPage() {
-  const { db } = useFirestore();
+  const db = useFirestore();
   const { tenantId } = useTenant();
   const { toast } = useToast();
 

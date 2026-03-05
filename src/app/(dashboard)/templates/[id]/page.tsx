@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
@@ -22,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 export default function TemplateEditorPage() {
   const { id } = useParams();
   const router = useRouter();
-  const { db } = useFirestore();
+  const db = useFirestore();
   const { tenantId } = useTenant();
   const { toast } = useToast();
   const isNew = id === 'new';
@@ -33,7 +32,6 @@ export default function TemplateEditorPage() {
   const [selectedProspectId, setSelectedProspectId] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
 
-  // Cargar template si existe
   const templateRef = useMemo(() => {
     if (!db || !tenantId || isNew) return null;
     return doc(db, "tenants", tenantId, "templates", id as string);
@@ -49,7 +47,6 @@ export default function TemplateEditorPage() {
     }
   }, [template]);
 
-  // Cargar prospectos para preview
   const prospectsQuery = useMemo(() => {
     if (!db || !tenantId) return null;
     return query(collection(db, "tenants", tenantId, "prospects"), limit(5));
@@ -121,7 +118,7 @@ export default function TemplateEditorPage() {
           <Card>
             <CardHeader>
               <CardTitle>Conteúdo do E-mail</CardTitle>
-              <CardDescription>Use chaves como {"{{companyName}}"} para inserir dados dinâmicos.</CardDescription>
+              <CardDescription>Use chaves como {"{{companyName}}"} para inserir datos dinâmicos.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -203,7 +200,7 @@ export default function TemplateEditorPage() {
               <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex items-start gap-2">
                 <Info className="w-4 h-4 text-blue-600 mt-0.5" />
                 <p className="text-[11px] text-blue-700">
-                  O preview utiliza dados reais do prospect selecionado. Se alguma variable aparecer como "-", é porque o dado não está cadastrado.
+                  O preview utiliza datos reais do prospect selecionado. Se alguma variable aparecer como "-", é porque o dado não está cadastrado.
                 </p>
               </div>
             </CardContent>

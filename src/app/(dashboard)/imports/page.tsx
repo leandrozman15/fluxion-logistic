@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useCallback } from "react";
@@ -25,7 +24,7 @@ import { calculateEffectiveScore } from "@/lib/utils/scoring";
 import { Prospect } from "@/app/lib/types";
 
 export default function ImportsPage() {
-  const { db } = useFirestore();
+  const db = useFirestore();
   const { tenantId } = useTenant();
   const { toast } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
@@ -50,12 +49,10 @@ export default function ImportsPage() {
         const dataRows = lines.slice(1).filter(row => row.length > 1);
 
         // Mapeo simple de columnas (Asumiendo orden: Empresa, CNPJ, Industria, Web, Email, Tel)
-        // En una versión final, permitiríamos al usuario mapear columnas manualmente.
         let importedCount = 0;
         let skippedCount = 0;
         const total = dataRows.length;
 
-        // Obtener CNPJs existentes para evitar duplicados en este batch
         const existingCnpjs = new Set<string>();
         const q = query(collection(db, "tenants", tenantId, "prospects"));
         const snapshot = await getDocs(q);
@@ -85,7 +82,7 @@ export default function ImportsPage() {
             websiteUrl: website,
             domain: website?.split("//")[1]?.split("/")[0] || "",
             status: "new",
-            aiScore: 50, // Default base score
+            aiScore: 50,
             contacts: [{ name: "Contato Principal", role: "N/A", email, phone }],
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
@@ -104,7 +101,7 @@ export default function ImportsPage() {
           });
 
           importedCount++;
-          existingCnpjs.add(cnpj); // Evitar duplicados dentro del mismo CSV
+          existingCnpjs.add(cnpj);
 
           if (importedCount % 20 === 0) {
             setProgress(Math.round(((i + 1) / total) * 100));
@@ -113,7 +110,6 @@ export default function ImportsPage() {
 
         await batch.commit();
 
-        // Registrar la importación
         await addDoc(collection(db, "tenants", tenantId, "imports"), {
           fileName: file.name,
           totalRows: total,
@@ -128,7 +124,6 @@ export default function ImportsPage() {
           description: `${importedCount} empresas adicionadas. ${skippedCount} duplicadas ou inválidas ignoradas.`,
         });
 
-        // Actualizar UI local (sería mejor un hook useCollection para esto)
         setImportHistory(prev => [
           { 
             id: Date.now().toString(), 

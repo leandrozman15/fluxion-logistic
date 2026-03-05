@@ -41,7 +41,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 
 export default function AnalyticsPage() {
-  const { db } = useFirestore();
+  const db = useFirestore();
   const { tenantId } = useTenant();
   const { user } = useUser();
   const { toast } = useToast();
@@ -125,7 +125,7 @@ export default function AnalyticsPage() {
       }, { merge: true });
 
       await batch.commit();
-      toast({ title: "Sincronização completa", description: "As métricas desta semana foram recalculadas com base nos dados atuais." });
+      toast({ title: "Sincronização completa", description: "As métricas desta semana foram recalculadas com base nos datos atuais." });
     } catch (e) {
       toast({ variant: "destructive", title: "Erro na sincronização" });
     } finally {
@@ -200,7 +200,7 @@ export default function AnalyticsPage() {
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData}>
                 <defs>
-                  <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="colorScore" x1="0" x2="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="hsl(var(--accent))" stopOpacity={0.3}/>
                     <stop offset="95%" stopColor="hsl(var(--accent))" stopOpacity={0}/>
                   </linearGradient>

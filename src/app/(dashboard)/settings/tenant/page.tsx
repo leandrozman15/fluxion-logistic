@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useMemo, useState } from "react";
@@ -18,7 +17,7 @@ import { Loader2, Save, Target, BrainCircuit, Mail, ShieldAlert } from "lucide-r
 import { Tenant, TenantSettings } from "@/app/lib/types";
 
 export default function TenantSettingsPage() {
-  const { db } = useFirestore();
+  const db = useFirestore();
   const { tenantId } = useTenant();
   const { toast } = useToast();
   
@@ -36,7 +35,6 @@ export default function TenantSettingsPage() {
     if (tenantData?.settings) {
       setSettings(tenantData.settings);
     } else if (tenantData && !tenantData.settings) {
-      // Default settings if none exist
       setSettings({
         scoringWeights: { effective: 0.6, ai: 0.4 },
         finalScoreMode: 'weighted',
@@ -83,7 +81,6 @@ export default function TenantSettingsPage() {
       </div>
 
       <div className="grid gap-6">
-        {/* Radar Settings */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Target className="w-5 h-5 text-accent" /> Radar Diário</CardTitle>
@@ -133,7 +130,6 @@ export default function TenantSettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Scoring Settings */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><BrainCircuit className="w-5 h-5 text-primary" /> Pesos do Motor de Scoring</CardTitle>
@@ -169,14 +165,13 @@ export default function TenantSettingsPage() {
               />
               <p className="text-xs text-muted-foreground italic">
                 {settings.finalScoreMode === 'weighted' 
-                  ? "O score final será uma média ponderada entre a qualidade dos dados e a análise de potencial da IA."
-                  : "O sistema usará sempre a melhor nota entre os dados e a IA."}
+                  ? "O score final será uma média ponderada entre a qualidade dos datos e a análise de potencial da IA."
+                  : "O sistema usará sempre a melhor nota entre os datos e a IA."}
               </p>
             </div>
           </CardContent>
         </Card>
 
-        {/* Delivery Settings */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Mail className="w-5 h-5 text-accent" /> Limites de Comunicação</CardTitle>
