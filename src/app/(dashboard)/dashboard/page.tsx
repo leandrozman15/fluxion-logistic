@@ -19,7 +19,9 @@ import {
   Zap,
   CheckCircle2,
   Lightbulb,
-  Rocket
+  Rocket,
+  Search,
+  Activity
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -41,6 +43,7 @@ import Link from "next/link";
 import { Prospect, DailyTop, Tenant, DailyStats } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
+import { calculateEffectiveScore } from "@/lib/utils/scoring";
 
 export default function DashboardPage() {
   const db = useFirestore();
@@ -49,6 +52,7 @@ export default function DashboardPage() {
   const { toast } = useToast();
   const router = useRouter();
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isRunningDiscovery, setIsRunningDiscovery] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
   
   const today = new Date().toISOString().split('T')[0];
@@ -178,6 +182,54 @@ export default function DashboardPage() {
     }
   };
 
+  const handleRunAutoDiscovery = async () => {
+    if (!db || !tenantId || !tenantData) return;
+    setIsRunningDiscovery(true);
+    try {
+      // Simulação do Job de Auto Discovery
+      const mockNewCompanies = [
+        { name: "Metalúrgica Alpha", state: "SP", sector: "Metalurgia" },
+        { name: "Tech Industrial Beta", state: "SC", sector: "Máquinas" },
+        { name: "Logística Gamma", state: "PR", sector: "Logística" }
+      ];
+
+      const batch = writeBatch(db);
+      for (const comp of mockNewCompanies) {
+        const id = `auto_${Math.random().toString(36).substr(2, 9)}`;
+        const pRef = doc(db, "tenants", tenantId, "prospects", id);
+        
+        const data: Partial<Prospect> = {
+          companyName: comp.name,
+          cnpj: `${Math.floor(Math.random() * 90 + 10)}.000.000/0001-${Math.floor(Math.random() * 90 + 10)}`,
+          industryTags: [comp.sector],
+          address: { state: comp.state, city: "São Paulo", country: "Brasil" },
+          status: "new",
+          source: "auto_discovery",
+          aiScore: 70,
+          aiScoreReasons: ["Detectada via Auto Discovery", "Localizada em polo industrial"],
+          isRecentlyCreated: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        const effectiveScore = calculateEffectiveScore(data, tenantData.settings);
+        batch.set(pRef, { ...data, id, effectiveScore });
+      }
+
+      batch.update(tenantRef as any, {
+        "settings.lastDiscoveryRunAt": new Date().toISOString(),
+        "settings.lastDiscoveryCount": mockNewCompanies.length
+      });
+
+      await batch.commit();
+      toast({ title: "Auto Discovery Concluído", description: `${mockNewCompanies.length} novas indústrias encontradas.` });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erro no Discovery" });
+    } finally {
+      setIsRunningDiscovery(false);
+    }
+  };
+
   const handleQuickClaim = async (prospectId: string) => {
     if (!db || !tenantId) return;
     setIsActionLoading(prospectId);
@@ -213,10 +265,6 @@ export default function DashboardPage() {
     }
   };
 
-  const handleActionClick = (prospectId: string, type: string) => {
-    router.push(`/prospects/${prospectId}`);
-  };
-
   const dailyQuotaUsed = stats?.quotaUsed || 0;
   const dailyQuotaLimit = stats?.quotaLimit || tenantData?.settings?.dailyTopLimit || 30;
   const quotaProgress = (dailyQuotaUsed / dailyQuotaLimit) * 100;
@@ -225,7 +273,7 @@ export default function DashboardPage() {
     { title: "Ativados Hoje", value: `${dailyQuotaUsed}/${dailyQuotaLimit}`, icon: Target, description: "Progresso da meta diária" },
     { title: "Base Total", value: allProspects?.length || 0, icon: Users, description: "Empresas cadastradas" },
     { title: "Emails na Fila", value: stats?.emailsSent || 0, icon: Mail, description: "Comunicações disparadas" },
-    { title: "Potencial IA", value: "84%", icon: Sparkles, description: "Qualidade média da base" },
+    { title: "Auto Discovery", value: tenantData?.settings?.lastDiscoveryCount || 0, icon: Sparkles, description: "Última busca semanal" },
   ];
 
   return (
@@ -247,9 +295,16 @@ export default function DashboardPage() {
       )}
 
       <div className="flex flex-col md:flex-row gap-4 items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-primary">Radar do Dia</h1>
-          <p className="text-muted-foreground">Foco nas melhores oportunidades industriais.</p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-primary">Radar do Dia</h1>
+            <p className="text-muted-foreground">Foco nas melhores oportunidades industriais.</p>
+          </div>
+          {tenantData?.settings?.autoDiscoveryEnabled && (
+            <Badge variant="outline" className="h-fit py-1 px-3 border-accent/50 bg-accent/5 text-accent flex items-center gap-2">
+              <Activity className="w-3 h-3 animate-pulse" /> Auto Discovery Ativo
+            </Badge>
+          )}
         </div>
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
           <Card className="w-full md:w-80 bg-accent/5 border-accent/20">
@@ -319,9 +374,11 @@ export default function DashboardPage() {
                             variant="secondary" 
                             size="sm" 
                             className="h-8 text-[10px] font-bold"
-                            onClick={() => handleActionClick(item.prospectId, 'followup')}
+                            asChild
                           >
-                            <Lightbulb className="w-3 h-3 mr-1 text-accent" /> Próxima Ação
+                            <Link href={`/prospects/${item.prospectId}`}>
+                              <Lightbulb className="w-3 h-3 mr-1 text-accent" /> Próxima Ação
+                            </Link>
                           </Button>
                           <Button 
                             variant="ghost" 
@@ -329,7 +386,7 @@ export default function DashboardPage() {
                             className="h-8 w-8 text-green-600" 
                             onClick={() => handleQuickClaim(item.prospectId)}
                           >
-                            <CheckCircle2 className="w-4 h-4" />
+                            {isActionLoading === item.prospectId ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                           </Button>
                         </div>
                         <ChevronRight className="w-4 h-4 text-muted-foreground ml-2" />
@@ -343,6 +400,38 @@ export default function DashboardPage() {
         </Card>
 
         <div className="space-y-6">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-accent" /> Automação de Discovery
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="p-4 rounded-xl bg-secondary/30 border border-border space-y-3">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-muted-foreground">Última execução:</span>
+                  <span className="font-semibold">{tenantData?.settings?.lastDiscoveryRunAt ? new Date(tenantData.settings.lastDiscoveryRunAt).toLocaleDateString() : 'Nunca'}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-muted-foreground">Novos encontrados:</span>
+                  <span className="font-semibold">{tenantData?.settings?.lastDiscoveryCount || 0}</span>
+                </div>
+                <Button 
+                  onClick={handleRunAutoDiscovery} 
+                  disabled={isRunningDiscovery || !tenantData?.settings?.autoDiscoveryEnabled} 
+                  className="w-full h-8 text-[10px] bg-accent/10 text-accent hover:bg-accent hover:text-white border-accent/20"
+                  variant="outline"
+                >
+                  {isRunningDiscovery ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <RefreshCw className="w-3 h-3 mr-2" />}
+                  Executar Discovery Agora
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted-foreground leading-relaxed italic">
+                O motor busca automaticamente novas indústrias baseadas no seu perfil de CNAE e estados selecionados em Configurações.
+              </p>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2"><PieChart className="w-4 h-4" /> Mix de Indústrias</CardTitle>

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from "react";
@@ -21,7 +22,8 @@ import {
   Trash2, 
   ChevronDown,
   Building2,
-  MapPin
+  MapPin,
+  Activity
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -221,7 +223,7 @@ export default function ProspectsPage() {
             <FileDown className="w-4 h-4 mr-2" /> Exportar
           </Button>
           <Button size="sm" className="bg-accent hover:bg-accent/90" asChild>
-            <Link href="/prospects/new">
+            <Link href="/discovery">
                <Plus className="w-4 h-4 mr-2" /> Novo Prospect
             </Link>
           </Button>
@@ -311,7 +313,7 @@ export default function ProspectsPage() {
                   />
                 </TableHead>
                 <TableHead>Empresa / CNPJ</TableHead>
-                <TableHead>Local / Tags</TableHead>
+                <TableHead>Local / Fonte</TableHead>
                 <TableHead>Score Radar</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
@@ -338,9 +340,12 @@ export default function ProspectsPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
-                        <Link href={`/prospects/${prospect.id}`} className="font-bold hover:underline text-primary">
-                          {prospect.companyName}
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          <Link href={`/prospects/${prospect.id}`} className="font-bold hover:underline text-primary">
+                            {prospect.companyName}
+                          </Link>
+                          {prospect.isRecentlyCreated && <Badge className="bg-orange-500 text-[8px] h-4">Nova Empresa</Badge>}
+                        </div>
                         <span className="text-[10px] font-mono text-muted-foreground">{prospect.cnpj}</span>
                       </div>
                     </TableCell>
@@ -350,11 +355,14 @@ export default function ProspectsPage() {
                            <MapPin className="w-3 h-3 text-muted-foreground" />
                            {prospect.address?.city || "-"}, {prospect.address?.state || "-"}
                          </div>
-                         <div className="flex flex-wrap gap-1">
-                           {prospect.industryTags?.slice(0, 2).map(tag => (
-                             <Badge key={tag} variant="secondary" className="text-[8px] px-1 py-0">{tag}</Badge>
-                           ))}
-                           {prospect.industryTags?.length > 2 && <span className="text-[8px] text-muted-foreground">+{prospect.industryTags.length - 2}</span>}
+                         <div className="flex items-center gap-1">
+                           {prospect.source === 'auto_discovery' ? (
+                             <Badge variant="secondary" className="text-[8px] px-1 py-0 bg-accent/10 text-accent border-accent/20">
+                               <Activity className="w-2 h-2 mr-1" /> Auto Discovery
+                             </Badge>
+                           ) : (
+                             <Badge variant="secondary" className="text-[8px] px-1 py-0">{prospect.source}</Badge>
+                           )}
                          </div>
                        </div>
                     </TableCell>

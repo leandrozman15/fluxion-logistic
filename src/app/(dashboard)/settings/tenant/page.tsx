@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useMemo, useState } from "react";
@@ -13,8 +14,18 @@ import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Save, Target, BrainCircuit, Mail, ShieldAlert } from "lucide-react";
+import { Loader2, Save, Target, BrainCircuit, Mail, ShieldAlert, Sparkles, MapPin, Factory } from "lucide-react";
 import { Tenant, TenantSettings } from "@/app/lib/types";
+import { Checkbox } from "@/components/ui/checkbox";
+
+const BRAZIL_STATES = ["SP", "SC", "PR", "RS", "MG", "RJ", "BA", "PE", "CE"];
+const INDUSTRIAL_SECTORS = [
+  { id: "25", label: "Metalurgia / Fabricação Metal" },
+  { id: "28", label: "Máquinas e Equipamentos" },
+  { id: "29", label: "Automotivo / Autopeças" },
+  { id: "30", label: "Outros Equip. Transporte" },
+  { id: "31", label: "Móveis / Marcenaria Industrial" }
+];
 
 export default function TenantSettingsPage() {
   const db = useFirestore();
@@ -33,7 +44,15 @@ export default function TenantSettingsPage() {
 
   useEffect(() => {
     if (tenantData?.settings) {
-      setSettings(tenantData.settings);
+      // Garantir que campos de auto discovery existam
+      const currentSettings = tenantData.settings;
+      setSettings({
+        ...currentSettings,
+        autoDiscoveryEnabled: currentSettings.autoDiscoveryEnabled ?? false,
+        autoDiscoveryStates: currentSettings.autoDiscoveryStates ?? ["SP"],
+        autoDiscoveryCNAE: currentSettings.autoDiscoveryCNAE ?? ["25", "28"],
+        autoDiscoveryLimitPerWeek: currentSettings.autoDiscoveryLimitPerWeek ?? 50,
+      });
     } else if (tenantData && !tenantData.settings) {
       setSettings({
         scoringWeights: { effective: 0.6, ai: 0.4 },
@@ -43,7 +62,11 @@ export default function TenantSettingsPage() {
         cooldownDays: 7,
         hourlyEmailLimit: 20,
         dailyEmailLimit: 200,
-        defaultTemplateId: null
+        defaultTemplateId: null,
+        autoDiscoveryEnabled: false,
+        autoDiscoveryStates: ["SP"],
+        autoDiscoveryCNAE: ["25", "28"],
+        autoDiscoveryLimitPerWeek: 50
       });
     }
   }, [tenantData]);
@@ -64,6 +87,24 @@ export default function TenantSettingsPage() {
     }
   };
 
+  const toggleState = (state: string) => {
+    if (!settings) return;
+    const current = settings.autoDiscoveryStates || [];
+    const updated = current.includes(state) 
+      ? current.filter(s => s !== state) 
+      : [...current, state];
+    setSettings({ ...settings, autoDiscoveryStates: updated });
+  };
+
+  const toggleCnae = (cnae: string) => {
+    if (!settings) return;
+    const current = settings.autoDiscoveryCNAE || [];
+    const updated = current.includes(cnae) 
+      ? current.filter(c => c !== cnae) 
+      : [...current, cnae];
+    setSettings({ ...settings, autoDiscoveryCNAE: updated });
+  };
+
   if (loading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="animate-spin" /></div>;
   if (!settings) return null;
 
@@ -81,6 +122,67 @@ export default function TenantSettingsPage() {
       </div>
 
       <div className="grid gap-6">
+        <Card className={`border-2 transition-all ${settings.autoDiscoveryEnabled ? 'border-accent/30 shadow-md' : 'border-border'}`}>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div className="space-y-1">
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-accent" /> Auto Discovery (Weekly)
+              </CardTitle>
+              <CardDescription>O sistema buscará novas indústrias automaticamente toda segunda-feira.</CardDescription>
+            </div>
+            <Switch 
+              checked={settings.autoDiscoveryEnabled} 
+              onCheckedChange={(v) => setSettings({...settings, autoDiscoveryEnabled: v})}
+            />
+          </CardHeader>
+          {settings.autoDiscoveryEnabled && (
+            <CardContent className="space-y-6 animate-in fade-in slide-in-from-top-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
+                <div className="space-y-4">
+                  <Label className="flex items-center gap-2"><MapPin className="w-4 h-4" /> Estados de Atuação</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {BRAZIL_STATES.map(state => (
+                      <div key={state} className="flex items-center space-x-2 p-2 border rounded hover:bg-secondary/50 cursor-pointer" onClick={() => toggleState(state)}>
+                        <Checkbox id={`state-${state}`} checked={settings.autoDiscoveryStates?.includes(state)} />
+                        <label className="text-xs font-semibold cursor-pointer">{state}</label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <Label className="flex items-center gap-2"><Factory className="w-4 h-4" /> Setores Industriais (CNAE)</Label>
+                  <div className="space-y-2">
+                    {INDUSTRIAL_SECTORS.map(sector => (
+                      <div key={sector.id} className="flex items-center space-x-2 p-2 border rounded hover:bg-secondary/50 cursor-pointer" onClick={() => toggleCnae(sector.id)}>
+                        <Checkbox id={`cnae-${sector.id}`} checked={settings.autoDiscoveryCNAE?.includes(sector.id)} />
+                        <label className="text-[10px] font-medium leading-none cursor-pointer">{sector.label}</label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t">
+                <div className="flex justify-between items-center mb-4">
+                  <Label>Volume de Novos Leads (Semanal)</Label>
+                  <Badge variant="outline" className="text-accent border-accent">{settings.autoDiscoveryLimitPerWeek} empresas</Badge>
+                </div>
+                <Slider 
+                  value={[settings.autoDiscoveryLimitPerWeek]} 
+                  max={100} 
+                  min={10} 
+                  step={5} 
+                  onValueChange={([v]) => setSettings({...settings, autoDiscoveryLimitPerWeek: v})}
+                />
+                <p className="text-[10px] text-muted-foreground mt-2 italic">
+                  O motor de discovery prioriza empresas recém-criadas e localizadas em polos industriais dos estados selecionados.
+                </p>
+              </div>
+            </CardContent>
+          )}
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Target className="w-5 h-5 text-accent" /> Radar Diário</CardTitle>

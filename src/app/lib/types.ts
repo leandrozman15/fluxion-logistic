@@ -23,7 +23,7 @@ export interface Prospect {
   createdAt: string;
   updatedAt: string;
   createdBy: string;
-  source: 'manual' | 'csv' | 'web' | 'referral';
+  source: 'manual' | 'csv' | 'web' | 'referral' | 'auto_discovery';
   companyName: string;
   cnpj: string;
   industryTags: string[];
@@ -71,6 +71,10 @@ export interface Prospect {
   doNotContact?: boolean;
   doNotContactReason?: string;
   doNotContactAt?: string;
+
+  // Discovery specific
+  isRecentlyCreated?: boolean;
+  isIndustrialHub?: boolean;
 }
 
 export interface Task {
@@ -195,6 +199,14 @@ export interface TenantSettings {
   dailyEmailLimit: number;
   defaultTemplateId: string | null;
   onboardingCompleted?: boolean;
+
+  // Auto Discovery Settings
+  autoDiscoveryEnabled: boolean;
+  autoDiscoveryStates: string[];
+  autoDiscoveryCNAE: string[];
+  autoDiscoveryLimitPerWeek: number;
+  lastDiscoveryRunAt?: string;
+  lastDiscoveryCount?: number;
 }
 
 export interface Tenant {
