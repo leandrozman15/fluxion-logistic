@@ -45,7 +45,7 @@ export interface Prospect {
   aiWebSummary?: string;
   aiWebAnalysisAt?: string;
   
-  // AI Email Suggestions (Capa 2.4)
+  // AI Email Suggestions
   aiEmailDomainUsed?: string;
   aiEmailSuggestedAt?: string;
   aiEmailSuggestions?: {
@@ -105,10 +105,14 @@ export interface DailyTop {
   id: string; // YYYY-MM-DD
   date: string;
   limit: number;
+  generatedAt: string;
   items: {
     prospectId: string;
     companyName: string;
     effectiveScore: number;
+    hasEmail: boolean;
+    hasPhone: boolean;
+    hasWebsite: boolean;
     reasons: string[];
   }[];
 }
@@ -126,8 +130,8 @@ export interface Contact {
   email: string;
   phone: string;
   whatsapp?: string;
-  verified?: boolean; // Capa 2.4
-  source?: "manual" | "csv" | "ai_suggestion" | "website"; // Capa 2.4
+  verified?: boolean;
+  source?: "manual" | "csv" | "ai_suggestion" | "website";
 }
 
 export interface Tenant {

@@ -10,7 +10,7 @@
           "templates": { "description": "Plantillas de comunicación con soporte para variables" },
           "campaigns": { "description": "Configuración y estado de campañas masivas" },
           "imports": { "description": "Registro de importaciones de archivos CSV" },
-          "dailyTop": { "description": "Listas curadas diarias de mejores prospects" },
+          "dailyTop": { "description": "Ranking diario congelado de las mejores oportunidades (Top 30)" },
           "dailyStats": { "description": "Estadísticas de uso y cuotas por día" },
           "outbox": { "description": "Cola de mensajes operativos (draft, queued, sent, failed) con soporte para idempotencia" }
         }

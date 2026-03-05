@@ -1,25 +1,24 @@
 
 'use client';
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, where, orderBy, limit, doc } from "firebase/firestore";
+import { collection, query, where, orderBy, limit, doc, setDoc, getDocs, serverTimestamp } from "firebase/firestore";
 import { KPICard } from "@/components/dashboard/kpi-card";
 import { 
   Users, 
   Mail, 
   Target, 
-  TrendingUp, 
   Sparkles, 
-  CheckCircle2, 
-  Clock, 
   ChevronRight, 
   Loader2,
   PieChart,
   BarChart3,
   Factory,
-  MapPin
+  MapPin,
+  RefreshCw,
+  Zap
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,28 +27,25 @@ import { Button } from "@/components/ui/button";
 import { 
   ChartContainer, 
   ChartTooltip, 
-  ChartTooltipContent, 
-  ChartLegend, 
-  ChartLegendContent 
+  ChartTooltipContent
 } from "@/components/ui/chart";
 import { 
   Bar, 
   BarChart, 
   XAxis, 
   YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-  Cell,
-  Pie,
-  PieChart as RechartsPieChart
+  Tooltip
 } from "recharts";
 import Link from "next/link";
-import { Prospect } from "@/app/lib/types";
+import { Prospect, DailyTop } from "@/app/lib/types";
+import { useToast } from "@/hooks/use-toast";
 
 export default function DashboardPage() {
   const { db } = useFirestore();
   const { tenantId } = useTenant();
+  const { toast } = useToast();
+  const [isGenerating, setIsGenerating] = useState(false);
+  
   const today = new Date().toISOString().split('T')[0];
 
   // Stats y Quota
@@ -58,22 +54,17 @@ export default function DashboardPage() {
     return doc(db, "tenants", tenantId, "dailyStats", today);
   }, [db, tenantId, today]);
 
-  const { data: stats, loading: statsLoading } = useDoc<any>(statsRef);
+  const { data: stats } = useDoc<any>(statsRef);
 
-  // Top Prospects (Radar Sugerido)
-  const topProspectsQuery = useMemo(() => {
+  // Daily Top (Radar Congelado)
+  const dailyTopRef = useMemo(() => {
     if (!db || !tenantId) return null;
-    return query(
-      collection(db, "tenants", tenantId, "prospects"),
-      where("status", "==", "new"),
-      orderBy("effectiveScore", "desc"),
-      limit(10)
-    );
-  }, [db, tenantId]);
+    return doc(db, "tenants", tenantId, "dailyTop", today);
+  }, [db, tenantId, today]);
 
-  const { data: topProspects, loading: prospectsLoading } = useCollection<Prospect>(topProspectsQuery);
+  const { data: dailyTop, loading: dailyTopLoading } = useDoc<DailyTop>(dailyTopRef);
 
-  // Datos para gráfico de distribución por industria
+  // Datos para gráficos (Mix de Industrias) - Muestreo de los últimos 100
   const industryStatsQuery = useMemo(() => {
     if (!db || !tenantId) return null;
     return query(collection(db, "tenants", tenantId, "prospects"), limit(100));
@@ -93,6 +84,60 @@ export default function DashboardPage() {
       .sort((a, b) => b.value - a.value)
       .slice(0, 5);
   }, [allProspects]);
+
+  const handleGenerateDailyRadar = async () => {
+    if (!db || !tenantId) return;
+    setIsGenerating(true);
+    try {
+      // 1. Buscar mejores prospectos (No descartados, no clientes)
+      const q = query(
+        collection(db, "tenants", tenantId, "prospects"),
+        where("status", "in", ["new", "contacted"]),
+        orderBy("effectiveScore", "desc"),
+        limit(100)
+      );
+      
+      const snapshot = await getDocs(q);
+      const candidates = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Prospect));
+      
+      // 2. Filtrar y seleccionar top 30 (priorizando accionabilidad)
+      const top30 = candidates
+        .filter(p => !p.isClaimedToday)
+        .sort((a, b) => b.effectiveScore - a.effectiveScore)
+        .slice(0, 30);
+
+      if (top30.length === 0) {
+        toast({ title: "Radar vazio", description: "Não há novos prospectos para gerar o radar hoje." });
+        return;
+      }
+
+      // 3. Guardar dailyTop
+      const dailyTopData: DailyTop = {
+        id: today,
+        date: today,
+        limit: 30,
+        generatedAt: new Date().toISOString(),
+        items: top30.map(p => ({
+          prospectId: p.id,
+          companyName: p.companyName,
+          effectiveScore: p.effectiveScore,
+          hasEmail: p.contacts?.some(c => !!c.email) || false,
+          hasPhone: p.contacts?.some(c => !!c.phone || !!c.whatsapp) || false,
+          hasWebsite: !!p.websiteUrl,
+          reasons: p.aiScoreReasons || p.scoreReasons || []
+        }))
+      };
+
+      await setDoc(doc(db, "tenants", tenantId, "dailyTop", today), dailyTopData);
+      
+      toast({ title: "Radar gerado!", description: `As melhores ${top30.length} oportunidades estão prontas.` });
+    } catch (e) {
+      console.error(e);
+      toast({ variant: "destructive", title: "Erro ao gerar radar", description: "Verifique suas permissões de rede." });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   const dailyQuotaUsed = stats?.quotaUsed || 0;
   const dailyQuotaLimit = stats?.quotaLimit || 30;
@@ -116,17 +161,19 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold text-primary">Radar do Dia</h1>
           <p className="text-muted-foreground">Foco nas mejores oportunidades industriales.</p>
         </div>
-        <Card className="w-full md:w-80 bg-accent/5 border-accent/20">
-          <CardContent className="pt-4 pb-4">
-            <div className="flex justify-between text-xs mb-2">
-              <span className="font-semibold text-accent flex items-center gap-1">
-                <Target className="w-3 h-3" /> Progresso da Quota
-              </span>
-              <span>{dailyQuotaUsed}/{dailyQuotaLimit}</span>
-            </div>
-            <Progress value={quotaProgress} className="h-2" />
-          </CardContent>
-        </Card>
+        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+          <Card className="w-full md:w-80 bg-accent/5 border-accent/20">
+            <CardContent className="pt-4 pb-4">
+              <div className="flex justify-between text-xs mb-2">
+                <span className="font-semibold text-accent flex items-center gap-1">
+                  <Target className="w-3 h-3" /> Progresso da Quota
+                </span>
+                <span>{dailyQuotaUsed}/{dailyQuotaLimit}</span>
+              </div>
+              <Progress value={quotaProgress} className="h-2" />
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -141,27 +188,43 @@ export default function DashboardPage() {
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-accent" /> Sugestões de Hoje
+                <Zap className="w-5 h-5 text-accent" /> Sugestões de Hoje
               </CardTitle>
-              <CardDescription>Top 10 empresas com maior Score Efetivo para ativação.</CardDescription>
+              <CardDescription>
+                {dailyTop ? `Top ${dailyTop.items.length} oportunidades congeladas para hoje.` : 'O radar ainda no foi gerado para este dia.'}
+              </CardDescription>
             </div>
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/prospects">Ver todos</Link>
-            </Button>
+            {!dailyTop && !dailyTopLoading && (
+              <Button onClick={handleGenerateDailyRadar} disabled={isGenerating} size="sm" className="bg-accent hover:bg-accent/90">
+                {isGenerating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                Gerar Radar
+              </Button>
+            )}
+            {dailyTop && (
+              <Button variant="outline" size="sm" onClick={handleGenerateDailyRadar} disabled={isGenerating}>
+                 {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+              </Button>
+            )}
           </CardHeader>
           <CardContent>
-            {prospectsLoading ? (
-              <div className="py-10 flex justify-center"><Loader2 className="w-6 h-6 animate-spin" /></div>
+            {dailyTopLoading ? (
+              <div className="py-20 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>
             ) : (
               <div className="space-y-3">
-                {topProspects?.length === 0 ? (
-                  <div className="text-center py-10 text-muted-foreground text-sm space-y-2">
-                    <Factory className="w-10 h-10 mx-auto opacity-10" />
-                    <p>Sem sugestões novas. Importe mais prospects para o Radar.</p>
+                {!dailyTop ? (
+                  <div className="text-center py-20 border-2 border-dashed rounded-xl space-y-4">
+                    <Factory className="w-12 h-12 mx-auto opacity-10" />
+                    <div className="max-w-xs mx-auto">
+                      <p className="text-sm font-semibold">Radar pronto para ser gerado</p>
+                      <p className="text-xs text-muted-foreground mt-1">O sistema selecionará as melhores 30 empresas para você focar hoje.</p>
+                    </div>
+                    <Button onClick={handleGenerateDailyRadar} disabled={isGenerating}>
+                      Começar o dia agora
+                    </Button>
                   </div>
                 ) : (
-                  topProspects?.map((item, i) => (
-                    <Link key={item.id} href={`/prospects/${item.id}`}>
+                  dailyTop.items.map((item, i) => (
+                    <Link key={item.prospectId} href={`/prospects/${item.prospectId}`}>
                       <div className="flex items-center justify-between p-4 mb-3 rounded-xl bg-secondary/20 border hover:border-accent/50 transition-all group cursor-pointer">
                         <div className="flex items-center gap-4">
                           <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-xs shrink-0">
@@ -169,17 +232,17 @@ export default function DashboardPage() {
                           </div>
                           <div>
                             <div className="font-bold text-sm line-clamp-1">{item.companyName}</div>
-                            <div className="text-[10px] text-muted-foreground flex items-center gap-2">
-                              {item.industryTags?.[0] || "Indústria Geral"} • <MapPin className="w-2.5 h-2.5" /> {item.address?.city || "Brasil"}
+                            <div className="flex items-center gap-2 mt-1">
+                               <Badge variant="outline" className="text-[9px] px-1 py-0 bg-background">Score: {item.effectiveScore}</Badge>
+                               <div className="flex gap-1">
+                                 {item.hasEmail && <Mail className="w-3 h-3 text-green-600" />}
+                                 {item.hasPhone && <Zap className="w-3 h-3 text-orange-600" />}
+                                 {item.hasWebsite && <MapPin className="w-3 h-3 text-blue-600" />}
+                               </div>
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3 shrink-0">
-                          <Badge className={item.effectiveScore > 80 ? "bg-accent" : "bg-primary"}>
-                            Score: {item.effectiveScore}
-                          </Badge>
-                          <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-accent" />
-                        </div>
+                        <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-accent" />
                       </div>
                     </Link>
                   ))
