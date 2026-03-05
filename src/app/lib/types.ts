@@ -194,6 +194,7 @@ export interface TenantSettings {
   hourlyEmailLimit: number;
   dailyEmailLimit: number;
   defaultTemplateId: string | null;
+  onboardingCompleted?: boolean;
 }
 
 export interface Tenant {

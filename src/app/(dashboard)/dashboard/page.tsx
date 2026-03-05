@@ -17,12 +17,9 @@ import {
   Factory,
   RefreshCw,
   Zap,
-  Send,
-  SearchCode,
   CheckCircle2,
-  ExternalLink,
-  MessageCircle,
-  Lightbulb
+  Lightbulb,
+  Rocket
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -43,11 +40,7 @@ import {
 import Link from "next/link";
 import { Prospect, DailyTop, Tenant, DailyStats } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
-import { TooltipProvider, Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useRouter } from "next/navigation";
-import { analyzeWebsiteContent } from "@/ai/flows/analyze-website-content-flow";
-import { normalizePhoneBR, buildWaMeUrl } from "@/lib/utils/whatsapp";
-import { calculateNextAction } from "@/lib/utils/nba";
 
 export default function DashboardPage() {
   const db = useFirestore();
@@ -221,21 +214,7 @@ export default function DashboardPage() {
   };
 
   const handleActionClick = (prospectId: string, type: string) => {
-    switch (type) {
-      case 'suggest_emails':
-      case 'analyze_website':
-        router.push(`/prospects/${prospectId}`);
-        break;
-      case 'whatsapp_first':
-      case 'followup':
-        router.push(`/prospects/${prospectId}?action=whatsapp`);
-        break;
-      case 'prepare_email':
-        router.push(`/prospects/${prospectId}?action=prepare`);
-        break;
-      default:
-        router.push(`/prospects/${prospectId}`);
-    }
+    router.push(`/prospects/${prospectId}`);
   };
 
   const dailyQuotaUsed = stats?.quotaUsed || 0;
@@ -251,6 +230,22 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {tenantData && !tenantData.settings?.onboardingCompleted && (
+        <Card className="bg-primary text-white border-none shadow-lg overflow-hidden relative group">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110"></div>
+          <CardHeader className="relative pb-2">
+            <CardTitle className="flex items-center gap-2"><Rocket className="w-5 h-5 text-accent" /> Comece com o pé direito</CardTitle>
+            <CardDescription className="text-white/70">Seu motor de prospecção ainda não foi calibrado.</CardDescription>
+          </CardHeader>
+          <CardContent className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <p className="text-sm">Complete o onboarding para configurar seus pesos de IA, importar leads e gerar seu primeiro radar.</p>
+            <Button variant="secondary" className="font-bold shrink-0" asChild>
+              <Link href="/onboarding">Configurar Agora <ChevronRight className="ml-1 w-4 h-4" /></Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="flex flex-col md:flex-row gap-4 items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-primary">Radar do Dia</h1>
@@ -277,7 +272,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="md:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>

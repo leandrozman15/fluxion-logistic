@@ -1,8 +1,8 @@
 
 'use client';
 
-import { useState, useMemo } from "react";
-import { useFirestore } from "@/firebase";
+import { useState, useMemo, useEffect } from "react";
+import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { collection, addDoc, serverTimestamp, query, where, getDocs } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Building2, MapPin, Plus, Loader2, Sparkles, Factory, Globe } from "lucide-react";
+import { Search, Building2, MapPin, Plus, Loader2, Sparkles, Factory, Globe, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { calculateEffectiveScore } from "@/lib/utils/scoring";
 import { Prospect } from "@/app/lib/types";
@@ -38,9 +38,20 @@ export default function DiscoveryPage() {
   const [results, setResults] = useState<any[]>([]);
   const [isAddingId, setIsAddingId] = useState<string | null>(null);
 
+  // Fetch existing prospects to show status
+  const prospectsQuery = useMemo(() => {
+    if (!db || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "prospects"));
+  }, [db, tenantId]);
+
+  const { data: existingProspects } = useCollection<Prospect>(prospectsQuery);
+
+  const existingCnpjs = useMemo(() => {
+    return new Set(existingProspects?.map(p => p.cnpj.replace(/\D/g, "")));
+  }, [existingProspects]);
+
   const handleSearch = () => {
     setIsSearching(true);
-    // Simula delay de rede e busca em base externa
     setTimeout(() => {
       let filtered = MOCK_DISCOVERY_RESULTS;
       if (searchTerm) {
@@ -56,22 +67,19 @@ export default function DiscoveryPage() {
 
   const handleAddToPipeline = async (item: any) => {
     if (!db || !tenantId) return;
+    const cleanCnpj = item.cnpj.replace(/\D/g, "");
+    
+    if (existingCnpjs.has(cleanCnpj)) {
+      toast({ variant: "destructive", title: "Empresa já cadastrada" });
+      return;
+    }
+
     setIsAddingId(item.cnpj);
     try {
-      // 1. Verificar se já existe (Deduplicação)
-      const q = query(collection(db, "tenants", tenantId, "prospects"), where("cnpj", "==", item.cnpj.replace(/\D/g, "")));
-      const snap = await getDocs(q);
-      
-      if (!snap.empty) {
-        toast({ variant: "destructive", title: "Empresa já cadastrada", description: "Esta empresa já faz parte do seu pipeline." });
-        return;
-      }
-
-      // 2. Criar objeto prospecto
       const prospectData: Partial<Prospect> = {
         tenantId,
         companyName: item.name,
-        cnpj: item.cnpj.replace(/\D/g, ""),
+        cnpj: cleanCnpj,
         industryTags: [item.sector],
         websiteUrl: `https://www.${item.website}`,
         domain: item.website,
@@ -156,46 +164,53 @@ export default function DiscoveryPage() {
                 <TableHead>Empresa</TableHead>
                 <TableHead>Localização</TableHead>
                 <TableHead>Setor</TableHead>
-                <TableHead>Website</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ação</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {results.map((item) => (
-                <TableRow key={item.cnpj}>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-bold">{item.name}</span>
-                      <span className="text-[10px] text-muted-foreground">{item.cnpj}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1 text-xs">
-                      <MapPin className="w-3 h-3" /> {item.city}, {item.state}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" className="text-[10px]">{item.sector}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1 text-xs text-primary hover:underline cursor-pointer">
-                      <Globe className="w-3 h-3" /> {item.website}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button 
-                      size="sm" 
-                      variant="ghost" 
-                      className="text-accent hover:text-accent hover:bg-accent/10"
-                      disabled={isAddingId === item.cnpj}
-                      onClick={() => handleAddToPipeline(item)}
-                    >
-                      {isAddingId === item.cnpj ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4 mr-1" />}
-                      Add Pipeline
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {results.map((item) => {
+                const isExisting = existingCnpjs.has(item.cnpj.replace(/\D/g, ""));
+                return (
+                  <TableRow key={item.cnpj}>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-bold">{item.name}</span>
+                        <span className="text-[10px] text-muted-foreground">{item.cnpj}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1 text-xs">
+                        <MapPin className="w-3 h-3" /> {item.city}, {item.state}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary" className="text-[10px]">{item.sector}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      {isExisting ? (
+                        <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">
+                          <CheckCircle2 className="w-3 h-3 mr-1" /> No Pipeline
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50">Novo</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        className="text-accent hover:text-accent hover:bg-accent/10"
+                        disabled={isAddingId === item.cnpj || isExisting}
+                        onClick={() => handleAddToPipeline(item)}
+                      >
+                        {isAddingId === item.cnpj ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4 mr-1" />}
+                        Add Pipeline
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
