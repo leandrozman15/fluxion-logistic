@@ -4,7 +4,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { useFirestore, useDoc, useCollection, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc, updateDoc, runTransaction, serverTimestamp, setDoc, getDoc, collection, query, orderBy, increment, addDoc } from "firebase/firestore";
+import { doc, updateDoc, runTransaction, serverTimestamp, setDoc, getDoc, collection, query, orderBy, increment, addDoc, where } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Building2, Globe, MapPin, Mail, Phone, ExternalLink, MessageSquare, History, Sparkles, Loader2, CheckCircle2, Send, Wand2, BrainCircuit, AlertCircle, SearchCode, MailPlus, UserPlus, Info, Ban, ShieldAlert, MessageCircle, ArrowLeft, Lightbulb, Clock } from "lucide-react";
+import { Building2, Globe, MapPin, Mail, Phone, ExternalLink, MessageSquare, History, Sparkles, Loader2, CheckCircle2, Send, Wand2, BrainCircuit, AlertCircle, SearchCode, MailPlus, UserPlus, Info, Ban, ShieldAlert, MessageCircle, ArrowLeft, Lightbulb, Clock, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Prospect, ProspectStatus, EmailTemplate, OutboxMessage, OutboxState, AiConfidence, Contact, Task } from "@/app/lib/types";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -25,6 +25,8 @@ import { calculateNextAction } from "@/lib/utils/nba";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Link from "next/link";
 import { addDays } from "date-fns";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 export default function ProspectDetailPage() {
   const { id } = useParams();
@@ -39,7 +41,6 @@ export default function ProspectDetailPage() {
   const [isOutboxDialogOpen, setIsOutboxDialogOpen] = useState(false);
   const [isDncDialogOpen, setIsDncDialogOpen] = useState(false);
   const [isWhatsAppDialogOpen, setIsWhatsAppDialogOpen] = useState(false);
-  const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
   
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [selectedContactIndex, setSelectedContactIndex] = useState<string>("0");
@@ -65,6 +66,17 @@ export default function ProspectDetailPage() {
   }, [db, tenantId]);
 
   const { data: templates } = useCollection<EmailTemplate>(templatesQuery);
+
+  const historyQuery = useMemo(() => {
+    if (!db || !tenantId || !id) return null;
+    return query(
+      collection(db, "tenants", tenantId, "events"),
+      where("prospectId", "==", id as string),
+      orderBy("createdAt", "desc")
+    );
+  }, [db, tenantId, id]);
+
+  const { data: events, loading: eventsLoading } = useCollection<any>(historyQuery);
 
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
   const selectedContact = prospect?.contacts?.[parseInt(selectedContactIndex)];
@@ -105,7 +117,7 @@ export default function ProspectDetailPage() {
   };
 
   const handleStatusChange = async (newStatus: ProspectStatus) => {
-    if (!prospectRef || !db || !tenantId) return;
+    if (!prospectRef || !db || !tenantId || !user) return;
     setIsUpdating(true);
     try {
       const today = new Date();
@@ -116,6 +128,15 @@ export default function ProspectDetailPage() {
         transaction.update(prospectRef, { 
           status: newStatus,
           updatedAt: new Date().toISOString()
+        });
+
+        transaction.set(doc(collection(db, "tenants", tenantId, "events")), {
+          type: "status_changed",
+          prospectId: id,
+          companyName: prospect?.companyName,
+          actorUid: user.uid,
+          createdAt: serverTimestamp(),
+          metadata: { from: prospect?.status, to: newStatus }
         });
 
         const statsDoc = await transaction.get(weeklyStatsRef);
@@ -144,7 +165,7 @@ export default function ProspectDetailPage() {
   };
 
   const handleToggleDnc = async () => {
-    if (!prospectRef || !prospect) return;
+    if (!prospectRef || !prospect || !user) return;
     setIsUpdating(true);
     try {
       const isEnabling = !prospect.doNotContact;
@@ -154,6 +175,16 @@ export default function ProspectDetailPage() {
         doNotContactAt: isEnabling ? new Date().toISOString() : null,
         updatedAt: new Date().toISOString()
       });
+
+      await addDoc(collection(db, "tenants", tenantId, "events"), {
+        type: isEnabling ? "dnc_enabled" : "dnc_disabled",
+        prospectId: prospect.id,
+        companyName: prospect.companyName,
+        actorUid: user.uid,
+        createdAt: serverTimestamp(),
+        metadata: { reason: dncReason }
+      });
+
       toast({ 
         title: isEnabling ? "Bloqueado!" : "Desbloqueado", 
         description: isEnabling ? "O prospect não aparecerá mais no Radar." : "Prospect liberado."
@@ -187,7 +218,7 @@ export default function ProspectDetailPage() {
       });
       setCustomSubject(result.subject);
       setCustomBody(result.body);
-      toast({ title: "Email mejorado con IA!" });
+      toast({ title: "Email melhorado com IA!" });
     } catch (e) {
       toast({ variant: "destructive", title: "Erro na IA" });
     } finally {
@@ -221,6 +252,15 @@ export default function ProspectDetailPage() {
       await updateDoc(prospectRef as any, { 
         lastContactAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
+      });
+
+      await addDoc(collection(db, "tenants", tenantId, "events"), {
+        type: "email_prepared",
+        prospectId: prospect.id,
+        companyName: prospect.companyName,
+        actorUid: user.uid,
+        createdAt: serverTimestamp(),
+        metadata: { state, to: selectedContact?.email, aiUsed: !!customBody }
       });
 
       if (state === 'queued') {
@@ -269,7 +309,7 @@ export default function ProspectDetailPage() {
 
   const handleFinalizeWhatsApp = async () => {
     if (!prospect || !db || !tenantId || !user) return;
-    const phone = prospect.contacts?.[0]?.phone || prospect.contacts?.[0]?.whatsapp;
+    const phone = prospect.contacts?.find(c => !!c.phone || !!c.whatsapp)?.phone || prospect.contacts?.find(c => !!c.phone || !!c.whatsapp)?.whatsapp;
     const normalized = normalizePhoneBR(phone || "");
     if (!normalized) {
       toast({ variant: "destructive", title: "Telefone inválido" });
@@ -315,10 +355,31 @@ export default function ProspectDetailPage() {
     }
   };
 
+  const getEventIcon = (type: string) => {
+    switch (type) {
+      case 'whatsapp_opened': return <MessageCircle className="w-4 h-4 text-green-500" />;
+      case 'email_prepared': return <Mail className="w-4 h-4 text-blue-500" />;
+      case 'status_changed': return <RefreshCw className="w-4 h-4 text-orange-500" />;
+      case 'dnc_enabled': return <Ban className="w-4 h-4 text-destructive" />;
+      default: return <Clock className="w-4 h-4 text-muted-foreground" />;
+    }
+  };
+
+  const getEventLabel = (event: any) => {
+    switch (event.type) {
+      case 'whatsapp_opened': return "Contato via WhatsApp iniciado";
+      case 'email_prepared': return `E-mail preparado para ${event.metadata?.to}`;
+      case 'status_changed': return `Status alterado de ${event.metadata?.from} para ${event.metadata?.to}`;
+      case 'dnc_enabled': return `Adicionado à lista DNC: ${event.metadata?.reason}`;
+      case 'dnc_disabled': return "Removido da lista DNC";
+      default: return event.type;
+    }
+  };
+
   if (loading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-muted-foreground" /></div>;
   if (!prospect) return <div className="text-center py-20"><h2 className="text-xl font-bold">Prospect não encontrado.</h2></div>;
 
-  const primaryPhone = prospect.contacts?.[0]?.phone || prospect.contacts?.[0]?.whatsapp;
+  const primaryPhone = prospect.contacts?.find(c => !!c.phone || !!c.whatsapp)?.phone || prospect.contacts?.find(c => !!c.phone || !!c.whatsapp)?.whatsapp;
   const isPhoneValid = !!normalizePhoneBR(primaryPhone || "");
   const hasEmail = prospect.contacts?.some(c => !!c.email);
 
@@ -390,25 +451,10 @@ export default function ProspectDetailPage() {
         </div>
       </div>
 
-      {nba && nba.type !== 'none' && (
-        <div className="bg-accent/5 border border-accent/20 rounded-xl p-4 flex items-start gap-3">
-          <Lightbulb className="w-5 h-5 text-accent mt-0.5" />
-          <div className="flex-1">
-            <h4 className="text-sm font-bold text-primary">Próxima Melhor Ação</h4>
-            <p className="text-xs text-muted-foreground">{nba.reason}</p>
-          </div>
-          <Button size="sm" variant="outline" className="text-accent border-accent" onClick={executeNBA}>
-            {nba.label}
-          </Button>
-        </div>
-      )}
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Visão Geral</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle>Visão Geral</CardTitle></CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="space-y-3">
@@ -423,12 +469,6 @@ export default function ProspectDetailPage() {
                   <div className="flex items-center gap-2 text-sm">
                     <MapPin className="w-4 h-4 text-muted-foreground" />
                     <span>{prospect.address?.city || "-"}, {prospect.address?.state || "-"}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <Clock className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-xs">
-                      Último contato: {prospect.lastContactAt ? format(new Date(prospect.lastContactAt), "dd/MM HH:mm") : "Nunca"}
-                    </span>
                   </div>
                   <div className="pt-2">
                     <h4 className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Segmentos</h4>
@@ -453,15 +493,55 @@ export default function ProspectDetailPage() {
             </CardContent>
           </Card>
 
-          <Tabs defaultValue="contacts">
+          <Tabs defaultValue="history">
             <TabsList className="w-full justify-start border-b rounded-none h-12 bg-transparent p-0">
+              <TabsTrigger value="history" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
+                Linha do Tempo
+              </TabsTrigger>
               <TabsTrigger value="contacts" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
                 Contatos ({prospect.contacts?.length || 0})
               </TabsTrigger>
-              <TabsTrigger value="history" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
-                Histórico
-              </TabsTrigger>
             </TabsList>
+            <TabsContent value="history" className="mt-6">
+               <Card>
+                 <CardContent className="pt-6">
+                    {eventsLoading ? (
+                      <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin" /></div>
+                    ) : (
+                      <div className="space-y-6">
+                        {events?.length === 0 ? (
+                          <div className="text-center py-10 text-muted-foreground text-sm italic">Nenhuma atividade registrada ainda.</div>
+                        ) : (
+                          events?.map((event: any, i: number) => (
+                            <div key={i} className="flex gap-4 group">
+                              <div className="flex flex-col items-center">
+                                <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
+                                  {getEventIcon(event.type)}
+                                </div>
+                                {i !== events.length - 1 && <div className="w-0.5 h-full bg-border mt-2"></div>}
+                              </div>
+                              <div className="pb-6">
+                                <div className="text-sm font-semibold text-primary">{getEventLabel(event)}</div>
+                                <div className="text-[10px] text-muted-foreground mt-1 flex items-center gap-2">
+                                  <Clock className="w-3 h-3" /> 
+                                  {event.createdAt?.toDate ? format(event.createdAt.toDate(), "dd 'de' MMMM, HH:mm", { locale: ptBR }) : "Agora"}
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                        <div className="flex gap-4">
+                          <div className="flex flex-col items-center"><div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center"><Clock className="w-4 h-4 text-primary" /></div></div>
+                          <div>
+                            <div className="text-sm font-semibold">Prospecto adicionado ao sistema</div>
+                            <div className="text-[10px] text-muted-foreground">{format(new Date(prospect.createdAt), "dd 'de' MMMM, HH:mm", { locale: ptBR })}</div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                 </CardContent>
+               </Card>
+            </TabsContent>
             <TabsContent value="contacts" className="mt-6 space-y-4">
               {prospect.contacts?.map((contact, i) => (
                 <Card key={i}>
@@ -480,21 +560,6 @@ export default function ProspectDetailPage() {
                   </CardContent>
                 </Card>
               ))}
-            </TabsContent>
-            <TabsContent value="history" className="mt-6">
-               <Card>
-                 <CardContent className="pt-6">
-                    <div className="space-y-6">
-                      <div className="flex gap-4">
-                        <div className="flex flex-col items-center"><div className="w-2 h-2 rounded-full bg-primary mt-1.5"></div><div className="w-0.5 h-full bg-border"></div></div>
-                        <div>
-                          <div className="text-sm font-semibold">Importado no sistema</div>
-                          <div className="text-xs text-muted-foreground">{new Date(prospect.createdAt).toLocaleString()}</div>
-                        </div>
-                      </div>
-                    </div>
-                 </CardContent>
-               </Card>
             </TabsContent>
           </Tabs>
         </div>
@@ -527,7 +592,7 @@ export default function ProspectDetailPage() {
         </div>
       </div>
 
-      {/* Prepare Email Dialog */}
+      {/* Dialogs... */}
       <Dialog open={isOutboxDialogOpen} onOpenChange={setIsOutboxDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -595,23 +660,17 @@ export default function ProspectDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* WhatsApp Preparation Dialog */}
       <Dialog open={isWhatsAppDialogOpen} onOpenChange={setIsWhatsAppDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Preparar WhatsApp</DialogTitle>
-            <DialogDescription>Ajuste a mensagem antes de abrir o contato direto.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="wa-text">Mensagem</Label>
-              <Textarea 
-                id="wa-text" 
-                className="min-h-[150px] text-sm" 
-                value={whatsAppDraft}
-                onChange={(e) => setWhatsAppDraft(e.target.value)}
-              />
-            </div>
+            <Textarea 
+              className="min-h-[150px] text-sm" 
+              value={whatsAppDraft}
+              onChange={(e) => setWhatsAppDraft(e.target.value)}
+            />
             <Button 
               variant="outline" 
               className="w-full text-accent border-accent" 
@@ -623,9 +682,8 @@ export default function ProspectDetailPage() {
             </Button>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsWhatsAppDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleFinalizeWhatsApp} className="bg-green-500 hover:bg-green-600">
-              <ExternalLink className="w-4 h-4 mr-2" /> Abrir WhatsApp
+            <Button onClick={handleFinalizeWhatsApp} className="bg-green-500 hover:bg-green-600 w-full">
+              Abrir WhatsApp
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -639,13 +697,13 @@ export default function ProspectDetailPage() {
           {!prospect.doNotContact && (
             <div className="space-y-2 py-4">
               <Label>Motivo do Bloqueio</Label>
-              <Input value={dncReason} onChange={e => setDncReason(e.target.value)} placeholder="Ex: Solicitou opt-out / Concorrente" />
+              <Input value={dncReason} onChange={e => setDncReason(e.target.value)} placeholder="Ex: Solicitou opt-out" />
             </div>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDncDialogOpen(false)}>Cancelar</Button>
             <Button variant="destructive" onClick={handleToggleDnc} disabled={isUpdating}>
-              {prospect.doNotContact ? "Confirmar Desbloqueio" : "Confirmar DNC"}
+              Confirmar
             </Button>
           </DialogFooter>
         </DialogContent>
