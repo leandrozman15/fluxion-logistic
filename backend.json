@@ -1,3 +1,4 @@
+
 {
   "firestore": {
     "collections": {
@@ -36,8 +37,9 @@
           "campaigns": { "description": "Configuración y estado de campañas masivas" },
           "imports": { "description": "Registro de importaciones de archivos CSV" },
           "dailyTop": { "description": "Ranking diario congelado de las mejores oportunidades (Top 30)" },
+          "events": { "description": "Registro de telemetría y auditoría de acciones" },
           "dailyStats": { 
-            "description": "Estadísticas de uso, cuotas y métricas por día",
+            "description": "Estadísticas de uso, cuotas y métricas por dia",
             "schema": {
               "type": "object",
               "properties": {

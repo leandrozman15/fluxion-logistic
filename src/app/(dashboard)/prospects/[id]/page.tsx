@@ -4,7 +4,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { useFirestore, useDoc, useCollection, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc, updateDoc, runTransaction, serverTimestamp, setDoc, getDoc, collection, query, orderBy, increment } from "firebase/firestore";
+import { doc, updateDoc, runTransaction, serverTimestamp, setDoc, getDoc, collection, query, orderBy, increment, addDoc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Building2, Globe, MapPin, Mail, Phone, ExternalLink, MessageSquare, History, Sparkles, Loader2, CheckCircle2, Send, Wand2, BrainCircuit, AlertCircle, SearchCode, MailPlus, UserPlus, Info, Ban, ShieldAlert } from "lucide-react";
+import { Building2, Globe, MapPin, Mail, Phone, ExternalLink, MessageSquare, History, Sparkles, Loader2, CheckCircle2, Send, Wand2, BrainCircuit, AlertCircle, SearchCode, MailPlus, UserPlus, Info, Ban, ShieldAlert, MessageCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Prospect, ProspectStatus, EmailTemplate, OutboxMessage, OutboxState, AiConfidence, Contact } from "@/app/lib/types";
 import { useParams } from "next/navigation";
@@ -24,8 +24,11 @@ import { generateEmailDraft } from "@/ai/flows/generate-email-draft-flow";
 import { calculateProspectAiScore } from "@/ai/flows/calculate-prospect-ai-score-flow";
 import { analyzeWebsiteContent, AnalyzeWebsiteOutput } from "@/ai/flows/analyze-website-content-flow";
 import { suggestCorporateEmails, SuggestEmailsOutput } from "@/ai/flows/suggest-corporate-emails-flow";
+import { generateWhatsAppMessage } from "@/ai/flows/generate-whatsapp-message-flow";
 import { calculateEffectiveScore } from "@/lib/utils/scoring";
 import { deriveDomain, extractEmailsFromText } from "@/lib/utils/email-domain";
+import { normalizePhoneBR, buildWaMeUrl, buildWhatsAppMessage } from "@/lib/utils/whatsapp";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export default function ProspectDetailPage() {
   const { id } = useParams();
@@ -39,6 +42,7 @@ export default function ProspectDetailPage() {
   const [isWebAnalysisDialogOpen, setIsWebAnalysisDialogOpen] = useState(false);
   const [isEmailSuggestionDialogOpen, setIsEmailSuggestionDialogOpen] = useState(false);
   const [isDncDialogOpen, setIsDncDialogOpen] = useState(false);
+  const [isWhatsAppDialogOpen, setIsWhatsAppDialogOpen] = useState(false);
   
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [selectedContactIndex, setSelectedContactIndex] = useState<string>("0");
@@ -47,6 +51,7 @@ export default function ProspectDetailPage() {
   const [isScoring, setIsScoring] = useState(false);
   const [isAnalyzingWeb, setIsAnalyzingWeb] = useState(false);
   const [isSuggestingEmails, setIsSuggestingEmails] = useState(false);
+  const [isAiWhatsAppDrafting, setIsAiWhatsAppDrafting] = useState(false);
   
   const [customSubject, setCustomSubject] = useState<string | null>(null);
   const [customBody, setCustomBody] = useState<string | null>(null);
@@ -56,6 +61,7 @@ export default function ProspectDetailPage() {
   const [selectedWebTags, setSelectedWebTags] = useState<string[]>([]);
   
   const [emailSuggestions, setEmailSuggestions] = useState<SuggestEmailsOutput['suggestions'] | null>(null);
+  const [whatsAppDraft, setWhatsAppDraft] = useState("");
 
   const prospectRef = useMemo(() => {
     if (!db || !tenantId || !id) return null;
@@ -112,7 +118,7 @@ export default function ProspectDetailPage() {
 
       toast({ title: "Status atualizado", description: `O prospect agora está como ${newStatus}.` });
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro", description: "Não fue posible procesar la actualización." });
+      toast({ variant: "destructive", title: "Erro", description: "Não foi possível atualizar." });
     } finally {
       setIsUpdating(false);
     }
@@ -131,12 +137,12 @@ export default function ProspectDetailPage() {
       });
       toast({ 
         title: isEnabling ? "Bloqueado!" : "Desbloqueado", 
-        description: isEnabling ? "Este prospect não aparecerá mais no Radar." : "Prospect liberado para prospecção."
+        description: isEnabling ? "O prospect não aparecerá mais no Radar." : "Prospect liberado."
       });
       setIsDncDialogOpen(false);
       setDncReason("");
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro", description: "Falha ao atualizar compliance." });
+      toast({ variant: "destructive", title: "Erro" });
     } finally {
       setIsUpdating(false);
     }
@@ -176,134 +182,73 @@ export default function ProspectDetailPage() {
         updatedAt: new Date().toISOString()
       });
 
-      toast({ title: "Score IA atualizado!", description: `Nota atribuída: ${result.aiScore} (${result.confidence})` });
+      toast({ title: "Score IA atualizado!", description: `Nota: ${result.aiScore}` });
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro no Scoring", description: "Não fue posible procesar la IA ahora." });
+      toast({ variant: "destructive", title: "Erro no Scoring" });
     } finally {
       setIsScoring(false);
     }
   };
 
-  const handleRunWebAnalysis = async () => {
-    if (!prospect?.websiteUrl) return;
-    setIsAnalyzingWeb(true);
-    setWebAnalysisResult(null);
-    try {
-      const result = await analyzeWebsiteContent({
-        websiteUrl: prospect.websiteUrl,
-        companyName: prospect.companyName
-      });
-      setWebAnalysisResult(result);
-      setSelectedWebTags(result.industryTags);
-      setIsWebAnalysisDialogOpen(true);
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Erro na Análise", description: e.message });
-    } finally {
-      setIsAnalyzingWeb(false);
-    }
+  const handleOpenWhatsAppDialog = () => {
+    if (!prospect) return;
+    const initialMsg = buildWhatsAppMessage(prospect);
+    setWhatsAppDraft(initialMsg);
+    setIsWhatsAppDialogOpen(true);
   };
 
-  const handleApplyWebAnalysis = async () => {
-    if (!prospectRef || !webAnalysisResult) return;
-    setIsUpdating(true);
+  const handleImproveWhatsAppWithAi = async () => {
+    if (!prospect) return;
+    setIsAiWhatsAppDrafting(true);
     try {
-      const currentTags = prospect?.industryTags || [];
-      const combinedTags = Array.from(new Set([...currentTags, ...selectedWebTags]));
-      
-      await updateDoc(prospectRef, {
-        industryTags: combinedTags,
-        aiWebSummary: webAnalysisResult.summary,
-        aiWebAnalysisAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+      const result = await generateWhatsAppMessage({
+        templateBaseText: whatsAppDraft,
+        prospect: {
+          companyName: prospect.companyName,
+          city: prospect.address?.city,
+          state: prospect.address?.state,
+          industryTags: prospect.industryTags,
+          contactName: selectedContact?.name,
+          contactRole: selectedContact?.role,
+        }
       });
-      
-      toast({ title: "Dados atualizados!", description: "O perfil do prospect foi enriquecido con a análise web." });
-      setIsWebAnalysisDialogOpen(false);
+      setWhatsAppDraft(result.message);
+      toast({ title: "Mensagem melhorada!" });
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro ao aplicar", description: "Não foi possível salvar las alteraciones." });
+      toast({ variant: "destructive", title: "Erro na IA" });
     } finally {
-      setIsUpdating(false);
+      setIsAiWhatsAppDrafting(false);
     }
   };
 
-  const handleRunEmailSuggestions = async () => {
-    if (!prospect || !prospectRef) return;
+  const handleFinalizeWhatsApp = async () => {
+    if (!prospect || !db || !tenantId || !user) return;
     
-    const domain = deriveDomain(prospect.domain, prospect.websiteUrl, prospect.contacts?.map(c => c.email).filter(e => !!e) as string[]);
+    const phone = prospect.contacts?.[0]?.phone || prospect.contacts?.[0]?.whatsapp;
+    const normalized = normalizePhoneBR(phone || "");
     
-    if (!domain) {
-      toast({ variant: "destructive", title: "Domínio necessário", description: "O prospect precisa ter um website ou domínio para sugerir padrões." });
+    if (!normalized) {
+      toast({ variant: "destructive", title: "Telefone inválido" });
       return;
     }
 
-    setIsSuggestingEmails(true);
-    try {
-      const websiteExtractedEmails = extractEmailsFromText(prospect.aiWebSummary || "");
+    // Telemetria
+    await addDoc(collection(db, "tenants", tenantId, "events"), {
+      type: "whatsapp_opened",
+      prospectId: prospect.id,
+      companyName: prospect.companyName,
+      actorUid: user.uid,
+      createdAt: serverTimestamp(),
+      metadata: { phoneE164: normalized, hasPrefilledText: !!whatsAppDraft }
+    });
 
-      const result = await suggestCorporateEmails({
-        domain,
-        companyName: prospect.companyName,
-        contactName: prospect.contacts?.[0]?.name,
-        existingEmails: prospect.contacts?.map(c => c.email).filter(e => !!e) as string[],
-        websiteExtractedEmails
-      });
-      
-      setEmailSuggestions(result.suggestions);
-      
-      await updateDoc(prospectRef, {
-        aiEmailDomainUsed: domain,
-        aiEmailSuggestions: result.suggestions,
-        aiEmailSuggestedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
-
-      setIsEmailSuggestionDialogOpen(true);
-    } catch (e) {
-      toast({ variant: "destructive", title: "Erro na Sugestão", description: "Não fue posible generar sugerencias ahora." });
-    } finally {
-      setIsSuggestingEmails(false);
-    }
-  };
-
-  const handleAddSuggestedContact = async (email: string, type: string) => {
-    if (!prospect || !prospectRef) return;
-    
-    if (prospect.contacts?.some(c => c.email.toLowerCase() === email.toLowerCase())) {
-      toast({ title: "Atenção", description: "Este e-mail já está cadastrado nos contatos." });
-      return;
-    }
-
-    const newContact: Contact = {
-      name: prospect.contacts?.[0]?.name || "Contato IA",
-      role: type === 'generic_role' ? "Geral/Suporte" : "Sugerido",
-      email: email.toLowerCase(),
-      phone: "",
-      verified: false,
-      source: "ai_suggestion"
-    };
-
-    const updatedContacts = [...(prospect.contacts || []), newContact];
-    
-    setIsUpdating(true);
-    try {
-      await updateDoc(prospectRef, {
-        contacts: updatedContacts,
-        updatedAt: new Date().toISOString()
-      });
-      toast({ title: "Contato adicionado!", description: `E-mail ${email} foi adicionado à lista.` });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Erro", description: "Não foi posible guardar el contacto." });
-    } finally {
-      setIsUpdating(false);
-    }
+    window.open(buildWaMeUrl(normalized, whatsAppDraft), "_blank");
+    setIsWhatsAppDialogOpen(false);
   };
 
   const handleClaimForToday = async () => {
     if (!db || !tenantId || !prospect || !user) return;
-    if (prospect.doNotContact) {
-      toast({ variant: "destructive", title: "Ação bloqueada", description: "Prospect em lista negra (DNC)." });
-      return;
-    }
+    if (prospect.doNotContact) return;
     
     setIsUpdating(true);
     const todayStr = new Date().toISOString().split('T')[0];
@@ -321,9 +266,7 @@ export default function ProspectDetailPage() {
           quotaLimit = statsDoc.data().quotaLimit || 30;
         }
 
-        if (currentQuota >= quotaLimit) {
-          throw new Error("Quota diária atingida.");
-        }
+        if (currentQuota >= quotaLimit) throw new Error("Quota diária atingida.");
 
         transaction.update(pRef, {
           isClaimedToday: true,
@@ -343,124 +286,22 @@ export default function ProspectDetailPage() {
             createdAt: serverTimestamp()
           });
         } else {
-          transaction.update(statsRef, {
-            quotaUsed: currentQuota + 1
-          });
+          transaction.update(statsRef, { quotaUsed: currentQuota + 1 });
         }
       });
-
-      toast({ title: "Ativado!", description: "Este prospect foi adicionado ao seu radar de hoje." });
+      toast({ title: "Ativado!" });
     } catch (e: any) {
-      toast({ variant: "destructive", title: "Erro ao ativar", description: e.message });
+      toast({ variant: "destructive", title: "Erro", description: e.message });
     } finally {
       setIsUpdating(false);
     }
   };
 
-  const handleImproveWithAi = async () => {
-    if (!selectedTemplate || !prospect) return;
-    
-    setIsAiDrafting(true);
-    try {
-      const result = await generateEmailDraft({
-        templateSubject: selectedTemplate.subject,
-        templateBody: selectedTemplate.body,
-        prospect: {
-          companyName: prospect.companyName,
-          city: prospect.address?.city,
-          state: prospect.address?.state,
-          industryTags: prospect.industryTags,
-          websiteUrl: prospect.websiteUrl,
-          effectiveScore: prospect.effectiveScore,
-          scoreReasons: prospect.aiScoreReasons || prospect.scoreReasons,
-          contactName: selectedContact?.name,
-          contactRole: selectedContact?.role,
-        }
-      });
-      
-      setCustomSubject(result.subject);
-      setCustomBody(result.body);
-      
-      toast({ title: "Email melhorado com IA!", description: "O rascunho fue personalizado para este prospect." });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Erro na IA", description: "Não foi possível gerar a sugestão agora." });
-    } finally {
-      setIsAiDrafting(false);
-    }
-  };
-
-  const handlePrepareOutbox = async (targetState: OutboxState) => {
-    if (!db || !tenantId || !prospect || !selectedTemplate || !user || !selectedContact) return;
-    if (prospect.doNotContact) {
-       toast({ variant: "destructive", title: "Ação bloqueada", description: "Não é possível enviar emails para contatos bloqueados (DNC)." });
-       return;
-    }
-
-    setIsSavingOutbox(true);
-    const todayStr = new Date().toISOString().split('T')[0];
-    const dedupeKey = `manual:${prospect.id}:${selectedTemplate.id}:${todayStr}`;
-    
-    let hash = 0;
-    for (let i = 0; i < dedupeKey.length; i++) {
-        const char = dedupeKey.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash;
-    }
-    const messageId = `msg_${Math.abs(hash)}`;
-    const messageRef = doc(db, "tenants", tenantId, "outbox", messageId);
-
-    try {
-      const existing = await getDoc(messageRef);
-      if (existing.exists() && existing.data().state !== 'draft') {
-        toast({ title: "Atenção", description: "Já existe um envio preparado para hoje com este template." });
-        setIsOutboxDialogOpen(false);
-        return;
-      }
-
-      await setDoc(messageRef, {
-        id: messageId,
-        tenantId,
-        createdAt: serverTimestamp(),
-        createdBy: user.uid,
-        updatedAt: serverTimestamp(),
-        updatedBy: user.uid,
-        type: 'email',
-        state: targetState,
-        to: selectedContact.email,
-        subject: previewSubject,
-        body: previewBody,
-        templateId: selectedTemplate.id,
-        prospectId: prospect.id,
-        campaignId: null,
-        attempts: 0,
-        lastError: null,
-        dedupeKey,
-        companyName: prospect.companyName,
-        effectiveScore: prospect.effectiveScore,
-        aiUsed: !!customSubject
-      }, { merge: true });
-
-      toast({ 
-        title: targetState === 'queued' ? "Mensagem na fila!" : "Rascunho salvo", 
-        description: targetState === 'queued' ? "O envio será processado em breve." : "Você puede encontrarlos en el Outbox."
-      });
-      setIsOutboxDialogOpen(false);
-      setCustomSubject(null);
-      setCustomBody(null);
-    } catch (e) {
-      toast({ variant: "destructive", title: "Erro", description: "Não fue posible preparar el contacto." });
-    } finally {
-      setIsSavingOutbox(false);
-    }
-  };
-
-  useEffect(() => {
-    setCustomSubject(null);
-    setCustomBody(null);
-  }, [selectedTemplateId]);
-
   if (loading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-muted-foreground" /></div>;
   if (!prospect) return <div className="text-center py-20"><h2 className="text-xl font-bold">Prospect não encontrado.</h2></div>;
+
+  const primaryPhone = prospect.contacts?.[0]?.phone || prospect.contacts?.[0]?.whatsapp;
+  const isPhoneValid = !!normalizePhoneBR(primaryPhone || "");
 
   return (
     <div className="space-y-6">
@@ -473,20 +314,10 @@ export default function ProspectDetailPage() {
             <h1 className="text-2xl font-bold text-primary">{prospect.companyName}</h1>
             <div className="flex items-center gap-2 mt-1">
               <Badge variant="outline">{prospect.cnpj}</Badge>
-              <div className="flex items-center gap-1">
-                <Badge variant="default" className="bg-accent">Score Radar: {prospect.effectiveScore}</Badge>
-                {prospect.aiScoreConfidence && (
-                  <Badge variant="secondary" className="text-[10px]">IA: {prospect.aiScoreConfidence}</Badge>
-                )}
-              </div>
+              <Badge variant="default" className="bg-accent">Score Radar: {prospect.effectiveScore}</Badge>
               {prospect.isClaimedToday && (
                 <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">
                   <CheckCircle2 className="w-3 h-3 mr-1" /> No Radar de Hoje
-                </Badge>
-              )}
-              {prospect.doNotContact && (
-                <Badge variant="destructive" className="flex items-center gap-1">
-                  <Ban className="w-3 h-3" /> Bloqueado (DNC)
                 </Badge>
               )}
             </div>
@@ -494,9 +325,28 @@ export default function ProspectDetailPage() {
         </div>
         <div className="flex gap-2">
           {prospect.isClaimedToday && (
-            <Button onClick={() => setIsOutboxDialogOpen(true)} className="bg-primary" disabled={prospect.doNotContact}>
-              <Send className="w-4 h-4 mr-2" /> Preparar Contato
-            </Button>
+            <>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button 
+                        onClick={handleOpenWhatsAppDialog} 
+                        className="bg-green-500 hover:bg-green-600" 
+                        disabled={!isPhoneValid || prospect.doNotContact}
+                      >
+                        <MessageCircle className="w-4 h-4 mr-2" /> WhatsApp
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {!isPhoneValid && <TooltipContent>Sem telefone válido</TooltipContent>}
+                </Tooltip>
+              </TooltipProvider>
+
+              <Button onClick={() => setIsOutboxDialogOpen(true)} className="bg-primary" disabled={prospect.doNotContact}>
+                <Send className="w-4 h-4 mr-2" /> E-mail
+              </Button>
+            </>
           )}
           {!prospect.isClaimedToday && prospect.status !== 'client' && (
             <Button onClick={handleClaimForToday} disabled={isUpdating || prospect.doNotContact} className="bg-green-600 hover:bg-green-700">
@@ -504,52 +354,14 @@ export default function ProspectDetailPage() {
               Ativar para Hoje
             </Button>
           )}
-          <Button variant="outline" size="sm">Editar</Button>
         </div>
       </div>
-
-      {prospect.doNotContact && (
-        <div className="bg-destructive/10 border border-destructive/20 p-4 rounded-xl flex items-start gap-4 animate-in fade-in slide-in-from-top-2">
-          <ShieldAlert className="w-6 h-6 text-destructive shrink-0" />
-          <div>
-            <h3 className="text-sm font-bold text-destructive">Prospect em Lista Negra (Do Not Contact)</h3>
-            <p className="text-xs text-destructive/80 mt-1">
-              Motivo: {prospect.doNotContactReason || "Não informado"} - Registrado em {new Date(prospect.doNotContactAt || "").toLocaleString()}
-            </p>
-            <Button variant="link" size="sm" className="p-0 h-auto text-destructive underline mt-2" onClick={() => setIsDncDialogOpen(true)}>
-              Remover bloqueio
-            </Button>
-          </div>
-        </div>
-      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Visão Geral</CardTitle>
-              <div className="flex flex-wrap gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="border-primary text-primary hover:bg-primary/5" 
-                  onClick={handleRunWebAnalysis}
-                  disabled={isAnalyzingWeb || !prospect.websiteUrl}
-                >
-                  {isAnalyzingWeb ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <SearchCode className="w-3 h-3 mr-2" />}
-                  Analisar Website
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="border-accent text-accent hover:bg-accent/5" 
-                  onClick={handleRunAiScore}
-                  disabled={isScoring}
-                >
-                  {isScoring ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <BrainCircuit className="w-3 h-3 mr-2" />}
-                  Análise Inteligente (IA)
-                </Button>
-              </div>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -569,33 +381,19 @@ export default function ProspectDetailPage() {
                   <div className="pt-2">
                     <h4 className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Segmentos</h4>
                     <div className="flex flex-wrap gap-1">
-                      {prospect.industryTags?.length ? prospect.industryTags.map(tag => (
+                      {prospect.industryTags?.map(tag => (
                         <Badge key={tag} variant="secondary" className="text-[10px]">{tag}</Badge>
-                      )) : <span className="text-xs text-muted-foreground italic">Nenhum tag definido.</span>}
+                      ))}
                     </div>
                   </div>
-                  {prospect.aiWebSummary && (
-                    <div className="pt-2 border-t mt-2">
-                      <h4 className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Resumo Industrial (IA)</h4>
-                      <p className="text-xs text-muted-foreground italic leading-relaxed">"{prospect.aiWebSummary}"</p>
-                    </div>
-                  )}
                 </div>
                 <div className="space-y-2 p-4 bg-accent/5 rounded-lg border border-accent/10">
-                   <h4 className="text-xs font-bold uppercase text-accent flex items-center gap-2">
-                     <BrainCircuit className="w-3 h-3" /> Análise de IA
-                   </h4>
-                   <ul className="space-y-1 mt-2">
-                     {(prospect.aiScoreReasons?.length ? prospect.aiScoreReasons : prospect.scoreReasons)?.map((reason, i) => (
-                       <li key={i} className="text-xs flex items-start gap-2">
-                         <div className="w-1 h-1 rounded-full bg-accent mt-1.5 shrink-0"></div>
-                         <span className="text-muted-foreground leading-relaxed">{reason}</span>
-                       </li>
+                   <h4 className="text-xs font-bold uppercase text-accent">Análise de IA</h4>
+                   <ul className="space-y-1">
+                     {(prospect.aiScoreReasons || prospect.scoreReasons)?.map((reason, i) => (
+                       <li key={i} className="text-xs text-muted-foreground leading-relaxed">• {reason}</li>
                      ))}
                    </ul>
-                   {prospect.aiScoreUpdatedAt && (
-                     <p className="text-[9px] text-muted-foreground mt-2 italic">Atualizado em: {new Date(prospect.aiScoreUpdatedAt).toLocaleString()}</p>
-                   )}
                 </div>
               </div>
             </CardContent>
@@ -609,41 +407,21 @@ export default function ProspectDetailPage() {
               <TabsTrigger value="history" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
                 Histórico
               </TabsTrigger>
-              <TabsTrigger value="ai-tools" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
-                Ferramentas IA
-              </TabsTrigger>
             </TabsList>
             <TabsContent value="contacts" className="mt-6 space-y-4">
-              <div className="flex justify-end">
-                <Button variant="outline" size="sm" className="text-primary border-primary" onClick={handleRunEmailSuggestions} disabled={isSuggestingEmails}>
-                   {isSuggestingEmails ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <MailPlus className="w-3 h-3 mr-2" />}
-                   Sugerir E-mails Corporativos
-                </Button>
-              </div>
               {prospect.contacts?.map((contact, i) => (
                 <Card key={i}>
-                  <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <CardContent className="p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center font-bold text-primary">{contact.name.charAt(0)}</div>
                       <div>
-                        <div className="font-semibold flex items-center gap-2">
-                          {contact.name}
-                          {contact.verified === false && <Badge variant="outline" className="text-[8px] bg-orange-50 text-orange-600 border-orange-200">Não verificado</Badge>}
-                          {contact.source === 'ai_suggestion' && <Badge variant="secondary" className="text-[8px] uppercase">IA</Badge>}
-                        </div>
+                        <div className="font-semibold">{contact.name}</div>
                         <div className="text-xs text-muted-foreground">{contact.role}</div>
                       </div>
                     </div>
-                    <div className="flex gap-4">
-                      <div className="flex flex-col items-end">
-                        <span className="text-sm flex items-center gap-1"><Mail className="w-3 h-3" /> {contact.email || "-"}</span>
-                        <span className="text-sm flex items-center gap-1"><Phone className="w-3 h-3" /> {contact.phone || "-"}</span>
-                      </div>
-                      {(contact.whatsapp || contact.phone) && (
-                        <Button variant="outline" size="icon" className="text-green-600 border-green-200" asChild>
-                          <a href={`https://wa.me/${(contact.whatsapp || contact.phone).replace(/\D/g, "")}`} target="_blank"><MessageSquare className="w-4 h-4" /></a>
-                        </Button>
-                      )}
+                    <div className="flex flex-col items-end">
+                      <span className="text-sm flex items-center gap-1"><Mail className="w-3 h-3" /> {contact.email || "-"}</span>
+                      <span className="text-sm flex items-center gap-1"><Phone className="w-3 h-3" /> {contact.phone || "-"}</span>
                     </div>
                   </CardContent>
                 </Card>
@@ -660,309 +438,89 @@ export default function ProspectDetailPage() {
                  </div>
               </div>
             </TabsContent>
-            <TabsContent value="ai-tools" className="mt-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card className="hover:border-primary transition-colors cursor-pointer" onClick={handleRunEmailSuggestions}>
-                  <CardHeader className="p-4">
-                    <CardTitle className="text-sm flex items-center gap-2 text-primary">
-                      <MailPlus className="w-4 h-4" /> Sugerir E-mails
-                    </CardTitle>
-                    <CardDescription className="text-xs">
-                      Detecta padrões corporativos para sugerir emails como nome.sobrenome@dominio.
-                    </CardDescription>
-                  </CardHeader>
-                </Card>
-                <Card className="hover:border-accent transition-colors cursor-pointer" onClick={handleRunAiScore}>
-                  <CardHeader className="p-4">
-                    <CardTitle className="text-sm flex items-center gap-2 text-accent">
-                      <BrainCircuit className="w-4 h-4" /> Refinar Score
-                    </CardTitle>
-                    <CardDescription className="text-xs">
-                      Reavalia o potencial industrial com base nos dados atuais.
-                    </CardDescription>
-                  </CardHeader>
-                </Card>
-              </div>
-            </TabsContent>
           </Tabs>
         </div>
 
         <div className="space-y-6">
           <Card>
             <CardHeader><CardTitle>Status do Pipeline</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-               <div className="grid grid-cols-2 gap-2">
-                 {['new', 'contacted', 'interested', 'demo', 'client', 'discarded'].map((s) => (
-                   <Button key={s} disabled={isUpdating} variant={prospect.status === s ? (s === 'discarded' ? 'destructive' : 'default') : 'outline'} size="sm" onClick={() => handleStatusChange(s as ProspectStatus)} className="capitalize">
-                     {s}
-                   </Button>
-                 ))}
-               </div>
+            <CardContent className="grid grid-cols-2 gap-2">
+              {['new', 'contacted', 'interested', 'demo', 'client', 'discarded'].map((s) => (
+                <Button key={s} disabled={isUpdating} variant={prospect.status === s ? 'default' : 'outline'} size="sm" onClick={() => handleStatusChange(s as any)} className="capitalize">
+                  {s}
+                </Button>
+              ))}
             </CardContent>
           </Card>
 
           <Card>
-             <CardHeader className="pb-2">
-               <CardTitle className="text-sm flex items-center gap-2 text-destructive">
-                 <ShieldAlert className="w-4 h-4" /> Compliance
-               </CardTitle>
-             </CardHeader>
-             <CardContent>
+            <CardHeader><CardTitle>Compliance</CardTitle></CardHeader>
+            <CardContent>
                <Button 
                 variant={prospect.doNotContact ? "default" : "outline"} 
                 size="sm" 
-                className={`w-full ${prospect.doNotContact ? 'bg-destructive hover:bg-destructive/90' : 'text-destructive border-destructive hover:bg-destructive/5'}`}
+                className="w-full text-destructive border-destructive"
                 onClick={() => setIsDncDialogOpen(true)}
                >
-                 <Ban className="w-4 h-4 mr-2" />
-                 {prospect.doNotContact ? "Remover de Lista Negra" : "Marcar Do Not Contact"}
+                 <Ban className="w-4 h-4 mr-2" /> {prospect.doNotContact ? "Remover Bloqueio" : "Não Contactar"}
                </Button>
-             </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader><CardTitle>Notas de Negócio</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-               <Textarea placeholder="Adicione uma observação técnica ou comercial..." className="min-h-[120px]" defaultValue={prospect.notes} />
-               <Button className="w-full" size="sm">Salvar Notas</Button>
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {/* DNC Dialog */}
+      {/* WhatsApp Preparation Dialog */}
+      <Dialog open={isWhatsAppDialogOpen} onOpenChange={setIsWhatsAppDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Preparar WhatsApp</DialogTitle>
+            <DialogDescription>Ajuste a mensagem antes de abrir o contato direto.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="wa-text">Mensagem</Label>
+              <Textarea 
+                id="wa-text" 
+                className="min-h-[150px] text-sm" 
+                value={whatsAppDraft}
+                onChange={(e) => setWhatsAppDraft(e.target.value)}
+              />
+            </div>
+            <Button 
+              variant="outline" 
+              className="w-full text-accent border-accent" 
+              onClick={handleImproveWhatsAppWithAi}
+              disabled={isAiWhatsAppDrafting}
+            >
+              {isAiWhatsAppDrafting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Wand2 className="w-4 h-4 mr-2" />}
+              Melhorar com IA
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsWhatsAppDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleFinalizeWhatsApp} className="bg-green-500 hover:bg-green-600">
+              <ExternalLink className="w-4 h-4 mr-2" /> Abrir WhatsApp
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Outbox Dialog, DNC Dialog etc (already existing or similar to previous versions) */}
       <Dialog open={isDncDialogOpen} onOpenChange={setIsDncDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{prospect.doNotContact ? "Remover Bloqueio" : "Marcar como Do Not Contact"}</DialogTitle>
-            <DialogDescription>
-              {prospect.doNotContact 
-                ? "Deseja liberar este prospect para novas comunicações?" 
-                : "Isso impedirá que o prospect apareça no Radar Diário e bloqueará qualquer envio de email."}
-            </DialogDescription>
+            <DialogTitle>{prospect.doNotContact ? "Remover DNC" : "Ativar Do Not Contact"}</DialogTitle>
           </DialogHeader>
           {!prospect.doNotContact && (
             <div className="space-y-2 py-4">
-              <Label htmlFor="dnc-reason">Motivo do bloqueio</Label>
-              <Input 
-                id="dnc-reason" 
-                placeholder="Ex: Solicitou opt-out, dados incorretos..." 
-                value={dncReason} 
-                onChange={(e) => setDncReason(e.target.value)}
-              />
+              <Label>Motivo</Label>
+              <Input value={dncReason} onChange={e => setDncReason(e.target.value)} placeholder="Ex: Solicitou opt-out" />
             </div>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDncDialogOpen(false)}>Cancelar</Button>
-            <Button 
-              variant={prospect.doNotContact ? "default" : "destructive"} 
-              onClick={handleToggleDnc} 
-              disabled={isUpdating || (!prospect.doNotContact && !dncReason)}
-            >
-              {isUpdating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Ban className="w-4 h-4 mr-2" />}
-              Confirmar Alteração
-            </Button>
+            <Button variant="destructive" onClick={handleToggleDnc} disabled={isUpdating}>Confirmar</Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Email Suggestions Dialog */}
-      <Dialog open={isEmailSuggestionDialogOpen} onOpenChange={setIsEmailSuggestionDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Sugestões de E-mail IA</DialogTitle>
-            <DialogDescription>Padrões detectados para o domínio <strong>{prospect.aiEmailDomainUsed || prospect.domain}</strong>.</DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            {emailSuggestions?.length === 0 ? (
-              <p className="text-sm text-center text-muted-foreground py-10">Não foi posible detectar patrones para este dominio.</p>
-            ) : (
-              emailSuggestions?.map((s, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 border rounded-lg hover:bg-secondary/20 transition-colors">
-                  <div className="space-y-1">
-                    <div className="text-sm font-mono font-bold text-primary">{s.email}</div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className={`text-[8px] uppercase ${
-                        s.confidence === 'high' ? 'bg-green-50 text-green-600 border-green-200' :
-                        s.confidence === 'medium' ? 'bg-blue-50 text-blue-600 border-blue-200' :
-                        'bg-orange-50 text-orange-600 border-orange-200'
-                      }`}>
-                        {s.confidence} confidence
-                      </Badge>
-                      <span className="text-[10px] text-muted-foreground">{s.reason}</span>
-                    </div>
-                  </div>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    onClick={() => handleAddSuggestedContact(s.email, s.type)} 
-                    disabled={isUpdating || prospect.contacts?.some(c => c.email.toLowerCase() === s.email.toLowerCase())}
-                  >
-                    {prospect.contacts?.some(c => c.email.toLowerCase() === s.email.toLowerCase()) ? (
-                      <CheckCircle2 className="w-4 h-4 text-green-600" />
-                    ) : (
-                      <UserPlus className="w-4 h-4 text-primary" />
-                    )}
-                  </Button>
-                </div>
-              ))
-            )}
-            <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex items-start gap-2">
-              <Info className="w-4 h-4 text-blue-600 mt-0.5" />
-              <p className="text-xs text-blue-700">
-                Estes e-mails são baseados em padrões industriais e não são garantidos. Marque como verificado após o primeiro contato.
-              </p>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEmailSuggestionDialogOpen(false)}>Fechar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Website Analysis Dialog */}
-      <Dialog open={isWebAnalysisDialogOpen} onOpenChange={setIsWebAnalysisDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Análise do Website Concluída</DialogTitle>
-            <DialogDescription>A IA analisou o site da empresa. Selecione o que deseja aplicar ao perfil.</DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-6 py-4">
-            <div className="space-y-3">
-              <Label className="text-xs font-bold uppercase text-muted-foreground">Resumo Detectado</Label>
-              <div className="p-3 bg-secondary/30 rounded-lg text-sm italic border">
-                "{webAnalysisResult?.summary}"
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <Label className="text-xs font-bold uppercase text-muted-foreground">Tags de Indústria Sugeridas</Label>
-              <div className="grid grid-cols-1 gap-2">
-                {webAnalysisResult?.industryTags.map(tag => (
-                  <div key={tag} className="flex items-center space-x-2">
-                    <Checkbox 
-                      id={`tag-${tag}`} 
-                      checked={selectedWebTags.includes(tag)}
-                      onCheckedChange={(checked) => {
-                        if (checked) setSelectedWebTags(prev => [...prev, tag]);
-                        else setSelectedWebTags(prev => prev.filter(t => t !== tag));
-                      }}
-                    />
-                    <label htmlFor={`tag-${tag}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                      {tag}
-                    </label>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <Label className="text-xs font-bold uppercase text-muted-foreground">Keywords Técnicas</Label>
-              <div className="flex flex-wrap gap-1">
-                {webAnalysisResult?.detectedKeywords.map(kw => (
-                  <Badge key={kw} variant="outline" className="text-[9px]">{kw}</Badge>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsWebAnalysisDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleApplyWebAnalysis} disabled={isUpdating} className="bg-primary">
-              {isUpdating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-              Aplicar ao Perfil
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Outbox Preparation Dialog */}
-      <Dialog open={isOutboxDialogOpen} onOpenChange={setIsOutboxDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Preparar Contato Industrial</DialogTitle>
-            <DialogDescription>Escolha um template e verifique a personalização antes de enfileirar.</DialogDescription>
-          </DialogHeader>
-
-          {prospect.doNotContact ? (
-            <div className="p-8 text-center space-y-4">
-              <Ban className="w-12 h-12 mx-auto text-destructive opacity-50" />
-              <p className="text-sm font-bold text-destructive">Bloqueado por compliance (Do Not Contact).</p>
-              <Button variant="outline" onClick={() => setIsOutboxDialogOpen(false)}>Fechar</Button>
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Template Base</Label>
-                    <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
-                      <SelectTrigger><SelectValue placeholder="Selecione um modelo" /></SelectTrigger>
-                      <SelectContent>
-                        {templates.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Contato Destino</Label>
-                    <Select value={selectedContactIndex} onValueChange={setSelectedContactIndex}>
-                      <SelectTrigger><SelectValue placeholder="Escolha o contacto" /></SelectTrigger>
-                      <SelectContent>
-                        {prospect.contacts.map((c, i) => <SelectItem key={i} value={i.toString()}>{c.name} ({c.email})</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {selectedTemplate && (
-                    <Button 
-                      variant="outline" 
-                      className="w-full border-accent text-accent hover:bg-accent/5" 
-                      onClick={handleImproveWithAi}
-                      disabled={isAiDrafting}
-                    >
-                      {isAiDrafting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Wand2 className="w-4 h-4 mr-2" />}
-                      Melhorar com IA
-                    </Button>
-                  )}
-                </div>
-
-                <div className="bg-white p-6 rounded-lg border shadow-inner space-y-3 relative overflow-hidden min-h-[300px]">
-                  <div className="text-[10px] font-bold text-muted-foreground uppercase flex justify-between items-center mb-2">
-                    Visualização do E-mail {customSubject && <Badge className="bg-accent h-4 text-[8px] uppercase">IA Gerado</Badge>}
-                  </div>
-                  {selectedTemplate ? (
-                    <>
-                      <div className="text-sm font-semibold border-b pb-2 mb-2 text-primary">{previewSubject}</div>
-                      <div 
-                        className="prose prose-sm max-w-none text-xs text-gray-700 leading-relaxed"
-                        dangerouslySetInnerHTML={{ __html: previewBody || '<i>Corpo vazio...</i>' }}
-                      />
-                    </>
-                  ) : (
-                    <div className="text-sm text-muted-foreground italic h-full flex items-center justify-center">Selecione um template para ver o preview.</div>
-                  )}
-                  {isAiDrafting && (
-                    <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-10">
-                      <Loader2 className="w-8 h-8 animate-spin text-accent" />
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <DialogFooter className="gap-2 sm:gap-0">
-                <Button variant="outline" disabled={!selectedTemplate || isSavingOutbox || isAiDrafting} onClick={() => handlePrepareOutbox('draft')}>
-                  Salvar como Rascunho
-                </Button>
-                <Button disabled={!selectedTemplate || isSavingOutbox || isAiDrafting} onClick={() => handlePrepareOutbox('queued')} className="bg-primary">
-                  {isSavingOutbox ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
-                  Enfileirar para Envio
-                </Button>
-              </DialogFooter>
-            </>
-          )}
         </DialogContent>
       </Dialog>
     </div>

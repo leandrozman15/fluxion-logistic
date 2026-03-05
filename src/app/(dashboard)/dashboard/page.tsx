@@ -1,9 +1,10 @@
+
 'use client';
 
 import { useMemo, useState } from "react";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, where, orderBy, limit, doc, setDoc, getDocs, serverTimestamp, getDoc, runTransaction, updateDoc } from "firebase/firestore";
+import { collection, query, where, orderBy, limit, doc, setDoc, getDocs, serverTimestamp, getDoc, runTransaction, updateDoc, addDoc } from "firebase/firestore";
 import { KPICard } from "@/components/dashboard/kpi-card";
 import { 
   Users, 
@@ -22,7 +23,8 @@ import {
   SearchCode,
   CheckCircle2,
   ExternalLink,
-  Ban
+  Ban,
+  MessageCircle
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -46,10 +48,13 @@ import { useToast } from "@/hooks/use-toast";
 import { TooltipProvider, Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useRouter } from "next/navigation";
 import { analyzeWebsiteContent } from "@/ai/flows/analyze-website-content-flow";
+import { normalizePhoneBR, buildWaMeUrl } from "@/lib/utils/whatsapp";
+import { useUser } from "@/firebase";
 
 export default function DashboardPage() {
   const db = useFirestore();
   const { tenantId } = useTenant();
+  const { user } = useUser();
   const { toast } = useToast();
   const router = useRouter();
   const [isGenerating, setIsGenerating] = useState(false);
@@ -109,7 +114,7 @@ export default function DashboardPage() {
       let q = query(
         collection(db, "tenants", tenantId, "prospects"),
         where("status", "in", ["new", "contacted"]),
-        where("doNotContact", "==", false), // Excluir DNC
+        where("doNotContact", "==", false),
         orderBy("effectiveScore", "desc"),
         limit(200)
       );
@@ -131,7 +136,7 @@ export default function DashboardPage() {
         .slice(0, topLimit);
 
       if (topN.length === 0) {
-        toast({ title: "Radar vazio", description: "Não há novos prospectos para gerar o radar hoje com os filtros atuais." });
+        toast({ title: "Radar vazio", description: "Não há novos prospectos para gerar o radar hoje." });
         return;
       }
 
@@ -173,7 +178,7 @@ export default function DashboardPage() {
         }
       });
       
-      toast({ title: "Radar gerado!", description: `As mejores ${topN.length} oportunidades estão listas.` });
+      toast({ title: "Radar gerado!", description: `As melhores ${topN.length} oportunidades estão prontas.` });
     } catch (e) {
       console.error(e);
       toast({ variant: "destructive", title: "Erro ao gerar radar" });
@@ -186,8 +191,7 @@ export default function DashboardPage() {
     if (!db || !tenantId) return;
     setIsActionLoading(prospectId);
     try {
-      const todayStr = new Date().toISOString().split('T')[0];
-      const statsRef = doc(db, "tenants", tenantId, "dailyStats", todayStr);
+      const statsRef = doc(db, "tenants", tenantId, "dailyStats", today);
       const pRef = doc(db, "tenants", tenantId, "prospects", prospectId);
 
       await runTransaction(db, async (transaction) => {
@@ -250,6 +254,34 @@ export default function DashboardPage() {
     }
   };
 
+  const handleQuickWhatsApp = async (prospectId: string, companyName: string) => {
+    if (!db || !tenantId || !user) return;
+    
+    // Obter dados do prospecto para encontrar o telefone
+    const pSnap = await getDoc(doc(db, "tenants", tenantId, "prospects", prospectId));
+    const pData = pSnap.data() as Prospect;
+    
+    const phone = pData.contacts?.[0]?.phone || pData.contacts?.[0]?.whatsapp;
+    const normalized = normalizePhoneBR(phone || "");
+    
+    if (!normalized) {
+      toast({ variant: "destructive", title: "Telefone ausente", description: "Não há um telefone válido para este contato." });
+      return;
+    }
+
+    // Registrar evento de telemetria
+    await addDoc(collection(db, "tenants", tenantId, "events"), {
+      type: "whatsapp_opened",
+      prospectId,
+      companyName,
+      actorUid: user.uid,
+      createdAt: serverTimestamp(),
+      metadata: { phoneE164: normalized, hasPrefilledText: false }
+    });
+
+    window.open(buildWaMeUrl(normalized), "_blank");
+  };
+
   const dailyQuotaUsed = stats?.quotaUsed || 0;
   const dailyQuotaLimit = stats?.quotaLimit || tenantData?.settings?.dailyTopLimit || 30;
   const quotaProgress = (dailyQuotaUsed / dailyQuotaLimit) * 100;
@@ -266,7 +298,7 @@ export default function DashboardPage() {
       <div className="flex flex-col md:flex-row gap-4 items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-primary">Radar do Dia</h1>
-          <p className="text-muted-foreground">Foco nas mejores oportunidades industriales.</p>
+          <p className="text-muted-foreground">Foco nas melhores oportunidades industriais.</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
           <Card className="w-full md:w-80 bg-accent/5 border-accent/20">
@@ -347,6 +379,21 @@ export default function DashboardPage() {
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>Análise Rápida IA</TooltipContent>
+                            </UITooltip>
+
+                            <UITooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-green-500" 
+                                  onClick={(e) => { e.preventDefault(); handleQuickWhatsApp(item.prospectId, item.companyName); }}
+                                  disabled={isActionLoading === item.prospectId || !item.hasPhone}
+                                >
+                                  <MessageCircle className="w-4 h-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>WhatsApp Direto</TooltipContent>
                             </UITooltip>
                             
                             <UITooltip>
