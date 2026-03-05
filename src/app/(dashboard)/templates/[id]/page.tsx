@@ -18,12 +18,15 @@ import Link from "next/link";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function TemplateEditorPage() {
-  const { id } = useParams();
+  const params = useParams();
+  const id = params?.id as string;
   const router = useRouter();
   const db = useFirestore();
   const { tenantId } = useTenant();
   const { toast } = useToast();
-  const isNew = id === 'new';
+  
+  // Una plantilla es nueva si el ID es 'new' o si no hay ID (ruta /templates/new)
+  const isNew = !id || id === 'new';
 
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
@@ -33,16 +36,16 @@ export default function TemplateEditorPage() {
 
   const templateRef = useMemo(() => {
     if (!db || !tenantId || isNew) return null;
-    return doc(db, "tenants", tenantId, "templates", id as string);
+    return doc(db, "tenants", tenantId, "templates", id);
   }, [db, tenantId, id, isNew]);
 
   const { data: template, loading: templateLoading } = useDoc<EmailTemplate>(templateRef);
 
   useEffect(() => {
     if (template) {
-      setName(template.name);
-      setSubject(template.subject);
-      setBody(template.body);
+      setName(template.name || "");
+      setSubject(template.subject || "");
+      setBody(template.body || "");
     }
   }, [template]);
 
@@ -61,31 +64,46 @@ export default function TemplateEditorPage() {
   }, [prospects, selectedProspectId]);
 
   const handleSave = async () => {
-    if (!db || !tenantId) return;
-    if (!name || !subject || !body) {
-      toast({ variant: "destructive", title: "Campos obrigatórios", description: "Preencha todos los campos." });
+    if (!db || !tenantId) {
+      toast({ variant: "destructive", title: "Erro de conexão", description: "Não foi possível conectar ao banco de dados." });
+      return;
+    }
+    
+    if (!name.trim() || !subject.trim() || !body.trim()) {
+      toast({ variant: "destructive", title: "Campos obrigatórios", description: "Por favor, preencha o nome, assunto e corpo do e-mail." });
       return;
     }
 
     setIsSaving(true);
-    const templateId = isNew ? doc(collection(db, "tenants", tenantId, "templates")).id : id as string;
-    const finalRef = doc(db, "tenants", tenantId, "templates", templateId);
-
+    
     try {
+      // Si es nuevo, generamos un ID único; si no, usamos el ID existente
+      const finalId = isNew ? doc(collection(db, "tenants", tenantId, "templates")).id : id;
+      const finalRef = doc(db, "tenants", tenantId, "templates", finalId);
+
       await setDoc(finalRef, {
-        name,
-        subject,
-        body,
+        id: finalId,
+        name: name.trim(),
+        subject: subject.trim(),
+        body: body.trim(),
         tenantId,
         variablesUsed: extractVariables(subject + " " + body),
         updatedAt: serverTimestamp(),
         ...(isNew ? { createdAt: serverTimestamp() } : {})
       }, { merge: true });
 
-      toast({ title: "Template salvo com sucesso!" });
-      if (isNew) router.push("/templates");
-    } catch (e) {
-      toast({ variant: "destructive", title: "Erro ao salvar" });
+      toast({ title: "Template salvo!", description: "As alterações foram registradas com sucesso." });
+      
+      if (isNew) {
+        router.push("/templates");
+      }
+    } catch (e: any) {
+      console.error("Error saving template:", e);
+      toast({ 
+        variant: "destructive", 
+        title: "Erro ao salvar", 
+        description: e.message || "Ocorreu un erro inesperado ao tentar salvar a plantilla." 
+      });
     } finally {
       setIsSaving(false);
     }
@@ -103,14 +121,18 @@ export default function TemplateEditorPage() {
   };
 
   if (templateLoading && !isNew) {
-    return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin" /></div>;
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <Loader2 className="w-10 h-10 animate-spin text-muted-foreground" />
+      </div>
+    );
   }
 
   const renderedPreviewBody = selectedProspect ? renderTemplate(body, selectedProspect) : body;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" asChild>
             <Link href="/templates"><ArrowLeft className="w-4 h-4" /></Link>
@@ -119,7 +141,7 @@ export default function TemplateEditorPage() {
             {isNew ? "Novo Template" : "Editar Template"}
           </h1>
         </div>
-        <Button onClick={handleSave} disabled={isSaving} className="bg-accent">
+        <Button onClick={handleSave} disabled={isSaving} className="bg-accent hover:bg-accent/90">
           {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
           Salvar Alterações
         </Button>
@@ -177,6 +199,7 @@ export default function TemplateEditorPage() {
               {PERMITTED_VARIABLES.map(v => (
                 <button 
                   key={v} 
+                  type="button"
                   className="text-[10px] bg-card border px-2 py-1 rounded hover:bg-accent hover:text-white transition-colors"
                   onClick={() => insertHtml(`{{${v}}}`)}
                 >
@@ -190,12 +213,12 @@ export default function TemplateEditorPage() {
         <div className="lg:col-span-2 space-y-6">
           <Card className="sticky top-24">
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Eye className="w-5 h-5 text-accent" /> Visualização Real
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Eye className="w-5 h-5 text-accent" /> Preview Real
                 </CardTitle>
                 <Select value={selectedProspectId} onValueChange={setSelectedProspectId}>
-                  <SelectTrigger className="w-[180px] h-8 text-xs">
+                  <SelectTrigger className="w-[160px] h-8 text-xs">
                     <SelectValue placeholder="Escolha um prospect" />
                   </SelectTrigger>
                   <SelectContent>
@@ -211,7 +234,7 @@ export default function TemplateEditorPage() {
                 <div className="mb-4">
                   <div className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Assunto</div>
                   <div className="text-sm font-semibold text-primary border-b pb-2">
-                    {selectedProspect ? renderTemplate(subject, selectedProspect) : subject}
+                    {selectedProspect ? renderTemplate(subject, selectedProspect) : subject || '...'}
                   </div>
                 </div>
                 <div>
