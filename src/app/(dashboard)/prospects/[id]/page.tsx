@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
@@ -13,11 +12,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Building2, Globe, MapPin, Mail, Phone, ExternalLink, MessageSquare, History, Sparkles, Loader2, CheckCircle2, Send } from "lucide-react";
+import { Building2, Globe, MapPin, Mail, Phone, ExternalLink, MessageSquare, History, Sparkles, Loader2, CheckCircle2, Send, Wand2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Prospect, ProspectStatus, EmailTemplate, OutboxState } from "@/app/lib/types";
-import { useParams, Link } from "next/navigation";
+import { useParams } from "next/navigation";
 import { renderTemplate } from "@/lib/utils/template-renderer";
+import { generateEmailDraft } from "@/ai/flows/generate-email-draft-flow";
 
 export default function ProspectDetailPage() {
   const { id } = useParams();
@@ -31,6 +31,11 @@ export default function ProspectDetailPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [selectedContactIndex, setSelectedContactIndex] = useState<string>("0");
   const [isSavingOutbox, setIsSavingOutbox] = useState(false);
+  const [isAiDrafting, setIsAiDrafting] = useState(false);
+  
+  // Custom draft overrides (when IA is used)
+  const [customSubject, setCustomSubject] = useState<string | null>(null);
+  const [customBody, setCustomBody] = useState<string | null>(null);
 
   // Prospect Data
   const prospectRef = useMemo(() => {
@@ -51,8 +56,8 @@ export default function ProspectDetailPage() {
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
   const selectedContact = prospect?.contacts?.[parseInt(selectedContactIndex)];
 
-  const previewSubject = selectedTemplate && prospect ? renderTemplate(selectedTemplate.subject, prospect) : "";
-  const previewBody = selectedTemplate && prospect ? renderTemplate(selectedTemplate.body, prospect) : "";
+  const previewSubject = customSubject || (selectedTemplate && prospect ? renderTemplate(selectedTemplate.subject, prospect) : "");
+  const previewBody = customBody || (selectedTemplate && prospect ? renderTemplate(selectedTemplate.body, prospect) : "");
 
   const handleStatusChange = async (newStatus: ProspectStatus) => {
     if (!prospectRef) return;
@@ -64,7 +69,7 @@ export default function ProspectDetailPage() {
       });
       toast({ title: "Status atualizado", description: `O prospect agora está como ${newStatus}.` });
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro", description: "Não fue posible actualizar el status." });
+      toast({ variant: "destructive", title: "Erro", description: "Não foi possível actualizar el status." });
     } finally {
       setIsUpdating(false);
     }
@@ -121,6 +126,39 @@ export default function ProspectDetailPage() {
     }
   };
 
+  const handleImproveWithAi = async () => {
+    if (!selectedTemplate || !prospect) return;
+    
+    setIsAiDrafting(true);
+    try {
+      const result = await generateEmailDraft({
+        templateSubject: selectedTemplate.subject,
+        templateBody: selectedTemplate.body,
+        prospect: {
+          companyName: prospect.companyName,
+          city: prospect.address?.city,
+          state: prospect.address?.state,
+          industryTags: prospect.industryTags,
+          websiteUrl: prospect.websiteUrl,
+          effectiveScore: prospect.effectiveScore,
+          scoreReasons: prospect.scoreReasons,
+          contactName: selectedContact?.name,
+          contactRole: selectedContact?.role,
+        }
+      });
+      
+      setCustomSubject(result.subject);
+      setCustomBody(result.body);
+      
+      toast({ title: "Email melhorado com IA!", description: "O rascunho foi personalizado para este prospect." });
+    } catch (e) {
+      console.error(e);
+      toast({ variant: "destructive", title: "Erro na IA", description: "Não foi possível gerar a sugestão agora." });
+    } finally {
+      setIsAiDrafting(false);
+    }
+  };
+
   const handlePrepareOutbox = async (targetState: OutboxState) => {
     if (!db || !tenantId || !prospect || !selectedTemplate || !user || !selectedContact) return;
 
@@ -165,7 +203,8 @@ export default function ProspectDetailPage() {
         lastError: null,
         dedupeKey,
         companyName: prospect.companyName,
-        effectiveScore: prospect.effectiveScore
+        effectiveScore: prospect.effectiveScore,
+        aiUsed: !!customSubject // Registro si se usó IA
       }, { merge: true });
 
       toast({ 
@@ -173,12 +212,21 @@ export default function ProspectDetailPage() {
         description: targetState === 'queued' ? "O envio será processado em breve." : "Você puede encontrarlo en el Outbox."
       });
       setIsOutboxDialogOpen(false);
+      // Reset custom draft after saving
+      setCustomSubject(null);
+      setCustomBody(null);
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro", description: "Não foi possível preparar o contato." });
+      toast({ variant: "destructive", title: "Erro", description: "Não foi posible preparar o contato." });
     } finally {
       setIsSavingOutbox(false);
     }
   };
+
+  // Reset custom text if template changes
+  useEffect(() => {
+    setCustomSubject(null);
+    setCustomBody(null);
+  }, [selectedTemplateId]);
 
   if (loading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-muted-foreground" /></div>;
   if (!prospect) return <div className="text-center py-20"><h2 className="text-xl font-bold">Prospect não encontrado.</h2></div>;
@@ -246,7 +294,7 @@ export default function ProspectDetailPage() {
                        <li key={i} className="text-sm flex items-start gap-2">
                          <Sparkles className="w-3 h-3 text-accent mt-1" /> {reason}
                        </li>
-                     )) : <li className="text-sm text-muted-foreground italic">Score basado en calidad de datos.</li>}
+                     )) : <li className="text-sm text-muted-foreground italic">Score baseado na qualidade de dados.</li>}
                    </ul>
                 </div>
               </div>
@@ -292,7 +340,7 @@ export default function ProspectDetailPage() {
               <div className="space-y-4">
                  <div className="flex gap-4">
                     <div className="flex flex-col items-center"><div className="w-2 h-2 rounded-full bg-primary"></div><div className="w-0.5 h-full bg-border"></div></div>
-                    <div className="pb-4"><div className="text-sm font-semibold">Atualizado em {new Date(prospect.updatedAt).toLocaleDateString()}</div></div>
+                    <div className="pb-4"><div className="text-sm font-semibold">Importado em {new Date(prospect.createdAt).toLocaleDateString()}</div></div>
                  </div>
               </div>
             </TabsContent>
@@ -328,13 +376,13 @@ export default function ProspectDetailPage() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Preparar Contato Industrial</DialogTitle>
-            <DialogDescription>Escolha um template e verifique a personalización antes de enfileirar.</DialogDescription>
+            <DialogDescription>Escolha um template e verifique a personalização antes de enfileirar.</DialogDescription>
           </DialogHeader>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label>Template</Label>
+                <Label>Template Base</Label>
                 <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
                   <SelectTrigger><SelectValue placeholder="Selecione um modelo" /></SelectTrigger>
                   <SelectContent>
@@ -351,10 +399,24 @@ export default function ProspectDetailPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {selectedTemplate && (
+                <Button 
+                  variant="outline" 
+                  className="w-full border-accent text-accent hover:bg-accent/5" 
+                  onClick={handleImproveWithAi}
+                  disabled={isAiDrafting}
+                >
+                  {isAiDrafting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Wand2 className="w-4 h-4 mr-2" />}
+                  Melhorar com IA
+                </Button>
+              )}
             </div>
 
-            <div className="bg-secondary/20 p-4 rounded-lg border space-y-3">
-              <div className="text-[10px] font-bold text-muted-foreground uppercase">Preview</div>
+            <div className="bg-secondary/20 p-4 rounded-lg border space-y-3 relative overflow-hidden">
+              <div className="text-[10px] font-bold text-muted-foreground uppercase flex justify-between items-center">
+                Preview {customSubject && <Badge className="bg-accent h-4 text-[8px] uppercase">IA Gerado</Badge>}
+              </div>
               {selectedTemplate ? (
                 <>
                   <div className="text-sm font-semibold border-b pb-2">{previewSubject}</div>
@@ -363,14 +425,19 @@ export default function ProspectDetailPage() {
               ) : (
                 <div className="text-sm text-muted-foreground italic h-40 flex items-center justify-center">Selecione um template para ver o preview.</div>
               )}
+              {isAiDrafting && (
+                <div className="absolute inset-0 bg-background/50 flex items-center justify-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-accent" />
+                </div>
+              )}
             </div>
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" disabled={!selectedTemplate || isSavingOutbox} onClick={() => handlePrepareOutbox('draft')}>
+            <Button variant="outline" disabled={!selectedTemplate || isSavingOutbox || isAiDrafting} onClick={() => handlePrepareOutbox('draft')}>
               Salvar como Rascunho
             </Button>
-            <Button disabled={!selectedTemplate || isSavingOutbox} onClick={() => handlePrepareOutbox('queued')} className="bg-primary">
+            <Button disabled={!selectedTemplate || isSavingOutbox || isAiDrafting} onClick={() => handlePrepareOutbox('queued')} className="bg-primary">
               {isSavingOutbox ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
               Enfileirar para Envio
             </Button>
