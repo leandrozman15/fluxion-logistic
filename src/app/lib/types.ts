@@ -1,10 +1,23 @@
+
 export type ProspectStatus = 'new' | 'contacted' | 'interested' | 'demo' | 'client' | 'discarded';
+export type UserRole = 'admin' | 'sales' | 'viewer';
+
+export interface AppUser {
+  uid: string;
+  tenantId: string;
+  email: string;
+  displayName: string;
+  role: UserRole;
+  createdAt: string;
+  lastLogin?: string;
+}
 
 export interface Prospect {
   id: string;
   tenantId: string;
   createdAt: string;
   updatedAt: string;
+  createdBy: string; // User UID
   source: 'manual' | 'csv' | 'web' | 'referral';
   companyName: string;
   cnpj: string;
@@ -23,6 +36,15 @@ export interface Prospect {
   lastContactAt?: string;
   nextFollowUpAt?: string;
   notes?: string;
+  auditLog: AuditEntry[];
+}
+
+export interface AuditEntry {
+  timestamp: string;
+  userId: string;
+  action: string;
+  previousValue?: any;
+  newValue?: any;
 }
 
 export interface Contact {
@@ -38,8 +60,11 @@ export interface Tenant {
   name: string;
   createdAt: string;
   plan: 'free' | 'pro';
-  dailyEmailLimit: number;
-  hourlyEmailLimit: number;
+  settings: {
+    dailyEmailLimit: number;
+    hourlyEmailLimit: number;
+    timezone: string;
+  };
   isActive: boolean;
 }
 
@@ -61,6 +86,9 @@ export interface Campaign {
   scheduledAt?: string;
   sentCount: number;
   failedCount: number;
+  rateLimitConfig?: {
+    emailsPerHour: number;
+  };
 }
 
 export interface Template {
@@ -71,4 +99,16 @@ export interface Template {
   name: string;
   subject: string;
   body: string;
+}
+
+export interface ImportRecord {
+  id: string;
+  tenantId: string;
+  createdAt: string;
+  createdBy: string;
+  fileName: string;
+  status: 'processing' | 'completed' | 'failed';
+  totalRows: number;
+  importedRows: number;
+  errorLog: string[];
 }

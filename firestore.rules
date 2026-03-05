@@ -1,0 +1,60 @@
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Función para verificar si el usuario pertenece al tenant
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function belongsToTenant(tenantId) {
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/tenants/$(tenantId)/users/$(request.auth.uid));
+    }
+
+    function getUserData(tenantId) {
+      return get(/databases/$(database)/documents/tenants/$(tenantId)/users/$(request.auth.uid)).data;
+    }
+
+    function hasRole(tenantId, role) {
+      let userData = getUserData(tenantId);
+      return userData.role == role || userData.role == 'admin';
+    }
+
+    // Reglas para el Tenant
+    match /tenants/{tenantId} {
+      allow read: if belongsToTenant(tenantId);
+      allow write: if false; // Solo via Admin SDK o configuración inicial
+
+      // Usuarios del tenant
+      match /users/{userId} {
+        allow read: if belongsToTenant(tenantId);
+        allow write: if hasRole(tenantId, 'admin');
+      }
+
+      // Prospects: Núcleo del CRM
+      match /prospects/{prospectId} {
+        allow read: if belongsToTenant(tenantId);
+        allow create, update: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales');
+        allow delete: if hasRole(tenantId, 'admin');
+      }
+
+      // Plantillas y Campañas
+      match /templates/{templateId} {
+        allow read: if belongsToTenant(tenantId);
+        allow write: if hasRole(tenantId, 'sales');
+      }
+
+      match /campaigns/{campaignId} {
+        allow read: if belongsToTenant(tenantId);
+        allow write: if hasRole(tenantId, 'sales');
+      }
+
+      // Importaciones
+      match /imports/{importId} {
+        allow read: if belongsToTenant(tenantId);
+        allow write: if hasRole(tenantId, 'sales');
+      }
+    }
+  }
+}
