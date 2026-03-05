@@ -4,7 +4,7 @@
 import { useMemo, useState } from "react";
 import { useFirestore, useCollection, useDoc, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, where, orderBy, limit, doc, setDoc, getDocs, serverTimestamp, getDoc, runTransaction, updateDoc, addDoc } from "firebase/firestore";
+import { collection, query, where, orderBy, limit, doc, getDocs, serverTimestamp, runTransaction, writeBatch } from "firebase/firestore";
 import { KPICard } from "@/components/dashboard/kpi-card";
 import { 
   Users, 
@@ -20,8 +20,8 @@ import {
   CheckCircle2,
   Lightbulb,
   Rocket,
-  Search,
-  Activity
+  Activity,
+  MessageCircle
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +29,6 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { 
   ChartContainer, 
-  ChartTooltip, 
   ChartTooltipContent
 } from "@/components/ui/chart";
 import { 
@@ -40,17 +39,16 @@ import {
   Tooltip
 } from "recharts";
 import Link from "next/link";
-import { Prospect, DailyTop, Tenant, DailyStats } from "@/app/lib/types";
+import { Prospect, DailyTop, Tenant, DailyStats, SegmentStats } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
-import { useRouter } from "next/navigation";
 import { calculateEffectiveScore } from "@/lib/utils/scoring";
+import { getSegmentKey } from "@/lib/utils/learning-loop";
 
 export default function DashboardPage() {
   const db = useFirestore();
   const { tenantId } = useTenant();
   const { user } = useUser();
   const { toast } = useToast();
-  const router = useRouter();
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRunningDiscovery, setIsRunningDiscovery] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
@@ -77,6 +75,13 @@ export default function DashboardPage() {
   }, [db, tenantId, today]);
 
   const { data: dailyTop, loading: dailyTopLoading } = useDoc<DailyTop>(dailyTopRef);
+
+  const segmentStatsQuery = useMemo(() => {
+    if (!db || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "segmentStats"));
+  }, [db, tenantId]);
+
+  const { data: allSegments } = useCollection<SegmentStats>(segmentStatsQuery);
 
   const industryStatsQuery = useMemo(() => {
     if (!db || !tenantId) return null;
@@ -186,7 +191,6 @@ export default function DashboardPage() {
     if (!db || !tenantId || !tenantData) return;
     setIsRunningDiscovery(true);
     try {
-      // Simulação do Job de Auto Discovery
       const mockNewCompanies = [
         { name: "Metalúrgica Alpha", state: "SP", sector: "Metalurgia" },
         { name: "Tech Industrial Beta", state: "SC", sector: "Máquinas" },
@@ -357,41 +361,53 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   <div className="space-y-1">
-                    {dailyTop.items.map((item, i) => (
-                      <div key={item.prospectId} className="flex items-center justify-between p-3 rounded-xl bg-secondary/20 border hover:border-accent/50 transition-all group">
-                        <Link href={`/prospects/${item.prospectId}`} className="flex items-center gap-4 flex-1">
-                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-xs shrink-0">#{i+1}</div>
-                          <div className="min-w-0">
-                            <div className="font-bold text-sm truncate">{item.companyName}</div>
-                            <div className="flex items-center gap-2 mt-0.5">
-                               <Badge variant="outline" className="text-[9px] px-1 h-4">Score: {item.effectiveScore}</Badge>
+                    {dailyTop.items.map((item, i) => {
+                      // Learning Loop recommendation
+                      const prospectRef = allProspects?.find(p => p.id === item.prospectId);
+                      const sKey = prospectRef ? getSegmentKey(prospectRef) : null;
+                      const segment = allSegments?.find(s => s.id === sKey);
+                      const isWARecommended = segment?.preferredChannel === 'whatsapp';
+                      const isEmailRecommended = segment?.preferredChannel === 'email';
+
+                      return (
+                        <div key={item.prospectId} className="flex items-center justify-between p-3 rounded-xl bg-secondary/20 border hover:border-accent/50 transition-all group">
+                          <Link href={`/prospects/${item.prospectId}`} className="flex items-center gap-4 flex-1">
+                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-xs shrink-0">#{i+1}</div>
+                            <div className="min-w-0">
+                              <div className="font-bold text-sm truncate">{item.companyName}</div>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                 <Badge variant="outline" className="text-[9px] px-1 h-4">Score: {item.effectiveScore}</Badge>
+                                 {isWARecommended && <Badge variant="outline" className="text-[8px] h-4 bg-green-50 text-green-700 border-green-200 flex items-center gap-1"><Zap className="w-2 h-2" /> WA Recomendado</Badge>}
+                                 {isEmailRecommended && <Badge variant="outline" className="text-[8px] h-4 bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-1"><Zap className="w-2 h-2" /> E-mail Recomendado</Badge>}
+                              </div>
                             </div>
+                          </Link>
+                          
+                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {isWARecommended && <MessageCircle className="w-4 h-4 text-green-600 animate-bounce" />}
+                            <Button 
+                              variant="secondary" 
+                              size="sm" 
+                              className="h-8 text-[10px] font-bold"
+                              asChild
+                            >
+                              <Link href={`/prospects/${item.prospectId}`}>
+                                <Lightbulb className="w-3 h-3 mr-1 text-accent" /> Próxima Ação
+                              </Link>
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-green-600" 
+                              onClick={() => handleQuickClaim(item.prospectId)}
+                            >
+                              {isActionLoading === item.prospectId ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                            </Button>
                           </div>
-                        </Link>
-                        
-                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button 
-                            variant="secondary" 
-                            size="sm" 
-                            className="h-8 text-[10px] font-bold"
-                            asChild
-                          >
-                            <Link href={`/prospects/${item.prospectId}`}>
-                              <Lightbulb className="w-3 h-3 mr-1 text-accent" /> Próxima Ação
-                            </Link>
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-green-600" 
-                            onClick={() => handleQuickClaim(item.prospectId)}
-                          >
-                            {isActionLoading === item.prospectId ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                          </Button>
+                          <ChevronRight className="w-4 h-4 text-muted-foreground ml-2" />
                         </div>
-                        <ChevronRight className="w-4 h-4 text-muted-foreground ml-2" />
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

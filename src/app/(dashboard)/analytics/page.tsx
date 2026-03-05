@@ -17,30 +17,23 @@ import {
   Tooltip, 
   ResponsiveContainer, 
   Legend,
-  AreaChart,
-  Area,
-  ComposedChart,
-  Line,
   Cell
 } from "recharts";
 import { 
   TrendingUp, 
-  Users, 
   Target, 
-  Mail, 
   Loader2,
-  Zap,
-  Filter,
   RefreshCw,
-  Info,
   MessageCircle,
   Lightbulb,
   ShieldCheck,
-  AlertTriangle
+  Filter,
+  Activity
 } from "lucide-react";
-import { DailyStats, WeeklyStats, Prospect, AppUser } from "@/app/lib/types";
+import { DailyStats, WeeklyStats, Prospect, AppUser, SegmentStats } from "@/app/lib/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { getSegmentKey, calculateSegmentPerformance } from "@/lib/utils/learning-loop";
 
 export default function AnalyticsPage() {
   const db = useFirestore();
@@ -76,15 +69,12 @@ export default function AnalyticsPage() {
 
   const { data: weeklyStats, loading: weeklyLoading } = useCollection<WeeklyStats>(weeklyStatsQuery);
 
-  const chartData = useMemo(() => {
-    return [...(dailyStats || [])].reverse().map(s => ({
-      name: s.date.split('-').slice(1).join('/'),
-      score: s.radarAvgFinalScore || 0,
-      emails: s.emailsSent || 0,
-      delivered: s.emailsDelivered || Math.floor((s.emailsSent || 0) * 0.95),
-      new: s.newProspects || 0
-    }));
-  }, [dailyStats]);
+  const segmentStatsQuery = useMemo(() => {
+    if (!db || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "segmentStats"), orderBy("sampleSize", "desc"), limit(5));
+  }, [db, tenantId]);
+
+  const { data: segmentStats } = useCollection<SegmentStats>(segmentStatsQuery);
 
   const deliverabilityData = useMemo(() => {
     if (!dailyStats || dailyStats.length === 0) return [];
@@ -105,6 +95,14 @@ export default function AnalyticsPage() {
       { name: 'WhatsApp', sent: latest.whatsappOpenedCount || 0, conv: latest.whatsappInterestedCount || 0 },
     ];
   }, [weeklyStats]);
+
+  const segmentChartData = useMemo(() => {
+    return (segmentStats || []).map(s => ({
+      name: s.industryTag,
+      email: s.emailAttempts ? Math.round((s.emailInterested / s.emailAttempts) * 100) : 0,
+      whatsapp: s.whatsappAttempts ? Math.round((s.whatsappInterested / s.whatsappAttempts) * 100) : 0
+    }));
+  }, [segmentStats]);
 
   const operationalInsight = useMemo(() => {
     if (!weeklyStats || weeklyStats.length === 0) return null;
@@ -130,7 +128,6 @@ export default function AnalyticsPage() {
     if (!db || !tenantId || !isAdmin) return;
     setIsSyncing(true);
     try {
-      const todayStr = new Date().toISOString().split('T')[0];
       const yearWeek = `${new Date().getFullYear()}-${Math.ceil((new Date().getDate() + 6 - new Date().getDay()) / 7)}`;
       
       const pSnapshot = await getDocs(query(collection(db, "tenants", tenantId, "prospects")));
@@ -139,6 +136,9 @@ export default function AnalyticsPage() {
       const eSnapshot = await getDocs(query(collection(db, "tenants", tenantId, "events")));
       const events = eSnapshot.docs.map(d => d.data());
 
+      const batch = writeBatch(db);
+
+      // 1. Weekly Stats Update
       const counts = {
         contacted: prospects.filter(p => p.status === 'contacted').length,
         interested: prospects.filter(p => p.status === 'interested').length,
@@ -149,9 +149,7 @@ export default function AnalyticsPage() {
       const waInterested = prospects.filter(p => p.status === 'interested' && events.some(e => e.prospectId === p.id && e.type === 'whatsapp_opened')).length;
       const emailInterested = prospects.filter(p => p.status === 'interested' && events.some(e => e.prospectId === p.id && e.type === 'email_prepared')).length;
 
-      const batch = writeBatch(db);
       const weeklyRef = doc(db, "tenants", tenantId, "weeklyStats", yearWeek);
-      
       batch.set(weeklyRef, {
         id: yearWeek,
         weekId: yearWeek,
@@ -164,9 +162,57 @@ export default function AnalyticsPage() {
         reconciledAt: serverTimestamp()
       }, { merge: true });
 
+      // 2. Learning Loop: Segment Stats Update
+      const segments: Record<string, Partial<SegmentStats>> = {};
+      
+      prospects.forEach(p => {
+        const key = getSegmentKey(p);
+        if (!key) return;
+
+        if (!segments[key]) {
+          segments[key] = {
+            id: key,
+            tenantId,
+            industryTag: p.industryTags[0],
+            state: p.address.state,
+            emailAttempts: 0,
+            emailInterested: 0,
+            whatsappAttempts: 0,
+            whatsappInterested: 0,
+            sampleSize: 0
+          };
+        }
+
+        const pEvents = events.filter(e => e.prospectId === p.id);
+        const hadEmail = pEvents.some(e => e.type === 'email_prepared');
+        const hadWA = pEvents.some(e => e.type === 'whatsapp_opened');
+        const isInterested = p.status === 'interested' || p.status === 'demo' || p.status === 'client';
+
+        if (hadEmail) {
+          segments[key].emailAttempts!++;
+          if (isInterested) segments[key].emailInterested!++;
+        }
+        if (hadWA) {
+          segments[key].whatsappAttempts!++;
+          if (isInterested) segments[key].whatsappInterested!++;
+        }
+        segments[key].sampleSize!++;
+      });
+
+      Object.values(segments).forEach(s => {
+        const perf = calculateSegmentPerformance(s);
+        const sRef = doc(db, "tenants", tenantId, "segmentStats", s.id!);
+        batch.set(sRef, { 
+          ...s, 
+          ...perf, 
+          updatedAt: serverTimestamp() 
+        }, { merge: true });
+      });
+
       await batch.commit();
-      toast({ title: "Sincronização completa" });
+      toast({ title: "Sincronização completa", description: "Learning Loop atualizado com novos dados." });
     } catch (e) {
+      console.error(e);
       toast({ variant: "destructive", title: "Erro na sincronização" });
     } finally {
       setIsSyncing(false);
@@ -184,7 +230,7 @@ export default function AnalyticsPage() {
   const kpis = [
     { title: "Deliverability", value: "98.2%", icon: ShieldCheck, description: "Saúde do domínio" },
     { title: "Abordagens WA", value: dailyStats?.reduce((acc, s) => acc + (s.whatsappOpened || 0), 0) || 0, icon: MessageCircle, description: "Total WhatsApp" },
-    { title: "Score Médio Radar", value: Math.round(dailyStats?.reduce((acc, s) => acc + (s.radarAvgFinalScore || 0), 0) / (dailyStats?.length || 1)), icon: Target, description: "Qualidade IA" },
+    { title: "Score Médio Radar", value: Math.round(dailyStats?.reduce((acc, s) => acc + (s.radarAvgFinalScore || 0), 0) / (dailyStats?.length || 1)) || 0, icon: Target, description: "Qualidade IA" },
     { title: "Taxa Interesse", value: "14%", icon: TrendingUp, description: "Conversão Global" },
   ];
 
@@ -193,13 +239,13 @@ export default function AnalyticsPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-primary">Insights Industriais</h1>
-          <p className="text-muted-foreground">Analise a saúde da sua prospecção e entregabilidade.</p>
+          <p className="text-muted-foreground">Analise a saúde da sua prospecção e o aprendizado por segmento.</p>
         </div>
         <div className="flex items-center gap-2">
           {isAdmin && (
             <Button variant="outline" size="sm" onClick={handleReconcileStats} disabled={isSyncing}>
               {isSyncing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-              Sincronizar Métricas
+              Sincronizar Inteligência
             </Button>
           )}
           <Select value={range} onValueChange={setRange}>
@@ -238,22 +284,20 @@ export default function AnalyticsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-bold flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-green-600" /> Saúde de Entrega (E-mail)
+              <Activity className="w-4 h-4 text-primary" /> Performance por Segmento (%)
             </CardTitle>
-            <CardDescription>Volume de envios bem sucedidos vs rejeitados.</CardDescription>
+            <CardDescription>Conversão comparativa entre e-mail e WhatsApp por setor.</CardDescription>
           </CardHeader>
           <CardContent className="h-[300px] pt-4">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={deliverabilityData}>
+              <BarChart data={segmentChartData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
                 <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} />
-                <YAxis fontSize={10} axisLine={false} tickLine={false} />
+                <YAxis fontSize={10} axisLine={false} tickLine={false} unit="%" />
                 <Tooltip cursor={{fill: 'transparent'}} />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]} barSize={40}>
-                  {deliverabilityData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Bar>
+                <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} />
+                <Bar dataKey="email" name="E-mail" fill="#94a3b8" radius={[4, 4, 0, 0]} barSize={20} />
+                <Bar dataKey="whatsapp" name="WhatsApp" fill="hsl(var(--accent))" radius={[4, 4, 0, 0]} barSize={20} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -262,7 +306,7 @@ export default function AnalyticsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-bold flex items-center gap-2">
-              <Filter className="w-4 h-4 text-primary" /> Conversões por Canal
+              <Filter className="w-4 h-4 text-primary" /> Conversões Totais por Canal
             </CardTitle>
             <CardDescription>Volume de abordagens versus leads interessados.</CardDescription>
           </CardHeader>
@@ -274,8 +318,8 @@ export default function AnalyticsPage() {
                 <YAxis dataKey="name" type="category" fontSize={10} axisLine={false} tickLine={false} width={80} />
                 <Tooltip cursor={{fill: 'transparent'}} />
                 <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} />
-                <Bar dataKey="sent" name="Abordagens" fill="#94a3b8" radius={[0, 4, 4, 0]} barSize={20} />
-                <Bar dataKey="conv" name="Interessados" fill="hsl(var(--accent))" radius={[0, 4, 4, 0]} barSize={20} />
+                <Bar dataKey="sent" name="Abordagens" fill="#cbd5e1" radius={[0, 4, 4, 0]} barSize={20} />
+                <Bar dataKey="conv" name="Interessados" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>

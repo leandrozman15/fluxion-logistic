@@ -1,5 +1,5 @@
 
-import { Prospect } from "@/app/lib/types";
+import { Prospect, SegmentStats } from "@/app/lib/types";
 
 export type NextActionType = 
   | "suggest_emails" 
@@ -14,12 +14,14 @@ export interface NextAction {
   label: string;
   reason: string;
   priority: "high" | "medium" | "low";
+  channelRecommendation?: 'email' | 'whatsapp';
 }
 
 /**
- * Calculates the "Next Best Action" for a given prospect based on its current state.
+ * Calculates the "Next Best Action" for a given prospect based on its current state
+ * and segment performance data (Learning Loop).
  */
-export function calculateNextAction(prospect: Prospect): NextAction {
+export function calculateNextAction(prospect: Prospect, segmentStats?: SegmentStats | null): NextAction {
   if (prospect.doNotContact) {
     return { type: "none", label: "Não Contactar", reason: "Prospect em lista DNC.", priority: "low" };
   }
@@ -30,6 +32,9 @@ export function calculateNextAction(prospect: Prospect): NextAction {
   const hasAiSummary = !!prospect.aiWebSummary;
   const lastContactAt = prospect.lastContactAt ? new Date(prospect.lastContactAt) : null;
   const now = new Date();
+  
+  // Learning Loop integration: detect preferred channel
+  const preferred = segmentStats?.preferredChannel || 'none';
   
   // 1. If no contact info but has website -> Suggest Emails
   if (!hasEmail && hasWebsite) {
@@ -51,27 +56,34 @@ export function calculateNextAction(prospect: Prospect): NextAction {
     };
   }
 
-  // 3. If has phone and never contacted -> WhatsApp First
-  if (hasPhone && !lastContactAt) {
-    return { 
-      type: "whatsapp_first", 
-      label: "WhatsApp", 
-      reason: "Contato direto por celular disponível para primeira abordagem.", 
-      priority: "high" 
-    };
+  // 3. First Contact Logic (guided by Learning Loop)
+  if (!lastContactAt) {
+    if (hasPhone && (preferred === 'whatsapp' || !hasEmail)) {
+      return { 
+        type: "whatsapp_first", 
+        label: "WhatsApp", 
+        reason: preferred === 'whatsapp' 
+          ? "Canal com maior conversão histórica para este setor." 
+          : "Contato direto por celular disponível.", 
+        priority: "high",
+        channelRecommendation: 'whatsapp'
+      };
+    }
+    
+    if (hasEmail) {
+      return { 
+        type: "prepare_email", 
+        label: "Preparar E-mail", 
+        reason: preferred === 'email' 
+          ? "Canal preferencial detectado pela IA para este nicho." 
+          : "E-mail disponível para abordagem estruturada.", 
+        priority: "high",
+        channelRecommendation: 'email'
+      };
+    }
   }
 
-  // 4. If has email and never contacted -> Prepare Email
-  if (hasEmail && !lastContactAt) {
-    return { 
-      type: "prepare_email", 
-      label: "Preparar E-mail", 
-      reason: "E-mail disponível para abordagem profissional estruturada.", 
-      priority: "high" 
-    };
-  }
-
-  // 5. If was contacted but more than 2 days ago -> Follow-up
+  // 4. Follow-up Logic
   if (lastContactAt && prospect.status !== 'client' && prospect.status !== 'discarded') {
     const diffDays = Math.ceil((now.getTime() - lastContactAt.getTime()) / (1000 * 3600 * 24));
     if (diffDays >= 2) {

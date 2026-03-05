@@ -4,7 +4,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { useFirestore, useDoc, useCollection, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc, updateDoc, runTransaction, serverTimestamp, setDoc, getDoc, collection, query, orderBy, increment, addDoc, where } from "firebase/firestore";
+import { doc, updateDoc, runTransaction, serverTimestamp, collection, query, orderBy, increment, addDoc, where } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,10 +18,10 @@ import {
   MessageSquare, History, Sparkles, Loader2, CheckCircle2, 
   Send, Wand2, BrainCircuit, AlertCircle, SearchCode, 
   MailPlus, UserPlus, Info, Ban, ShieldAlert, MessageCircle, 
-  ArrowLeft, Lightbulb, Clock, User, AlertTriangle, ShieldCheck 
+  ArrowLeft, Lightbulb, Clock, User, AlertTriangle, ShieldCheck, Zap 
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Prospect, ProspectStatus, EmailTemplate, OutboxMessage, OutboxState, AiConfidence, Contact, Task } from "@/app/lib/types";
+import { Prospect, ProspectStatus, EmailTemplate, OutboxState, SegmentStats } from "@/app/lib/types";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { renderTemplate } from "@/lib/utils/template-renderer";
 import { generateEmailDraft } from "@/ai/flows/generate-email-draft-flow";
@@ -35,6 +35,7 @@ import Link from "next/link";
 import { addDays } from "date-fns";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { getSegmentKey } from "@/lib/utils/learning-loop";
 
 export default function ProspectDetailPage() {
   const { id } = useParams();
@@ -43,7 +44,6 @@ export default function ProspectDetailPage() {
   const { tenantId } = useTenant();
   const { user } = useUser();
   const { toast } = useToast();
-  const router = useRouter();
   
   const [isUpdating, setIsUpdating] = useState(false);
   const [isOutboxDialogOpen, setIsOutboxDialogOpen] = useState(false);
@@ -67,6 +67,10 @@ export default function ProspectDetailPage() {
   }, [db, tenantId, id]);
 
   const { data: prospect, loading } = useDoc<Prospect>(prospectRef);
+
+  const segmentKey = useMemo(() => prospect ? getSegmentKey(prospect) : null, [prospect]);
+  const segmentRef = useMemo(() => (db && tenantId && segmentKey) ? doc(db, "tenants", tenantId, "segmentStats", segmentKey) : null, [db, tenantId, segmentKey]);
+  const { data: segmentData } = useDoc<SegmentStats>(segmentRef);
 
   const templatesQuery = useMemo(() => {
     if (!db || !tenantId) return null;
@@ -97,7 +101,7 @@ export default function ProspectDetailPage() {
   const spamProb = previewBody ? calculateSpamProbability(previewSubject, previewBody) : 0;
   const onCooldown = prospect ? isEmailOnCooldown(prospect.lastEmailSentAt) : false;
 
-  const nba = useMemo(() => prospect ? calculateNextAction(prospect) : null, [prospect]);
+  const nba = useMemo(() => prospect ? calculateNextAction(prospect, segmentData) : null, [prospect, segmentData]);
 
   useEffect(() => {
     if (searchParams?.get('action') === 'prepare' && !loading && prospect) {
@@ -433,9 +437,10 @@ export default function ProspectDetailPage() {
                     <span>
                       <Button 
                         onClick={handleOpenWhatsAppDialog} 
-                        className="bg-green-500 hover:bg-green-600" 
+                        className={`transition-all ${nba?.channelRecommendation === 'whatsapp' ? 'bg-green-600 shadow-[0_0_15px_rgba(22,163,74,0.4)] scale-105' : 'bg-green-500'}`} 
                         disabled={!isPhoneValid || prospect.doNotContact}
                       >
+                        {nba?.channelRecommendation === 'whatsapp' && <Zap className="w-3 h-3 mr-1 animate-pulse" />}
                         <MessageCircle className="w-4 h-4 mr-2" /> WhatsApp
                       </Button>
                     </span>
@@ -450,9 +455,10 @@ export default function ProspectDetailPage() {
                     <span>
                       <Button 
                         onClick={() => setIsOutboxDialogOpen(true)} 
-                        className="bg-primary" 
+                        className={`transition-all ${nba?.channelRecommendation === 'email' ? 'bg-primary shadow-[0_0_15px_rgba(30,41,59,0.4)] scale-105' : 'bg-primary/90'}`} 
                         disabled={!hasEmail || prospect.doNotContact}
                       >
+                        {nba?.channelRecommendation === 'email' && <Zap className="w-3 h-3 mr-1 animate-pulse" />}
                         <Send className="w-4 h-4 mr-2" /> E-mail
                       </Button>
                     </span>
@@ -468,7 +474,14 @@ export default function ProspectDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <Card>
-            <CardHeader><CardTitle>Visão Geral</CardTitle></CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle>Visão Geral</CardTitle>
+              {segmentData?.preferredChannel && segmentData.preferredChannel !== 'none' && (
+                <Badge variant="outline" className="bg-accent/5 text-accent border-accent/20 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" /> Recomendado: {segmentData.preferredChannel === 'whatsapp' ? 'WhatsApp' : 'E-mail'}
+                </Badge>
+              )}
+            </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="space-y-3">
@@ -502,6 +515,11 @@ export default function ProspectDetailPage() {
                        <li key={i} className="text-xs text-muted-foreground leading-relaxed">• {reason}</li>
                      ))}
                    </ul>
+                   {segmentData && segmentData.confidence > 0.5 && (
+                     <div className="mt-3 pt-2 border-t border-accent/10 text-[9px] text-accent italic">
+                       IA aprendeu que {segmentData.preferredChannel === 'whatsapp' ? 'WhatsApp' : 'E-mail'} converte melhor neste setor (SP/SC).
+                     </div>
+                   )}
                 </div>
               </div>
             </CardContent>
@@ -606,7 +624,7 @@ export default function ProspectDetailPage() {
         </div>
       </div>
 
-      {/* Dialogs... */}
+      {/* Dialogs remain same... */}
       <Dialog open={isOutboxDialogOpen} onOpenChange={setIsOutboxDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -676,16 +694,10 @@ export default function ProspectDetailPage() {
               <div className="space-y-1">
                 <Label className="text-[10px]">Corpo</Label>
                 <div 
-                  className="text-xs bg-white p-3 rounded border min-h-[150px] prose prose-sm max-w-none"
+                  className="text-xs bg-white p-3 rounded border min-h-[150px] prose prose-sm max-w-none overflow-hidden"
                   dangerouslySetInnerHTML={{ __html: previewBody || "<i>Selecione um template...</i>" }}
                 />
               </div>
-              {spamProb > 60 && (
-                <div className="text-[9px] text-destructive bg-white/80 p-2 rounded border border-destructive flex items-start gap-2 absolute bottom-4 left-4 right-4">
-                  <ShieldAlert className="w-3 h-3 mt-0.5 shrink-0" />
-                  <span>Conteúdo com muitos links ou palavras sensíveis. Sua taxa de entrega pode ser prejudicada.</span>
-                </div>
-              )}
             </div>
           </div>
           <DialogFooter className="gap-2">
@@ -733,9 +745,9 @@ export default function ProspectDetailPage() {
       <Dialog open={isDncDialogOpen} onOpenChange={setIsDncDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{prospect.doNotContact ? "Remover DNC" : "Ativar Do Not Contact"}</DialogTitle>
+            <DialogTitle>{prospect?.doNotContact ? "Remover DNC" : "Ativar Do Not Contact"}</DialogTitle>
           </DialogHeader>
-          {!prospect.doNotContact && (
+          {!prospect?.doNotContact && (
             <div className="space-y-2 py-4">
               <Label>Motivo do Bloqueio</Label>
               <Input value={dncReason} onChange={e => setDncReason(e.target.value)} placeholder="Ex: Solicitou opt-out" />

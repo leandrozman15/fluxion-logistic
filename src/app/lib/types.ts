@@ -188,6 +188,21 @@ export interface WeeklyStats {
   reconciledAt?: any;
 }
 
+export interface SegmentStats {
+  id: string; // industryTag_state
+  tenantId: string;
+  industryTag: string;
+  state: string;
+  emailAttempts: number;
+  emailInterested: number;
+  whatsappAttempts: number;
+  whatsappInterested: number;
+  preferredChannel: 'email' | 'whatsapp' | 'none';
+  confidence: number;
+  sampleSize: number;
+  updatedAt: any;
+}
+
 export interface Contact {
   name: string;
   role: string;
