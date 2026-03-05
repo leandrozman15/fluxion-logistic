@@ -1,4 +1,3 @@
-
 export type ProspectStatus = 'new' | 'contacted' | 'interested' | 'demo' | 'client' | 'discarded';
 export type UserRole = 'admin' | 'sales' | 'viewer';
 export type OutboxState = 'draft' | 'queued' | 'sent' | 'failed' | 'canceled';
@@ -119,9 +118,22 @@ export interface DailyTop {
 
 export interface DailyStats {
   id: string; // YYYY-MM-DD
+  date: string;
   quotaLimit: number;
   quotaUsed: number;
   emailsSent: number;
+  emailsFailed: number;
+  radarAvgFinalScore: number;
+  newProspects: number;
+}
+
+export interface WeeklyStats {
+  id: string; // YYYY-WW
+  weekId: string;
+  statusChangedTo_contacted: number;
+  statusChangedTo_interested: number;
+  statusChangedTo_demo: number;
+  statusChangedTo_client: number;
 }
 
 export interface Contact {

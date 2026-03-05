@@ -1,4 +1,3 @@
-
 {
   "firestore": {
     "collections": {
@@ -37,7 +36,34 @@
           "campaigns": { "description": "Configuración y estado de campañas masivas" },
           "imports": { "description": "Registro de importaciones de archivos CSV" },
           "dailyTop": { "description": "Ranking diario congelado de las mejores oportunidades (Top 30)" },
-          "dailyStats": { "description": "Estadísticas de uso y cuotas por día" },
+          "dailyStats": { 
+            "description": "Estadísticas de uso, cuotas y métricas por día",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "date": { "type": "string" },
+                "quotaUsed": { "type": "number" },
+                "quotaLimit": { "type": "number" },
+                "emailsSent": { "type": "number" },
+                "emailsFailed": { "type": "number" },
+                "radarAvgFinalScore": { "type": "number" },
+                "newProspects": { "type": "number" }
+              }
+            }
+          },
+          "weeklyStats": {
+            "description": "Métricas de conversión del pipeline por semana",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "weekId": { "type": "string" },
+                "statusChangedTo_contacted": { "type": "number" },
+                "statusChangedTo_interested": { "type": "number" },
+                "statusChangedTo_demo": { "type": "number" },
+                "statusChangedTo_client": { "type": "number" }
+              }
+            }
+          },
           "outbox": { "description": "Cola de mensajes operativos (draft, queued, sent, failed) con soporte para idempotencia" }
         }
       }

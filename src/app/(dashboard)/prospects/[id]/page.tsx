@@ -1,10 +1,9 @@
-
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
 import { useFirestore, useDoc, useCollection, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc, updateDoc, runTransaction, serverTimestamp, setDoc, getDoc, collection, query, orderBy } from "firebase/firestore";
+import { doc, updateDoc, runTransaction, serverTimestamp, setDoc, getDoc, collection, query, orderBy, increment } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -75,16 +74,42 @@ export default function ProspectDetailPage() {
   const previewBody = customBody || (selectedTemplate && prospect ? renderTemplate(selectedTemplate.body, prospect) : "");
 
   const handleStatusChange = async (newStatus: ProspectStatus) => {
-    if (!prospectRef) return;
+    if (!prospectRef || !db || !tenantId) return;
     setIsUpdating(true);
     try {
-      await updateDoc(prospectRef, { 
-        status: newStatus,
-        updatedAt: new Date().toISOString()
+      const today = new Date();
+      const yearWeek = `${today.getFullYear()}-${Math.ceil((today.getDate() + 6 - today.getDay()) / 7)}`;
+      const weeklyStatsRef = doc(db, "tenants", tenantId, "weeklyStats", yearWeek);
+
+      await runTransaction(db, async (transaction) => {
+        transaction.update(prospectRef, { 
+          status: newStatus,
+          updatedAt: new Date().toISOString()
+        });
+
+        // Telemetría de conversión
+        if (newStatus !== 'new') {
+          const statsDoc = await transaction.get(weeklyStatsRef);
+          const field = `statusChangedTo_${newStatus}`;
+          if (statsDoc.exists()) {
+            transaction.update(weeklyStatsRef, { [field]: increment(1) });
+          } else {
+            transaction.set(weeklyStatsRef, { 
+              id: yearWeek, 
+              weekId: yearWeek, 
+              [field]: 1,
+              statusChangedTo_contacted: newStatus === 'contacted' ? 1 : 0,
+              statusChangedTo_interested: newStatus === 'interested' ? 1 : 0,
+              statusChangedTo_demo: newStatus === 'demo' ? 1 : 0,
+              statusChangedTo_client: newStatus === 'client' ? 1 : 0
+            });
+          }
+        }
       });
+
       toast({ title: "Status atualizado", description: `O prospect agora está como ${newStatus}.` });
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro", description: "Não foi possível atualizar o status." });
+      toast({ variant: "destructive", title: "Erro", description: "Não foi posible guardar la actualización." });
     } finally {
       setIsUpdating(false);
     }
@@ -126,7 +151,7 @@ export default function ProspectDetailPage() {
 
       toast({ title: "Score IA atualizado!", description: `Nota atribuída: ${result.aiScore} (${result.confidence})` });
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro no Scoring", description: "Não foi possível processar a IA agora." });
+      toast({ variant: "destructive", title: "Erro no Scoring", description: "Não fue posible procesar la IA ahora." });
     } finally {
       setIsScoring(false);
     }
@@ -209,7 +234,7 @@ export default function ProspectDetailPage() {
 
       setIsEmailSuggestionDialogOpen(true);
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro na Sugestão", description: "Não foi possível gerar sugestões agora." });
+      toast({ variant: "destructive", title: "Erro na Sugestão", description: "Não fue posible generar sugerencias ahora." });
     } finally {
       setIsSuggestingEmails(false);
     }
@@ -243,7 +268,7 @@ export default function ProspectDetailPage() {
       });
       toast({ title: "Contato adicionado!", description: `E-mail ${email} foi adicionado à lista.` });
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro", description: "Não fue posible guardar el contacto." });
+      toast({ variant: "destructive", title: "Erro", description: "Não foi possível guardar el contacto." });
     } finally {
       setIsUpdating(false);
     }
@@ -253,8 +278,8 @@ export default function ProspectDetailPage() {
     if (!db || !tenantId || !prospect || !user) return;
     
     setIsUpdating(true);
-    const today = new Date().toISOString().split('T')[0];
-    const statsRef = doc(db, "tenants", tenantId, "dailyStats", today);
+    const todayStr = new Date().toISOString().split('T')[0];
+    const statsRef = doc(db, "tenants", tenantId, "dailyStats", todayStr);
     const pRef = doc(db, "tenants", tenantId, "prospects", prospect.id);
 
     try {
@@ -280,9 +305,13 @@ export default function ProspectDetailPage() {
 
         if (!statsDoc.exists()) {
           transaction.set(statsRef, {
+            date: todayStr,
             quotaUsed: 1,
             quotaLimit: 30,
-            date: today,
+            emailsSent: 0,
+            emailsFailed: 0,
+            newProspects: 0,
+            radarAvgFinalScore: 0,
             createdAt: serverTimestamp()
           });
         } else {
@@ -336,8 +365,8 @@ export default function ProspectDetailPage() {
     if (!db || !tenantId || !prospect || !selectedTemplate || !user || !selectedContact) return;
 
     setIsSavingOutbox(true);
-    const today = new Date().toISOString().split('T')[0];
-    const dedupeKey = `manual:${prospect.id}:${selectedTemplate.id}:${today}`;
+    const todayStr = new Date().toISOString().split('T')[0];
+    const dedupeKey = `manual:${prospect.id}:${selectedTemplate.id}:${todayStr}`;
     
     let hash = 0;
     for (let i = 0; i < dedupeKey.length; i++) {
@@ -381,7 +410,7 @@ export default function ProspectDetailPage() {
 
       toast({ 
         title: targetState === 'queued' ? "Mensagem na fila!" : "Rascunho salvo", 
-        description: targetState === 'queued' ? "O envio será processado em breve." : "Você pode encontrá-lo no Outbox."
+        description: targetState === 'queued' ? "O envio será processado em breve." : "Você puede encontrarlos en el Outbox."
       });
       setIsOutboxDialogOpen(false);
       setCustomSubject(null);
@@ -640,7 +669,7 @@ export default function ProspectDetailPage() {
 
           <div className="space-y-4 py-4">
             {emailSuggestions?.length === 0 ? (
-              <p className="text-sm text-center text-muted-foreground py-10">Não foi possível detectar padrões para este domínio.</p>
+              <p className="text-sm text-center text-muted-foreground py-10">Não foi posible detectar patrones para este dominio.</p>
             ) : (
               emailSuggestions?.map((s, idx) => (
                 <div key={idx} className="flex items-center justify-between p-3 border rounded-lg hover:bg-secondary/20 transition-colors">

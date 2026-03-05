@@ -1,10 +1,9 @@
-
 'use client';
 
 import { useState, useMemo } from "react";
 import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, where, writeBatch, doc, serverTimestamp, runTransaction } from "firebase/firestore";
+import { collection, query, orderBy, where, writeBatch, doc, serverTimestamp, runTransaction, increment } from "firebase/firestore";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -93,8 +92,8 @@ export default function ProspectsPage() {
     if (!db || !tenantId || !user || selectedIds.length === 0) return;
     
     setIsBulkProcessing(true);
-    const today = new Date().toISOString().split('T')[0];
-    const statsRef = doc(db, "tenants", tenantId, "dailyStats", today);
+    const todayStr = new Date().toISOString().split('T')[0];
+    const statsRef = doc(db, "tenants", tenantId, "dailyStats", todayStr);
 
     try {
       await runTransaction(db, async (transaction) => {
@@ -126,9 +125,13 @@ export default function ProspectsPage() {
 
         if (!statsDoc.exists()) {
           transaction.set(statsRef, {
+            date: todayStr,
             quotaUsed: toProcess.length,
             quotaLimit: 30,
-            date: today,
+            emailsSent: 0,
+            emailsFailed: 0,
+            newProspects: 0,
+            radarAvgFinalScore: 0,
             createdAt: serverTimestamp()
           });
         } else {
@@ -153,18 +156,38 @@ export default function ProspectsPage() {
   const handleBulkStatusChange = async (newStatus: ProspectStatus) => {
     if (!db || !tenantId || selectedIds.length === 0) return;
     setIsBulkProcessing(true);
-    const batch = writeBatch(db);
     
-    selectedIds.forEach(id => {
-      const pRef = doc(db, "tenants", tenantId, "prospects", id);
-      batch.update(pRef, { 
-        status: newStatus,
-        updatedAt: new Date().toISOString()
-      });
-    });
-
     try {
-      await batch.commit();
+      const today = new Date();
+      const yearWeek = `${today.getFullYear()}-${Math.ceil((today.getDate() + 6 - today.getDay()) / 7)}`;
+      const weeklyStatsRef = doc(db, "tenants", tenantId, "weeklyStats", yearWeek);
+
+      await runTransaction(db, async (transaction) => {
+        selectedIds.forEach(id => {
+          const pRef = doc(db, "tenants", tenantId, "prospects", id);
+          transaction.update(pRef, { 
+            status: newStatus,
+            updatedAt: new Date().toISOString()
+          });
+        });
+
+        const field = `statusChangedTo_${newStatus}`;
+        const statsDoc = await transaction.get(weeklyStatsRef);
+        if (statsDoc.exists()) {
+          transaction.update(weeklyStatsRef, { [field]: increment(selectedIds.length) });
+        } else {
+          transaction.set(weeklyStatsRef, { 
+            id: yearWeek, 
+            weekId: yearWeek, 
+            [field]: selectedIds.length,
+            statusChangedTo_contacted: newStatus === 'contacted' ? selectedIds.length : 0,
+            statusChangedTo_interested: newStatus === 'interested' ? selectedIds.length : 0,
+            statusChangedTo_demo: newStatus === 'demo' ? selectedIds.length : 0,
+            statusChangedTo_client: newStatus === 'client' ? selectedIds.length : 0
+          });
+        }
+      });
+
       toast({ title: "Status atualizado", description: `${selectedIds.length} registros modificados.` });
       setSelectedIds([]);
     } catch (e) {

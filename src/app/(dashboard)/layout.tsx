@@ -1,12 +1,12 @@
-
 import { SidebarProvider, SidebarInset, Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarGroup, SidebarGroupLabel, SidebarGroupContent } from "@/components/ui/sidebar";
-import { LayoutDashboard, Users, Mail, FileSpreadsheet, Settings, Target, FileText, Inbox, LogOut, Building2 } from "lucide-react";
+import { LayoutDashboard, Users, Mail, FileSpreadsheet, Settings, Target, FileText, Inbox, LogOut, Building2, BarChart3 } from "lucide-react";
 import Link from "next/link";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const menuItems = [
     { title: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
     { title: "Prospects", icon: Users, href: "/prospects" },
+    { title: "Insights", icon: BarChart3, href: "/analytics" },
     { title: "Outbox", icon: Inbox, href: "/outbox" },
     { title: "Campanhas", icon: Target, href: "/campaigns" },
     { title: "Templates", icon: FileText, href: "/templates" },

@@ -1,10 +1,9 @@
-
 'use client';
 
 import { useMemo, useState } from "react";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, where, orderBy, limit, doc, setDoc, getDocs, serverTimestamp, getDoc } from "firebase/firestore";
+import { collection, query, where, orderBy, limit, doc, setDoc, getDocs, serverTimestamp, getDoc, runTransaction } from "firebase/firestore";
 import { KPICard } from "@/components/dashboard/kpi-card";
 import { 
   Users, 
@@ -37,7 +36,7 @@ import {
   Tooltip
 } from "recharts";
 import Link from "next/link";
-import { Prospect, DailyTop, Tenant } from "@/app/lib/types";
+import { Prospect, DailyTop, Tenant, DailyStats } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 
 export default function DashboardPage() {
@@ -62,7 +61,7 @@ export default function DashboardPage() {
     return doc(db, "tenants", tenantId, "dailyStats", today);
   }, [db, tenantId, today]);
 
-  const { data: stats } = useDoc<any>(statsRef);
+  const { data: stats } = useDoc<DailyStats>(statsRef);
 
   // Daily Top (Radar Congelado)
   const dailyTopRef = useMemo(() => {
@@ -133,7 +132,9 @@ export default function DashboardPage() {
         return;
       }
 
-      // 5. Guardar dailyTop
+      const avgScore = topN.reduce((acc, p) => acc + p.effectiveScore, 0) / topN.length;
+
+      // 5. Guardar dailyTop y actualizar stats
       const dailyTopData: DailyTop = {
         id: today,
         date: today,
@@ -150,7 +151,26 @@ export default function DashboardPage() {
         }))
       };
 
-      await setDoc(doc(db, "tenants", tenantId, "dailyTop", today), dailyTopData);
+      await runTransaction(db, async (transaction) => {
+        transaction.set(doc(db, "tenants", tenantId, "dailyTop", today), dailyTopData);
+        
+        // Actualizar radarAvgFinalScore en stats
+        const statsDoc = await transaction.get(statsRef as any);
+        if (statsDoc.exists()) {
+          transaction.update(statsRef as any, { radarAvgFinalScore: Math.round(avgScore) });
+        } else {
+          transaction.set(statsRef as any, {
+            date: today,
+            radarAvgFinalScore: Math.round(avgScore),
+            quotaUsed: 0,
+            quotaLimit: topLimit,
+            emailsSent: 0,
+            emailsFailed: 0,
+            newProspects: 0,
+            createdAt: serverTimestamp()
+          });
+        }
+      });
       
       toast({ title: "Radar gerado!", description: `As mejores ${topN.length} oportunidades están listas.` });
     } catch (e) {
