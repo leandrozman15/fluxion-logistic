@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
@@ -12,12 +13,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Building2, Globe, MapPin, Mail, Phone, ExternalLink, MessageSquare, History, Sparkles, Loader2, CheckCircle2, Send, Wand2 } from "lucide-react";
+import { Building2, Globe, MapPin, Mail, Phone, ExternalLink, MessageSquare, History, Sparkles, Loader2, CheckCircle2, Send, Wand2, BrainCircuit, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Prospect, ProspectStatus, EmailTemplate, OutboxState } from "@/app/lib/types";
+import { Prospect, ProspectStatus, EmailTemplate, OutboxState, AiConfidence } from "@/app/lib/types";
 import { useParams } from "next/navigation";
 import { renderTemplate } from "@/lib/utils/template-renderer";
 import { generateEmailDraft } from "@/ai/flows/generate-email-draft-flow";
+import { calculateProspectAiScore } from "@/ai/flows/calculate-prospect-ai-score-flow";
+import { calculateEffectiveScore } from "@/lib/utils/scoring";
 
 export default function ProspectDetailPage() {
   const { id } = useParams();
@@ -32,12 +35,11 @@ export default function ProspectDetailPage() {
   const [selectedContactIndex, setSelectedContactIndex] = useState<string>("0");
   const [isSavingOutbox, setIsSavingOutbox] = useState(false);
   const [isAiDrafting, setIsAiDrafting] = useState(false);
+  const [isScoring, setIsScoring] = useState(false);
   
-  // Custom draft overrides (when IA is used)
   const [customSubject, setCustomSubject] = useState<string | null>(null);
   const [customBody, setCustomBody] = useState<string | null>(null);
 
-  // Prospect Data
   const prospectRef = useMemo(() => {
     if (!db || !tenantId || !id) return null;
     return doc(db, "tenants", tenantId, "prospects", id as string);
@@ -45,7 +47,6 @@ export default function ProspectDetailPage() {
 
   const { data: prospect, loading } = useDoc<Prospect>(prospectRef);
 
-  // Templates for Dialog
   const templatesQuery = useMemo(() => {
     if (!db || !tenantId) return null;
     return query(collection(db, "tenants", tenantId, "templates"), orderBy("name"));
@@ -72,6 +73,50 @@ export default function ProspectDetailPage() {
       toast({ variant: "destructive", title: "Erro", description: "Não foi possível actualizar el status." });
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const handleRunAiScore = async () => {
+    if (!prospect || !prospectRef) return;
+    setIsScoring(true);
+    try {
+      const result = await calculateProspectAiScore({
+        companyName: prospect.companyName,
+        industryTags: prospect.industryTags || [],
+        city: prospect.address?.city,
+        state: prospect.address?.state,
+        hasWebsite: !!prospect.websiteUrl,
+        hasCorporateEmail: prospect.contacts?.some(c => c.email && !c.email.includes('gmail') && !c.email.includes('hotmail')) || false,
+        hasPhone: prospect.contacts?.some(c => !!c.phone) || false,
+        status: prospect.status,
+        cnpj: prospect.cnpj
+      });
+
+      // Recalcular effectiveScore con los nuevos datos de IA
+      const updatedProspectData = {
+        ...prospect,
+        aiScore: result.aiScore,
+        aiScoreConfidence: result.confidence as AiConfidence,
+        aiScoreReasons: result.reasons
+      };
+      
+      const newEffectiveScore = calculateEffectiveScore(updatedProspectData);
+
+      await updateDoc(prospectRef, {
+        aiScore: result.aiScore,
+        aiScoreConfidence: result.confidence,
+        aiScoreReasons: result.reasons,
+        aiScoreUpdatedAt: new Date().toISOString(),
+        effectiveScore: newEffectiveScore,
+        updatedAt: new Date().toISOString()
+      });
+
+      toast({ title: "Score IA atualizado!", description: `Nota atribuída: ${result.aiScore} (${result.confidence})` });
+    } catch (e) {
+      console.error(e);
+      toast({ variant: "destructive", title: "Erro no Scoring", description: "Não foi possível processar a IA agora." });
+    } finally {
+      setIsScoring(false);
     }
   };
 
@@ -141,7 +186,7 @@ export default function ProspectDetailPage() {
           industryTags: prospect.industryTags,
           websiteUrl: prospect.websiteUrl,
           effectiveScore: prospect.effectiveScore,
-          scoreReasons: prospect.scoreReasons,
+          scoreReasons: prospect.aiScoreReasons || prospect.scoreReasons,
           contactName: selectedContact?.name,
           contactRole: selectedContact?.role,
         }
@@ -166,7 +211,6 @@ export default function ProspectDetailPage() {
     const today = new Date().toISOString().split('T')[0];
     const dedupeKey = `manual:${prospect.id}:${selectedTemplate.id}:${today}`;
     
-    // Hash simple para ID de documento (idempotencia)
     let hash = 0;
     for (let i = 0; i < dedupeKey.length; i++) {
         const char = dedupeKey.charCodeAt(i);
@@ -204,25 +248,23 @@ export default function ProspectDetailPage() {
         dedupeKey,
         companyName: prospect.companyName,
         effectiveScore: prospect.effectiveScore,
-        aiUsed: !!customSubject // Registro si se usó IA
+        aiUsed: !!customSubject
       }, { merge: true });
 
       toast({ 
         title: targetState === 'queued' ? "Mensagem na fila!" : "Rascunho salvo", 
-        description: targetState === 'queued' ? "O envio será processado em breve." : "Você puede encontrarlo en el Outbox."
+        description: targetState === 'queued' ? "O envio será processado em breve." : "Você pode encontrá-lo no Outbox."
       });
       setIsOutboxDialogOpen(false);
-      // Reset custom draft after saving
       setCustomSubject(null);
       setCustomBody(null);
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro", description: "Não foi posible preparar o contato." });
+      toast({ variant: "destructive", title: "Erro", description: "Não foi possível preparar o contato." });
     } finally {
       setIsSavingOutbox(false);
     }
   };
 
-  // Reset custom text if template changes
   useEffect(() => {
     setCustomSubject(null);
     setCustomBody(null);
@@ -242,7 +284,12 @@ export default function ProspectDetailPage() {
             <h1 className="text-2xl font-bold text-primary">{prospect.companyName}</h1>
             <div className="flex items-center gap-2 mt-1">
               <Badge variant="outline">{prospect.cnpj}</Badge>
-              <Badge variant="default" className="bg-accent">Score: {prospect.effectiveScore}</Badge>
+              <div className="flex items-center gap-1">
+                <Badge variant="default" className="bg-accent">Score Radar: {prospect.effectiveScore}</Badge>
+                {prospect.aiScoreConfidence && (
+                  <Badge variant="secondary" className="text-[10px]">IA: {prospect.aiScoreConfidence}</Badge>
+                )}
+              </div>
               {prospect.isClaimedToday && (
                 <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">
                   <CheckCircle2 className="w-3 h-3 mr-1" /> No Radar de Hoje
@@ -270,7 +317,19 @@ export default function ProspectDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <Card>
-            <CardHeader><CardTitle>Visão Geral</CardTitle></CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Visão Geral</CardTitle>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="border-accent text-accent hover:bg-accent/5" 
+                onClick={handleRunAiScore}
+                disabled={isScoring}
+              >
+                {isScoring ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <BrainCircuit className="w-3 h-3 mr-2" />}
+                Análise Inteligente (IA)
+              </Button>
+            </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="space-y-3">
@@ -286,16 +345,30 @@ export default function ProspectDetailPage() {
                     <MapPin className="w-4 h-4 text-muted-foreground" />
                     <span>{prospect.address?.city || "-"}, {prospect.address?.state || "-"}</span>
                   </div>
+                  <div className="pt-2">
+                    <h4 className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Segmentos</h4>
+                    <div className="flex flex-wrap gap-1">
+                      {prospect.industryTags?.map(tag => (
+                        <Badge key={tag} variant="secondary" className="text-[10px]">{tag}</Badge>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                   <h4 className="text-xs font-bold uppercase text-muted-foreground">Análise de IA (Score)</h4>
-                   <ul className="space-y-1">
-                     {prospect.scoreReasons?.length ? prospect.scoreReasons.map((reason, i) => (
-                       <li key={i} className="text-sm flex items-start gap-2">
-                         <Sparkles className="w-3 h-3 text-accent mt-1" /> {reason}
+                <div className="space-y-2 p-4 bg-accent/5 rounded-lg border border-accent/10">
+                   <h4 className="text-xs font-bold uppercase text-accent flex items-center gap-2">
+                     <BrainCircuit className="w-3 h-3" /> Análise de IA
+                   </h4>
+                   <ul className="space-y-1 mt-2">
+                     {(prospect.aiScoreReasons?.length ? prospect.aiScoreReasons : prospect.scoreReasons)?.map((reason, i) => (
+                       <li key={i} className="text-xs flex items-start gap-2">
+                         <div className="w-1 h-1 rounded-full bg-accent mt-1.5 shrink-0"></div>
+                         <span className="text-muted-foreground leading-relaxed">{reason}</span>
                        </li>
-                     )) : <li className="text-sm text-muted-foreground italic">Score baseado na qualidade de dados.</li>}
+                     ))}
                    </ul>
+                   {prospect.aiScoreUpdatedAt && (
+                     <p className="text-[9px] text-muted-foreground mt-2 italic">Actualizado em: {new Date(prospect.aiScoreUpdatedAt).toLocaleString()}</p>
+                   )}
                 </div>
               </div>
             </CardContent>
@@ -340,7 +413,10 @@ export default function ProspectDetailPage() {
               <div className="space-y-4">
                  <div className="flex gap-4">
                     <div className="flex flex-col items-center"><div className="w-2 h-2 rounded-full bg-primary"></div><div className="w-0.5 h-full bg-border"></div></div>
-                    <div className="pb-4"><div className="text-sm font-semibold">Importado em {new Date(prospect.createdAt).toLocaleDateString()}</div></div>
+                    <div className="pb-4">
+                      <div className="text-sm font-semibold">Importado no sistema</div>
+                      <div className="text-xs text-muted-foreground">{new Date(prospect.createdAt).toLocaleDateString()}</div>
+                    </div>
                  </div>
               </div>
             </TabsContent>

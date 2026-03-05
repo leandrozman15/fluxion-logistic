@@ -2,6 +2,7 @@
 export type ProspectStatus = 'new' | 'contacted' | 'interested' | 'demo' | 'client' | 'discarded';
 export type UserRole = 'admin' | 'sales' | 'viewer';
 export type OutboxState = 'draft' | 'queued' | 'sent' | 'failed' | 'canceled';
+export type AiConfidence = 'low' | 'medium' | 'high';
 
 export interface AppUser {
   uid: string;
@@ -32,9 +33,16 @@ export interface Prospect {
   domain?: string;
   contacts: Contact[];
   status: ProspectStatus;
+  
+  // AI Scoring Fields
   aiScore: number; 
-  effectiveScore: number; 
-  scoreReasons: string[];
+  aiScoreConfidence?: AiConfidence;
+  aiScoreReasons: string[];
+  aiScoreUpdatedAt?: string;
+  
+  effectiveScore: number; // Final weighted score used for ranking
+  scoreReasons: string[]; // Combined reasons
+  
   isClaimedToday?: boolean;
   claimedAt?: string;
   lastContactAt?: string;
@@ -73,7 +81,7 @@ export interface OutboxMessage {
   attempts: number;
   lastError: string | null;
   dedupeKey: string;
-  // Denormalized for lists
+  aiUsed?: boolean;
   companyName: string;
   effectiveScore: number;
 }
