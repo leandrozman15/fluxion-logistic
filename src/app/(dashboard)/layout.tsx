@@ -1,6 +1,6 @@
 
 import { SidebarProvider, SidebarInset, Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarGroup, SidebarGroupLabel, SidebarGroupContent } from "@/components/ui/sidebar";
-import { LayoutDashboard, Users, Mail, FileSpreadsheet, Settings, Target, FileText, Inbox, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, Mail, FileSpreadsheet, Settings, Target, FileText, Inbox, LogOut, Building2 } from "lucide-react";
 import Link from "next/link";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -14,8 +14,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   ];
 
   const settingItems = [
+    { title: "Organização", icon: Building2, href: "/settings/tenant" },
     { title: "Usuários", icon: Users, href: "/settings/users" },
-    { title: "Limites e Uso", icon: Settings, href: "/settings/limits" },
+    { title: "Consumo", icon: Settings, href: "/settings/limits" },
   ];
 
   return (

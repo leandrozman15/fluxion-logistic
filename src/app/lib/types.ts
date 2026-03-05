@@ -134,12 +134,23 @@ export interface Contact {
   source?: "manual" | "csv" | "ai_suggestion" | "website";
 }
 
+export interface TenantSettings {
+  scoringWeights: {
+    effective: number;
+    ai: number;
+  };
+  finalScoreMode: 'weighted' | 'max';
+  dailyTopLimit: number;
+  requireContactMethod: 'email_or_phone' | 'email_only' | 'none';
+  cooldownDays: number;
+  hourlyEmailLimit: number;
+  dailyEmailLimit: number;
+  defaultTemplateId: string | null;
+}
+
 export interface Tenant {
   id: string;
   name: string;
   plan: 'free' | 'pro';
-  settings: {
-    dailyProspectingLimit: number;
-    dailyEmailLimit: number;
-  };
+  settings: TenantSettings;
 }

@@ -1,13 +1,13 @@
 
-import { Prospect } from "@/app/lib/types";
+import { Prospect, TenantSettings } from "@/app/lib/types";
 
 /**
- * Calcula o score efetivo baseado no aiScore (se existir) e regras determinísticas de qualidade.
- * Peso Sugerido: 60% Regras de Dados (Accionabilidade) + 40% IA (Potencial de Negócio)
+ * Calcula o score efetivo basado no aiScore y reglas de datos.
+ * Utiliza los pesos configurados en el tenant si están disponibles.
  */
-export function calculateEffectiveScore(prospect: Partial<Prospect>): number {
+export function calculateEffectiveScore(prospect: Partial<Prospect>, settings?: TenantSettings): number {
   // 1. Componente Determinístico (Qualidade de Dados) - Base 0 a 100
-  let dataQualityScore = 50; // Começamos no neutro
+  let dataQualityScore = 50; 
 
   const hasEmail = prospect.contacts?.some(c => !!c.email && c.email.includes('@') && !c.email.includes('gmail') && !c.email.includes('hotmail'));
   const hasGenericEmail = prospect.contacts?.some(c => !!c.email && (c.email.includes('gmail') || c.email.includes('hotmail')));
@@ -22,7 +22,7 @@ export function calculateEffectiveScore(prospect: Partial<Prospect>): number {
   if (hasValidCnpj) dataQualityScore += 10;
   if (hasPhone) dataQualityScore += 10;
 
-  // Penalidade severa se não for acionável
+  // Penalidad severa se no for acionável
   if (!hasEmail && !hasGenericEmail && !hasPhone) {
     dataQualityScore = Math.max(0, dataQualityScore - 40);
   }
@@ -30,14 +30,16 @@ export function calculateEffectiveScore(prospect: Partial<Prospect>): number {
   // 2. Componente de IA (se disponível)
   const aiPart = prospect.aiScore ?? 50;
 
-  // 3. Score Final Ponderado
-  // Se não tem aiScore, usamos apenas dataQualityScore
-  if (prospect.aiScore === undefined) {
-    return Math.min(Math.max(dataQualityScore, 0), 100);
+  // 3. Score Final
+  const mode = settings?.finalScoreMode || 'weighted';
+  const weights = settings?.scoringWeights || { effective: 0.6, ai: 0.4 };
+
+  if (mode === 'max' && prospect.aiScore !== undefined) {
+    return Math.max(Math.round(dataQualityScore), Math.round(aiPart));
   }
 
-  // Peso: 0.6 Data Quality + 0.4 AI
-  const finalScore = (dataQualityScore * 0.6) + (aiPart * 0.4);
+  // Peso Ponderado
+  const finalScore = (dataQualityScore * weights.effective) + (aiPart * weights.ai);
 
   return Math.round(Math.min(Math.max(finalScore, 0), 100));
 }

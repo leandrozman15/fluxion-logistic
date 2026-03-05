@@ -4,7 +4,7 @@
 import { useMemo, useState } from "react";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, where, orderBy, limit, doc, setDoc, getDocs, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, orderBy, limit, doc, setDoc, getDocs, serverTimestamp, getDoc } from "firebase/firestore";
 import { KPICard } from "@/components/dashboard/kpi-card";
 import { 
   Users, 
@@ -37,7 +37,7 @@ import {
   Tooltip
 } from "recharts";
 import Link from "next/link";
-import { Prospect, DailyTop } from "@/app/lib/types";
+import { Prospect, DailyTop, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 
 export default function DashboardPage() {
@@ -47,6 +47,14 @@ export default function DashboardPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   
   const today = new Date().toISOString().split('T')[0];
+
+  // Tenant Settings
+  const tenantRef = useMemo(() => {
+    if (!db || !tenantId) return null;
+    return doc(db, "tenants", tenantId);
+  }, [db, tenantId]);
+
+  const { data: tenantData } = useDoc<Tenant>(tenantRef);
 
   // Stats y Quota
   const statsRef = useMemo(() => {
@@ -64,7 +72,7 @@ export default function DashboardPage() {
 
   const { data: dailyTop, loading: dailyTopLoading } = useDoc<DailyTop>(dailyTopRef);
 
-  // Datos para gráficos (Mix de Industrias) - Muestreo de los últimos 100
+  // Datos para gráficos
   const industryStatsQuery = useMemo(() => {
     if (!db || !tenantId) return null;
     return query(collection(db, "tenants", tenantId, "prospects"), limit(100));
@@ -89,35 +97,49 @@ export default function DashboardPage() {
     if (!db || !tenantId) return;
     setIsGenerating(true);
     try {
-      // 1. Buscar mejores prospectos (No descartados, no clientes)
-      const q = query(
+      // 1. Obtener configuraciones del tenant
+      const settings = tenantData?.settings;
+      const topLimit = settings?.dailyTopLimit || 30;
+      const requireContact = settings?.requireContactMethod || 'email_or_phone';
+
+      // 2. Buscar mejores prospectos
+      let q = query(
         collection(db, "tenants", tenantId, "prospects"),
         where("status", "in", ["new", "contacted"]),
         orderBy("effectiveScore", "desc"),
-        limit(100)
+        limit(200)
       );
       
       const snapshot = await getDocs(q);
-      const candidates = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Prospect));
+      let candidates = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Prospect));
       
-      // 2. Filtrar y seleccionar top 30 (priorizando accionabilidad)
-      const top30 = candidates
-        .filter(p => !p.isClaimedToday)
-        .sort((a, b) => b.effectiveScore - a.effectiveScore)
-        .slice(0, 30);
+      // 3. Aplicar filtros de accionabilidad si están configurados
+      if (requireContact !== 'none') {
+        candidates = candidates.filter(p => {
+          const hasEmail = p.contacts?.some(c => !!c.email);
+          const hasPhone = p.contacts?.some(c => !!c.phone || !!c.whatsapp);
+          if (requireContact === 'email_only') return hasEmail;
+          return hasEmail || hasPhone;
+        });
+      }
 
-      if (top30.length === 0) {
-        toast({ title: "Radar vazio", description: "Não há novos prospectos para gerar o radar hoje." });
+      // 4. Seleccionar top N
+      const topN = candidates
+        .filter(p => !p.isClaimedToday)
+        .slice(0, topLimit);
+
+      if (topN.length === 0) {
+        toast({ title: "Radar vazio", description: "Não há novos prospectos para gerar el radar hoy con los filtros actuales." });
         return;
       }
 
-      // 3. Guardar dailyTop
+      // 5. Guardar dailyTop
       const dailyTopData: DailyTop = {
         id: today,
         date: today,
-        limit: 30,
+        limit: topLimit,
         generatedAt: new Date().toISOString(),
-        items: top30.map(p => ({
+        items: topN.map(p => ({
           prospectId: p.id,
           companyName: p.companyName,
           effectiveScore: p.effectiveScore,
@@ -130,17 +152,17 @@ export default function DashboardPage() {
 
       await setDoc(doc(db, "tenants", tenantId, "dailyTop", today), dailyTopData);
       
-      toast({ title: "Radar gerado!", description: `As melhores ${top30.length} oportunidades estão prontas.` });
+      toast({ title: "Radar gerado!", description: `As mejores ${topN.length} oportunidades están listas.` });
     } catch (e) {
       console.error(e);
-      toast({ variant: "destructive", title: "Erro ao gerar radar", description: "Verifique suas permissões de rede." });
+      toast({ variant: "destructive", title: "Erro ao gerar radar" });
     } finally {
       setIsGenerating(false);
     }
   };
 
   const dailyQuotaUsed = stats?.quotaUsed || 0;
-  const dailyQuotaLimit = stats?.quotaLimit || 30;
+  const dailyQuotaLimit = stats?.quotaLimit || tenantData?.settings?.dailyTopLimit || 30;
   const quotaProgress = (dailyQuotaUsed / dailyQuotaLimit) * 100;
 
   const kpis = [
@@ -149,10 +171,6 @@ export default function DashboardPage() {
     { title: "Emails na Fila", value: stats?.emailsSent || 0, icon: Mail, description: "Comunicações disparadas" },
     { title: "Potencial IA", value: "84%", icon: Sparkles, description: "Qualidade média da base" },
   ];
-
-  const chartConfig = {
-    value: { label: "Empresas", color: "hsl(var(--primary))" },
-  };
 
   return (
     <div className="space-y-6">
@@ -183,7 +201,6 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">
-        {/* Sugeridos - Prioridad Operativa */}
         <Card className="md:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
@@ -191,20 +208,14 @@ export default function DashboardPage() {
                 <Zap className="w-5 h-5 text-accent" /> Sugestões de Hoje
               </CardTitle>
               <CardDescription>
-                {dailyTop ? `Top ${dailyTop.items.length} oportunidades congeladas para hoje.` : 'O radar ainda no foi gerado para este dia.'}
+                {dailyTop ? `Top ${dailyTop.items.length} oportunidades congeladas para hoje.` : 'O radar ainda não foi gerado.'}
               </CardDescription>
             </div>
-            {!dailyTop && !dailyTopLoading && (
+            <div className="flex gap-2">
               <Button onClick={handleGenerateDailyRadar} disabled={isGenerating} size="sm" className="bg-accent hover:bg-accent/90">
-                {isGenerating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-                Gerar Radar
+                {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               </Button>
-            )}
-            {dailyTop && (
-              <Button variant="outline" size="sm" onClick={handleGenerateDailyRadar} disabled={isGenerating}>
-                 {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-              </Button>
-            )}
+            </div>
           </CardHeader>
           <CardContent>
             {dailyTopLoading ? (
@@ -214,31 +225,19 @@ export default function DashboardPage() {
                 {!dailyTop ? (
                   <div className="text-center py-20 border-2 border-dashed rounded-xl space-y-4">
                     <Factory className="w-12 h-12 mx-auto opacity-10" />
-                    <div className="max-w-xs mx-auto">
-                      <p className="text-sm font-semibold">Radar pronto para ser gerado</p>
-                      <p className="text-xs text-muted-foreground mt-1">O sistema selecionará as melhores 30 empresas para você focar hoje.</p>
-                    </div>
-                    <Button onClick={handleGenerateDailyRadar} disabled={isGenerating}>
-                      Começar o dia agora
-                    </Button>
+                    <p className="text-sm font-semibold">Radar pronto para ser gerado</p>
+                    <Button onClick={handleGenerateDailyRadar} disabled={isGenerating}>Começar agora</Button>
                   </div>
                 ) : (
                   dailyTop.items.map((item, i) => (
                     <Link key={item.prospectId} href={`/prospects/${item.prospectId}`}>
-                      <div className="flex items-center justify-between p-4 mb-3 rounded-xl bg-secondary/20 border hover:border-accent/50 transition-all group cursor-pointer">
+                      <div className="flex items-center justify-between p-4 mb-3 rounded-xl bg-secondary/20 border hover:border-accent/50 transition-all group">
                         <div className="flex items-center gap-4">
-                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-xs shrink-0">
-                            #{i + 1}
-                          </div>
+                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-xs">#{i+1}</div>
                           <div>
-                            <div className="font-bold text-sm line-clamp-1">{item.companyName}</div>
+                            <div className="font-bold text-sm">{item.companyName}</div>
                             <div className="flex items-center gap-2 mt-1">
-                               <Badge variant="outline" className="text-[9px] px-1 py-0 bg-background">Score: {item.effectiveScore}</Badge>
-                               <div className="flex gap-1">
-                                 {item.hasEmail && <Mail className="w-3 h-3 text-green-600" />}
-                                 {item.hasPhone && <Zap className="w-3 h-3 text-orange-600" />}
-                                 {item.hasWebsite && <MapPin className="w-3 h-3 text-blue-600" />}
-                               </div>
+                               <Badge variant="outline" className="text-[9px]">Score: {item.effectiveScore}</Badge>
                             </div>
                           </div>
                         </div>
@@ -252,19 +251,15 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Analytics Lateral */}
         <div className="space-y-6">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <PieChart className="w-4 h-4 text-primary" /> Mix de Indústrias
-              </CardTitle>
-              <CardDescription className="text-[10px]">Distribuição detectada pela IA.</CardDescription>
+              <CardTitle className="text-sm flex items-center gap-2"><PieChart className="w-4 h-4" /> Mix de Indústrias</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-[200px] w-full">
                 {industryData.length > 0 ? (
-                  <ChartContainer config={chartConfig}>
+                  <ChartContainer config={{ value: { label: "Empresas", color: "hsl(var(--primary))" } }}>
                     <BarChart data={industryData} layout="vertical" margin={{ left: -20, right: 20 }}>
                       <XAxis type="number" hide />
                       <YAxis dataKey="name" type="category" width={100} fontSize={10} axisLine={false} tickLine={false} />
@@ -272,30 +267,8 @@ export default function DashboardPage() {
                       <Bar dataKey="value" fill="var(--color-value)" radius={[0, 4, 4, 0]} />
                     </BarChart>
                   </ChartContainer>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-xs text-muted-foreground italic">
-                    Dados insuficientes
-                  </div>
-                )}
+                ) : <div className="flex items-center justify-center h-full text-xs text-muted-foreground italic">Dados insuficientes</div>}
               </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-primary text-primary-foreground">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <BarChart3 className="w-4 h-4" /> Performance Operativa
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-1">
-                <div className="text-[10px] uppercase opacity-70">Conversão New {'->'} Contacted</div>
-                <div className="text-xl font-bold">24.5%</div>
-                <Progress value={24} className="h-1 bg-white/20" />
-              </div>
-              <Button variant="secondary" size="sm" className="w-full text-xs" asChild>
-                <Link href="/outbox">Ver Outbox Completo</Link>
-              </Button>
             </CardContent>
           </Card>
         </div>
