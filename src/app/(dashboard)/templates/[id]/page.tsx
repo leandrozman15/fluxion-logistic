@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
@@ -10,11 +11,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { EmailTemplate, Prospect } from "@/app/lib/types";
 import { renderTemplate, extractVariables, PERMITTED_VARIABLES } from "@/lib/utils/template-renderer";
-import { Loader2, ArrowLeft, Save, Eye, Info } from "lucide-react";
+import { Loader2, ArrowLeft, Save, Eye, Info, Image as ImageIcon, Bold, Type } from "lucide-react";
 import Link from "next/link";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -92,9 +92,22 @@ export default function TemplateEditorPage() {
     }
   };
 
+  const insertHtml = (html: string) => {
+    setBody(prev => prev + html);
+  };
+
+  const insertImage = () => {
+    const url = prompt("Insira a URL da imagem (hospedada em Firebase Storage ou CDN):", "https://picsum.photos/seed/industrial/600/200");
+    if (url) {
+      insertHtml(`<img src="${url}" width="100%" style="max-width: 600px; border-radius: 8px;" alt="Imagem Industrial">`);
+    }
+  };
+
   if (templateLoading && !isNew) {
     return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin" /></div>;
   }
+
+  const renderedPreviewBody = selectedProspect ? renderTemplate(body, selectedProspect) : body;
 
   return (
     <div className="space-y-6">
@@ -116,9 +129,22 @@ export default function TemplateEditorPage() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         <div className="lg:col-span-3 space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Conteúdo do E-mail</CardTitle>
-              <CardDescription>Use chaves como {"{{companyName}}"} para inserir datos dinâmicos.</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Conteúdo do E-mail</CardTitle>
+                <CardDescription>Suporte a HTML e imagens hospedadas.</CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => insertHtml('<b>', '</b>')} title="Negrito">
+                  <Bold className="w-4 h-4" />
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => insertHtml('<br>')} title="Quebra de Linha">
+                  <Type className="w-4 h-4" />
+                </Button>
+                <Button variant="outline" size="sm" onClick={insertImage} title="Inserir Imagem">
+                  <ImageIcon className="w-4 h-4" />
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -130,13 +156,13 @@ export default function TemplateEditorPage() {
                 <Input id="subject" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Olá {{contactName}}, solução para {{companyName}}" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="body">Corpo do E-mail</Label>
+                <Label htmlFor="body">Corpo do E-mail (HTML permitido)</Label>
                 <Textarea 
                   id="body" 
-                  className="min-h-[300px] font-mono" 
+                  className="min-h-[350px] font-mono text-sm leading-relaxed" 
                   value={body} 
                   onChange={e => setBody(e.target.value)} 
-                  placeholder="Escreva sua mensagem aqui..."
+                  placeholder="Olá {{contactName}}, <br><br> Veja nossa nova solução..."
                 />
               </div>
             </CardContent>
@@ -145,7 +171,7 @@ export default function TemplateEditorPage() {
           <Card className="bg-secondary/20">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
-                <Info className="w-4 h-4" /> Variáveis Disponíveis
+                <Info className="w-4 h-4" /> Variáveis Dinâmicas
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
@@ -153,7 +179,7 @@ export default function TemplateEditorPage() {
                 <button 
                   key={v} 
                   className="text-[10px] bg-card border px-2 py-1 rounded hover:bg-accent hover:text-white transition-colors"
-                  onClick={() => setBody(prev => prev + ` {{${v}}}`)}
+                  onClick={() => insertHtml(`{{${v}}}`)}
                 >
                   {"{{" + v + "}}"}
                 </button>
@@ -167,7 +193,7 @@ export default function TemplateEditorPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
-                  <Eye className="w-5 h-5 text-accent" /> Preview Real
+                  <Eye className="w-5 h-5 text-accent" /> Visualização Real
                 </CardTitle>
                 <Select value={selectedProspectId} onValueChange={setSelectedProspectId}>
                   <SelectTrigger className="w-[180px] h-8 text-xs">
@@ -182,25 +208,26 @@ export default function TemplateEditorPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="p-4 bg-muted rounded-lg space-y-3">
-                <div>
-                  <div className="text-[10px] font-bold text-muted-foreground uppercase">Assunto</div>
-                  <div className="text-sm font-semibold">
+              <div className="p-6 bg-white border rounded-xl shadow-inner min-h-[400px]">
+                <div className="mb-4">
+                  <div className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Assunto</div>
+                  <div className="text-sm font-semibold text-primary border-b pb-2">
                     {selectedProspect ? renderTemplate(subject, selectedProspect) : subject}
                   </div>
                 </div>
-                <div className="border-t pt-3">
-                  <div className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Mensagem</div>
-                  <div className="text-sm whitespace-pre-wrap leading-relaxed italic text-muted-foreground">
-                    {selectedProspect ? renderTemplate(body, selectedProspect) : body}
-                  </div>
+                <div>
+                  <div className="text-[10px] font-bold text-muted-foreground uppercase mb-2">Mensagem (HTML Renderizado)</div>
+                  <div 
+                    className="prose prose-sm max-w-none text-sm leading-relaxed text-gray-700"
+                    dangerouslySetInnerHTML={{ __html: renderedPreviewBody || '<i>Corpo vazio...</i>' }}
+                  />
                 </div>
               </div>
               
-              <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex items-start gap-2">
-                <Info className="w-4 h-4 text-blue-600 mt-0.5" />
-                <p className="text-[11px] text-blue-700">
-                  O preview utiliza datos reais do prospect selecionado. Se alguma variable aparecer como "-", é porque o dado não está cadastrado.
+              <div className="bg-amber-50 p-3 rounded-lg border border-amber-100 flex items-start gap-2">
+                <Info className="w-4 h-4 text-amber-600 mt-0.5" />
+                <p className="text-[11px] text-amber-700">
+                  <strong>Dica:</strong> Evite imagens muito pesadas (>200kb) para não cair em filtros de SPAM. Use URLs absolutas (https://...).
                 </p>
               </div>
             </CardContent>

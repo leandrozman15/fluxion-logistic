@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
@@ -111,7 +112,7 @@ export default function ProspectDetailPage() {
 
       toast({ title: "Status atualizado", description: `O prospect agora está como ${newStatus}.` });
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro", description: "Não foi posible guardar la actualización." });
+      toast({ variant: "destructive", title: "Erro", description: "Não fue posible procesar la actualización." });
     } finally {
       setIsUpdating(false);
     }
@@ -380,7 +381,7 @@ export default function ProspectDetailPage() {
       setCustomSubject(result.subject);
       setCustomBody(result.body);
       
-      toast({ title: "Email melhorado com IA!", description: "O rascunho foi personalizado para este prospect." });
+      toast({ title: "Email melhorado com IA!", description: "O rascunho fue personalizado para este prospect." });
     } catch (e) {
       toast({ variant: "destructive", title: "Erro na IA", description: "Não foi possível gerar a sugestão agora." });
     } finally {
@@ -928,20 +929,23 @@ export default function ProspectDetailPage() {
                   )}
                 </div>
 
-                <div className="bg-secondary/20 p-4 rounded-lg border space-y-3 relative overflow-hidden">
-                  <div className="text-[10px] font-bold text-muted-foreground uppercase flex justify-between items-center">
-                    Preview {customSubject && <Badge className="bg-accent h-4 text-[8px] uppercase">IA Gerado</Badge>}
+                <div className="bg-white p-6 rounded-lg border shadow-inner space-y-3 relative overflow-hidden min-h-[300px]">
+                  <div className="text-[10px] font-bold text-muted-foreground uppercase flex justify-between items-center mb-2">
+                    Visualização do E-mail {customSubject && <Badge className="bg-accent h-4 text-[8px] uppercase">IA Gerado</Badge>}
                   </div>
                   {selectedTemplate ? (
                     <>
-                      <div className="text-sm font-semibold border-b pb-2">{previewSubject}</div>
-                      <div className="text-xs whitespace-pre-wrap text-muted-foreground italic leading-relaxed">{previewBody}</div>
+                      <div className="text-sm font-semibold border-b pb-2 mb-2 text-primary">{previewSubject}</div>
+                      <div 
+                        className="prose prose-sm max-w-none text-xs text-gray-700 leading-relaxed"
+                        dangerouslySetInnerHTML={{ __html: previewBody || '<i>Corpo vazio...</i>' }}
+                      />
                     </>
                   ) : (
-                    <div className="text-sm text-muted-foreground italic h-40 flex items-center justify-center">Selecione um template para ver o preview.</div>
+                    <div className="text-sm text-muted-foreground italic h-full flex items-center justify-center">Selecione um template para ver o preview.</div>
                   )}
                   {isAiDrafting && (
-                    <div className="absolute inset-0 bg-background/50 flex items-center justify-center">
+                    <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-10">
                       <Loader2 className="w-8 h-8 animate-spin text-accent" />
                     </div>
                   )}
