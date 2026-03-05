@@ -3,20 +3,25 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/firebase";
+import { useAuth, useFirestore } from "@/firebase";
 import { 
   signInWithEmailAndPassword, 
   signInWithPopup, 
-  GoogleAuthProvider 
+  GoogleAuthProvider,
+  User
 } from "firebase/auth";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Target, Loader2, AlertTriangle } from "lucide-react";
+import { Target, Loader2, AlertTriangle, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import { isFirebaseConfigValid } from "@/firebase/config";
+
+const BOOTSTRAP_UID = "4zxTMJtXvbh5DjWF8xSrITJh1W33";
+const BOOTSTRAP_EMAIL = "leozman15@gmail.com";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -25,6 +30,67 @@ export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const auth = useAuth();
+  const db = useFirestore();
+
+  const bootstrapUser = async (user: User) => {
+    if (!db) return;
+
+    try {
+      const userRef = doc(db, "users", user.uid);
+      const userSnap = await getDoc(userRef);
+
+      if (!userSnap.exists()) {
+        const isInitialAdmin = user.uid === BOOTSTRAP_UID || user.email === BOOTSTRAP_EMAIL;
+        const tenantId = "default_tenant";
+
+        // 1. Create Tenant if it doesn't exist
+        const tenantRef = doc(db, "tenants", tenantId);
+        const tenantSnap = await getDoc(tenantRef);
+        
+        if (!tenantSnap.exists()) {
+          await setDoc(tenantRef, {
+            id: tenantId,
+            name: "Fluxion Radar HQ",
+            plan: "pro",
+            createdAt: serverTimestamp(),
+            settings: {
+              scoringWeights: { effective: 0.6, ai: 0.4 },
+              finalScoreMode: 'weighted',
+              dailyTopLimit: 30,
+              onboardingCompleted: false
+            }
+          });
+        }
+
+        // 2. Create User Profile
+        await setDoc(userRef, {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName || user.email?.split('@')[0] || "Admin",
+          tenantId: tenantId,
+          role: isInitialAdmin ? "admin" : "sales",
+          createdAt: new Date().toISOString(),
+          status: "active"
+        });
+
+        // 3. Add to Tenant Users Collection
+        const tenantUserRef = doc(db, "tenants", tenantId, "users", user.uid);
+        await setDoc(tenantUserRef, {
+          uid: user.uid,
+          email: user.email,
+          role: isInitialAdmin ? "admin" : "sales",
+          createdAt: new Date().toISOString()
+        });
+
+        toast({
+          title: "Sistema Inicializado",
+          description: "Seu perfil de administrador foi configurado com sucesso.",
+        });
+      }
+    } catch (error) {
+      console.error("Bootstrap error:", error);
+    }
+  };
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +98,7 @@ export default function LoginPage() {
       toast({
         variant: "destructive",
         title: "Sistema Desconfigurado",
-        description: "Por favor, configure las variables de entorno de Firebase.",
+        description: "Por favor, configure as variáveis de ambiente do Firebase.",
       });
       return;
     }
@@ -40,7 +106,8 @@ export default function LoginPage() {
 
     setIsLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      await bootstrapUser(userCredential.user);
       router.push("/dashboard");
     } catch (error: any) {
       console.error("Login error:", error);
@@ -59,7 +126,8 @@ export default function LoginPage() {
     setIsLoading(true);
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
+      const userCredential = await signInWithPopup(auth, provider);
+      await bootstrapUser(userCredential.user);
       router.push("/dashboard");
     } catch (error: any) {
       console.error("Google login error:", error);
@@ -89,7 +157,7 @@ export default function LoginPage() {
             <CardContent className="pt-6 flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
               <div className="text-sm text-amber-800">
-                <strong>Configuração necessária:</strong> Las variables de entorno en el archivo <code>.env</code> no han sido configuradas. El login está deshabilitado.
+                <strong>Configuração necessária:</strong> As variáveis de ambiente no arquivo <code>.env</code> não foram configuradas. O login está desabilitado.
               </div>
             </CardContent>
           </Card>
@@ -165,7 +233,7 @@ export default function LoginPage() {
         </Card>
         
         <p className="text-center text-xs text-muted-foreground">
-          Ao entrar, você concorda con nossos <Link href="#" className="underline">Termos de Uso</Link> e <Link href="#" className="underline">Privacidade</Link>.
+          Ao entrar, você concorda com nossos <Link href="#" className="underline">Termos de Uso</Link> e <Link href="#" className="underline">Privacidade</Link>.
         </p>
       </div>
     </div>

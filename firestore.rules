@@ -18,11 +18,11 @@ service cloud.firestore {
     }
 
     function getUserRole(tenantId) {
-      let rootUser = /databases/$(database)/documents/users/$(request.auth.uid);
-      let tenantUser = /databases/$(database)/documents/tenants/$(tenantId)/users/$(request.auth.uid);
+      let rootUserPath = /databases/$(database)/documents/users/$(request.auth.uid);
+      let tenantUserPath = /databases/$(database)/documents/tenants/$(tenantId)/users/$(request.auth.uid);
       
-      return exists(tenantUser) ? get(tenantUser).data.role : 
-             (exists(rootUser) ? get(rootUser).data.role : 'viewer');
+      return exists(tenantUserPath) ? get(tenantUserPath).data.role : 
+             (exists(rootUserPath) ? get(rootUserPath).data.role : 'viewer');
     }
 
     function hasRole(tenantId, role) {
@@ -33,7 +33,9 @@ service cloud.firestore {
     // Root profile MUST be first to avoid conflicts
     match /users/{userId} {
       allow read: if isSignedIn() && request.auth.uid == userId;
-      allow write: if isSignedIn() && request.auth.uid == userId;
+      // Allow the user to create their own initial profile
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && request.auth.uid == userId;
     }
 
     // Global Industry Index - Accessible to all industrial users
@@ -44,6 +46,9 @@ service cloud.firestore {
     match /tenants/{tenantId} {
       allow read: if belongsToTenant(tenantId);
       allow write: if hasRole(tenantId, 'admin');
+      
+      // Allow initial tenant creation if the user is the bootstrap admin
+      allow create: if isSignedIn() && (request.auth.uid == '4zxTMJtXvbh5DjWF8xSrITJh1W33' || request.auth.token.email == 'leozman15@gmail.com');
 
       match /users/{userId} {
         allow read: if belongsToTenant(tenantId);
