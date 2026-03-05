@@ -163,6 +163,7 @@ export interface DailyStats {
   quotaUsed: number;
   emailsSent: number;
   emailsFailed: number;
+  whatsappOpened: number;
   radarAvgFinalScore: number;
   newProspects: number;
 }
@@ -174,6 +175,12 @@ export interface WeeklyStats {
   statusChangedTo_interested: number;
   statusChangedTo_demo: number;
   statusChangedTo_client: number;
+  // Channel Conversions
+  emailsSentCount: number;
+  emailInterestedCount: number;
+  whatsappOpenedCount: number;
+  whatsappInterestedCount: number;
+  reconciledAt?: any;
 }
 
 export interface Contact {
