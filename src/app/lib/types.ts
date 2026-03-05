@@ -72,6 +72,10 @@ export interface Prospect {
   doNotContactReason?: string;
   doNotContactAt?: string;
 
+  // Deliverability tracking
+  emailAttempts?: number;
+  lastEmailSentAt?: string;
+
   // Discovery specific
   isRecentlyCreated?: boolean;
   isIndustrialHub?: boolean;
@@ -163,6 +167,7 @@ export interface DailyStats {
   quotaUsed: number;
   emailsSent: number;
   emailsFailed: number;
+  emailsDelivered?: number;
   whatsappOpened: number;
   radarAvgFinalScore: number;
   newProspects: number;
@@ -191,6 +196,7 @@ export interface Contact {
   whatsapp?: string;
   verified?: boolean;
   source?: "manual" | "csv" | "ai_suggestion" | "website";
+  quality?: "corporate" | "generic" | "spam";
 }
 
 export interface TenantSettings {
@@ -214,6 +220,11 @@ export interface TenantSettings {
   autoDiscoveryLimitPerWeek: number;
   lastDiscoveryRunAt?: string;
   lastDiscoveryCount?: number;
+
+  // Deliverability Settings
+  warmupModeEnabled?: boolean;
+  spamProtectionLevel?: 'low' | 'medium' | 'high';
+  maxAttemptsPerProspect?: number;
 }
 
 export interface Tenant {

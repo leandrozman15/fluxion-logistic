@@ -13,7 +13,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Building2, Globe, MapPin, Mail, Phone, ExternalLink, MessageSquare, History, Sparkles, Loader2, CheckCircle2, Send, Wand2, BrainCircuit, AlertCircle, SearchCode, MailPlus, UserPlus, Info, Ban, ShieldAlert, MessageCircle, ArrowLeft, Lightbulb, Clock, User } from "lucide-react";
+import { 
+  Building2, Globe, MapPin, Mail, Phone, ExternalLink, 
+  MessageSquare, History, Sparkles, Loader2, CheckCircle2, 
+  Send, Wand2, BrainCircuit, AlertCircle, SearchCode, 
+  MailPlus, UserPlus, Info, Ban, ShieldAlert, MessageCircle, 
+  ArrowLeft, Lightbulb, Clock, User, AlertTriangle, ShieldCheck 
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Prospect, ProspectStatus, EmailTemplate, OutboxMessage, OutboxState, AiConfidence, Contact, Task } from "@/app/lib/types";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -22,7 +28,9 @@ import { generateEmailDraft } from "@/ai/flows/generate-email-draft-flow";
 import { generateWhatsAppMessage } from "@/ai/flows/generate-whatsapp-message-flow";
 import { normalizePhoneBR, buildWaMeUrl, buildWhatsAppMessage } from "@/lib/utils/whatsapp";
 import { calculateNextAction } from "@/lib/utils/nba";
+import { checkEmailQuality, calculateSpamProbability, isEmailOnCooldown } from "@/lib/utils/deliverability";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import Link from "next/link";
 import { addDays } from "date-fns";
 import { format } from "date-fns";
@@ -84,6 +92,11 @@ export default function ProspectDetailPage() {
   const previewSubject = customSubject || (selectedTemplate && prospect ? renderTemplate(selectedTemplate.subject, prospect) : "");
   const previewBody = customBody || (selectedTemplate && prospect ? renderTemplate(selectedTemplate.body, prospect) : "");
 
+  // Deliverability Checks
+  const emailQuality = selectedContact?.email ? checkEmailQuality(selectedContact.email) : null;
+  const spamProb = previewBody ? calculateSpamProbability(previewSubject, previewBody) : 0;
+  const onCooldown = prospect ? isEmailOnCooldown(prospect.lastEmailSentAt) : false;
+
   const nba = useMemo(() => prospect ? calculateNextAction(prospect) : null, [prospect]);
 
   useEffect(() => {
@@ -110,7 +123,6 @@ export default function ProspectDetailPage() {
         createdAt: serverTimestamp(),
         createdBy: user.uid
       });
-      toast({ title: "Follow-up agendado", description: "Tarefa criada para daqui a 2 dias." });
     } catch (e) {
       console.error("Error creating task:", e);
     }
@@ -250,6 +262,8 @@ export default function ProspectDetailPage() {
       });
 
       await updateDoc(prospectRef as any, { 
+        lastEmailSentAt: new Date().toISOString(),
+        emailAttempts: increment(1),
         lastContactAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
@@ -260,7 +274,7 @@ export default function ProspectDetailPage() {
         companyName: prospect.companyName,
         actorUid: user.uid,
         createdAt: serverTimestamp(),
-        metadata: { state, to: selectedContact?.email, aiUsed: !!customBody }
+        metadata: { state, to: selectedContact?.email, aiUsed: !!customBody, quality: emailQuality }
       });
 
       if (state === 'queued') {
@@ -599,6 +613,17 @@ export default function ProspectDetailPage() {
             <DialogTitle>Preparar Comunicação por E-mail</DialogTitle>
             <DialogDescription>Personalize o contato antes de enviar.</DialogDescription>
           </DialogHeader>
+          
+          {onCooldown && (
+            <Alert variant="destructive" className="bg-amber-50 border-amber-200 text-amber-900">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertTitle className="text-xs font-bold">Aviso de Entregabilidade</AlertTitle>
+              <AlertDescription className="text-[10px]">
+                Um e-mail foi enviado recentemente para esta empresa. Recomendamos aguardar 3 dias para evitar filtros de spam.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
             <div className="space-y-4">
               <div className="space-y-2">
@@ -620,6 +645,11 @@ export default function ProspectDetailPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                {emailQuality === 'generic' && (
+                  <p className="text-[10px] text-amber-600 flex items-center gap-1 mt-1">
+                    <Info className="w-3 h-3" /> E-mail genérico detectado (baixa conversão).
+                  </p>
+                )}
               </div>
               <Button 
                 variant="outline" 
@@ -632,8 +662,13 @@ export default function ProspectDetailPage() {
               </Button>
             </div>
 
-            <div className="bg-secondary/20 p-4 rounded-xl space-y-3 border">
-              <h4 className="text-xs font-bold uppercase text-muted-foreground">Preview do Envio</h4>
+            <div className="bg-secondary/20 p-4 rounded-xl space-y-3 border relative">
+              <h4 className="text-xs font-bold uppercase text-muted-foreground flex justify-between">
+                Preview do Envio
+                {spamProb > 40 && (
+                  <Badge variant="destructive" className="text-[8px] h-4">Spam Risk: {spamProb}%</Badge>
+                )}
+              </h4>
               <div className="space-y-1">
                 <Label className="text-[10px]">Assunto</Label>
                 <div className="text-sm font-semibold border-b pb-1">{previewSubject || "..."}</div>
@@ -645,6 +680,12 @@ export default function ProspectDetailPage() {
                   dangerouslySetInnerHTML={{ __html: previewBody || "<i>Selecione um template...</i>" }}
                 />
               </div>
+              {spamProb > 60 && (
+                <div className="text-[9px] text-destructive bg-white/80 p-2 rounded border border-destructive flex items-start gap-2 absolute bottom-4 left-4 right-4">
+                  <ShieldAlert className="w-3 h-3 mt-0.5 shrink-0" />
+                  <span>Conteúdo com muitos links ou palavras sensíveis. Sua taxa de entrega pode ser prejudicada.</span>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter className="gap-2">

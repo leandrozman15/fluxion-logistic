@@ -14,7 +14,7 @@ import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Save, Target, BrainCircuit, Mail, ShieldAlert, Sparkles, MapPin, Factory } from "lucide-react";
+import { Loader2, Save, Target, BrainCircuit, Mail, ShieldAlert, Sparkles, MapPin, Factory, ShieldCheck } from "lucide-react";
 import { Tenant, TenantSettings } from "@/app/lib/types";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -44,29 +44,15 @@ export default function TenantSettingsPage() {
 
   useEffect(() => {
     if (tenantData?.settings) {
-      // Garantir que campos de auto discovery existam
-      const currentSettings = tenantData.settings;
       setSettings({
-        ...currentSettings,
-        autoDiscoveryEnabled: currentSettings.autoDiscoveryEnabled ?? false,
-        autoDiscoveryStates: currentSettings.autoDiscoveryStates ?? ["SP"],
-        autoDiscoveryCNAE: currentSettings.autoDiscoveryCNAE ?? ["25", "28"],
-        autoDiscoveryLimitPerWeek: currentSettings.autoDiscoveryLimitPerWeek ?? 50,
-      });
-    } else if (tenantData && !tenantData.settings) {
-      setSettings({
-        scoringWeights: { effective: 0.6, ai: 0.4 },
-        finalScoreMode: 'weighted',
-        dailyTopLimit: 30,
-        requireContactMethod: 'email_or_phone',
-        cooldownDays: 7,
-        hourlyEmailLimit: 20,
-        dailyEmailLimit: 200,
-        defaultTemplateId: null,
-        autoDiscoveryEnabled: false,
-        autoDiscoveryStates: ["SP"],
-        autoDiscoveryCNAE: ["25", "28"],
-        autoDiscoveryLimitPerWeek: 50
+        ...tenantData.settings,
+        autoDiscoveryEnabled: tenantData.settings.autoDiscoveryEnabled ?? false,
+        autoDiscoveryStates: tenantData.settings.autoDiscoveryStates ?? ["SP"],
+        autoDiscoveryCNAE: tenantData.settings.autoDiscoveryCNAE ?? ["25", "28"],
+        autoDiscoveryLimitPerWeek: tenantData.settings.autoDiscoveryLimitPerWeek ?? 50,
+        warmupModeEnabled: tenantData.settings.warmupModeEnabled ?? true,
+        spamProtectionLevel: tenantData.settings.spamProtectionLevel ?? 'medium',
+        maxAttemptsPerProspect: tenantData.settings.maxAttemptsPerProspect ?? 3
       });
     }
   }, [tenantData]);
@@ -81,7 +67,7 @@ export default function TenantSettingsPage() {
       }, { merge: true });
       toast({ title: "Configurações salvas!", description: "O motor de prospeção foi atualizado." });
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro ao salvar", description: "Verifique suas permissões de administrador." });
+      toast({ variant: "destructive", title: "Erro ao salvar" });
     } finally {
       setIsSaving(false);
     }
@@ -122,7 +108,52 @@ export default function TenantSettingsPage() {
       </div>
 
       <div className="grid gap-6">
-        <Card className={`border-2 transition-all ${settings.autoDiscoveryEnabled ? 'border-accent/30 shadow-md' : 'border-border'}`}>
+        <Card className="border-2 border-primary/10">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-green-600" /> Proteção de Entregabilidade</CardTitle>
+            <CardDescription>Evite que seu domínio caia em listas de SPAM.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="flex items-center justify-between p-4 bg-secondary/30 rounded-lg">
+              <div className="space-y-0.5">
+                <Label>Modo Warmup (Aquecimento)</Label>
+                <p className="text-xs text-muted-foreground">Aumenta gradualmente os limites de envio para novos domínios.</p>
+              </div>
+              <Switch 
+                checked={settings.warmupModeEnabled} 
+                onCheckedChange={(v) => setSettings({...settings, warmupModeEnabled: v})}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label>Nível de Proteção Anti-Spam</Label>
+                <Select 
+                  value={settings.spamProtectionLevel} 
+                  onValueChange={(v: any) => setSettings({...settings, spamProtectionLevel: v})}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Leve (Avisa pouco)</SelectItem>
+                    <SelectItem value="medium">Médio (Recomendado)</SelectItem>
+                    <SelectItem value="high">Rigoroso (Bloqueia riscos)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Máximo de Tentativas por Prospect</Label>
+                <Input 
+                  type="number" 
+                  value={settings.maxAttemptsPerProspect} 
+                  onChange={(e) => setSettings({...settings, maxAttemptsPerProspect: parseInt(e.target.value)})}
+                />
+                <p className="text-[10px] text-muted-foreground">Recomendado: 3 e-mails antes do descarte.</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div className="space-y-1">
               <CardTitle className="flex items-center gap-2">
@@ -175,9 +206,6 @@ export default function TenantSettingsPage() {
                   step={5} 
                   onValueChange={([v]) => setSettings({...settings, autoDiscoveryLimitPerWeek: v})}
                 />
-                <p className="text-[10px] text-muted-foreground mt-2 italic">
-                  O motor de discovery prioriza empresas recém-criadas e localizadas em polos industriais dos estados selecionados.
-                </p>
               </div>
             </CardContent>
           )}
@@ -185,99 +213,8 @@ export default function TenantSettingsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Target className="w-5 h-5 text-accent" /> Radar Diário</CardTitle>
-            <CardDescription>Configure como a lista Top do dia é gerada e filtrada.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label>Limite de Prospectos (Top N)</Label>
-                <Select 
-                  value={settings.dailyTopLimit.toString()} 
-                  onValueChange={(v) => setSettings({...settings, dailyTopLimit: parseInt(v)})}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="20">Top 20</SelectItem>
-                    <SelectItem value="30">Top 30</SelectItem>
-                    <SelectItem value="50">Top 50</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-[10px] text-muted-foreground">Recomendado: 30 para manter o foco operacional.</p>
-              </div>
-              <div className="space-y-2">
-                <Label>Exigência de Contato</Label>
-                <Select 
-                  value={settings.requireContactMethod} 
-                  onValueChange={(v: any) => setSettings({...settings, requireContactMethod: v})}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="email_or_phone">Email ou Telefone</SelectItem>
-                    <SelectItem value="email_only">Apenas Email</SelectItem>
-                    <SelectItem value="none">Nenhuma (Trazer todos)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Janela de Cooldown (Dias)</Label>
-                <Input 
-                  type="number" 
-                  value={settings.cooldownDays} 
-                  onChange={(e) => setSettings({...settings, cooldownDays: parseInt(e.target.value)})}
-                />
-                <p className="text-[10px] text-muted-foreground">Evita sugerir empresas contactadas recentemente.</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><BrainCircuit className="w-5 h-5 text-primary" /> Pesos do Motor de Scoring</CardTitle>
-            <CardDescription>Determine como o algoritmo prioriza as empresas no radar.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-8">
-            <div className="space-y-4">
-              <div className="flex justify-between items-center mb-2">
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary">Regras de Dados ({Math.round(settings.scoringWeights.effective * 100)}%)</Badge>
-                  <span className="text-xs text-muted-foreground">vs</span>
-                  <Badge className="bg-primary">Análise IA ({Math.round(settings.scoringWeights.ai * 100)}%)</Badge>
-                </div>
-                <Select 
-                  value={settings.finalScoreMode} 
-                  onValueChange={(v: any) => setSettings({...settings, finalScoreMode: v})}
-                >
-                  <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="weighted">Ponderado</SelectItem>
-                    <SelectItem value="max">Maior Nota</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <Slider 
-                value={[settings.scoringWeights.effective * 100]} 
-                max={100} 
-                step={5} 
-                onValueChange={([v]) => setSettings({
-                  ...settings, 
-                  scoringWeights: { effective: v/100, ai: (100-v)/100 }
-                })}
-              />
-              <p className="text-xs text-muted-foreground italic">
-                {settings.finalScoreMode === 'weighted' 
-                  ? "O score final será uma média ponderada entre a qualidade dos datos e a análise de potencial da IA."
-                  : "O sistema usará sempre a melhor nota entre os datos e a IA."}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
             <CardTitle className="flex items-center gap-2"><Mail className="w-5 h-5 text-accent" /> Limites de Comunicação</CardTitle>
-            <CardDescription>Controle a cadência para proteger a reputación do seu domínio.</CardDescription>
+            <CardDescription>Controle a cadência para proteger a reputação do seu domínio.</CardDescription>
           </CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
