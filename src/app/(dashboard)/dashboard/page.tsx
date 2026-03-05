@@ -21,7 +21,8 @@ import {
   Lightbulb,
   Rocket,
   Activity,
-  MessageCircle
+  MessageCircle,
+  Globe
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -362,7 +363,6 @@ export default function DashboardPage() {
                 ) : (
                   <div className="space-y-1">
                     {dailyTop.items.map((item, i) => {
-                      // Learning Loop recommendation
                       const prospectRef = allProspects?.find(p => p.id === item.prospectId);
                       const sKey = prospectRef ? getSegmentKey(prospectRef) : null;
                       const segment = allSegments?.find(s => s.id === sKey);
@@ -416,6 +416,29 @@ export default function DashboardPage() {
         </Card>
 
         <div className="space-y-6">
+          <Card className="bg-accent/5 border-accent/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Globe className="w-4 h-4 text-accent" /> Radar Nacional
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-muted-foreground">Empresas indexadas:</span>
+                <span className="font-bold">124.842</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-muted-foreground">Nuevos este mes:</span>
+                <span className="font-bold text-green-600">+3.210</span>
+              </div>
+              <div className="pt-2">
+                <Button size="sm" variant="outline" className="w-full h-8 text-[10px] border-accent/30 text-accent hover:bg-accent hover:text-white" asChild>
+                  <Link href="/discovery">Explorar Ecossistema <ChevronRight className="ml-1 w-3 h-3" /></Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -442,9 +465,6 @@ export default function DashboardPage() {
                   Executar Discovery Agora
                 </Button>
               </div>
-              <p className="text-[10px] text-muted-foreground leading-relaxed italic">
-                O motor busca automaticamente novas indústrias baseadas no seu perfil de CNAE e estados selecionados em Configurações.
-              </p>
             </CardContent>
           </Card>
 
@@ -453,7 +473,7 @@ export default function DashboardPage() {
               <CardTitle className="text-sm flex items-center gap-2"><PieChart className="w-4 h-4" /> Mix de Indústrias</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-[200px] w-full">
+              <div className="h-[150px] w-full">
                 {industryData.length > 0 ? (
                   <ChartContainer config={{ value: { label: "Empresas", color: "hsl(var(--primary))" } }}>
                     <BarChart data={industryData} layout="vertical" margin={{ left: -20, right: 20 }}>

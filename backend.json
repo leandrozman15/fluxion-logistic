@@ -2,6 +2,24 @@
 {
   "firestore": {
     "collections": {
+      "industryIndex": {
+        "description": "Índice global de indústrias brasileiras para prospecção ativa",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "companyName": { "type": "string" },
+            "cnpj": { "type": "string" },
+            "city": { "type": "string" },
+            "state": { "type": "string" },
+            "industryTag": { "type": "string" },
+            "cnae": { "type": "string" },
+            "website": { "type": "string" },
+            "employeesRange": { "type": "string" },
+            "foundedYear": { "type": "number" },
+            "isIndustrialHub": { "type": "boolean" }
+          }
+        }
+      },
       "tenants": {
         "description": "Datos maestros de la organización/empresa",
         "schema": {
@@ -32,17 +50,18 @@
         },
         "documents": {
           "users": { "description": "Usuarios pertenecientes al tenant con roles" },
-          "prospects": { "description": "Base de datos de leads industriales con histórico y auditoría" },
-          "templates": { "description": "Plantillas de comunicación con soporte para variables" },
-          "campaigns": { "description": "Configuración y estado de campañas masivas" },
-          "imports": { "description": "Registro de importaciones de archivos CSV" },
-          "dailyTop": { "description": "Ranking diario congelado de las mejores oportunidades (Top 30)" },
-          "events": { "description": "Registro de telemetría y auditoría de acciones" },
+          "prospects": { "description": "Base de datos de leads industriais com histórico e auditoria" },
+          "templates": { "description": "Plantillas de comunicação com suporte para variables" },
+          "campaigns": { "description": "Configuração e estado de campaigns masivas" },
+          "imports": { "description": "Registro de importaciones de arquivos CSV" },
+          "dailyTop": { "description": "Ranking diario congelado de las melhores oportunidades (Top 30)" },
+          "events": { "description": "Registro de telemetria e auditoría de acciones" },
           "dailyStats": { "description": "Estadísticas de uso, cuotas y métricas por dia" },
           "weeklyStats": { "description": "Métricas de conversión del pipeline por semana" },
-          "outbox": { "description": "Cola de mensajes operativos (draft, queued, sent, failed) con soporte para idempotencia" },
+          "segmentStats": { "description": "Inteligência de performance por segmento industrial" },
+          "outbox": { "description": "Cola de mensagens operativos (draft, queued, sent, failed) com suporte para idempotencia" },
           "tasks": { 
-            "description": "Tareas de seguimiento y acciones pendientes por prospecto",
+            "description": "Tarefas de seguimento e ações pendentes por prospecto",
             "schema": {
               "type": "object",
               "properties": {

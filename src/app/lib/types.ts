@@ -23,7 +23,7 @@ export interface Prospect {
   createdAt: string;
   updatedAt: string;
   createdBy: string;
-  source: 'manual' | 'csv' | 'web' | 'referral' | 'auto_discovery';
+  source: 'manual' | 'csv' | 'web' | 'referral' | 'auto_discovery' | 'radar_index';
   companyName: string;
   cnpj: string;
   industryTags: string[];
@@ -79,6 +79,21 @@ export interface Prospect {
   // Discovery specific
   isRecentlyCreated?: boolean;
   isIndustrialHub?: boolean;
+}
+
+export interface IndustryIndexCompany {
+  id: string;
+  companyName: string;
+  cnpj: string;
+  city: string;
+  state: string;
+  industryTag: string;
+  cnae: string;
+  website?: string;
+  employeesRange: '1-10' | '11-50' | '51-200' | '201-500' | '500+';
+  foundedYear: number;
+  isIndustrialHub?: boolean;
+  radarScore?: number; // Estimated score before import
 }
 
 export interface Task {

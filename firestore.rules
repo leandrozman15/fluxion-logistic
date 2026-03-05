@@ -30,6 +30,17 @@ service cloud.firestore {
       return userRole == role || userRole == 'admin';
     }
 
+    // Root profile MUST be first to avoid conflicts
+    match /users/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Global Industry Index - Accessible to all industrial users
+    match /industryIndex/{docId} {
+      allow read: if isSignedIn();
+    }
+
     match /tenants/{tenantId} {
       allow read: if belongsToTenant(tenantId);
       allow write: if hasRole(tenantId, 'admin');
@@ -41,33 +52,30 @@ service cloud.firestore {
 
       match /prospects/{prospectId} {
         allow read: if belongsToTenant(tenantId);
-        allow create: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales');
-        allow update: if belongsToTenant(tenantId) && (
-          hasRole(tenantId, 'sales') || 
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['notes', 'status', 'updatedAt', 'doNotContact', 'doNotContactReason', 'doNotContactAt', 'lastContactAt', 'nextFollowUpAt'])
-        );
+        allow create: if belongsToTenant(tenantId);
+        allow update: if belongsToTenant(tenantId);
         allow delete: if hasRole(tenantId, 'admin');
       }
 
       match /tasks/{taskId} {
         allow read: if belongsToTenant(tenantId);
-        allow write: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales');
+        allow write: if belongsToTenant(tenantId);
       }
 
       match /templates/{templateId} {
         allow read: if belongsToTenant(tenantId);
-        allow write: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales');
+        allow write: if belongsToTenant(tenantId);
       }
 
       match /campaigns/{campaignId} {
         allow read: if belongsToTenant(tenantId);
-        allow write: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales');
+        allow write: if belongsToTenant(tenantId);
       }
 
       match /outbox/{messageId} {
         allow read: if belongsToTenant(tenantId);
-        allow create: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales');
-        allow update: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales');
+        allow create: if belongsToTenant(tenantId);
+        allow update: if belongsToTenant(tenantId);
         allow delete: if hasRole(tenantId, 'admin');
       }
 
@@ -78,7 +86,7 @@ service cloud.firestore {
 
       match /imports/{importId} {
         allow read: if belongsToTenant(tenantId);
-        allow write: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales');
+        allow write: if belongsToTenant(tenantId);
       }
       
       match /dailyStats/{date} {
@@ -95,11 +103,11 @@ service cloud.firestore {
         allow read: if belongsToTenant(tenantId);
         allow write: if hasRole(tenantId, 'admin');
       }
-    }
 
-    match /users/{userId} {
-      allow read: if isSignedIn() && request.auth.uid == userId;
-      allow write: if isSignedIn() && request.auth.uid == userId;
+      match /segmentStats/{segmentId} {
+        allow read: if belongsToTenant(tenantId);
+        allow write: if belongsToTenant(tenantId);
+      }
     }
   }
 }
