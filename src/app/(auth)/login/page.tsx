@@ -1,9 +1,9 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth, useFirestore } from "@/firebase";
+import { useAuth, useFirestore, useUser } from "@/firebase";
 import { 
   signInWithEmailAndPassword, 
   signInWithPopup, 
@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Target, Loader2, AlertTriangle, ShieldCheck } from "lucide-react";
+import { Target, Loader2, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import { isFirebaseConfigValid } from "@/firebase/config";
@@ -31,6 +31,14 @@ export default function LoginPage() {
   const { toast } = useToast();
   const auth = useAuth();
   const db = useFirestore();
+  const { user: currentUser, loading: userLoading } = useUser();
+
+  // Redirigir si ya está logueado
+  useEffect(() => {
+    if (!userLoading && currentUser) {
+      router.push("/dashboard");
+    }
+  }, [currentUser, userLoading, router]);
 
   const bootstrapUser = async (user: User) => {
     if (!db) return;
@@ -87,21 +95,19 @@ export default function LoginPage() {
           description: "Seu perfil de administrador foi configurado com sucesso.",
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Bootstrap error:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro na inicialização",
+        description: error.message || "Não foi possível criar seu perfil.",
+      });
     }
   };
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!auth) {
-      toast({
-        variant: "destructive",
-        title: "Sistema Desconfigurado",
-        description: "Por favor, configure as variáveis de ambiente do Firebase.",
-      });
-      return;
-    }
+    if (!auth) return;
     if (!email || !password) return;
 
     setIsLoading(true);
@@ -114,7 +120,7 @@ export default function LoginPage() {
       toast({
         variant: "destructive",
         title: "Erro ao acessar",
-        description: "Verifique suas credenciais.",
+        description: "Verifique seu e-mail e senha. Verifique se o usuário já existe no Firebase Auth.",
       });
     } finally {
       setIsLoading(false);
@@ -157,7 +163,7 @@ export default function LoginPage() {
             <CardContent className="pt-6 flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
               <div className="text-sm text-amber-800">
-                <strong>Configuração necessária:</strong> As variáveis de ambiente no arquivo <code>.env</code> não foram configuradas. O login está desabilitado.
+                <strong>Configuração necessária:</strong> As credenciais do Firebase não estão configuradas corretamente.
               </div>
             </CardContent>
           </Card>
