@@ -1,10 +1,11 @@
 import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
+import { AuthProvider } from "@/app/lib/auth-context";
 
 export const metadata: Metadata = {
   title: 'Fluxion Radar | Prospecção Industrial Inteligente',
-  description: 'Sistema de prospecção B2B industrial com IA integrada para o mercado brasileiro.',
+  description: 'Sistema de prospecção B2B industrial con IA integrada para o mercado brasileiro.',
 };
 
 export default function RootLayout({
@@ -20,8 +21,10 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased">
-        {children}
-        <Toaster />
+        <AuthProvider>
+          {children}
+          <Toaster />
+        </AuthProvider>
       </body>
     </html>
   );

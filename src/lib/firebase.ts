@@ -12,24 +12,26 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Inicialización segura para evitar errores de API Key vacía en el primer render
-let app: FirebaseApp;
-let auth: Auth;
-let db: Firestore;
-let storage: FirebaseStorage;
+// Verificar si la configuración es mínima para evitar errores de inicialización
+const isConfigValid = typeof firebaseConfig.apiKey === 'string' && firebaseConfig.apiKey.length > 0 && firebaseConfig.apiKey !== "undefined";
 
-try {
-  app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-  auth = getAuth(app);
-  db = getFirestore(app);
-  storage = getStorage(app);
-} catch (error) {
-  console.error("Error al inicializar Firebase. Asegúrate de configurar las variables de entorno.", error);
-  // Fallback para evitar que la app crashee completamente en build/dev sin envs
-  app = {} as FirebaseApp;
-  auth = {} as Auth;
-  db = {} as Firestore;
-  storage = {} as FirebaseStorage;
+let app: FirebaseApp | undefined;
+let auth: Auth | undefined;
+let db: Firestore | undefined;
+let storage: FirebaseStorage | undefined;
+
+if (isConfigValid) {
+  try {
+    app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+    storage = getStorage(app);
+  } catch (error) {
+    console.error("Error al inicializar los servicios de Firebase:", error);
+  }
+} else {
+  console.warn("Firebase: NEXT_PUBLIC_FIREBASE_API_KEY no encontrada o inválida. El sistema funcionará en modo degradado (mock).");
 }
 
+// Exportamos como opcionales para que los componentes manejen el estado 'offline' o 'unconfigured'
 export { app, auth, db, storage };
