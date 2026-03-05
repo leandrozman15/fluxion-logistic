@@ -20,7 +20,7 @@ import {
   MailPlus, UserPlus, Info, Ban, ShieldAlert, MessageCircle, 
   ArrowLeft, Lightbulb, Clock, User, AlertTriangle, ShieldCheck, Zap,
   Cpu, FileSearch, CheckCircle, TrendingUp, TrendingDown,
-  Target
+  Target, Bot
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Prospect, ProspectStatus, EmailTemplate, OutboxState, SegmentStats } from "@/app/lib/types";
@@ -30,6 +30,7 @@ import { generateEmailDraft } from "@/ai/flows/generate-email-draft-flow";
 import { generateWhatsAppMessage } from "@/ai/flows/generate-whatsapp-message-flow";
 import { analyzeWebsiteContent } from "@/ai/flows/analyze-website-content-flow";
 import { predictCloseProbability } from "@/ai/flows/predict-close-probability-flow";
+import { generateApproachPlan, type GenerateApproachPlanOutput } from "@/ai/flows/generate-approach-plan-flow";
 import { normalizePhoneBR, buildWaMeUrl, buildWhatsAppMessage } from "@/lib/utils/whatsapp";
 import { calculateNextAction } from "@/lib/utils/nba";
 import { calculateEffectiveScore } from "@/lib/utils/scoring";
@@ -55,6 +56,7 @@ export default function ProspectDetailPage() {
   const [isOutboxDialogOpen, setIsOutboxDialogOpen] = useState(false);
   const [isDncDialogOpen, setIsDncDialogOpen] = useState(false);
   const [isWhatsAppDialogOpen, setIsWhatsAppDialogOpen] = useState(false);
+  const [isAiAgentDialogOpen, setIsAiAgentDialogOpen] = useState(false);
   
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [selectedContactIndex, setSelectedContactIndex] = useState<string>("0");
@@ -63,11 +65,13 @@ export default function ProspectDetailPage() {
   const [isAiWhatsAppDrafting, setIsAiWhatsAppDrafting] = useState(false);
   const [isAnalyzingWeb, setIsAnalyzingWeb] = useState(false);
   const [isPredictingClose, setIsPredictingClose] = useState(false);
+  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
   
   const [customSubject, setCustomSubject] = useState<string | null>(null);
   const [customBody, setCustomBody] = useState<string | null>(null);
   const [dncReason, setDncReason] = useState("");
   const [whatsAppDraft, setWhatsAppDraft] = useState("");
+  const [aiPlan, setAiPlan] = useState<GenerateApproachPlanOutput | null>(null);
 
   const prospectRef = useMemo(() => {
     if (!db || !tenantId || !id) return null;
@@ -120,7 +124,7 @@ export default function ProspectDetailPage() {
     }
   }, [searchParams, loading, prospect]);
 
-  const createFollowUpTask = async (type: 'followup_whatsapp' | 'followup_email') => {
+  const createFollowUpTask = async (type: 'followup_whatsapp' | 'followup_email', customNotes?: string) => {
     if (!db || !tenantId || !prospect || !user) return;
     try {
       const dueAt = addDays(new Date(), 2);
@@ -133,11 +137,70 @@ export default function ProspectDetailPage() {
         state: "open",
         assignedTo: user.uid,
         createdAt: serverTimestamp(),
-        createdBy: user.uid
+        createdBy: user.uid,
+        notes: customNotes
       });
     } catch (e) {
       console.error("Error creating task:", e);
     }
+  };
+
+  const handleGenerateAiPlan = async () => {
+    if (!prospect) return;
+    setIsGeneratingPlan(true);
+    try {
+      const plan = await generateApproachPlan({
+        prospect: {
+          companyName: prospect.companyName,
+          industryTags: prospect.industryTags,
+          aiWebSummary: prospect.aiWebSummary,
+          contacts: prospect.contacts,
+          doNotContact: prospect.doNotContact
+        },
+        closeProbability: prospect.closeProbability,
+        drivers: prospect.closeProbabilityDrivers as any,
+        preferredChannel: segmentData?.preferredChannel,
+        emailQuality: emailQuality || 'generic',
+        spamRisk: spamProb
+      });
+      setAiPlan(plan);
+      setIsAiAgentDialogOpen(true);
+      
+      await addDoc(collection(db!, "tenants", tenantId!, "events"), {
+        type: "approach_generated_ai",
+        prospectId: prospect.id,
+        companyName: prospect.companyName,
+        actorUid: user?.uid,
+        createdAt: serverTimestamp(),
+        metadata: { recommendedChannel: plan.recommendedChannel, angle: plan.approachAngle }
+      });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Erro no Agente de IA", description: e.message });
+    } finally {
+      setIsGeneratingPlan(false);
+    }
+  };
+
+  const handleApplyAiPlan = async () => {
+    if (!aiPlan || !prospect) return;
+    if (aiPlan.recommendedChannel === 'email') {
+      setCustomSubject(aiPlan.subject || "");
+      setCustomBody(aiPlan.message);
+      setIsOutboxDialogOpen(true);
+    } else {
+      setWhatsAppDraft(aiPlan.message);
+      setIsWhatsAppDialogOpen(true);
+    }
+    setIsAiAgentDialogOpen(false);
+    
+    await addDoc(collection(db!, "tenants", tenantId!, "events"), {
+      type: "approach_applied",
+      prospectId: prospect.id,
+      companyName: prospect.companyName,
+      actorUid: user?.uid,
+      createdAt: serverTimestamp(),
+      metadata: { channel: aiPlan.recommendedChannel }
+    });
   };
 
   const handleStatusChange = async (newStatus: ProspectStatus) => {
@@ -369,7 +432,7 @@ export default function ProspectDetailPage() {
       });
 
       if (state === 'queued') {
-        createFollowUpTask('followup_email');
+        createFollowUpTask('followup_email', aiPlan?.followupMessage);
       }
 
       toast({ title: state === 'queued' ? "Email na fila!" : "Rascunho salvo!" });
@@ -435,7 +498,7 @@ export default function ProspectDetailPage() {
       updatedAt: new Date().toISOString()
     });
 
-    createFollowUpTask('followup_whatsapp');
+    createFollowUpTask('followup_whatsapp', aiPlan?.followupMessage);
 
     window.open(buildWaMeUrl(normalized, whatsAppDraft), "_blank");
     setIsWhatsAppDialogOpen(false);
@@ -468,6 +531,7 @@ export default function ProspectDetailPage() {
       case 'status_changed': return <RefreshCw className="w-4 h-4 text-orange-500" />;
       case 'dnc_enabled': return <Ban className="w-4 h-4 text-destructive" />;
       case 'website_analyzed': return <SearchCode className="w-4 h-4 text-purple-500" />;
+      case 'approach_generated_ai': return <Bot className="w-4 h-4 text-accent" />;
       default: return <Clock className="w-4 h-4 text-muted-foreground" />;
     }
   };
@@ -480,6 +544,7 @@ export default function ProspectDetailPage() {
       case 'dnc_enabled': return `Adicionado à lista DNC: ${event.metadata?.reason}`;
       case 'dnc_disabled': return "Removido da lista DNC";
       case 'website_analyzed': return "Inteligência web extraída via IA";
+      case 'approach_generated_ai': return `Plano de abordagem IA gerado (${event.metadata?.recommendedChannel})`;
       default: return event.type;
     }
   };
@@ -519,6 +584,16 @@ export default function ProspectDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          {!prospect.doNotContact && (
+            <Button 
+              onClick={handleGenerateAiPlan} 
+              className="bg-accent hover:bg-accent/90"
+              disabled={isGeneratingPlan}
+            >
+              {isGeneratingPlan ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Bot className="w-4 h-4 mr-2" />}
+              Gerar Abordagem (IA)
+            </Button>
+          )}
           {prospect.isClaimedToday && (
             <>
               <TooltipProvider>
@@ -615,7 +690,6 @@ export default function ProspectDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Close Probability Card (Layer 15) */}
           <Card className="border-accent/20 bg-accent/5">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <div>
@@ -850,6 +924,65 @@ export default function ProspectDetailPage() {
           </Card>
         </div>
       </div>
+
+      <Dialog open={isAiAgentDialogOpen} onOpenChange={setIsAiAgentDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Bot className="w-5 h-5 text-accent" /> Plano de Abordagem Sugerido</DialogTitle>
+            <DialogDescription>IA analisou os drivers de fechamento e website para sugerir esta estratégia.</DialogDescription>
+          </DialogHeader>
+          {aiPlan && (
+            <div className="space-y-6 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-secondary/30 rounded-lg border">
+                  <div className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Canal Recomendado</div>
+                  <Badge className={aiPlan.recommendedChannel === 'whatsapp' ? 'bg-green-600' : 'bg-primary'}>
+                    {aiPlan.recommendedChannel === 'whatsapp' ? <MessageCircle className="w-3 h-3 mr-1" /> : <Mail className="w-3 h-3 mr-1" />}
+                    {aiPlan.recommendedChannel.toUpperCase()}
+                  </Badge>
+                </div>
+                <div className="p-3 bg-secondary/30 rounded-lg border">
+                  <div className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Ângulo de Venda</div>
+                  <div className="text-sm font-bold capitalize text-accent">{aiPlan.approachAngle}</div>
+                </div>
+              </div>
+
+              <Card className="bg-primary/5 border-primary/10">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-bold uppercase flex justify-between items-center">
+                    Mensagem de Abertura
+                    <Badge variant="outline" className="text-[8px]">pt-BR • Industrial</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {aiPlan.subject && (
+                    <div className="text-sm font-semibold border-b pb-1">Assunto: {aiPlan.subject}</div>
+                  )}
+                  <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{aiPlan.message}</div>
+                </CardContent>
+              </Card>
+
+              <div className="space-y-2">
+                <h4 className="text-[10px] font-bold uppercase text-muted-foreground">Perguntas de Qualificação</h4>
+                <ul className="space-y-1">
+                  {aiPlan.qualifyingQuestions.map((q, i) => (
+                    <li key={i} className="text-xs flex items-start gap-2 bg-secondary/20 p-2 rounded">
+                      <Target className="w-3 h-3 mt-0.5 text-accent shrink-0" />
+                      {q}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAiAgentDialogOpen(false)}>Fechar</Button>
+            <Button onClick={handleApplyAiPlan} className="bg-accent">
+              <Zap className="w-4 h-4 mr-2" /> Aplicar Abordagem
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isOutboxDialogOpen} onOpenChange={setIsOutboxDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">

@@ -20,9 +20,11 @@ import {
   Loader2,
   ChevronRight,
   ExternalLink,
-  RotateCcw
+  RotateCcw,
+  Bot,
+  Zap
 } from "lucide-react";
-import { Task, TaskType, TaskState } from "@/app/lib/types";
+import { Task, TaskType, TaskState, Prospect } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { format, isBefore, isToday, addDays, isAfter } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -99,10 +101,9 @@ export default function TasksPage() {
       const pData = pSnap.data();
       const phone = pData?.contacts?.[0]?.phone || pData?.contacts?.[0]?.whatsapp;
       const normalized = normalizePhoneBR(phone || "");
-      if (normalized) window.open(buildWaMeUrl(normalized), "_blank");
+      if (normalized) window.open(buildWaMeUrl(normalized, task.notes), "_blank");
       else toast({ variant: "destructive", title: "Telefone não encontrado" });
     } else if (task.type === 'followup_email') {
-      // Just redirect to prospect page for now
       window.location.href = `/prospects/${task.prospectId}?action=prepare`;
     } else {
       window.location.href = `/prospects/${task.prospectId}`;
@@ -155,7 +156,13 @@ export default function TasksPage() {
             </div>
 
             <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
-              <Button variant="ghost" size="sm" onClick={() => handleTaskAction(task)} className="h-8 text-xs">
+              {task.notes && (
+                <div className="hidden lg:block text-[9px] max-w-[150px] italic text-muted-foreground truncate border-l pl-2">
+                  {task.notes}
+                </div>
+              )}
+              <Button variant="ghost" size="sm" onClick={() => handleTaskAction(task)} className="h-8 text-xs font-bold text-accent">
+                {task.notes ? <Bot className="w-3 h-3 mr-1" /> : null}
                 Executar <ExternalLink className="w-3 h-3 ml-1" />
               </Button>
               <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-600" onClick={() => handleSnoozeTask(task.id, 2)}>
