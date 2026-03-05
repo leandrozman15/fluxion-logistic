@@ -2,15 +2,21 @@
 'use client';
 
 import { SidebarProvider, SidebarInset, Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarGroup, SidebarGroupLabel, SidebarGroupContent } from "@/components/ui/sidebar";
-import { LayoutDashboard, Users, Mail, FileSpreadsheet, Settings, Target, FileText, Inbox, LogOut, Building2, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Users, Mail, FileSpreadsheet, Settings, Target, FileText, Inbox, LogOut, Building2, BarChart3, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { useAuth } from "@/firebase";
+import { useAuth, useDoc } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
+import { useMemo } from "react";
+import { doc } from "firebase/firestore";
+import { Tenant } from "@/app/lib/types";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
+  const db = useAuth() ? null : null; // Para evitar erro de useFirestore não inicializado se auth sumir
+  const { tenantId, loading: tenantLoading } = useTenant();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -37,7 +43,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       router.push("/login");
       toast({ title: "Sessão encerrada", description: "Você saiu do sistema com sucesso." });
     } catch (error) {
-      toast({ variant: "destructive", title: "Erro ao sair", description: "Não foi posible encerrar a sessão." });
+      toast({ variant: "destructive", title: "Erro ao sair", description: "Não foi possível encerrar a sessão." });
     }
   };
 
@@ -104,8 +110,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <h2 className="text-lg font-semibold text-primary">Painel de Controle</h2>
             </div>
             <div className="flex items-center gap-4">
-               <div className="text-sm text-muted-foreground hidden sm:block">Empresa Industrial Ltda.</div>
-               <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center font-bold text-xs">JS</div>
+               {tenantLoading ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /> : (
+                 <div className="text-sm text-muted-foreground hidden sm:block">ID Org: {tenantId || "N/A"}</div>
+               )}
+               <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center font-bold text-xs uppercase">
+                 USR
+               </div>
             </div>
           </header>
           <main className="p-6">

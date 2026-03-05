@@ -6,16 +6,17 @@ service cloud.firestore {
       return request.auth != null;
     }
     
-    // Check if user belongs to tenant via root /users/{uid} or tenants/{id}/users/{uid}
+    // Check if user belongs to tenant
     function belongsToTenant(tenantId) {
+      let rootUserPath = /databases/$(database)/documents/users/$(request.auth.uid);
+      let tenantUserPath = /databases/$(database)/documents/tenants/$(tenantId)/users/$(request.auth.uid);
+      
       return isSignedIn() && (
-        exists(/databases/$(database)/documents/tenants/$(tenantId)/users/$(request.auth.uid)) ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId == tenantId)
+        exists(tenantUserPath) ||
+        (exists(rootUserPath) && get(rootUserPath).data.tenantId == tenantId)
       );
     }
 
-    // Get role from either location
     function getUserRole(tenantId) {
       let rootUser = /databases/$(database)/documents/users/$(request.auth.uid);
       let tenantUser = /databases/$(database)/documents/tenants/$(tenantId)/users/$(request.auth.uid);
@@ -61,9 +62,13 @@ service cloud.firestore {
       match /outbox/{messageId} {
         allow read: if belongsToTenant(tenantId);
         allow create: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales');
-        allow update: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales') 
-          && (request.resource.data.state in ['draft', 'queued', 'canceled']);
+        allow update: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales');
         allow delete: if hasRole(tenantId, 'admin');
+      }
+
+      match /events/{eventId} {
+        allow read: if belongsToTenant(tenantId);
+        allow create: if belongsToTenant(tenantId);
       }
 
       match /imports/{importId} {
@@ -89,7 +94,7 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isSignedIn() && request.auth.uid == userId;
-      allow write: if false;
+      allow write: if isSignedIn() && request.auth.uid == userId; // Allow self-provisioning during login
     }
   }
 }
