@@ -1,6 +1,7 @@
 
 export type ProspectStatus = 'new' | 'contacted' | 'interested' | 'demo' | 'client' | 'discarded';
 export type UserRole = 'admin' | 'sales' | 'viewer';
+export type OutboxState = 'draft' | 'queued' | 'sent' | 'failed' | 'canceled';
 
 export interface AppUser {
   uid: string;
@@ -35,6 +36,7 @@ export interface Prospect {
   effectiveScore: number; 
   scoreReasons: string[];
   isClaimedToday?: boolean;
+  claimedAt?: string;
   lastContactAt?: string;
   nextFollowUpAt?: string;
   notes?: string;
@@ -50,6 +52,29 @@ export interface EmailTemplate {
   createdAt: any;
   updatedAt: any;
   createdBy: string;
+}
+
+export interface OutboxMessage {
+  id: string;
+  tenantId: string;
+  createdAt: any;
+  createdBy: string;
+  updatedAt: any;
+  updatedBy: string;
+  type: 'email';
+  state: OutboxState;
+  to: string;
+  subject: string;
+  body: string;
+  templateId: string;
+  prospectId: string;
+  campaignId: string | null;
+  attempts: number;
+  lastError: string | null;
+  dedupeKey: string;
+  // Denormalized
+  companyName: string;
+  effectiveScore: number;
 }
 
 export interface DailyTop {

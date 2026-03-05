@@ -11,7 +11,8 @@
           "campaigns": { "description": "Configuración y estado de campañas" },
           "imports": { "description": "Registro de importaciones de archivos" },
           "dailyTop": { "description": "Listas curadas diarias de mejores prospects (Top 30)" },
-          "dailyStats": { "description": "Estadísticas de uso y cuotas por día (YYYY-MM-DD)" }
+          "dailyStats": { "description": "Estadísticas de uso y cuotas por día (YYYY-MM-DD)" },
+          "outbox": { "description": "Mensajes listos para envío, rascunhos o fallidos" }
         }
       }
     }

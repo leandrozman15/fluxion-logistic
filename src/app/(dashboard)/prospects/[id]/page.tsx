@@ -1,18 +1,23 @@
+
 'use client';
 
-import { useMemo, useState } from "react";
-import { useFirestore, useDoc, useUser } from "@/firebase";
+import { useMemo, useState, useEffect } from "react";
+import { useFirestore, useDoc, useCollection, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc, updateDoc, runTransaction, serverTimestamp } from "firebase/firestore";
+import { doc, updateDoc, runTransaction, serverTimestamp, setDoc, getDoc, collection, query, orderBy } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Building2, Globe, MapPin, Mail, Phone, ExternalLink, MessageSquare, History, Sparkles, Loader2, CheckCircle2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Building2, Globe, MapPin, Mail, Phone, ExternalLink, MessageSquare, History, Sparkles, Loader2, CheckCircle2, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Prospect, ProspectStatus } from "@/app/lib/types";
-import { useParams } from "next/navigation";
+import { Prospect, ProspectStatus, EmailTemplate, OutboxState } from "@/app/lib/types";
+import { useParams, Link } from "next/navigation";
+import { renderTemplate } from "@/lib/utils/template-renderer";
 
 export default function ProspectDetailPage() {
   const { id } = useParams();
@@ -20,14 +25,34 @@ export default function ProspectDetailPage() {
   const { tenantId } = useTenant();
   const { user } = useUser();
   const { toast } = useToast();
+  
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isOutboxDialogOpen, setIsOutboxDialogOpen] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [selectedContactIndex, setSelectedContactIndex] = useState<string>("0");
+  const [isSavingOutbox, setIsSavingOutbox] = useState(false);
 
+  // Prospect Data
   const prospectRef = useMemo(() => {
     if (!db || !tenantId || !id) return null;
     return doc(db, "tenants", tenantId, "prospects", id as string);
   }, [db, tenantId, id]);
 
   const { data: prospect, loading } = useDoc<Prospect>(prospectRef);
+
+  // Templates for Dialog
+  const templatesQuery = useMemo(() => {
+    if (!db || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "templates"), orderBy("name"));
+  }, [db, tenantId]);
+
+  const { data: templates } = useCollection<EmailTemplate>(templatesQuery);
+
+  const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
+  const selectedContact = prospect?.contacts?.[parseInt(selectedContactIndex)];
+
+  const previewSubject = selectedTemplate && prospect ? renderTemplate(selectedTemplate.subject, prospect) : "";
+  const previewBody = selectedTemplate && prospect ? renderTemplate(selectedTemplate.body, prospect) : "";
 
   const handleStatusChange = async (newStatus: ProspectStatus) => {
     if (!prospectRef) return;
@@ -39,7 +64,7 @@ export default function ProspectDetailPage() {
       });
       toast({ title: "Status atualizado", description: `O prospect agora está como ${newStatus}.` });
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro", description: "Não foi possível atualizar o status." });
+      toast({ variant: "destructive", title: "Erro", description: "Não fue posible actualizar el status." });
     } finally {
       setIsUpdating(false);
     }
@@ -51,7 +76,7 @@ export default function ProspectDetailPage() {
     setIsUpdating(true);
     const today = new Date().toISOString().split('T')[0];
     const statsRef = doc(db, "tenants", tenantId, "dailyStats", today);
-    const prospectRef = doc(db, "tenants", tenantId, "prospects", prospect.id);
+    const pRef = doc(db, "tenants", tenantId, "prospects", prospect.id);
 
     try {
       await runTransaction(db, async (transaction) => {
@@ -68,14 +93,12 @@ export default function ProspectDetailPage() {
           throw new Error("Quota diária atingida.");
         }
 
-        // Marcar prospect como activado para hoy
-        transaction.update(prospectRef, {
+        transaction.update(pRef, {
           isClaimedToday: true,
           claimedAt: new Date().toISOString(),
           status: 'contacted'
         });
 
-        // Incrementar quota
         if (!statsDoc.exists()) {
           transaction.set(statsRef, {
             quotaUsed: 1,
@@ -98,22 +121,67 @@ export default function ProspectDetailPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex h-[60vh] items-center justify-center">
-        <Loader2 className="w-10 h-10 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
+  const handlePrepareOutbox = async (targetState: OutboxState) => {
+    if (!db || !tenantId || !prospect || !selectedTemplate || !user || !selectedContact) return;
 
-  if (!prospect) {
-    return (
-      <div className="text-center py-20">
-        <h2 className="text-xl font-bold">Prospect não encontrado.</h2>
-        <Button variant="link" asChild><Link href="/prospects">Voltar para a lista</Link></Button>
-      </div>
-    );
-  }
+    setIsSavingOutbox(true);
+    const today = new Date().toISOString().split('T')[0];
+    const dedupeKey = `manual:${prospect.id}:${selectedTemplate.id}:${today}`;
+    
+    // Hash simple para ID de documento (idempotencia)
+    let hash = 0;
+    for (let i = 0; i < dedupeKey.length; i++) {
+        const char = dedupeKey.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash;
+    }
+    const messageId = `msg_${Math.abs(hash)}`;
+    const messageRef = doc(db, "tenants", tenantId, "outbox", messageId);
+
+    try {
+      const existing = await getDoc(messageRef);
+      if (existing.exists() && existing.data().state !== 'draft') {
+        toast({ title: "Atenção", description: "Já existe um envio preparado para hoje com este template." });
+        setIsOutboxDialogOpen(false);
+        return;
+      }
+
+      await setDoc(messageRef, {
+        id: messageId,
+        tenantId,
+        createdAt: serverTimestamp(),
+        createdBy: user.uid,
+        updatedAt: serverTimestamp(),
+        updatedBy: user.uid,
+        type: 'email',
+        state: targetState,
+        to: selectedContact.email,
+        subject: previewSubject,
+        body: previewBody,
+        templateId: selectedTemplate.id,
+        prospectId: prospect.id,
+        campaignId: null,
+        attempts: 0,
+        lastError: null,
+        dedupeKey,
+        companyName: prospect.companyName,
+        effectiveScore: prospect.effectiveScore
+      }, { merge: true });
+
+      toast({ 
+        title: targetState === 'queued' ? "Mensagem na fila!" : "Rascunho salvo", 
+        description: targetState === 'queued' ? "O envio será processado em breve." : "Você puede encontrarlo en el Outbox."
+      });
+      setIsOutboxDialogOpen(false);
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erro", description: "Não foi possível preparar o contato." });
+    } finally {
+      setIsSavingOutbox(false);
+    }
+  };
+
+  if (loading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-muted-foreground" /></div>;
+  if (!prospect) return <div className="text-center py-20"><h2 className="text-xl font-bold">Prospect não encontrado.</h2></div>;
 
   return (
     <div className="space-y-6">
@@ -136,6 +204,11 @@ export default function ProspectDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          {prospect.isClaimedToday && (
+            <Button onClick={() => setIsOutboxDialogOpen(true)} className="bg-primary">
+              <Send className="w-4 h-4 mr-2" /> Preparar Contato
+            </Button>
+          )}
           {!prospect.isClaimedToday && prospect.status !== 'client' && (
             <Button onClick={handleClaimForToday} disabled={isUpdating} className="bg-green-600 hover:bg-green-700">
               {isUpdating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
@@ -149,9 +222,7 @@ export default function ProspectDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Visão Geral</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle>Visão Geral</CardTitle></CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="space-y-3">
@@ -173,12 +244,9 @@ export default function ProspectDetailPage() {
                    <ul className="space-y-1">
                      {prospect.scoreReasons?.length ? prospect.scoreReasons.map((reason, i) => (
                        <li key={i} className="text-sm flex items-start gap-2">
-                         <Sparkles className="w-3 h-3 text-accent mt-1" />
-                         {reason}
+                         <Sparkles className="w-3 h-3 text-accent mt-1" /> {reason}
                        </li>
-                     )) : (
-                       <li className="text-sm text-muted-foreground italic">Score baseado na qualidade dos dados disponíveis.</li>
-                     )}
+                     )) : <li className="text-sm text-muted-foreground italic">Score basado en calidad de datos.</li>}
                    </ul>
                 </div>
               </div>
@@ -199,9 +267,7 @@ export default function ProspectDetailPage() {
                 <Card key={i}>
                   <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center font-bold text-primary">
-                        {contact.name.charAt(0)}
-                      </div>
+                      <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center font-bold text-primary">{contact.name.charAt(0)}</div>
                       <div>
                         <div className="font-semibold">{contact.name}</div>
                         <div className="text-xs text-muted-foreground">{contact.role}</div>
@@ -214,9 +280,7 @@ export default function ProspectDetailPage() {
                       </div>
                       {(contact.whatsapp || contact.phone) && (
                         <Button variant="outline" size="icon" className="text-green-600 border-green-200" asChild>
-                          <a href={`https://wa.me/${(contact.whatsapp || contact.phone).replace(/\D/g, "")}`} target="_blank">
-                            <MessageSquare className="w-4 h-4" />
-                          </a>
+                          <a href={`https://wa.me/${(contact.whatsapp || contact.phone).replace(/\D/g, "")}`} target="_blank"><MessageSquare className="w-4 h-4" /></a>
                         </Button>
                       )}
                     </div>
@@ -225,53 +289,32 @@ export default function ProspectDetailPage() {
               ))}
             </TabsContent>
             <TabsContent value="history" className="mt-6">
-               <div className="space-y-4">
-                  <div className="flex gap-4">
-                    <div className="flex flex-col items-center">
-                      <div className="w-2 h-2 rounded-full bg-primary"></div>
-                      <div className="w-0.5 h-full bg-border"></div>
-                    </div>
-                    <div className="pb-4">
-                      <div className="text-sm font-semibold">Atualizado em {new Date(prospect.updatedAt).toLocaleDateString()}</div>
-                      <div className="text-xs text-muted-foreground">Status atual: {prospect.status}</div>
-                    </div>
-                  </div>
-                  <div className="flex gap-4">
-                    <div className="flex flex-col items-center">
-                      <div className="w-2 h-2 rounded-full bg-border"></div>
-                      <div className="w-0.5 h-full bg-border"></div>
-                    </div>
-                    <div className="pb-4">
-                      <div className="text-sm font-semibold">Prospecto adicionado via {prospect.source}</div>
-                      <div className="text-xs text-muted-foreground">{new Date(prospect.createdAt).toLocaleDateString()}</div>
-                    </div>
-                  </div>
-               </div>
+              <div className="space-y-4">
+                 <div className="flex gap-4">
+                    <div className="flex flex-col items-center"><div className="w-2 h-2 rounded-full bg-primary"></div><div className="w-0.5 h-full bg-border"></div></div>
+                    <div className="pb-4"><div className="text-sm font-semibold">Atualizado em {new Date(prospect.updatedAt).toLocaleDateString()}</div></div>
+                 </div>
+              </div>
             </TabsContent>
           </Tabs>
         </div>
 
         <div className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Status do Pipeline</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle>Status do Pipeline</CardTitle></CardHeader>
             <CardContent className="space-y-4">
                <div className="grid grid-cols-2 gap-2">
-                 <Button disabled={isUpdating} variant={prospect.status === 'new' ? 'default' : 'outline'} size="sm" onClick={() => handleStatusChange('new')}>Novo</Button>
-                 <Button disabled={isUpdating} variant={prospect.status === 'contacted' ? 'default' : 'outline'} size="sm" onClick={() => handleStatusChange('contacted')}>Contactado</Button>
-                 <Button disabled={isUpdating} variant={prospect.status === 'interested' ? 'default' : 'outline'} size="sm" onClick={() => handleStatusChange('interested')}>Interessado</Button>
-                 <Button disabled={isUpdating} variant={prospect.status === 'demo' ? 'default' : 'outline'} size="sm" onClick={() => handleStatusChange('demo')}>Demo</Button>
-                 <Button disabled={isUpdating} variant={prospect.status === 'client' ? 'default' : 'outline'} size="sm" onClick={() => handleStatusChange('client')}>Cliente</Button>
-                 <Button disabled={isUpdating} variant={prospect.status === 'discarded' ? 'destructive' : 'outline'} size="sm" onClick={() => handleStatusChange('discarded')}>Descartado</Button>
+                 {['new', 'contacted', 'interested', 'demo', 'client', 'discarded'].map((s) => (
+                   <Button key={s} disabled={isUpdating} variant={prospect.status === s ? (s === 'discarded' ? 'destructive' : 'default') : 'outline'} size="sm" onClick={() => handleStatusChange(s as ProspectStatus)} className="capitalize">
+                     {s}
+                   </Button>
+                 ))}
                </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Notas de Negócio</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle>Notas de Negócio</CardTitle></CardHeader>
             <CardContent className="space-y-4">
                <Textarea placeholder="Adicione uma observação técnica ou comercial..." className="min-h-[120px]" defaultValue={prospect.notes} />
                <Button className="w-full" size="sm">Salvar Notas</Button>
@@ -279,6 +322,61 @@ export default function ProspectDetailPage() {
           </Card>
         </div>
       </div>
+
+      {/* Outbox Preparation Dialog */}
+      <Dialog open={isOutboxDialogOpen} onOpenChange={setIsOutboxDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Preparar Contato Industrial</DialogTitle>
+            <DialogDescription>Escolha um template e verifique a personalización antes de enfileirar.</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Template</Label>
+                <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                  <SelectTrigger><SelectValue placeholder="Selecione um modelo" /></SelectTrigger>
+                  <SelectContent>
+                    {templates.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Contato Destino</Label>
+                <Select value={selectedContactIndex} onValueChange={setSelectedContactIndex}>
+                  <SelectTrigger><SelectValue placeholder="Escolha o contato" /></SelectTrigger>
+                  <SelectContent>
+                    {prospect.contacts.map((c, i) => <SelectItem key={i} value={i.toString()}>{c.name} ({c.email})</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="bg-secondary/20 p-4 rounded-lg border space-y-3">
+              <div className="text-[10px] font-bold text-muted-foreground uppercase">Preview</div>
+              {selectedTemplate ? (
+                <>
+                  <div className="text-sm font-semibold border-b pb-2">{previewSubject}</div>
+                  <div className="text-xs whitespace-pre-wrap text-muted-foreground italic leading-relaxed">{previewBody}</div>
+                </>
+              ) : (
+                <div className="text-sm text-muted-foreground italic h-40 flex items-center justify-center">Selecione um template para ver o preview.</div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" disabled={!selectedTemplate || isSavingOutbox} onClick={() => handlePrepareOutbox('draft')}>
+              Salvar como Rascunho
+            </Button>
+            <Button disabled={!selectedTemplate || isSavingOutbox} onClick={() => handlePrepareOutbox('queued')} className="bg-primary">
+              {isSavingOutbox ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
+              Enfileirar para Envio
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
