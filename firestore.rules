@@ -6,29 +6,36 @@ service cloud.firestore {
       return request.auth != null;
     }
     
+    // Check if user belongs to tenant via root /users/{uid} or tenants/{id}/users/{uid}
     function belongsToTenant(tenantId) {
-      return isSignedIn() && 
-        (exists(/databases/$(database)/documents/tenants/$(tenantId)/users/$(request.auth.uid)) || 
-         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId == tenantId));
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/tenants/$(tenantId)/users/$(request.auth.uid)) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId == tenantId)
+      );
     }
 
-    function getUserData(tenantId) {
-      let userInTenantPath = /databases/$(database)/documents/tenants/$(tenantId)/users/$(request.auth.uid);
-      return exists(userInTenantPath) ? get(userInTenantPath).data : get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    // Get role from either location
+    function getUserRole(tenantId) {
+      let rootUser = /databases/$(database)/documents/users/$(request.auth.uid);
+      let tenantUser = /databases/$(database)/documents/tenants/$(tenantId)/users/$(request.auth.uid);
+      
+      return exists(tenantUser) ? get(tenantUser).data.role : 
+             (exists(rootUser) ? get(rootUser).data.role : 'viewer');
     }
 
     function hasRole(tenantId, role) {
-      let userData = getUserData(tenantId);
-      return userData.role == role || userData.role == 'admin';
+      let userRole = getUserRole(tenantId);
+      return userRole == role || userRole == 'admin';
     }
 
     match /tenants/{tenantId} {
       allow read: if belongsToTenant(tenantId);
-      allow write: if isSignedIn() && hasRole(tenantId, 'admin');
+      allow write: if hasRole(tenantId, 'admin');
 
       match /users/{userId} {
         allow read: if belongsToTenant(tenantId);
-        allow write: if isSignedIn() && hasRole(tenantId, 'admin');
+        allow write: if hasRole(tenantId, 'admin');
       }
 
       match /prospects/{prospectId} {
@@ -36,9 +43,9 @@ service cloud.firestore {
         allow create: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales');
         allow update: if belongsToTenant(tenantId) && (
           hasRole(tenantId, 'sales') || 
-          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['notes', 'status', 'updatedAt', 'doNotContact', 'doNotContactReason', 'doNotContactAt']))
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['notes', 'status', 'updatedAt', 'doNotContact', 'doNotContactReason', 'doNotContactAt'])
         );
-        allow delete: if isSignedIn() && hasRole(tenantId, 'admin');
+        allow delete: if hasRole(tenantId, 'admin');
       }
 
       match /templates/{templateId} {
@@ -55,9 +62,8 @@ service cloud.firestore {
         allow read: if belongsToTenant(tenantId);
         allow create: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales');
         allow update: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales') 
-          && (request.resource.data.state in ['draft', 'queued', 'canceled'])
-          && (request.resource.data.attempts == resource.data.attempts);
-        allow delete: if isSignedIn() && hasRole(tenantId, 'admin');
+          && (request.resource.data.state in ['draft', 'queued', 'canceled']);
+        allow delete: if hasRole(tenantId, 'admin');
       }
 
       match /imports/{importId} {
@@ -77,7 +83,7 @@ service cloud.firestore {
 
       match /dailyTop/{date} {
         allow read: if belongsToTenant(tenantId);
-        allow write: if isSignedIn() && hasRole(tenantId, 'admin');
+        allow write: if hasRole(tenantId, 'admin');
       }
     }
 

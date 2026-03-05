@@ -1,11 +1,11 @@
+
 'use client';
 
 import { useMemo, useState } from "react";
-import { useFirestore, useCollection, useUser } from "@/firebase";
+import { useFirestore, useCollection, useUser, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, limit, where, Timestamp, getDocs, doc, writeBatch, increment, serverTimestamp } from "firebase/firestore";
+import { collection, query, orderBy, limit, where, doc, writeBatch, serverTimestamp, getDocs } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KPICard } from "@/components/dashboard/kpi-card";
 import { Button } from "@/components/ui/button";
 import { 
@@ -16,8 +16,6 @@ import {
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer, 
-  LineChart, 
-  Line, 
   Legend,
   AreaChart,
   Area
@@ -27,10 +25,7 @@ import {
   Users, 
   Target, 
   Mail, 
-  ArrowUpRight, 
-  ArrowDownRight, 
   Loader2,
-  Calendar,
   Zap,
   Filter,
   RefreshCw,
@@ -48,10 +43,10 @@ export default function AnalyticsPage() {
   const [range, setRange] = useState("30");
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const { data: userProfile } = useCollection<AppUser>(
-    useMemo(() => (db && user ? query(collection(db, "users"), where("uid", "==", user.uid)) : null), [db, user])
-  );
-  const isAdmin = userProfile?.[0]?.role === 'admin';
+  // Correctly fetching only the specific user document to avoid permission issues
+  const userProfileRef = useMemo(() => (db && user ? doc(db, "users", user.uid) : null), [db, user]);
+  const { data: userProfileData } = useDoc<AppUser>(userProfileRef);
+  const isAdmin = userProfileData?.role === 'admin';
 
   const dailyStatsQuery = useMemo(() => {
     if (!db || !tenantId) return null;
@@ -200,7 +195,7 @@ export default function AnalyticsPage() {
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData}>
                 <defs>
-                  <linearGradient id="colorScore" x1="0" x2="0" x2="0" y2="1">
+                  <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="hsl(var(--accent))" stopOpacity={0.3}/>
                     <stop offset="95%" stopColor="hsl(var(--accent))" stopOpacity={0}/>
                   </linearGradient>
@@ -247,8 +242,8 @@ export default function AnalyticsPage() {
       <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-start gap-3">
         <Info className="w-5 h-5 text-blue-600 mt-0.5" />
         <p className="text-sm text-blue-800 leading-relaxed">
-          <strong>Dica Operacional:</strong> Os gráficos de conversão refletem a eficácia do seu time em transformar oportunidades do Radar em reuniões (Demos). 
-          Se o volume de "Interessados" estiver baixo apesar de muitos emails enviados, considere ajustar o <strong>Motor de Scoring</strong> nas configurações para priorizar empresas com maior afinidade industrial detectada pela IA.
+          <strong>Dica Operacional:</strong> Os gráficos de conversão refletem a eficácia do seu time em transformar oportunidades do Radar en reuniões. 
+          Se o volume de "Interessados" estiver baixo, considere ajustar o <strong>Motor de Scoring</strong> para priorizar empresas com maior afinidade industrial.
         </p>
       </div>
     </div>
