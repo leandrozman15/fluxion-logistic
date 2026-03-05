@@ -1,8 +1,9 @@
+
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { auth } from "@/lib/firebase";
+import { useAuth } from "@/firebase";
 import { 
   signInWithEmailAndPassword, 
   signInWithPopup, 
@@ -12,9 +13,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Target, Loader2 } from "lucide-react";
+import { Target, Loader2, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
+import { isFirebaseConfigValid } from "@/firebase/config";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -22,9 +24,18 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
+  const auth = useAuth();
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!auth) {
+      toast({
+        variant: "destructive",
+        title: "Sistema Desconfigurado",
+        description: "Por favor, configure las variables de entorno de Firebase.",
+      });
+      return;
+    }
     if (!email || !password) return;
 
     setIsLoading(true);
@@ -36,7 +47,7 @@ export default function LoginPage() {
       toast({
         variant: "destructive",
         title: "Erro ao acessar",
-        description: "Verifique suas credenciais e tente novamente.",
+        description: "Verifique suas credenciais.",
       });
     } finally {
       setIsLoading(false);
@@ -44,6 +55,7 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
+    if (!auth) return;
     setIsLoading(true);
     const provider = new GoogleAuthProvider();
     try {
@@ -72,6 +84,17 @@ export default function LoginPage() {
           <p className="text-muted-foreground">Inteligência Industrial de Prospecção</p>
         </div>
 
+        {!isFirebaseConfigValid && (
+          <Card className="border-amber-200 bg-amber-50">
+            <CardContent className="pt-6 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
+              <div className="text-sm text-amber-800">
+                <strong>Configuração necessária:</strong> Las variables de entorno en el archivo <code>.env</code> no han sido configuradas. El login está deshabilitado.
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Card className="border shadow-lg">
           <CardHeader>
             <CardTitle>Acesse sua conta</CardTitle>
@@ -87,7 +110,7 @@ export default function LoginPage() {
                   placeholder="nome@empresa.com.br" 
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  disabled={isLoading}
+                  disabled={isLoading || !isFirebaseConfigValid}
                   required
                 />
               </div>
@@ -101,14 +124,14 @@ export default function LoginPage() {
                   type="password" 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  disabled={isLoading}
+                  disabled={isLoading || !isFirebaseConfigValid}
                   required
                 />
               </div>
               <Button 
                 type="submit" 
                 className="w-full bg-primary hover:bg-primary/90 mt-2"
-                disabled={isLoading}
+                disabled={isLoading || !isFirebaseConfigValid}
               >
                 {isLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                 Entrar no Sistema
@@ -128,7 +151,7 @@ export default function LoginPage() {
               variant="outline" 
               className="w-full" 
               onClick={handleGoogleLogin}
-              disabled={isLoading}
+              disabled={isLoading || !isFirebaseConfigValid}
             >
               <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
                 <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
