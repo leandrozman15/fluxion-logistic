@@ -6,13 +6,13 @@
         "description": "Datos maestros de la organización/empresa",
         "documents": {
           "users": { "description": "Usuarios pertenecientes al tenant con roles" },
-          "prospects": { "description": "Base de datos de leads industriales" },
-          "templates": { "description": "Plantillas de comunicación" },
-          "campaigns": { "description": "Configuración y estado de campañas" },
-          "imports": { "description": "Registro de importaciones de archivos" },
-          "dailyTop": { "description": "Listas curadas diarias de mejores prospects (Top 30)" },
-          "dailyStats": { "description": "Estadísticas de uso y cuotas por día (YYYY-MM-DD)" },
-          "outbox": { "description": "Mensajes listos para envío, rascunhos o fallidos" }
+          "prospects": { "description": "Base de datos de leads industriales con histórico y auditoría" },
+          "templates": { "description": "Plantillas de comunicación con soporte para variables" },
+          "campaigns": { "description": "Configuración y estado de campañas masivas" },
+          "imports": { "description": "Registro de importaciones de archivos CSV" },
+          "dailyTop": { "description": "Listas curadas diarias de mejores prospects" },
+          "dailyStats": { "description": "Estadísticas de uso y cuotas por día" },
+          "outbox": { "description": "Cola de mensajes operativos (draft, queued, sent, failed) con soporte para idempotencia" }
         }
       }
     }

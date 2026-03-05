@@ -61,6 +61,7 @@ export interface OutboxMessage {
   createdBy: string;
   updatedAt: any;
   updatedBy: string;
+  sentAt: any | null;
   type: 'email';
   state: OutboxState;
   to: string;
@@ -72,7 +73,7 @@ export interface OutboxMessage {
   attempts: number;
   lastError: string | null;
   dedupeKey: string;
-  // Denormalized
+  // Denormalized for lists
   companyName: string;
   effectiveScore: number;
 }

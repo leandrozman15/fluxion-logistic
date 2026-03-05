@@ -24,22 +24,19 @@ service cloud.firestore {
     // Reglas para el Tenant
     match /tenants/{tenantId} {
       allow read: if belongsToTenant(tenantId);
-      allow write: if false; // Solo via Admin SDK o configuración inicial
+      allow write: if false; 
 
-      // Usuarios del tenant
       match /users/{userId} {
         allow read: if belongsToTenant(tenantId);
         allow write: if hasRole(tenantId, 'admin');
       }
 
-      // Prospects: Núcleo del CRM
       match /prospects/{prospectId} {
         allow read: if belongsToTenant(tenantId);
         allow create, update: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales');
         allow delete: if hasRole(tenantId, 'admin');
       }
 
-      // Plantillas y Campañas
       match /templates/{templateId} {
         allow read: if belongsToTenant(tenantId);
         allow write: if hasRole(tenantId, 'sales');
@@ -50,10 +47,24 @@ service cloud.firestore {
         allow write: if hasRole(tenantId, 'sales');
       }
 
-      // Importaciones
+      match /outbox/{messageId} {
+        allow read: if belongsToTenant(tenantId);
+        // Los usuarios solo pueden crear o actualizar estados operativos
+        allow create: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales');
+        allow update: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales') 
+          && (request.resource.data.state in ['draft', 'queued', 'canceled'])
+          && (request.resource.data.attempts == resource.data.attempts); // No pueden resetear intentos manualmente
+        allow delete: if hasRole(tenantId, 'admin');
+      }
+
       match /imports/{importId} {
         allow read: if belongsToTenant(tenantId);
         allow write: if hasRole(tenantId, 'sales');
+      }
+      
+      match /dailyStats/{date} {
+        allow read: if belongsToTenant(tenantId);
+        allow write: if false; // Solo vía transacciones controladas o backend
       }
     }
   }
