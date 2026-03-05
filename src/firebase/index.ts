@@ -11,7 +11,13 @@ export function initializeFirebase(): {
   firestore: Firestore | null;
   auth: Auth | null;
 } {
-  if (typeof window === 'undefined' || !isFirebaseConfigValid) {
+  // Solo inicializar en el cliente
+  if (typeof window === 'undefined') {
+    return { firebaseApp: null, firestore: null, auth: null };
+  }
+
+  if (!isFirebaseConfigValid) {
+    console.warn("Firebase: Configuración inválida o incompleta.");
     return { firebaseApp: null, firestore: null, auth: null };
   }
 
@@ -22,7 +28,7 @@ export function initializeFirebase(): {
 
     return { firebaseApp, firestore, auth };
   } catch (error) {
-    console.error("Error initializing Firebase:", error);
+    console.error("Error al inicializar Firebase:", error);
     return { firebaseApp: null, firestore: null, auth: null };
   }
 }
