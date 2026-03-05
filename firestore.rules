@@ -1,3 +1,4 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -8,12 +9,12 @@ service cloud.firestore {
     function belongsToTenant(tenantId) {
       return isSignedIn() && 
         (exists(/databases/$(database)/documents/tenants/$(tenantId)/users/$(request.auth.uid)) || 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId == tenantId);
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId == tenantId));
     }
 
     function getUserData(tenantId) {
-      let userInTenant = /databases/$(database)/documents/tenants/$(tenantId)/users/$(request.auth.uid);
-      return exists(userInTenant) ? get(userInTenant).data : get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      let userInTenantPath = /databases/$(database)/documents/tenants/$(tenantId)/users/$(request.auth.uid);
+      return exists(userInTenantPath) ? get(userInTenantPath).data : get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
     function hasRole(tenantId, role) {
@@ -23,11 +24,11 @@ service cloud.firestore {
 
     match /tenants/{tenantId} {
       allow read: if belongsToTenant(tenantId);
-      allow write: if hasRole(tenantId, 'admin');
+      allow write: if isSignedIn() && hasRole(tenantId, 'admin');
 
       match /users/{userId} {
         allow read: if belongsToTenant(tenantId);
-        allow write: if hasRole(tenantId, 'admin');
+        allow write: if isSignedIn() && hasRole(tenantId, 'admin');
       }
 
       match /prospects/{prospectId} {
@@ -37,17 +38,17 @@ service cloud.firestore {
           hasRole(tenantId, 'sales') || 
           (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['notes', 'status', 'updatedAt', 'doNotContact', 'doNotContactReason', 'doNotContactAt']))
         );
-        allow delete: if hasRole(tenantId, 'admin');
+        allow delete: if isSignedIn() && hasRole(tenantId, 'admin');
       }
 
       match /templates/{templateId} {
         allow read: if belongsToTenant(tenantId);
-        allow write: if hasRole(tenantId, 'sales');
+        allow write: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales');
       }
 
       match /campaigns/{campaignId} {
         allow read: if belongsToTenant(tenantId);
-        allow write: if hasRole(tenantId, 'sales');
+        allow write: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales');
       }
 
       match /outbox/{messageId} {
@@ -56,12 +57,12 @@ service cloud.firestore {
         allow update: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales') 
           && (request.resource.data.state in ['draft', 'queued', 'canceled'])
           && (request.resource.data.attempts == resource.data.attempts);
-        allow delete: if hasRole(tenantId, 'admin');
+        allow delete: if isSignedIn() && hasRole(tenantId, 'admin');
       }
 
       match /imports/{importId} {
         allow read: if belongsToTenant(tenantId);
-        allow write: if hasRole(tenantId, 'sales');
+        allow write: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales');
       }
       
       match /dailyStats/{date} {
@@ -76,12 +77,12 @@ service cloud.firestore {
 
       match /dailyTop/{date} {
         allow read: if belongsToTenant(tenantId);
-        allow write: if hasRole(tenantId, 'admin');
+        allow write: if isSignedIn() && hasRole(tenantId, 'admin');
       }
     }
 
     match /users/{userId} {
-      allow read: if request.auth.uid == userId;
+      allow read: if isSignedIn() && request.auth.uid == userId;
       allow write: if false;
     }
   }
