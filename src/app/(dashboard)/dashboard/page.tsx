@@ -18,7 +18,8 @@ import {
   Loader2,
   PieChart,
   BarChart3,
-  Factory
+  Factory,
+  MapPin
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -82,7 +83,7 @@ export default function DashboardPage() {
 
   const industryData = useMemo(() => {
     const counts: Record<string, number> = {};
-    allProspects.forEach(p => {
+    (allProspects || []).forEach(p => {
       p.industryTags?.forEach(tag => {
         counts[tag] = (counts[tag] || 0) + 1;
       });
@@ -99,7 +100,7 @@ export default function DashboardPage() {
 
   const kpis = [
     { title: "Ativados Hoje", value: `${dailyQuotaUsed}/${dailyQuotaLimit}`, icon: Target, description: "Progresso da meta diária" },
-    { title: "Base Total", value: allProspects.length, icon: Users, description: "Empresas cadastradas" },
+    { title: "Base Total", value: allProspects?.length || 0, icon: Users, description: "Empresas cadastradas" },
     { title: "Emails na Fila", value: stats?.emailsSent || 0, icon: Mail, description: "Comunicações disparadas" },
     { title: "Potencial IA", value: "84%", icon: Sparkles, description: "Qualidade média da base" },
   ];
@@ -225,7 +226,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1">
-                <div className="text-[10px] uppercase opacity-70">Conversão New -> Contacted</div>
+                <div className="text-[10px] uppercase opacity-70">Conversão New {'->'} Contacted</div>
                 <div className="text-xl font-bold">24.5%</div>
                 <Progress value={24} className="h-1 bg-white/20" />
               </div>
