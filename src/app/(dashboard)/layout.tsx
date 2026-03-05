@@ -1,8 +1,19 @@
+
+'use client';
+
 import { SidebarProvider, SidebarInset, Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarGroup, SidebarGroupLabel, SidebarGroupContent } from "@/components/ui/sidebar";
 import { LayoutDashboard, Users, Mail, FileSpreadsheet, Settings, Target, FileText, Inbox, LogOut, Building2, BarChart3 } from "lucide-react";
 import Link from "next/link";
+import { useAuth } from "@/firebase";
+import { signOut } from "firebase/auth";
+import { useRouter } from "next/navigation";
+import { useToast } from "@/hooks/use-toast";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const auth = useAuth();
+  const router = useRouter();
+  const { toast } = useToast();
+
   const menuItems = [
     { title: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
     { title: "Prospects", icon: Users, href: "/prospects" },
@@ -18,6 +29,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { title: "Usuários", icon: Users, href: "/settings/users" },
     { title: "Consumo", icon: Settings, href: "/settings/limits" },
   ];
+
+  const handleLogout = async () => {
+    if (!auth) return;
+    try {
+      await signOut(auth);
+      router.push("/login");
+      toast({ title: "Sessão encerrada", description: "Você saiu do sistema com sucesso." });
+    } catch (error) {
+      toast({ variant: "destructive", title: "Erro ao sair", description: "Não foi posible encerrar a sessão." });
+    }
+  };
 
   return (
     <SidebarProvider>
@@ -67,7 +89,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </SidebarGroup>
           </SidebarContent>
           <div className="mt-auto p-4 border-t">
-            <SidebarMenuButton className="w-full text-destructive hover:text-destructive hover:bg-destructive/10">
+            <SidebarMenuButton 
+              className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={handleLogout}
+            >
               <LogOut />
               <span className="group-data-[collapsible=icon]:hidden">Sair</span>
             </SidebarMenuButton>

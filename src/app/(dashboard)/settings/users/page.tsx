@@ -1,20 +1,31 @@
 
 'use client';
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy } from "firebase/firestore";
+import { collection, query, orderBy, doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { UserPlus, MoreHorizontal, ShieldCheck, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AppUser } from "@/app/lib/types";
+import { AppUser, UserRole } from "@/app/lib/types";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
 
 export default function UsersSettingsPage() {
   const db = useFirestore();
   const { tenantId } = useTenant();
+  const { toast } = useToast();
+
+  const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [newRole, setNewRole] = useState<UserRole>("sales");
 
   const usersQuery = useMemo(() => {
     if (!db || !tenantId) return null;
@@ -23,6 +34,36 @@ export default function UsersSettingsPage() {
 
   const { data: users, loading } = useCollection<AppUser>(usersQuery);
 
+  const handleInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!db || !tenantId || !newEmail) return;
+
+    setIsSubmitting(true);
+    try {
+      // Generar un ID basado en el email para evitar duplicados simples
+      const userId = newEmail.replace(/[^a-zA-Z0-9]/g, "_");
+      const userRef = doc(db, "tenants", tenantId, "users", userId);
+      
+      await setDoc(userRef, {
+        uid: userId,
+        tenantId,
+        email: newEmail,
+        displayName: newEmail.split('@')[0],
+        role: newRole,
+        createdAt: new Date().toISOString(),
+        status: "invited"
+      });
+
+      toast({ title: "Convite enviado!", description: `O usuário ${newEmail} foi adicionado como ${newRole}.` });
+      setIsInviteOpen(false);
+      setNewEmail("");
+    } catch (error) {
+      toast({ variant: "destructive", title: "Erro ao convidar", description: "Verifique suas permissões." });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -30,9 +71,55 @@ export default function UsersSettingsPage() {
           <h1 className="text-2xl font-bold text-primary">Gestão de Equipe</h1>
           <p className="text-muted-foreground">Adicione e gerencie permissões dos membros da sua organização.</p>
         </div>
-        <Button className="bg-accent hover:bg-accent/90">
-          <UserPlus className="w-4 h-4 mr-2" /> Convidar Membro
-        </Button>
+        
+        <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-accent hover:bg-accent/90">
+              <UserPlus className="w-4 h-4 mr-2" /> Convidar Membro
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <form onSubmit={handleInvite}>
+              <DialogHeader>
+                <DialogTitle>Convidar Novo Membro</DialogTitle>
+                <DialogDescription>Insira o email corporativo e defina o nível de acesso.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email Corporativo</Label>
+                  <Input 
+                    id="email" 
+                    type="email" 
+                    placeholder="nome@empresa.com.br" 
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    required 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="role">Papel (Role)</Label>
+                  <Select value={newRole} onValueChange={(v: UserRole) => setNewRole(v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um papel" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">Administrador</SelectItem>
+                      <SelectItem value="sales">Vendas (Sales)</SelectItem>
+                      <SelectItem value="viewer">Apenas Leitura (Viewer)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" type="button" onClick={() => setIsInviteOpen(false)}>Cancelar</Button>
+                <Button type="submit" disabled={isSubmitting} className="bg-primary">
+                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  Confirmar Convite
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <Card>
@@ -81,8 +168,8 @@ export default function UsersSettingsPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">
-                          Ativo
+                        <Badge variant="outline" className={`${user.uid.includes('_') ? 'text-blue-600 border-blue-200 bg-blue-50' : 'text-green-600 border-green-200 bg-green-50'}`}>
+                          {user.uid.includes('_') ? 'Convidado' : 'Ativo'}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
