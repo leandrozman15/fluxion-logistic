@@ -14,7 +14,7 @@ const SuggestEmailsInputSchema = z.object({
   companyName: z.string(),
   contactName: z.string().optional().describe('Optional contact name to generate nominative patterns.'),
   existingEmails: z.array(z.string()).optional().describe('List of already known emails to help pattern detection.'),
-  websiteTextSnippet: z.string().optional().describe('Optional text snippet from website to find explicit emails.'),
+  websiteExtractedEmails: z.array(z.string()).optional().describe('List of emails explicitly found on the website content.'),
 });
 export type SuggestEmailsInput = z.infer<typeof SuggestEmailsInputSchema>;
 
@@ -36,19 +36,19 @@ const emailSuggestionPrompt = ai.definePrompt({
 
 Regras Estritas:
 1. Use APENAS o domínio fornecido: "{{{domain}}}".
-2. Se o "websiteTextSnippet" contiver e-mails explícitos (ex: contato@..., vendas@...), marque-os como "verified_on_site" com confiança "high".
+2. Se "websiteExtractedEmails" for fornecido, priorize-os como "verified_on_site" com confiança "high".
 3. Se houver um "contactName" (ex: João Silva), sugira padrões nominativos (ex: joao.silva@..., jsilva@...) como "pattern_guess" com confiança "medium" ou "low".
-4. Sugira sempre e-mails de função genérica ("generic_role") comuns no Brasil como: contato@, vendas@, compras@, diretoria@, comercial@.
-5. NÃO invente nomes de pessoas que não estão na entrada.
+4. Se NÃO houver "contactName", NÃO invente nomes de pessoas. Sugira apenas e-mails de função.
+5. Sugira sempre e-mails de função genérica ("generic_role") comuns no Brasil como: contato@, vendas@, compras@, diretoria@, comercial@.
 6. Forneça no máximo 8 sugestões.
 7. O campo "reason" deve ser uma frase curta e direta (ex: "Padrão comum para o nome fornecido", "Encontrado no conteúdo do site").
 
 Dados de Entrada:
 - Domínio: {{{domain}}}
 - Empresa: {{{companyName}}}
-- Nome do Contato: {{{contactName}}}
+- Nome do Contato (Alvo): {{{contactName}}}
 - E-mails existentes: {{#each existingEmails}}{{{this}}}, {{/each}}
-- Trecho do Website: {{{websiteTextSnippet}}}
+- E-mails extraídos da web: {{#each websiteExtractedEmails}}{{{this}}}, {{/each}}
 
 Forneça a saída estritamente no formato JSON solicitado.`,
 });

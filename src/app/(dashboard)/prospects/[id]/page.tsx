@@ -24,6 +24,7 @@ import { calculateProspectAiScore } from "@/ai/flows/calculate-prospect-ai-score
 import { analyzeWebsiteContent, AnalyzeWebsiteOutput } from "@/ai/flows/analyze-website-content-flow";
 import { suggestCorporateEmails, SuggestEmailsOutput } from "@/ai/flows/suggest-corporate-emails-flow";
 import { calculateEffectiveScore } from "@/lib/utils/scoring";
+import { deriveDomain, extractEmailsFromText } from "@/lib/utils/email-domain";
 
 export default function ProspectDetailPage() {
   const { id } = useParams();
@@ -167,7 +168,7 @@ export default function ProspectDetailPage() {
       toast({ title: "Dados atualizados!", description: "O perfil do prospect foi enriquecido com a análise web." });
       setIsWebAnalysisDialogOpen(false);
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro ao aplicar", description: "Não foi possível salvar las alterações." });
+      toast({ variant: "destructive", title: "Erro ao aplicar", description: "Não foi possível salvar las alteraciones." });
     } finally {
       setIsUpdating(false);
     }
@@ -176,26 +177,31 @@ export default function ProspectDetailPage() {
   const handleRunEmailSuggestions = async () => {
     if (!prospect || !prospectRef) return;
     
-    const domain = prospect.domain || prospect.websiteUrl?.split("//")[1]?.split("/")[0];
+    const domain = deriveDomain(prospect.domain, prospect.websiteUrl, prospect.contacts?.map(c => c.email).filter(e => !!e) as string[]);
+    
     if (!domain) {
-      toast({ variant: "destructive", title: "Domínio necessário", description: "O prospect precisa ter um website ou domínio cadastrado." });
+      toast({ variant: "destructive", title: "Domínio necessário", description: "O prospect precisa ter um website ou domínio para sugerir padrões." });
       return;
     }
 
     setIsSuggestingEmails(true);
     try {
+      // Extrair emails do resumo do site se existir
+      const websiteExtractedEmails = extractEmailsFromText(prospect.aiWebSummary || "");
+
       const result = await suggestCorporateEmails({
         domain,
         companyName: prospect.companyName,
         contactName: prospect.contacts?.[0]?.name,
         existingEmails: prospect.contacts?.map(c => c.email).filter(e => !!e) as string[],
-        websiteTextSnippet: prospect.aiWebSummary
+        websiteExtractedEmails
       });
       
       setEmailSuggestions(result.suggestions);
       
       // Salvar sugestões no prospect para cache
       await updateDoc(prospectRef, {
+        aiEmailDomainUsed: domain,
         aiEmailSuggestions: result.suggestions,
         aiEmailSuggestedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -209,15 +215,22 @@ export default function ProspectDetailPage() {
     }
   };
 
-  const handleAddSuggestedContact = async (email: string) => {
+  const handleAddSuggestedContact = async (email: string, type: string) => {
     if (!prospect || !prospectRef) return;
     
+    // Evitar duplicados
+    if (prospect.contacts?.some(c => c.email.toLowerCase() === email.toLowerCase())) {
+      toast({ title: "Atenção", description: "Este e-mail já está cadastrado nos contatos." });
+      return;
+    }
+
     const newContact: Contact = {
-      name: "Contato IA",
-      role: "Sugerido",
-      email,
+      name: prospect.contacts?.[0]?.name || "Contato IA",
+      role: type === 'generic_role' ? "Geral/Suporte" : "Sugerido",
+      email: email.toLowerCase(),
       phone: "",
-      verified: false
+      verified: false,
+      source: "ai_suggestion"
     };
 
     const updatedContacts = [...(prospect.contacts || []), newContact];
@@ -230,7 +243,7 @@ export default function ProspectDetailPage() {
       });
       toast({ title: "Contato adicionado!", description: `E-mail ${email} foi adicionado à lista.` });
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro", description: "Não foi possível salvar o contato." });
+      toast({ variant: "destructive", title: "Erro", description: "Não fue posible guardar el contacto." });
     } finally {
       setIsUpdating(false);
     }
@@ -374,7 +387,7 @@ export default function ProspectDetailPage() {
       setCustomSubject(null);
       setCustomBody(null);
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro", description: "Não foi possível preparar o contato." });
+      toast({ variant: "destructive", title: "Erro", description: "Não fue posible preparar el contacto." });
     } finally {
       setIsSavingOutbox(false);
     }
@@ -535,6 +548,7 @@ export default function ProspectDetailPage() {
                         <div className="font-semibold flex items-center gap-2">
                           {contact.name}
                           {contact.verified === false && <Badge variant="outline" className="text-[8px] bg-orange-50 text-orange-600 border-orange-200">Não verificado</Badge>}
+                          {contact.source === 'ai_suggestion' && <Badge variant="secondary" className="text-[8px] uppercase">IA</Badge>}
                         </div>
                         <div className="text-xs text-muted-foreground">{contact.role}</div>
                       </div>
@@ -621,7 +635,7 @@ export default function ProspectDetailPage() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Sugestões de E-mail IA</DialogTitle>
-            <DialogDescription>Padrões detectados para o domínio <strong>{prospect.domain || prospect.websiteUrl}</strong>.</DialogDescription>
+            <DialogDescription>Padrões detectados para o domínio <strong>{prospect.aiEmailDomainUsed || prospect.domain}</strong>.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
@@ -643,8 +657,17 @@ export default function ProspectDetailPage() {
                       <span className="text-[10px] text-muted-foreground">{s.reason}</span>
                     </div>
                   </div>
-                  <Button variant="ghost" size="icon" onClick={() => handleAddSuggestedContact(s.email)} disabled={isUpdating}>
-                    <UserPlus className="w-4 h-4 text-primary" />
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={() => handleAddSuggestedContact(s.email, s.type)} 
+                    disabled={isUpdating || prospect.contacts?.some(c => c.email.toLowerCase() === s.email.toLowerCase())}
+                  >
+                    {prospect.contacts?.some(c => c.email.toLowerCase() === s.email.toLowerCase()) ? (
+                      <CheckCircle2 className="w-4 h-4 text-green-600" />
+                    ) : (
+                      <UserPlus className="w-4 h-4 text-primary" />
+                    )}
                   </Button>
                 </div>
               ))
@@ -652,7 +675,7 @@ export default function ProspectDetailPage() {
             <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex items-start gap-2">
               <Info className="w-4 h-4 text-blue-600 mt-0.5" />
               <p className="text-xs text-blue-700">
-                Estes e-mails são baseados em padrões e não são garantidos. Verifique-os antes de iniciar uma cadência de massa.
+                Estes e-mails são baseados em padrões industriais e não são garantidos. Marque como verificado após o primeiro contato.
               </p>
             </div>
           </div>
