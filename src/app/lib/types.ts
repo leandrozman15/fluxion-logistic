@@ -40,6 +40,11 @@ export interface Prospect {
   aiScoreReasons: string[];
   aiScoreUpdatedAt?: string;
   
+  // AI Web Analysis Fields
+  aiIndustrySuggestions?: string[];
+  aiWebSummary?: string;
+  aiWebAnalysisAt?: string;
+  
   effectiveScore: number; // Final weighted score used for ranking
   scoreReasons: string[]; // Combined reasons
   

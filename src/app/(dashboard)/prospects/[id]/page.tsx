@@ -13,13 +13,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Building2, Globe, MapPin, Mail, Phone, ExternalLink, MessageSquare, History, Sparkles, Loader2, CheckCircle2, Send, Wand2, BrainCircuit, AlertCircle } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Building2, Globe, MapPin, Mail, Phone, ExternalLink, MessageSquare, History, Sparkles, Loader2, CheckCircle2, Send, Wand2, BrainCircuit, AlertCircle, SearchCode } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Prospect, ProspectStatus, EmailTemplate, OutboxState, AiConfidence } from "@/app/lib/types";
 import { useParams } from "next/navigation";
 import { renderTemplate } from "@/lib/utils/template-renderer";
 import { generateEmailDraft } from "@/ai/flows/generate-email-draft-flow";
 import { calculateProspectAiScore } from "@/ai/flows/calculate-prospect-ai-score-flow";
+import { analyzeWebsiteContent, AnalyzeWebsiteOutput } from "@/ai/flows/analyze-website-content-flow";
 import { calculateEffectiveScore } from "@/lib/utils/scoring";
 
 export default function ProspectDetailPage() {
@@ -31,14 +33,19 @@ export default function ProspectDetailPage() {
   
   const [isUpdating, setIsUpdating] = useState(false);
   const [isOutboxDialogOpen, setIsOutboxDialogOpen] = useState(false);
+  const [isWebAnalysisDialogOpen, setIsWebAnalysisDialogOpen] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [selectedContactIndex, setSelectedContactIndex] = useState<string>("0");
   const [isSavingOutbox, setIsSavingOutbox] = useState(false);
   const [isAiDrafting, setIsAiDrafting] = useState(false);
   const [isScoring, setIsScoring] = useState(false);
+  const [isAnalyzingWeb, setIsAnalyzingWeb] = useState(false);
   
   const [customSubject, setCustomSubject] = useState<string | null>(null);
   const [customBody, setCustomBody] = useState<string | null>(null);
+  
+  const [webAnalysisResult, setWebAnalysisResult] = useState<AnalyzeWebsiteOutput | null>(null);
+  const [selectedWebTags, setSelectedWebTags] = useState<string[]>([]);
 
   const prospectRef = useMemo(() => {
     if (!db || !tenantId || !id) return null;
@@ -92,7 +99,6 @@ export default function ProspectDetailPage() {
         cnpj: prospect.cnpj
       });
 
-      // Recalcular effectiveScore con los nuevos datos de IA
       const updatedProspectData = {
         ...prospect,
         aiScore: result.aiScore,
@@ -113,10 +119,51 @@ export default function ProspectDetailPage() {
 
       toast({ title: "Score IA atualizado!", description: `Nota atribuída: ${result.aiScore} (${result.confidence})` });
     } catch (e) {
-      console.error(e);
       toast({ variant: "destructive", title: "Erro no Scoring", description: "Não foi possível processar a IA agora." });
     } finally {
       setIsScoring(false);
+    }
+  };
+
+  const handleRunWebAnalysis = async () => {
+    if (!prospect?.websiteUrl) return;
+    setIsAnalyzingWeb(true);
+    setWebAnalysisResult(null);
+    try {
+      const result = await analyzeWebsiteContent({
+        websiteUrl: prospect.websiteUrl,
+        companyName: prospect.companyName
+      });
+      setWebAnalysisResult(result);
+      setSelectedWebTags(result.industryTags);
+      setIsWebAnalysisDialogOpen(true);
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Erro na Análise", description: e.message });
+    } finally {
+      setIsAnalyzingWeb(false);
+    }
+  };
+
+  const handleApplyWebAnalysis = async () => {
+    if (!prospectRef || !webAnalysisResult) return;
+    setIsUpdating(true);
+    try {
+      const currentTags = prospect?.industryTags || [];
+      const combinedTags = Array.from(new Set([...currentTags, ...selectedWebTags]));
+      
+      await updateDoc(prospectRef, {
+        industryTags: combinedTags,
+        aiWebSummary: webAnalysisResult.summary,
+        aiWebAnalysisAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+      
+      toast({ title: "Dados atualizados!", description: "O perfil do prospect foi enriquecido com a análise web." });
+      setIsWebAnalysisDialogOpen(false);
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erro ao aplicar", description: "Não foi possível salvar as alterações." });
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -165,7 +212,7 @@ export default function ProspectDetailPage() {
 
       toast({ title: "Ativado!", description: "Este prospect foi adicionado ao seu radar de hoje." });
     } catch (e: any) {
-      toast({ variant: "destructive", title: "Erro ao ativar", description: e.message });
+      toast({ variant: "destructive", title: "Erro ao activar", description: e.message });
     } finally {
       setIsUpdating(false);
     }
@@ -197,7 +244,6 @@ export default function ProspectDetailPage() {
       
       toast({ title: "Email melhorado com IA!", description: "O rascunho foi personalizado para este prospect." });
     } catch (e) {
-      console.error(e);
       toast({ variant: "destructive", title: "Erro na IA", description: "Não foi possível gerar a sugestão agora." });
     } finally {
       setIsAiDrafting(false);
@@ -259,7 +305,7 @@ export default function ProspectDetailPage() {
       setCustomSubject(null);
       setCustomBody(null);
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro", description: "Não foi possível preparar o contato." });
+      toast({ variant: "destructive", title: "Erro", description: "Não foi posible preparar o contato." });
     } finally {
       setIsSavingOutbox(false);
     }
@@ -319,16 +365,28 @@ export default function ProspectDetailPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Visão Geral</CardTitle>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="border-accent text-accent hover:bg-accent/5" 
-                onClick={handleRunAiScore}
-                disabled={isScoring}
-              >
-                {isScoring ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <BrainCircuit className="w-3 h-3 mr-2" />}
-                Análise Inteligente (IA)
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="border-primary text-primary hover:bg-primary/5" 
+                  onClick={handleRunWebAnalysis}
+                  disabled={isAnalyzingWeb || !prospect.websiteUrl}
+                >
+                  {isAnalyzingWeb ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <SearchCode className="w-3 h-3 mr-2" />}
+                  Analisar Website
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="border-accent text-accent hover:bg-accent/5" 
+                  onClick={handleRunAiScore}
+                  disabled={isScoring}
+                >
+                  {isScoring ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <BrainCircuit className="w-3 h-3 mr-2" />}
+                  Análise Inteligente (IA)
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -348,11 +406,17 @@ export default function ProspectDetailPage() {
                   <div className="pt-2">
                     <h4 className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Segmentos</h4>
                     <div className="flex flex-wrap gap-1">
-                      {prospect.industryTags?.map(tag => (
+                      {prospect.industryTags?.length ? prospect.industryTags.map(tag => (
                         <Badge key={tag} variant="secondary" className="text-[10px]">{tag}</Badge>
-                      ))}
+                      )) : <span className="text-xs text-muted-foreground italic">Nenhum tag definido.</span>}
                     </div>
                   </div>
+                  {prospect.aiWebSummary && (
+                    <div className="pt-2 border-t mt-2">
+                      <h4 className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Resumo Industrial (IA)</h4>
+                      <p className="text-xs text-muted-foreground italic leading-relaxed">"{prospect.aiWebSummary}"</p>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2 p-4 bg-accent/5 rounded-lg border border-accent/10">
                    <h4 className="text-xs font-bold uppercase text-accent flex items-center gap-2">
@@ -446,6 +510,63 @@ export default function ProspectDetailPage() {
           </Card>
         </div>
       </div>
+
+      {/* Website Analysis Dialog */}
+      <Dialog open={isWebAnalysisDialogOpen} onOpenChange={setIsWebAnalysisDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Análise do Website Concluída</DialogTitle>
+            <DialogDescription>A IA analisou o site da empresa. Selecione o que deseja aplicar ao perfil.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            <div className="space-y-3">
+              <Label className="text-xs font-bold uppercase text-muted-foreground">Resumo Detectado</Label>
+              <div className="p-3 bg-secondary/30 rounded-lg text-sm italic border">
+                "{webAnalysisResult?.summary}"
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-xs font-bold uppercase text-muted-foreground">Tags de Indústria Sugeridas</Label>
+              <div className="grid grid-cols-1 gap-2">
+                {webAnalysisResult?.industryTags.map(tag => (
+                  <div key={tag} className="flex items-center space-x-2">
+                    <Checkbox 
+                      id={`tag-${tag}`} 
+                      checked={selectedWebTags.includes(tag)}
+                      onCheckedChange={(checked) => {
+                        if (checked) setSelectedWebTags(prev => [...prev, tag]);
+                        else setSelectedWebTags(prev => prev.filter(t => t !== tag));
+                      }}
+                    />
+                    <label htmlFor={`tag-${tag}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                      {tag}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-xs font-bold uppercase text-muted-foreground">Keywords Técnicas</Label>
+              <div className="flex flex-wrap gap-1">
+                {webAnalysisResult?.detectedKeywords.map(kw => (
+                  <Badge key={kw} variant="outline" className="text-[9px]">{kw}</Badge>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsWebAnalysisDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleApplyWebAnalysis} disabled={isUpdating} className="bg-primary">
+              {isUpdating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+              Aplicar ao Perfil
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Outbox Preparation Dialog */}
       <Dialog open={isOutboxDialogOpen} onOpenChange={setIsOutboxDialogOpen}>
