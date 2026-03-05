@@ -43,10 +43,11 @@ export interface Prospect {
   aiScoreReasons: string[];
   aiScoreUpdatedAt?: string;
   
-  // AI Web Analysis Fields
+  // AI Web Analysis Fields (Layer 14)
   aiIndustrySuggestions?: string[];
   aiWebSummary?: string;
   aiWebAnalysisAt?: string;
+  aiDetectedKeywords?: string[];
   
   // AI Email Suggestions
   aiEmailDomainUsed?: string;
@@ -186,6 +187,7 @@ export interface DailyStats {
   whatsappOpened: number;
   radarAvgFinalScore: number;
   newProspects: number;
+  createdAt?: any;
 }
 
 export interface WeeklyStats {

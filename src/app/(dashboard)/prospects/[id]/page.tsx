@@ -18,7 +18,8 @@ import {
   MessageSquare, History, Sparkles, Loader2, CheckCircle2, 
   Send, Wand2, BrainCircuit, AlertCircle, SearchCode, 
   MailPlus, UserPlus, Info, Ban, ShieldAlert, MessageCircle, 
-  ArrowLeft, Lightbulb, Clock, User, AlertTriangle, ShieldCheck, Zap 
+  ArrowLeft, Lightbulb, Clock, User, AlertTriangle, ShieldCheck, Zap,
+  Cpu, FileSearch, CheckCircle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Prospect, ProspectStatus, EmailTemplate, OutboxState, SegmentStats } from "@/app/lib/types";
@@ -26,8 +27,10 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { renderTemplate } from "@/lib/utils/template-renderer";
 import { generateEmailDraft } from "@/ai/flows/generate-email-draft-flow";
 import { generateWhatsAppMessage } from "@/ai/flows/generate-whatsapp-message-flow";
+import { analyzeWebsiteContent } from "@/ai/flows/analyze-website-content-flow";
 import { normalizePhoneBR, buildWaMeUrl, buildWhatsAppMessage } from "@/lib/utils/whatsapp";
 import { calculateNextAction } from "@/lib/utils/nba";
+import { calculateEffectiveScore } from "@/lib/utils/scoring";
 import { checkEmailQuality, calculateSpamProbability, isEmailOnCooldown } from "@/lib/utils/deliverability";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -55,6 +58,7 @@ export default function ProspectDetailPage() {
   const [isSavingOutbox, setIsSavingOutbox] = useState(false);
   const [isAiDrafting, setIsAiDrafting] = useState(false);
   const [isAiWhatsAppDrafting, setIsAiWhatsAppDrafting] = useState(false);
+  const [isAnalyzingWeb, setIsAnalyzingWeb] = useState(false);
   
   const [customSubject, setCustomSubject] = useState<string | null>(null);
   const [customBody, setCustomBody] = useState<string | null>(null);
@@ -177,6 +181,46 @@ export default function ProspectDetailPage() {
       toast({ variant: "destructive", title: "Erro", description: "Não foi possível atualizar." });
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const handleAnalyzeWebsite = async () => {
+    if (!prospect?.websiteUrl || !prospectRef) return;
+    setIsAnalyzingWeb(true);
+    try {
+      const result = await analyzeWebsiteContent({ 
+        websiteUrl: prospect.websiteUrl, 
+        companyName: prospect.companyName 
+      });
+
+      const updates: Partial<Prospect> = {
+        aiWebSummary: result.summary,
+        aiDetectedKeywords: result.detectedKeywords,
+        aiScoreConfidence: result.confidence,
+        aiWebAnalysisAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      // Recalculate score with new info
+      const newScore = calculateEffectiveScore({ ...prospect, ...updates });
+      updates.effectiveScore = newScore;
+
+      await updateDoc(prospectRef, updates as any);
+
+      await addDoc(collection(db!, "tenants", tenantId!, "events"), {
+        type: "website_analyzed",
+        prospectId: prospect.id,
+        companyName: prospect.companyName,
+        actorUid: user?.uid,
+        createdAt: serverTimestamp(),
+        metadata: { confidence: result.confidence, tagsFound: result.industryTags.length }
+      });
+
+      toast({ title: "Site analisado!", description: "Inteligência industrial extraída com sucesso." });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Erro na análise", description: e.message });
+    } finally {
+      setIsAnalyzingWeb(false);
     }
   };
 
@@ -359,7 +403,8 @@ export default function ProspectDetailPage() {
     switch (nba.type) {
       case 'suggest_emails':
       case 'analyze_website':
-        toast({ title: "Ação Sugerida", description: nba.reason });
+        if (prospect?.websiteUrl) handleAnalyzeWebsite();
+        else toast({ title: "Ação Sugerida", description: nba.reason });
         break;
       case 'prepare_email':
         setIsOutboxDialogOpen(true);
@@ -379,6 +424,7 @@ export default function ProspectDetailPage() {
       case 'email_prepared': return <Mail className="w-4 h-4 text-blue-500" />;
       case 'status_changed': return <RefreshCw className="w-4 h-4 text-orange-500" />;
       case 'dnc_enabled': return <Ban className="w-4 h-4 text-destructive" />;
+      case 'website_analyzed': return <SearchCode className="w-4 h-4 text-purple-500" />;
       default: return <Clock className="w-4 h-4 text-muted-foreground" />;
     }
   };
@@ -390,6 +436,7 @@ export default function ProspectDetailPage() {
       case 'status_changed': return `Status alterado de ${event.metadata?.from} para ${event.metadata?.to}`;
       case 'dnc_enabled': return `Adicionado à lista DNC: ${event.metadata?.reason}`;
       case 'dnc_disabled': return "Removido da lista DNC";
+      case 'website_analyzed': return "Inteligência web extraída via IA";
       default: return event.type;
     }
   };
@@ -517,11 +564,75 @@ export default function ProspectDetailPage() {
                    </ul>
                    {segmentData && segmentData.confidence > 0.5 && (
                      <div className="mt-3 pt-2 border-t border-accent/10 text-[9px] text-accent italic">
-                       IA aprendeu que {segmentData.preferredChannel === 'whatsapp' ? 'WhatsApp' : 'E-mail'} converte melhor neste setor (SP/SC).
+                       IA aprendeu que {segmentData.preferredChannel === 'whatsapp' ? 'WhatsApp' : 'E-mail'} converte melhor neste setor.
                      </div>
                    )}
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Website Intelligence Section (Layer 14) */}
+          <Card className="border-purple-100 bg-purple-50/20">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <FileSearch className="w-5 h-5 text-purple-600" /> Website Intelligence
+                </CardTitle>
+                <CardDescription className="text-xs">Extração automática de produtos e processos industriais.</CardDescription>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="h-8 border-purple-200 text-purple-700 hover:bg-purple-100"
+                onClick={handleAnalyzeWebsite}
+                disabled={isAnalyzingWeb || !prospect.websiteUrl}
+              >
+                {isAnalyzingWeb ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <Cpu className="w-3 h-3 mr-2" />}
+                {prospect.aiWebSummary ? "Reanalisar Site" : "Analisar Site"}
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {prospect.aiWebSummary ? (
+                <div className="space-y-4 animate-in fade-in duration-500">
+                  <div className="p-3 bg-white rounded-lg border border-purple-100 text-sm italic text-gray-700 leading-relaxed shadow-sm">
+                    "{prospect.aiWebSummary}"
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <h4 className="text-[10px] font-bold uppercase text-purple-600 mb-2">Palavras-chave Detectadas</h4>
+                      <div className="flex flex-wrap gap-1">
+                        {prospect.aiDetectedKeywords?.map(kw => (
+                          <Badge key={kw} variant="outline" className="text-[9px] border-purple-200 bg-purple-50 text-purple-700">
+                            {kw}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[10px] text-muted-foreground">Confiança da Análise</div>
+                      <div className="flex items-center justify-end gap-1 mt-1">
+                        {prospect.aiScoreConfidence === 'high' ? (
+                          <Badge className="bg-green-600 text-[10px] h-5">Alta</Badge>
+                        ) : prospect.aiScoreConfidence === 'medium' ? (
+                          <Badge className="bg-orange-500 text-[10px] h-5">Média</Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-[10px] h-5">Baixa</Badge>
+                        )}
+                      </div>
+                      <div className="text-[9px] text-muted-foreground mt-2 flex items-center justify-end gap-1">
+                        <CheckCircle className="w-3 h-3 text-green-500" /> Analisado em {prospect.aiWebAnalysisAt ? format(new Date(prospect.aiWebAnalysisAt), "dd/MM/yyyy") : "-"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-6 border border-dashed rounded-lg bg-white/50">
+                  <Globe className="w-8 h-8 mx-auto text-purple-200 mb-2" />
+                  <p className="text-xs text-muted-foreground">Nenhuma inteligência de website disponível ainda.</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">Clique em "Analisar Site" para descobrir produtos e processos.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -624,7 +735,6 @@ export default function ProspectDetailPage() {
         </div>
       </div>
 
-      {/* Dialogs remain same... */}
       <Dialog open={isOutboxDialogOpen} onOpenChange={setIsOutboxDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>

@@ -2,8 +2,8 @@
 import { Prospect, TenantSettings } from "@/app/lib/types";
 
 /**
- * Calcula o score efetivo basado no aiScore y reglas de datos.
- * Utiliza los pesos configurados en el tenant si están disponibles.
+ * Calcula o score efetivo baseado no aiScore e regras de dados.
+ * Utiliza os pesos configurados no tenant se estão disponíveis.
  */
 export function calculateEffectiveScore(prospect: Partial<Prospect>, settings?: TenantSettings): number {
   // 1. Componente Determinístico (Qualidade de Dados) - Base 0 a 100
@@ -14,6 +14,7 @@ export function calculateEffectiveScore(prospect: Partial<Prospect>, settings?: 
   const hasPhone = prospect.contacts?.some(c => !!c.phone || !!c.whatsapp);
   const hasWebsite = !!prospect.websiteUrl || !!prospect.domain;
   const hasValidCnpj = !!prospect.cnpj && prospect.cnpj.replace(/\D/g, '').length === 14;
+  const hasAiEnrichment = !!prospect.aiWebSummary;
 
   if (hasEmail) dataQualityScore += 20;
   else if (hasGenericEmail) dataQualityScore += 5;
@@ -21,8 +22,11 @@ export function calculateEffectiveScore(prospect: Partial<Prospect>, settings?: 
   if (hasWebsite) dataQualityScore += 10;
   if (hasValidCnpj) dataQualityScore += 10;
   if (hasPhone) dataQualityScore += 10;
+  
+  // Layer 14: Bônus por enriquecimento de site (indica que a empresa tem infraestrutura digital ativa)
+  if (hasAiEnrichment) dataQualityScore += 15;
 
-  // Penalidad severa se no for acionável
+  // Penalidade severa se não for acionável
   if (!hasEmail && !hasGenericEmail && !hasPhone) {
     dataQualityScore = Math.max(0, dataQualityScore - 40);
   }

@@ -27,22 +27,22 @@ const webAnalysisPrompt = ai.definePrompt({
   name: 'webAnalysisPrompt',
   input: { schema: z.object({ url: z.string(), text: z.string(), companyName: z.string().optional() }) },
   output: { schema: AnalyzeWebsiteOutputSchema },
-  prompt: `Você é um especialista em inteligência de mercado B2B industrial.
-Sua tarefa é analisar o conteúdo textual extraído do site de uma empresa e classificá-la.
+  prompt: `Você é um especialista em inteligência de mercado B2B industrial brasileiro.
+Sua tarefa é analisar o conteúdo textual extraído do site de uma empresa e classificá-la para fins de prospecção.
 
 Empresa: {{{companyName}}}
 URL: {{{url}}}
 
-CONTEÚDO EXTRAÍDO:
+CONTEÚDO EXTRAÍDO DO SITE:
 """
 {{{text}}}
 """
 
-REGRAS:
-1. Extraia de 3 a 6 tags de indústria (ex: Metalurgia, Logística, Injeção Plástica, Manutenção Industrial).
-2. Escreva um resumo de no máximo 2 linhas sobre o que eles fabricam ou qual serviço prestam.
-3. Identifique palavras-chave técnicas (certificações, máquinas, processos).
-4. Se o conteúdo parecer genérico ou não industrial, marque confiança "low".
+REGRAS DE ANÁLISE:
+1. Extraia de 3 a 6 tags de indústria precisas (ex: Metalurgia, Logística, Injeção Plástica, Manutenção Industrial, Autopeças).
+2. Escreva um resumo executivo de no máximo 2 linhas sobre o que eles fabricam ou qual serviço técnico prestam. Seja direto e industrial.
+3. Identifique palavras-chave técnicas relevantes (certificações, tipos de máquinas, processos específicos).
+4. Se o conteúdo parecer genérico, institucional demais ou não industrial, marque confiança "low".
 5. Idioma: Português (pt-BR).
 
 Forneça a saída estritamente no formato JSON solicitado.`,
@@ -58,11 +58,21 @@ export const analyzeWebsiteContentFlow = ai.defineFlow(
     // 1. Fetch content (Server-side)
     let pageText = "";
     try {
+      // Use a timeout to prevent hanging the server action
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
       const response = await fetch(input.websiteUrl, {
-        headers: { 'User-Agent': 'FluxionRadar-Bot/1.0' },
-        next: { revalidate: 3600 } // Cache for 1 hour at fetch level
+        headers: { 
+          'User-Agent': 'FluxionRadar-IntelligenceBot/1.0 (B2B Industrial Research)',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        },
+        signal: controller.signal,
+        next: { revalidate: 3600 } 
       });
       
+      clearTimeout(timeoutId);
+
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       
       const html = await response.text();
@@ -74,11 +84,16 @@ export const analyzeWebsiteContentFlow = ai.defineFlow(
         .replace(/<[^>]+>/g, " ")
         .replace(/\s+/g, " ")
         .trim()
-        .substring(0, 15000); // Limit to 15k chars for prompt efficiency
+        .substring(0, 12000); // Limit to 12k chars for prompt efficiency
 
-    } catch (e) {
-      console.error("Fetch error:", e);
-      throw new Error("Não foi possível acessar o site. Verifique a URL ou permissões de rede.");
+      if (pageText.length < 100) {
+        throw new Error("Conteúdo insuficiente detectado no site.");
+      }
+
+    } catch (e: any) {
+      console.error("Website Fetch Error:", e);
+      if (e.name === 'AbortError') throw new Error("O site demorou muito para responder.");
+      throw new Error(`Não foi possível acessar o site: ${input.websiteUrl}.`);
     }
 
     // 2. AI Analysis
