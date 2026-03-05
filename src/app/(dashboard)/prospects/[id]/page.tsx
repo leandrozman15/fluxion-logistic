@@ -13,7 +13,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Building2, Globe, MapPin, Mail, Phone, ExternalLink, MessageSquare, History, Sparkles, Loader2, CheckCircle2, Send, Wand2, BrainCircuit, AlertCircle, SearchCode, MailPlus, UserPlus, Info } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Building2, Globe, MapPin, Mail, Phone, ExternalLink, MessageSquare, History, Sparkles, Loader2, CheckCircle2, Send, Wand2, BrainCircuit, AlertCircle, SearchCode, MailPlus, UserPlus, Info, Ban, ShieldAlert } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Prospect, ProspectStatus, EmailTemplate, OutboxMessage, OutboxState, AiConfidence, Contact } from "@/app/lib/types";
 import { useParams } from "next/navigation";
@@ -36,6 +37,7 @@ export default function ProspectDetailPage() {
   const [isOutboxDialogOpen, setIsOutboxDialogOpen] = useState(false);
   const [isWebAnalysisDialogOpen, setIsWebAnalysisDialogOpen] = useState(false);
   const [isEmailSuggestionDialogOpen, setIsEmailSuggestionDialogOpen] = useState(false);
+  const [isDncDialogOpen, setIsDncDialogOpen] = useState(false);
   
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [selectedContactIndex, setSelectedContactIndex] = useState<string>("0");
@@ -47,6 +49,7 @@ export default function ProspectDetailPage() {
   
   const [customSubject, setCustomSubject] = useState<string | null>(null);
   const [customBody, setCustomBody] = useState<string | null>(null);
+  const [dncReason, setDncReason] = useState("");
   
   const [webAnalysisResult, setWebAnalysisResult] = useState<AnalyzeWebsiteOutput | null>(null);
   const [selectedWebTags, setSelectedWebTags] = useState<string[]>([]);
@@ -87,7 +90,6 @@ export default function ProspectDetailPage() {
           updatedAt: new Date().toISOString()
         });
 
-        // Telemetría de conversión
         if (newStatus !== 'new') {
           const statsDoc = await transaction.get(weeklyStatsRef);
           const field = `statusChangedTo_${newStatus}`;
@@ -110,6 +112,30 @@ export default function ProspectDetailPage() {
       toast({ title: "Status atualizado", description: `O prospect agora está como ${newStatus}.` });
     } catch (e) {
       toast({ variant: "destructive", title: "Erro", description: "Não foi posible guardar la actualización." });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleToggleDnc = async () => {
+    if (!prospectRef || !prospect) return;
+    setIsUpdating(true);
+    try {
+      const isEnabling = !prospect.doNotContact;
+      await updateDoc(prospectRef, {
+        doNotContact: isEnabling,
+        doNotContactReason: isEnabling ? dncReason : "",
+        doNotContactAt: isEnabling ? new Date().toISOString() : null,
+        updatedAt: new Date().toISOString()
+      });
+      toast({ 
+        title: isEnabling ? "Bloqueado!" : "Desbloqueado", 
+        description: isEnabling ? "Este prospect não aparecerá mais no Radar." : "Prospect liberado para prospecção."
+      });
+      setIsDncDialogOpen(false);
+      setDncReason("");
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erro", description: "Falha ao atualizar compliance." });
     } finally {
       setIsUpdating(false);
     }
@@ -190,7 +216,7 @@ export default function ProspectDetailPage() {
         updatedAt: new Date().toISOString()
       });
       
-      toast({ title: "Dados atualizados!", description: "O perfil do prospect foi enriquecido com a análise web." });
+      toast({ title: "Dados atualizados!", description: "O perfil do prospect foi enriquecido con a análise web." });
       setIsWebAnalysisDialogOpen(false);
     } catch (e) {
       toast({ variant: "destructive", title: "Erro ao aplicar", description: "Não foi possível salvar las alteraciones." });
@@ -211,7 +237,6 @@ export default function ProspectDetailPage() {
 
     setIsSuggestingEmails(true);
     try {
-      // Extrair emails do resumo do site se existir
       const websiteExtractedEmails = extractEmailsFromText(prospect.aiWebSummary || "");
 
       const result = await suggestCorporateEmails({
@@ -224,7 +249,6 @@ export default function ProspectDetailPage() {
       
       setEmailSuggestions(result.suggestions);
       
-      // Salvar sugestões no prospect para cache
       await updateDoc(prospectRef, {
         aiEmailDomainUsed: domain,
         aiEmailSuggestions: result.suggestions,
@@ -243,7 +267,6 @@ export default function ProspectDetailPage() {
   const handleAddSuggestedContact = async (email: string, type: string) => {
     if (!prospect || !prospectRef) return;
     
-    // Evitar duplicados
     if (prospect.contacts?.some(c => c.email.toLowerCase() === email.toLowerCase())) {
       toast({ title: "Atenção", description: "Este e-mail já está cadastrado nos contatos." });
       return;
@@ -276,6 +299,10 @@ export default function ProspectDetailPage() {
 
   const handleClaimForToday = async () => {
     if (!db || !tenantId || !prospect || !user) return;
+    if (prospect.doNotContact) {
+      toast({ variant: "destructive", title: "Ação bloqueada", description: "Prospect em lista negra (DNC)." });
+      return;
+    }
     
     setIsUpdating(true);
     const todayStr = new Date().toISOString().split('T')[0];
@@ -363,6 +390,10 @@ export default function ProspectDetailPage() {
 
   const handlePrepareOutbox = async (targetState: OutboxState) => {
     if (!db || !tenantId || !prospect || !selectedTemplate || !user || !selectedContact) return;
+    if (prospect.doNotContact) {
+       toast({ variant: "destructive", title: "Ação bloqueada", description: "Não é possível enviar emails para contatos bloqueados (DNC)." });
+       return;
+    }
 
     setIsSavingOutbox(true);
     const todayStr = new Date().toISOString().split('T')[0];
@@ -452,17 +483,22 @@ export default function ProspectDetailPage() {
                   <CheckCircle2 className="w-3 h-3 mr-1" /> No Radar de Hoje
                 </Badge>
               )}
+              {prospect.doNotContact && (
+                <Badge variant="destructive" className="flex items-center gap-1">
+                  <Ban className="w-3 h-3" /> Bloqueado (DNC)
+                </Badge>
+              )}
             </div>
           </div>
         </div>
         <div className="flex gap-2">
           {prospect.isClaimedToday && (
-            <Button onClick={() => setIsOutboxDialogOpen(true)} className="bg-primary">
+            <Button onClick={() => setIsOutboxDialogOpen(true)} className="bg-primary" disabled={prospect.doNotContact}>
               <Send className="w-4 h-4 mr-2" /> Preparar Contato
             </Button>
           )}
           {!prospect.isClaimedToday && prospect.status !== 'client' && (
-            <Button onClick={handleClaimForToday} disabled={isUpdating} className="bg-green-600 hover:bg-green-700">
+            <Button onClick={handleClaimForToday} disabled={isUpdating || prospect.doNotContact} className="bg-green-600 hover:bg-green-700">
               {isUpdating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
               Ativar para Hoje
             </Button>
@@ -470,6 +506,21 @@ export default function ProspectDetailPage() {
           <Button variant="outline" size="sm">Editar</Button>
         </div>
       </div>
+
+      {prospect.doNotContact && (
+        <div className="bg-destructive/10 border border-destructive/20 p-4 rounded-xl flex items-start gap-4 animate-in fade-in slide-in-from-top-2">
+          <ShieldAlert className="w-6 h-6 text-destructive shrink-0" />
+          <div>
+            <h3 className="text-sm font-bold text-destructive">Prospect em Lista Negra (Do Not Contact)</h3>
+            <p className="text-xs text-destructive/80 mt-1">
+              Motivo: {prospect.doNotContactReason || "Não informado"} - Registrado em {new Date(prospect.doNotContactAt || "").toLocaleString()}
+            </p>
+            <Button variant="link" size="sm" className="p-0 h-auto text-destructive underline mt-2" onClick={() => setIsDncDialogOpen(true)}>
+              Remover bloqueio
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
@@ -650,6 +701,25 @@ export default function ProspectDetailPage() {
           </Card>
 
           <Card>
+             <CardHeader className="pb-2">
+               <CardTitle className="text-sm flex items-center gap-2 text-destructive">
+                 <ShieldAlert className="w-4 h-4" /> Compliance
+               </CardTitle>
+             </CardHeader>
+             <CardContent>
+               <Button 
+                variant={prospect.doNotContact ? "default" : "outline"} 
+                size="sm" 
+                className={`w-full ${prospect.doNotContact ? 'bg-destructive hover:bg-destructive/90' : 'text-destructive border-destructive hover:bg-destructive/5'}`}
+                onClick={() => setIsDncDialogOpen(true)}
+               >
+                 <Ban className="w-4 h-4 mr-2" />
+                 {prospect.doNotContact ? "Remover de Lista Negra" : "Marcar Do Not Contact"}
+               </Button>
+             </CardContent>
+          </Card>
+
+          <Card>
             <CardHeader><CardTitle>Notas de Negócio</CardTitle></CardHeader>
             <CardContent className="space-y-4">
                <Textarea placeholder="Adicione uma observação técnica ou comercial..." className="min-h-[120px]" defaultValue={prospect.notes} />
@@ -658,6 +728,42 @@ export default function ProspectDetailPage() {
           </Card>
         </div>
       </div>
+
+      {/* DNC Dialog */}
+      <Dialog open={isDncDialogOpen} onOpenChange={setIsDncDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{prospect.doNotContact ? "Remover Bloqueio" : "Marcar como Do Not Contact"}</DialogTitle>
+            <DialogDescription>
+              {prospect.doNotContact 
+                ? "Deseja liberar este prospect para novas comunicações?" 
+                : "Isso impedirá que o prospect apareça no Radar Diário e bloqueará qualquer envio de email."}
+            </DialogDescription>
+          </DialogHeader>
+          {!prospect.doNotContact && (
+            <div className="space-y-2 py-4">
+              <Label htmlFor="dnc-reason">Motivo do bloqueio</Label>
+              <Input 
+                id="dnc-reason" 
+                placeholder="Ex: Solicitou opt-out, dados incorretos..." 
+                value={dncReason} 
+                onChange={(e) => setDncReason(e.target.value)}
+              />
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDncDialogOpen(false)}>Cancelar</Button>
+            <Button 
+              variant={prospect.doNotContact ? "default" : "destructive"} 
+              onClick={handleToggleDnc} 
+              disabled={isUpdating || (!prospect.doNotContact && !dncReason)}
+            >
+              {isUpdating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Ban className="w-4 h-4 mr-2" />}
+              Confirmar Alteração
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Email Suggestions Dialog */}
       <Dialog open={isEmailSuggestionDialogOpen} onOpenChange={setIsEmailSuggestionDialogOpen}>
@@ -780,69 +886,79 @@ export default function ProspectDetailPage() {
             <DialogDescription>Escolha um template e verifique a personalização antes de enfileirar.</DialogDescription>
           </DialogHeader>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Template Base</Label>
-                <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
-                  <SelectTrigger><SelectValue placeholder="Selecione um modelo" /></SelectTrigger>
-                  <SelectContent>
-                    {templates.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Contato Destino</Label>
-                <Select value={selectedContactIndex} onValueChange={setSelectedContactIndex}>
-                  <SelectTrigger><SelectValue placeholder="Escolha o contato" /></SelectTrigger>
-                  <SelectContent>
-                    {prospect.contacts.map((c, i) => <SelectItem key={i} value={i.toString()}>{c.name} ({c.email})</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {selectedTemplate && (
-                <Button 
-                  variant="outline" 
-                  className="w-full border-accent text-accent hover:bg-accent/5" 
-                  onClick={handleImproveWithAi}
-                  disabled={isAiDrafting}
-                >
-                  {isAiDrafting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Wand2 className="w-4 h-4 mr-2" />}
-                  Melhorar com IA
-                </Button>
-              )}
+          {prospect.doNotContact ? (
+            <div className="p-8 text-center space-y-4">
+              <Ban className="w-12 h-12 mx-auto text-destructive opacity-50" />
+              <p className="text-sm font-bold text-destructive">Bloqueado por compliance (Do Not Contact).</p>
+              <Button variant="outline" onClick={() => setIsOutboxDialogOpen(false)}>Fechar</Button>
             </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Template Base</Label>
+                    <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                      <SelectTrigger><SelectValue placeholder="Selecione um modelo" /></SelectTrigger>
+                      <SelectContent>
+                        {templates.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Contato Destino</Label>
+                    <Select value={selectedContactIndex} onValueChange={setSelectedContactIndex}>
+                      <SelectTrigger><SelectValue placeholder="Escolha o contacto" /></SelectTrigger>
+                      <SelectContent>
+                        {prospect.contacts.map((c, i) => <SelectItem key={i} value={i.toString()}>{c.name} ({c.email})</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-            <div className="bg-secondary/20 p-4 rounded-lg border space-y-3 relative overflow-hidden">
-              <div className="text-[10px] font-bold text-muted-foreground uppercase flex justify-between items-center">
-                Preview {customSubject && <Badge className="bg-accent h-4 text-[8px] uppercase">IA Gerado</Badge>}
-              </div>
-              {selectedTemplate ? (
-                <>
-                  <div className="text-sm font-semibold border-b pb-2">{previewSubject}</div>
-                  <div className="text-xs whitespace-pre-wrap text-muted-foreground italic leading-relaxed">{previewBody}</div>
-                </>
-              ) : (
-                <div className="text-sm text-muted-foreground italic h-40 flex items-center justify-center">Selecione um template para ver o preview.</div>
-              )}
-              {isAiDrafting && (
-                <div className="absolute inset-0 bg-background/50 flex items-center justify-center">
-                  <Loader2 className="w-8 h-8 animate-spin text-accent" />
+                  {selectedTemplate && (
+                    <Button 
+                      variant="outline" 
+                      className="w-full border-accent text-accent hover:bg-accent/5" 
+                      onClick={handleImproveWithAi}
+                      disabled={isAiDrafting}
+                    >
+                      {isAiDrafting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Wand2 className="w-4 h-4 mr-2" />}
+                      Melhorar com IA
+                    </Button>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" disabled={!selectedTemplate || isSavingOutbox || isAiDrafting} onClick={() => handlePrepareOutbox('draft')}>
-              Salvar como Rascunho
-            </Button>
-            <Button disabled={!selectedTemplate || isSavingOutbox || isAiDrafting} onClick={() => handlePrepareOutbox('queued')} className="bg-primary">
-              {isSavingOutbox ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
-              Enfileirar para Envio
-            </Button>
-          </DialogFooter>
+                <div className="bg-secondary/20 p-4 rounded-lg border space-y-3 relative overflow-hidden">
+                  <div className="text-[10px] font-bold text-muted-foreground uppercase flex justify-between items-center">
+                    Preview {customSubject && <Badge className="bg-accent h-4 text-[8px] uppercase">IA Gerado</Badge>}
+                  </div>
+                  {selectedTemplate ? (
+                    <>
+                      <div className="text-sm font-semibold border-b pb-2">{previewSubject}</div>
+                      <div className="text-xs whitespace-pre-wrap text-muted-foreground italic leading-relaxed">{previewBody}</div>
+                    </>
+                  ) : (
+                    <div className="text-sm text-muted-foreground italic h-40 flex items-center justify-center">Selecione um template para ver o preview.</div>
+                  )}
+                  {isAiDrafting && (
+                    <div className="absolute inset-0 bg-background/50 flex items-center justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-accent" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button variant="outline" disabled={!selectedTemplate || isSavingOutbox || isAiDrafting} onClick={() => handlePrepareOutbox('draft')}>
+                  Salvar como Rascunho
+                </Button>
+                <Button disabled={!selectedTemplate || isSavingOutbox || isAiDrafting} onClick={() => handlePrepareOutbox('queued')} className="bg-primary">
+                  {isSavingOutbox ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
+                  Enfileirar para Envio
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>

@@ -1,8 +1,6 @@
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Función para verificar si el usuario pertenece al tenant
     function isSignedIn() {
       return request.auth != null;
     }
@@ -14,7 +12,6 @@ service cloud.firestore {
     }
 
     function getUserData(tenantId) {
-      // Intentar obtener de la subcolección o del mapeo raíz
       let userInTenant = /databases/$(database)/documents/tenants/$(tenantId)/users/$(request.auth.uid);
       return exists(userInTenant) ? get(userInTenant).data : get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
@@ -24,7 +21,6 @@ service cloud.firestore {
       return userData.role == role || userData.role == 'admin';
     }
 
-    // Reglas para el Tenant
     match /tenants/{tenantId} {
       allow read: if belongsToTenant(tenantId);
       allow write: if hasRole(tenantId, 'admin');
@@ -36,7 +32,11 @@ service cloud.firestore {
 
       match /prospects/{prospectId} {
         allow read: if belongsToTenant(tenantId);
-        allow create, update: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales');
+        allow create: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales');
+        allow update: if belongsToTenant(tenantId) && (
+          hasRole(tenantId, 'sales') || 
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['notes', 'status', 'updatedAt', 'doNotContact', 'doNotContactReason', 'doNotContactAt']))
+        );
         allow delete: if hasRole(tenantId, 'admin');
       }
 
@@ -66,7 +66,12 @@ service cloud.firestore {
       
       match /dailyStats/{date} {
         allow read: if belongsToTenant(tenantId);
-        allow write: if belongsToTenant(tenantId); // Permitido para actualizaciones de cuota vía transacción
+        allow write: if belongsToTenant(tenantId);
+      }
+
+      match /weeklyStats/{weekId} {
+        allow read: if belongsToTenant(tenantId);
+        allow write: if belongsToTenant(tenantId);
       }
 
       match /dailyTop/{date} {
@@ -75,7 +80,6 @@ service cloud.firestore {
       }
     }
 
-    // Colección raíz para mapeo uid -> tenantId (Seguridad extra)
     match /users/{userId} {
       allow read: if request.auth.uid == userId;
       allow write: if false;

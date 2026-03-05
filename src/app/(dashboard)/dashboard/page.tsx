@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, where, orderBy, limit, doc, setDoc, getDocs, serverTimestamp, getDoc, runTransaction } from "firebase/firestore";
+import { collection, query, where, orderBy, limit, doc, setDoc, getDocs, serverTimestamp, getDoc, runTransaction, updateDoc } from "firebase/firestore";
 import { KPICard } from "@/components/dashboard/kpi-card";
 import { 
   Users, 
@@ -17,7 +17,12 @@ import {
   Factory,
   MapPin,
   RefreshCw,
-  Zap
+  Zap,
+  Send,
+  SearchCode,
+  CheckCircle2,
+  ExternalLink,
+  Ban
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -38,16 +43,20 @@ import {
 import Link from "next/link";
 import { Prospect, DailyTop, Tenant, DailyStats } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
+import { TooltipProvider, Tooltip as UITooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { useRouter } from "next/navigation";
+import { analyzeWebsiteContent } from "@/ai/flows/analyze-website-content-flow";
 
 export default function DashboardPage() {
   const { db } = useFirestore();
   const { tenantId } = useTenant();
   const { toast } = useToast();
+  const router = useRouter();
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
   
   const today = new Date().toISOString().split('T')[0];
 
-  // Tenant Settings
   const tenantRef = useMemo(() => {
     if (!db || !tenantId) return null;
     return doc(db, "tenants", tenantId);
@@ -55,7 +64,6 @@ export default function DashboardPage() {
 
   const { data: tenantData } = useDoc<Tenant>(tenantRef);
 
-  // Stats y Quota
   const statsRef = useMemo(() => {
     if (!db || !tenantId) return null;
     return doc(db, "tenants", tenantId, "dailyStats", today);
@@ -63,7 +71,6 @@ export default function DashboardPage() {
 
   const { data: stats } = useDoc<DailyStats>(statsRef);
 
-  // Daily Top (Radar Congelado)
   const dailyTopRef = useMemo(() => {
     if (!db || !tenantId) return null;
     return doc(db, "tenants", tenantId, "dailyTop", today);
@@ -71,7 +78,6 @@ export default function DashboardPage() {
 
   const { data: dailyTop, loading: dailyTopLoading } = useDoc<DailyTop>(dailyTopRef);
 
-  // Datos para gráficos
   const industryStatsQuery = useMemo(() => {
     if (!db || !tenantId) return null;
     return query(collection(db, "tenants", tenantId, "prospects"), limit(100));
@@ -96,15 +102,14 @@ export default function DashboardPage() {
     if (!db || !tenantId) return;
     setIsGenerating(true);
     try {
-      // 1. Obtener configuraciones del tenant
       const settings = tenantData?.settings;
       const topLimit = settings?.dailyTopLimit || 30;
       const requireContact = settings?.requireContactMethod || 'email_or_phone';
 
-      // 2. Buscar mejores prospectos
       let q = query(
         collection(db, "tenants", tenantId, "prospects"),
         where("status", "in", ["new", "contacted"]),
+        where("doNotContact", "==", false), // Excluir DNC
         orderBy("effectiveScore", "desc"),
         limit(200)
       );
@@ -112,7 +117,6 @@ export default function DashboardPage() {
       const snapshot = await getDocs(q);
       let candidates = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Prospect));
       
-      // 3. Aplicar filtros de accionabilidad si están configurados
       if (requireContact !== 'none') {
         candidates = candidates.filter(p => {
           const hasEmail = p.contacts?.some(c => !!c.email);
@@ -122,19 +126,17 @@ export default function DashboardPage() {
         });
       }
 
-      // 4. Seleccionar top N
       const topN = candidates
         .filter(p => !p.isClaimedToday)
         .slice(0, topLimit);
 
       if (topN.length === 0) {
-        toast({ title: "Radar vazio", description: "Não há novos prospectos para gerar el radar hoy con los filtros actuales." });
+        toast({ title: "Radar vazio", description: "Não há novos prospectos para gerar o radar hoje com os filtros atuais." });
         return;
       }
 
       const avgScore = topN.reduce((acc, p) => acc + p.effectiveScore, 0) / topN.length;
 
-      // 5. Guardar dailyTop y actualizar stats
       const dailyTopData: DailyTop = {
         id: today,
         date: today,
@@ -154,7 +156,6 @@ export default function DashboardPage() {
       await runTransaction(db, async (transaction) => {
         transaction.set(doc(db, "tenants", tenantId, "dailyTop", today), dailyTopData);
         
-        // Actualizar radarAvgFinalScore en stats
         const statsDoc = await transaction.get(statsRef as any);
         if (statsDoc.exists()) {
           transaction.update(statsRef as any, { radarAvgFinalScore: Math.round(avgScore) });
@@ -172,12 +173,80 @@ export default function DashboardPage() {
         }
       });
       
-      toast({ title: "Radar gerado!", description: `As mejores ${topN.length} oportunidades están listas.` });
+      toast({ title: "Radar gerado!", description: `As melhores ${topN.length} oportunidades estão listas.` });
     } catch (e) {
       console.error(e);
       toast({ variant: "destructive", title: "Erro ao gerar radar" });
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleQuickClaim = async (prospectId: string) => {
+    if (!db || !tenantId) return;
+    setIsActionLoading(prospectId);
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const statsRef = doc(db, "tenants", tenantId, "dailyStats", todayStr);
+      const pRef = doc(db, "tenants", tenantId, "prospects", prospectId);
+
+      await runTransaction(db, async (transaction) => {
+        const statsDoc = await transaction.get(statsRef);
+        let currentQuota = 0;
+        let quotaLimit = 30;
+
+        if (statsDoc.exists()) {
+          currentQuota = statsDoc.data().quotaUsed || 0;
+          quotaLimit = statsDoc.data().quotaLimit || 30;
+        }
+
+        if (currentQuota >= quotaLimit) throw new Error("Quota atingida");
+
+        transaction.update(pRef, {
+          isClaimedToday: true,
+          claimedAt: new Date().toISOString(),
+          status: 'contacted'
+        });
+
+        transaction.update(statsRef, { quotaUsed: currentQuota + 1 });
+      });
+      toast({ title: "Ativado!", description: "Prospect adicionado ao radar de hoje." });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Erro", description: e.message });
+    } finally {
+      setIsActionLoading(null);
+    }
+  };
+
+  const handleQuickAnalyze = async (prospect: { prospectId: string, companyName: string }) => {
+    if (!db || !tenantId) return;
+    setIsActionLoading(prospect.prospectId);
+    try {
+      const pRef = doc(db, "tenants", tenantId, "prospects", prospect.prospectId);
+      const pSnap = await getDoc(pRef);
+      const pData = pSnap.data() as Prospect;
+      
+      if (!pData.websiteUrl) {
+        toast({ title: "Atenção", description: "Sem website para analisar." });
+        return;
+      }
+
+      const result = await analyzeWebsiteContent({
+        websiteUrl: pData.websiteUrl,
+        companyName: pData.companyName
+      });
+
+      await updateDoc(pRef, {
+        aiWebSummary: result.summary,
+        aiWebAnalysisAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+
+      toast({ title: "Análise concluída", description: "Resumo industrial gerado com sucesso." });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Erro na análise", description: e.message });
+    } finally {
+      setIsActionLoading(null);
     }
   };
 
@@ -249,22 +318,72 @@ export default function DashboardPage() {
                     <Button onClick={handleGenerateDailyRadar} disabled={isGenerating}>Começar agora</Button>
                   </div>
                 ) : (
-                  dailyTop.items.map((item, i) => (
-                    <Link key={item.prospectId} href={`/prospects/${item.prospectId}`}>
-                      <div className="flex items-center justify-between p-4 mb-3 rounded-xl bg-secondary/20 border hover:border-accent/50 transition-all group">
-                        <div className="flex items-center gap-4">
-                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-xs">#{i+1}</div>
-                          <div>
-                            <div className="font-bold text-sm">{item.companyName}</div>
-                            <div className="flex items-center gap-2 mt-1">
-                               <Badge variant="outline" className="text-[9px]">Score: {item.effectiveScore}</Badge>
+                  <div className="space-y-1">
+                    {dailyTop.items.map((item, i) => (
+                      <div key={item.prospectId} className="flex items-center justify-between p-3 rounded-xl bg-secondary/20 border hover:border-accent/50 transition-all group">
+                        <Link href={`/prospects/${item.prospectId}`} className="flex items-center gap-4 flex-1">
+                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-xs shrink-0">#{i+1}</div>
+                          <div className="min-w-0">
+                            <div className="font-bold text-sm truncate">{item.companyName}</div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                               <Badge variant="outline" className="text-[9px] px-1 h-4">Score: {item.effectiveScore}</Badge>
+                               {item.hasWebsite && <Badge variant="secondary" className="text-[8px] h-4"><ExternalLink className="w-2 h-2 mr-1" /> Web</Badge>}
                             </div>
                           </div>
+                        </Link>
+                        
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <TooltipProvider>
+                            <UITooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-accent" 
+                                  onClick={(e) => { e.preventDefault(); handleQuickAnalyze(item); }}
+                                  disabled={isActionLoading === item.prospectId || !item.hasWebsite}
+                                >
+                                  {isActionLoading === item.prospectId ? <Loader2 className="w-3 h-3 animate-spin" /> : <SearchCode className="w-4 h-4" />}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Análise Rápida IA</TooltipContent>
+                            </UITooltip>
+                            
+                            <UITooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-blue-600" 
+                                  onClick={(e) => { e.preventDefault(); router.push(`/prospects/${item.prospectId}?action=prepare`); }}
+                                  disabled={isActionLoading === item.prospectId || !item.hasEmail}
+                                >
+                                  <Send className="w-4 h-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Preparar Email</TooltipContent>
+                            </UITooltip>
+
+                            <UITooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-green-600" 
+                                  onClick={(e) => { e.preventDefault(); handleQuickClaim(item.prospectId); }}
+                                  disabled={isActionLoading === item.prospectId}
+                                >
+                                  <CheckCircle2 className="w-4 h-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Ativar Agora</TooltipContent>
+                            </UITooltip>
+                          </TooltipProvider>
                         </div>
-                        <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-accent" />
+                        <ChevronRight className="w-4 h-4 text-muted-foreground ml-2" />
                       </div>
-                    </Link>
-                  ))
+                    ))}
+                  </div>
                 )}
               </div>
             )}

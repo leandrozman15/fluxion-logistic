@@ -1,12 +1,13 @@
 'use client';
 
 import { useMemo, useState } from "react";
-import { useFirestore, useCollection } from "@/firebase";
+import { useFirestore, useCollection, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, limit, where, Timestamp } from "firebase/firestore";
+import { collection, query, orderBy, limit, where, Timestamp, getDocs, doc, writeBatch, increment, serverTimestamp } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KPICard } from "@/components/dashboard/kpi-card";
+import { Button } from "@/components/ui/button";
 import { 
   BarChart, 
   Bar, 
@@ -31,15 +32,26 @@ import {
   Loader2,
   Calendar,
   Zap,
-  Filter
+  Filter,
+  RefreshCw,
+  Info
 } from "lucide-react";
-import { DailyStats, WeeklyStats, Prospect } from "@/app/lib/types";
+import { DailyStats, WeeklyStats, Prospect, AppUser } from "@/app/lib/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
 
 export default function AnalyticsPage() {
   const { db } = useFirestore();
   const { tenantId } = useTenant();
+  const { user } = useUser();
+  const { toast } = useToast();
   const [range, setRange] = useState("30");
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const { data: userProfile } = useCollection<AppUser>(
+    useMemo(() => (db && user ? query(collection(db, "users"), where("uid", "==", user.uid)) : null), [db, user])
+  );
+  const isAdmin = userProfile?.[0]?.role === 'admin';
 
   const dailyStatsQuery = useMemo(() => {
     if (!db || !tenantId) return null;
@@ -63,14 +75,6 @@ export default function AnalyticsPage() {
 
   const { data: weeklyStats, loading: weeklyLoading } = useCollection<WeeklyStats>(weeklyStatsQuery);
 
-  const prospectsQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "prospects"), limit(500));
-  }, [db, tenantId]);
-
-  const { data: allProspects } = useCollection<Prospect>(prospectsQuery);
-
-  // Procesamiento de datos para gráficos
   const chartData = useMemo(() => {
     return [...(dailyStats || [])].reverse().map(s => ({
       name: s.date.split('-').slice(1).join('/'),
@@ -90,9 +94,47 @@ export default function AnalyticsPage() {
     }));
   }, [weeklyStats]);
 
+  const handleReconcileStats = async () => {
+    if (!db || !tenantId || !isAdmin) return;
+    setIsSyncing(true);
+    try {
+      const today = new Date();
+      const yearWeek = `${today.getFullYear()}-${Math.ceil((today.getDate() + 6 - today.getDay()) / 7)}`;
+      
+      const pSnapshot = await getDocs(query(collection(db, "tenants", tenantId, "prospects")));
+      const prospects = pSnapshot.docs.map(d => d.data() as Prospect);
+      
+      const counts = {
+        contacted: prospects.filter(p => p.status === 'contacted').length,
+        interested: prospects.filter(p => p.status === 'interested').length,
+        demo: prospects.filter(p => p.status === 'demo').length,
+        client: prospects.filter(p => p.status === 'client').length,
+      };
+
+      const batch = writeBatch(db);
+      const weeklyRef = doc(db, "tenants", tenantId, "weeklyStats", yearWeek);
+      
+      batch.set(weeklyRef, {
+        id: yearWeek,
+        weekId: yearWeek,
+        statusChangedTo_contacted: counts.contacted,
+        statusChangedTo_interested: counts.interested,
+        statusChangedTo_demo: counts.demo,
+        statusChangedTo_client: counts.client,
+        reconciledAt: serverTimestamp()
+      }, { merge: true });
+
+      await batch.commit();
+      toast({ title: "Sincronização completa", description: "As métricas desta semana foram recalculadas com base nos dados atuais." });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erro na sincronização" });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const kpis = useMemo(() => {
     if (!dailyStats || dailyStats.length === 0) return null;
-    const current = dailyStats[0];
     const totalNew = dailyStats.reduce((acc, s) => acc + (s.newProspects || 0), 0);
     const totalEmails = dailyStats.reduce((acc, s) => acc + (s.emailsSent || 0), 0);
     const avgScore = dailyStats.reduce((acc, s) => acc + (s.radarAvgFinalScore || 0), 0) / dailyStats.length;
@@ -121,7 +163,12 @@ export default function AnalyticsPage() {
           <p className="text-muted-foreground">Analise a saúde do seu funil e a eficácia da IA.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-muted-foreground" />
+          {isAdmin && (
+            <Button variant="outline" size="sm" onClick={handleReconcileStats} disabled={isSyncing}>
+              {isSyncing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+              Sincronizar Métricas
+            </Button>
+          )}
           <Select value={range} onValueChange={setRange}>
             <SelectTrigger className="w-[150px]">
               <SelectValue placeholder="Rango" />
@@ -195,28 +242,14 @@ export default function AnalyticsPage() {
             </ResponsiveContainer>
           </CardContent>
         </Card>
+      </div>
 
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-sm font-bold flex items-center gap-2">
-              <Mail className="w-4 h-4 text-blue-500" /> Volume de Saída Operacional
-            </CardTitle>
-            <CardDescription>Quantidade de e-mails disparados diariamente.</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[250px] pt-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} />
-                <YAxis fontSize={10} axisLine={false} tickLine={false} />
-                <Tooltip 
-                   contentStyle={{ backgroundColor: 'white', borderRadius: '8px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
-                />
-                <Line type="monotone" dataKey="emails" name="Emails Enviados" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex items-start gap-3">
+        <Info className="w-5 h-5 text-blue-600 mt-0.5" />
+        <p className="text-sm text-blue-800 leading-relaxed">
+          <strong>Dica Operacional:</strong> Os gráficos de conversão refletem a eficácia do seu time em transformar oportunidades do Radar em reuniões (Demos). 
+          Se o volume de "Interessados" estiver baixo apesar de muitos emails enviados, considere ajustar o <strong>Motor de Scoring</strong> nas configurações para priorizar empresas com maior afinidade industrial detectada pela IA.
+        </p>
       </div>
     </div>
   );

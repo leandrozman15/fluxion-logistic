@@ -62,6 +62,11 @@ export interface Prospect {
   lastContactAt?: string;
   nextFollowUpAt?: string;
   notes?: string;
+
+  // Hardening / Compliance
+  doNotContact?: boolean;
+  doNotContactReason?: string;
+  doNotContactAt?: string;
 }
 
 export interface EmailTemplate {
