@@ -1,3 +1,16 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "hero-industrial",
+      "description": "Industrial manufacturing facility",
+      "imageUrl": "https://picsum.photos/seed/fluxion1/1200/600",
+      "imageHint": "industrial manufacturing"
+    },
+    {
+      "id": "data-analytics",
+      "description": "Business data analytics dashboard",
+      "imageUrl": "https://picsum.photos/seed/fluxion2/600/400",
+      "imageHint": "business data"
+    }
+  ]
 }
