@@ -45,6 +45,15 @@ export interface Prospect {
   aiWebSummary?: string;
   aiWebAnalysisAt?: string;
   
+  // AI Email Suggestions (Capa 2.4)
+  aiEmailSuggestions?: {
+    email: string;
+    type: "verified_on_site" | "pattern_guess" | "generic_role";
+    confidence: AiConfidence;
+    reason: string;
+  }[];
+  aiEmailSuggestedAt?: string;
+  
   effectiveScore: number; // Final weighted score used for ranking
   scoreReasons: string[]; // Combined reasons
   
@@ -116,6 +125,7 @@ export interface Contact {
   email: string;
   phone: string;
   whatsapp?: string;
+  verified?: boolean; // Capa 2.4
 }
 
 export interface Tenant {

@@ -14,14 +14,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Building2, Globe, MapPin, Mail, Phone, ExternalLink, MessageSquare, History, Sparkles, Loader2, CheckCircle2, Send, Wand2, BrainCircuit, AlertCircle, SearchCode } from "lucide-react";
+import { Building2, Globe, MapPin, Mail, Phone, ExternalLink, MessageSquare, History, Sparkles, Loader2, CheckCircle2, Send, Wand2, BrainCircuit, AlertCircle, SearchCode, MailPlus, UserPlus, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Prospect, ProspectStatus, EmailTemplate, OutboxState, AiConfidence } from "@/app/lib/types";
+import { Prospect, ProspectStatus, EmailTemplate, OutboxMessage, OutboxState, AiConfidence, Contact } from "@/app/lib/types";
 import { useParams } from "next/navigation";
 import { renderTemplate } from "@/lib/utils/template-renderer";
 import { generateEmailDraft } from "@/ai/flows/generate-email-draft-flow";
 import { calculateProspectAiScore } from "@/ai/flows/calculate-prospect-ai-score-flow";
 import { analyzeWebsiteContent, AnalyzeWebsiteOutput } from "@/ai/flows/analyze-website-content-flow";
+import { suggestCorporateEmails, SuggestEmailsOutput } from "@/ai/flows/suggest-corporate-emails-flow";
 import { calculateEffectiveScore } from "@/lib/utils/scoring";
 
 export default function ProspectDetailPage() {
@@ -34,18 +35,23 @@ export default function ProspectDetailPage() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isOutboxDialogOpen, setIsOutboxDialogOpen] = useState(false);
   const [isWebAnalysisDialogOpen, setIsWebAnalysisDialogOpen] = useState(false);
+  const [isEmailSuggestionDialogOpen, setIsEmailSuggestionDialogOpen] = useState(false);
+  
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [selectedContactIndex, setSelectedContactIndex] = useState<string>("0");
   const [isSavingOutbox, setIsSavingOutbox] = useState(false);
   const [isAiDrafting, setIsAiDrafting] = useState(false);
   const [isScoring, setIsScoring] = useState(false);
   const [isAnalyzingWeb, setIsAnalyzingWeb] = useState(false);
+  const [isSuggestingEmails, setIsSuggestingEmails] = useState(false);
   
   const [customSubject, setCustomSubject] = useState<string | null>(null);
   const [customBody, setCustomBody] = useState<string | null>(null);
   
   const [webAnalysisResult, setWebAnalysisResult] = useState<AnalyzeWebsiteOutput | null>(null);
   const [selectedWebTags, setSelectedWebTags] = useState<string[]>([]);
+  
+  const [emailSuggestions, setEmailSuggestions] = useState<SuggestEmailsOutput['suggestions'] | null>(null);
 
   const prospectRef = useMemo(() => {
     if (!db || !tenantId || !id) return null;
@@ -77,7 +83,7 @@ export default function ProspectDetailPage() {
       });
       toast({ title: "Status atualizado", description: `O prospect agora está como ${newStatus}.` });
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro", description: "Não foi possível actualizar el status." });
+      toast({ variant: "destructive", title: "Erro", description: "Não foi possível atualizar o status." });
     } finally {
       setIsUpdating(false);
     }
@@ -161,7 +167,70 @@ export default function ProspectDetailPage() {
       toast({ title: "Dados atualizados!", description: "O perfil do prospect foi enriquecido com a análise web." });
       setIsWebAnalysisDialogOpen(false);
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro ao aplicar", description: "Não foi possível salvar as alterações." });
+      toast({ variant: "destructive", title: "Erro ao aplicar", description: "Não foi possível salvar las alterações." });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleRunEmailSuggestions = async () => {
+    if (!prospect || !prospectRef) return;
+    
+    const domain = prospect.domain || prospect.websiteUrl?.split("//")[1]?.split("/")[0];
+    if (!domain) {
+      toast({ variant: "destructive", title: "Domínio necessário", description: "O prospect precisa ter um website ou domínio cadastrado." });
+      return;
+    }
+
+    setIsSuggestingEmails(true);
+    try {
+      const result = await suggestCorporateEmails({
+        domain,
+        companyName: prospect.companyName,
+        contactName: prospect.contacts?.[0]?.name,
+        existingEmails: prospect.contacts?.map(c => c.email).filter(e => !!e) as string[],
+        websiteTextSnippet: prospect.aiWebSummary
+      });
+      
+      setEmailSuggestions(result.suggestions);
+      
+      // Salvar sugestões no prospect para cache
+      await updateDoc(prospectRef, {
+        aiEmailSuggestions: result.suggestions,
+        aiEmailSuggestedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+
+      setIsEmailSuggestionDialogOpen(true);
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erro na Sugestão", description: "Não foi possível gerar sugestões agora." });
+    } finally {
+      setIsSuggestingEmails(false);
+    }
+  };
+
+  const handleAddSuggestedContact = async (email: string) => {
+    if (!prospect || !prospectRef) return;
+    
+    const newContact: Contact = {
+      name: "Contato IA",
+      role: "Sugerido",
+      email,
+      phone: "",
+      verified: false
+    };
+
+    const updatedContacts = [...(prospect.contacts || []), newContact];
+    
+    setIsUpdating(true);
+    try {
+      await updateDoc(prospectRef, {
+        contacts: updatedContacts,
+        updatedAt: new Date().toISOString()
+      });
+      toast({ title: "Contato adicionado!", description: `E-mail ${email} foi adicionado à lista.` });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erro", description: "Não foi possível salvar o contato." });
     } finally {
       setIsUpdating(false);
     }
@@ -212,7 +281,7 @@ export default function ProspectDetailPage() {
 
       toast({ title: "Ativado!", description: "Este prospect foi adicionado ao seu radar de hoje." });
     } catch (e: any) {
-      toast({ variant: "destructive", title: "Erro ao activar", description: e.message });
+      toast({ variant: "destructive", title: "Erro ao ativar", description: e.message });
     } finally {
       setIsUpdating(false);
     }
@@ -305,7 +374,7 @@ export default function ProspectDetailPage() {
       setCustomSubject(null);
       setCustomBody(null);
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro", description: "Não foi posible preparar o contato." });
+      toast({ variant: "destructive", title: "Erro", description: "Não foi possível preparar o contato." });
     } finally {
       setIsSavingOutbox(false);
     }
@@ -365,7 +434,7 @@ export default function ProspectDetailPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Visão Geral</CardTitle>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button 
                   variant="outline" 
                   size="sm" 
@@ -431,7 +500,7 @@ export default function ProspectDetailPage() {
                      ))}
                    </ul>
                    {prospect.aiScoreUpdatedAt && (
-                     <p className="text-[9px] text-muted-foreground mt-2 italic">Actualizado em: {new Date(prospect.aiScoreUpdatedAt).toLocaleString()}</p>
+                     <p className="text-[9px] text-muted-foreground mt-2 italic">Atualizado em: {new Date(prospect.aiScoreUpdatedAt).toLocaleString()}</p>
                    )}
                 </div>
               </div>
@@ -446,15 +515,27 @@ export default function ProspectDetailPage() {
               <TabsTrigger value="history" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
                 Histórico
               </TabsTrigger>
+              <TabsTrigger value="ai-tools" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
+                Ferramentas IA
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="contacts" className="mt-6 space-y-4">
+              <div className="flex justify-end">
+                <Button variant="outline" size="sm" className="text-primary border-primary" onClick={handleRunEmailSuggestions} disabled={isSuggestingEmails}>
+                   {isSuggestingEmails ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <MailPlus className="w-3 h-3 mr-2" />}
+                   Sugerir E-mails Corporativos
+                </Button>
+              </div>
               {prospect.contacts?.map((contact, i) => (
                 <Card key={i}>
                   <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center font-bold text-primary">{contact.name.charAt(0)}</div>
                       <div>
-                        <div className="font-semibold">{contact.name}</div>
+                        <div className="font-semibold flex items-center gap-2">
+                          {contact.name}
+                          {contact.verified === false && <Badge variant="outline" className="text-[8px] bg-orange-50 text-orange-600 border-orange-200">Não verificado</Badge>}
+                        </div>
                         <div className="text-xs text-muted-foreground">{contact.role}</div>
                       </div>
                     </div>
@@ -484,6 +565,30 @@ export default function ProspectDetailPage() {
                  </div>
               </div>
             </TabsContent>
+            <TabsContent value="ai-tools" className="mt-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card className="hover:border-primary transition-colors cursor-pointer" onClick={handleRunEmailSuggestions}>
+                  <CardHeader className="p-4">
+                    <CardTitle className="text-sm flex items-center gap-2 text-primary">
+                      <MailPlus className="w-4 h-4" /> Sugerir E-mails
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Detecta padrões corporativos para sugerir emails como nome.sobrenome@dominio.
+                    </CardDescription>
+                  </CardHeader>
+                </Card>
+                <Card className="hover:border-accent transition-colors cursor-pointer" onClick={handleRunAiScore}>
+                  <CardHeader className="p-4">
+                    <CardTitle className="text-sm flex items-center gap-2 text-accent">
+                      <BrainCircuit className="w-4 h-4" /> Refinar Score
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Reavalia o potencial industrial com base nos dados atuais.
+                    </CardDescription>
+                  </CardHeader>
+                </Card>
+              </div>
+            </TabsContent>
           </Tabs>
         </div>
 
@@ -510,6 +615,53 @@ export default function ProspectDetailPage() {
           </Card>
         </div>
       </div>
+
+      {/* Email Suggestions Dialog */}
+      <Dialog open={isEmailSuggestionDialogOpen} onOpenChange={setIsEmailSuggestionDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Sugestões de E-mail IA</DialogTitle>
+            <DialogDescription>Padrões detectados para o domínio <strong>{prospect.domain || prospect.websiteUrl}</strong>.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {emailSuggestions?.length === 0 ? (
+              <p className="text-sm text-center text-muted-foreground py-10">Não foi possível detectar padrões para este domínio.</p>
+            ) : (
+              emailSuggestions?.map((s, idx) => (
+                <div key={idx} className="flex items-center justify-between p-3 border rounded-lg hover:bg-secondary/20 transition-colors">
+                  <div className="space-y-1">
+                    <div className="text-sm font-mono font-bold text-primary">{s.email}</div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className={`text-[8px] uppercase ${
+                        s.confidence === 'high' ? 'bg-green-50 text-green-600 border-green-200' :
+                        s.confidence === 'medium' ? 'bg-blue-50 text-blue-600 border-blue-200' :
+                        'bg-orange-50 text-orange-600 border-orange-200'
+                      }`}>
+                        {s.confidence} confidence
+                      </Badge>
+                      <span className="text-[10px] text-muted-foreground">{s.reason}</span>
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={() => handleAddSuggestedContact(s.email)} disabled={isUpdating}>
+                    <UserPlus className="w-4 h-4 text-primary" />
+                  </Button>
+                </div>
+              ))
+            )}
+            <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex items-start gap-2">
+              <Info className="w-4 h-4 text-blue-600 mt-0.5" />
+              <p className="text-xs text-blue-700">
+                Estes e-mails são baseados em padrões e não são garantidos. Verifique-os antes de iniciar uma cadência de massa.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEmailSuggestionDialogOpen(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Website Analysis Dialog */}
       <Dialog open={isWebAnalysisDialogOpen} onOpenChange={setIsWebAnalysisDialogOpen}>
