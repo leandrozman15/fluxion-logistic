@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
@@ -53,10 +52,10 @@ export default function TemplateEditorPage() {
   }, [db, tenantId]);
 
   const { data: prospects } = useCollection<Prospect>(prospectsQuery);
-  const selectedProspect = prospects.find(p => p.id === selectedProspectId) || prospects[0];
+  const selectedProspect = prospects.find(p => p.id === selectedProspectId) || (prospects && prospects.length > 0 ? prospects[0] : null);
 
   useEffect(() => {
-    if (prospects.length > 0 && !selectedProspectId) {
+    if (prospects && prospects.length > 0 && !selectedProspectId) {
       setSelectedProspectId(prospects[0].id);
     }
   }, [prospects, selectedProspectId]);
@@ -135,7 +134,7 @@ export default function TemplateEditorPage() {
                 <CardDescription>Suporte a HTML e imagens hospedadas.</CardDescription>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => insertHtml('<b>', '</b>')} title="Negrito">
+                <Button variant="outline" size="sm" onClick={() => insertHtml('<b></b>')} title="Negrito">
                   <Bold className="w-4 h-4" />
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => insertHtml('<br>')} title="Quebra de Linha">
@@ -200,7 +199,7 @@ export default function TemplateEditorPage() {
                     <SelectValue placeholder="Escolha um prospect" />
                   </SelectTrigger>
                   <SelectContent>
-                    {prospects.map(p => (
+                    {prospects && prospects.map(p => (
                       <SelectItem key={p.id} value={p.id}>{p.companyName}</SelectItem>
                     ))}
                   </SelectContent>
@@ -227,7 +226,7 @@ export default function TemplateEditorPage() {
               <div className="bg-amber-50 p-3 rounded-lg border border-amber-100 flex items-start gap-2">
                 <Info className="w-4 h-4 text-amber-600 mt-0.5" />
                 <p className="text-[11px] text-amber-700">
-                  <strong>Dica:</strong> Evite imagens muito pesadas (>200kb) para não cair em filtros de SPAM. Use URLs absolutas (https://...).
+                  <strong>Dica:</strong> Evite imagens muito pesadas (&gt;200kb) para não cair em filtros de SPAM. Use URLs absolutas (https://...).
                 </p>
               </div>
             </CardContent>
