@@ -1,18 +1,39 @@
+'use client';
+
+import { useState, useMemo } from "react";
+import { useFirestore, useCollection } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
+import { collection, query, orderBy, where } from "firebase/firestore";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Filter, Plus, FileDown, MoreHorizontal } from "lucide-react";
+import { Search, Filter, Plus, FileDown, MoreHorizontal, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { Prospect } from "@/app/lib/types";
 
 export default function ProspectsPage() {
-  const prospects = [
-    { id: "1", name: "Indústrias Matarazzo", cnpj: "12.345.678/0001-90", state: "SP", score: 85, status: "interested", lastContact: "20/05/2024" },
-    { id: "2", name: "Logística Expressa", cnpj: "23.456.789/0001-01", state: "PR", score: 62, status: "contacted", lastContact: "19/05/2024" },
-    { id: "3", name: "Alimentos Doce Vida", cnpj: "34.567.890/0001-12", state: "RS", score: 91, status: "demo", lastContact: "21/05/2024" },
-    { id: "4", name: "Tech Soluções", cnpj: "45.678.901/0001-23", state: "MG", score: 44, status: "new", lastContact: "-" },
-    { id: "5", name: "Metalúrgica Gerdau", cnpj: "56.789.012/0001-34", state: "SC", score: 78, status: "contacted", lastContact: "18/05/2024" },
-  ];
+  const { db } = useFirestore();
+  const { tenantId } = useTenant();
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const prospectsQuery = useMemo(() => {
+    if (!db || !tenantId) return null;
+    return query(
+      collection(db, "tenants", tenantId, "prospects"),
+      orderBy("effectiveScore", "desc")
+    );
+  }, [db, tenantId]);
+
+  const { data: prospects, loading } = useCollection<Prospect>(prospectsQuery);
+
+  const filteredProspects = useMemo(() => {
+    if (!prospects) return [];
+    return prospects.filter(p => 
+      p.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.cnpj.includes(searchTerm)
+    );
+  }, [prospects, searchTerm]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -49,8 +70,10 @@ export default function ProspectsPage() {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Buscar por nome ou CNPJ..."
+              placeholder="Buscar por nome o CNPJ..."
               className="pl-8"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
           <div className="flex items-center gap-2">
@@ -59,48 +82,68 @@ export default function ProspectsPage() {
             </Button>
           </div>
         </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Empresa</TableHead>
-              <TableHead>Estado</TableHead>
-              <TableHead>Score</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Último Contato</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {prospects.map((prospect) => (
-              <TableRow key={prospect.id}>
-                <TableCell>
-                  <div className="flex flex-col">
-                    <Link href={`/prospects/${prospect.id}`} className="font-semibold hover:underline text-primary">
-                      {prospect.name}
-                    </Link>
-                    <span className="text-xs text-muted-foreground">{prospect.cnpj}</span>
-                  </div>
-                </TableCell>
-                <TableCell>{prospect.state}</TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <div className="w-12 h-1.5 bg-secondary rounded-full overflow-hidden">
-                      <div className={`h-full ${prospect.score > 80 ? 'bg-accent' : 'bg-primary'}`} style={{ width: `${prospect.score}%` }}></div>
-                    </div>
-                    <span className="text-xs font-medium">{prospect.score}</span>
-                  </div>
-                </TableCell>
-                <TableCell>{getStatusBadge(prospect.status)}</TableCell>
-                <TableCell className="text-sm">{prospect.lastContact}</TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="icon">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </TableCell>
+        
+        {loading ? (
+          <div className="p-20 flex justify-center">
+            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Empresa</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead>Score</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Último Contato</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {filteredProspects.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
+                    Nenhum prospecto encontrado. Importe um CSV para começar.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredProspects.map((prospect) => (
+                  <TableRow key={prospect.id}>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <Link href={`/prospects/${prospect.id}`} className="font-semibold hover:underline text-primary">
+                          {prospect.companyName}
+                        </Link>
+                        <span className="text-xs text-muted-foreground">{prospect.cnpj}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>{prospect.address?.state || "-"}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className="w-12 h-1.5 bg-secondary rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full ${prospect.effectiveScore > 80 ? 'bg-accent' : 'bg-primary'}`} 
+                            style={{ width: `${prospect.effectiveScore}%` }}
+                          ></div>
+                        </div>
+                        <span className="text-xs font-medium">{prospect.effectiveScore}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>{getStatusBadge(prospect.status)}</TableCell>
+                    <TableCell className="text-sm">
+                      {prospect.lastContactAt ? new Date(prospect.lastContactAt).toLocaleDateString() : "-"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="icon">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        )}
       </div>
     </div>
   );

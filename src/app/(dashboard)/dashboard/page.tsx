@@ -1,31 +1,53 @@
+'use client';
 
-"use client";
-
+import { useMemo } from "react";
+import { useFirestore, useCollection, useDoc } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
+import { collection, query, where, orderBy, limit, doc } from "firebase/firestore";
 import { KPICard } from "@/components/dashboard/kpi-card";
-import { Users, Mail, Target, TrendingUp, Sparkles, CheckCircle2, Clock, ChevronRight } from "lucide-react";
+import { Users, Mail, Target, TrendingUp, Sparkles, CheckCircle2, Clock, ChevronRight, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { Prospect } from "@/app/lib/types";
 
 export default function DashboardPage() {
-  const dailyQuotaUsed = 12;
-  const dailyQuotaLimit = 30;
+  const { db } = useFirestore();
+  const { tenantId } = useTenant();
+  const today = new Date().toISOString().split('T')[0];
+
+  // Stats y Quota
+  const statsRef = useMemo(() => {
+    if (!db || !tenantId) return null;
+    return doc(db, "tenants", tenantId, "dailyStats", today);
+  }, [db, tenantId, today]);
+
+  const { data: stats, loading: statsLoading } = useDoc<any>(statsRef);
+
+  // Top Prospects (Candidatos)
+  const topProspectsQuery = useMemo(() => {
+    if (!db || !tenantId) return null;
+    return query(
+      collection(db, "tenants", tenantId, "prospects"),
+      where("status", "==", "new"),
+      orderBy("effectiveScore", "desc"),
+      limit(30)
+    );
+  }, [db, tenantId]);
+
+  const { data: topProspects, loading: prospectsLoading } = useCollection<Prospect>(topProspectsQuery);
+
+  const dailyQuotaUsed = stats?.quotaUsed || 0;
+  const dailyQuotaLimit = stats?.quotaLimit || 30;
   const quotaProgress = (dailyQuotaUsed / dailyQuotaLimit) * 100;
 
   const kpis = [
     { title: "Quota do Dia", value: `${dailyQuotaUsed}/${dailyQuotaLimit}`, icon: Target, description: "Prospects ativados hoje" },
-    { title: "Novos Prospects", value: 124, icon: Users, description: "Total no banco" },
-    { title: "Contactados", value: 45, icon: Mail, description: "Esta semana" },
-    { title: "Interessados", value: 8, icon: TrendingUp, description: "Taxa: 18%" },
-  ];
-
-  const dailyTop30 = [
-    { id: "1", company: "Metalúrgica Silva", score: 95, reason: "Decisor com LinkedIn e Email validado" },
-    { id: "2", company: "Indústria ABC", score: 88, reason: "Site industrial com alta relevância" },
-    { id: "3", company: "Logística Express", score: 82, reason: "Localizada em polo industrial" },
-    { id: "4", company: "AgroFértil", score: 79, reason: "CNPJ ativo e faturamento compatível" },
+    { title: "Novos Prospects", value: topProspects?.length || 0, icon: Users, description: "Disponíveis para hoje" },
+    { title: "Contactados", value: stats?.emailsSent || 0, icon: Mail, description: "Ações realizadas" },
+    { title: "Taxa de Sucesso", value: "18%", icon: TrendingUp, description: "Média do setor" },
   ];
 
   return (
@@ -33,7 +55,7 @@ export default function DashboardPage() {
       <div className="flex flex-col md:flex-row gap-4 items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-primary">Radar do Dia</h1>
-          <p className="text-muted-foreground">Foco nas melhores oportunidades para hoy.</p>
+          <p className="text-muted-foreground">Foco nas mejores oportunidades para hoje.</p>
         </div>
         <Card className="w-full md:w-72 bg-accent/5 border-accent/20">
           <CardContent className="pt-4 pb-4">
@@ -57,34 +79,46 @@ export default function DashboardPage() {
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-accent" /> Top Sugestões de Hoje
+                <Sparkles className="w-5 h-5 text-accent" /> Sugestões de Hoje
               </CardTitle>
-              <CardDescription>As 30 empresas com maior potencial para abordagem imediata.</CardDescription>
+              <CardDescription>Empresas com maior potencial detectado pela IA.</CardDescription>
             </div>
             <Button variant="outline" size="sm" asChild>
               <Link href="/prospects">Ver todos</Link>
             </Button>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {dailyTop30.map((item, i) => (
-                <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-secondary/20 border hover:border-accent/50 transition-colors group cursor-pointer">
-                  <div className="flex items-center gap-4">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-xs">
-                      #{i + 1}
-                    </div>
-                    <div>
-                      <div className="font-bold text-sm">{item.company}</div>
-                      <div className="text-xs text-muted-foreground">{item.reason}</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Badge className="bg-accent font-mono">Score: {item.score}</Badge>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-accent" />
-                  </div>
-                </div>
-              ))}
-            </div>
+            {prospectsLoading ? (
+              <div className="py-10 flex justify-center"><Loader2 className="w-6 h-6 animate-spin" /></div>
+            ) : (
+              <div className="space-y-3">
+                {topProspects?.length === 0 ? (
+                  <p className="text-center py-10 text-muted-foreground text-sm">Sem sugestões novas. Importe mais prospects!</p>
+                ) : (
+                  topProspects?.map((item, i) => (
+                    <Link key={item.id} href={`/prospects/${item.id}`}>
+                      <div className="flex items-center justify-between p-4 mb-3 rounded-xl bg-secondary/20 border hover:border-accent/50 transition-colors group cursor-pointer">
+                        <div className="flex items-center gap-4">
+                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-xs">
+                            #{i + 1}
+                          </div>
+                          <div>
+                            <div className="font-bold text-sm">{item.companyName}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {item.industryTags?.[0] || "Indústria Geral"} • {item.address?.city || "Brasil"}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Badge className="bg-accent font-mono">Score: {item.effectiveScore}</Badge>
+                          <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-accent" />
+                        </div>
+                      </div>
+                    </Link>
+                  ))
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -97,26 +131,24 @@ export default function DashboardPage() {
             <div className="p-4 rounded-lg bg-blue-50 border border-blue-100 space-y-2">
               <h4 className="text-xs font-bold text-blue-800 uppercase">Dica do Radar</h4>
               <p className="text-xs text-blue-700 leading-relaxed">
-                Empresas com score acima de 90 têm 4x mais chances de agendamento de demo. Priorize os contatos via WhatsApp agora de manhã.
+                Priorize empresas com score acima de 80. Elas têm 3x mais probabilidade de agendamento de demo.
               </p>
             </div>
 
             <div className="space-y-4">
                <div className="flex items-center gap-3 text-sm">
                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                 <span>6 Emails agendados para as 14h</span>
-               </div>
-               <div className="flex items-center gap-3 text-sm">
-                 <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-                 <span>3 Follow-ups pendentes</span>
+                 <span>{dailyQuotaUsed} Prospects ativados hoje</span>
                </div>
                <div className="flex items-center gap-3 text-sm">
                  <div className="w-2 h-2 rounded-full bg-muted"></div>
-                 <span className="text-muted-foreground">Meta: +18 ativações hoje</span>
+                 <span className="text-muted-foreground">Meta: {dailyQuotaLimit} ativações</span>
                </div>
             </div>
 
-            <Button className="w-full bg-primary">Limpar Quota do Dia</Button>
+            <Button className="w-full bg-primary" asChild>
+              <Link href="/prospects">Ir para Prospects</Link>
+            </Button>
           </CardContent>
         </Card>
       </div>
