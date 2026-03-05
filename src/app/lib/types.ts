@@ -59,6 +59,13 @@ export interface Prospect {
     reason: string;
   }[];
   
+  // Layer 15: Close Probability
+  closeProbability?: number;
+  closeProbabilityConfidence?: AiConfidence;
+  closeProbabilityUpdatedAt?: string;
+  closeProbabilityDrivers?: Array<{ factor: string; impact: "positive" | "negative"; evidence: string }>;
+  closeProbabilityModelVersion?: string;
+
   effectiveScore: number; // Final weighted score used for ranking
   scoreReasons: string[]; // Combined reasons
   
@@ -169,6 +176,7 @@ export interface DailyTop {
     prospectId: string;
     companyName: string;
     effectiveScore: number;
+    closeProbability?: number;
     hasEmail: boolean;
     hasPhone: boolean;
     hasWebsite: boolean;

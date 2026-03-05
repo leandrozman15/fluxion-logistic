@@ -22,7 +22,8 @@ import {
   Rocket,
   Activity,
   MessageCircle,
-  Globe
+  Globe,
+  TrendingUp
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -152,6 +153,7 @@ export default function DashboardPage() {
           prospectId: p.id,
           companyName: p.companyName,
           effectiveScore: p.effectiveScore,
+          closeProbability: p.closeProbability,
           hasEmail: p.contacts?.some(c => !!c.email) || false,
           hasPhone: p.contacts?.some(c => !!c.phone || !!c.whatsapp) || false,
           hasWebsite: !!p.websiteUrl,
@@ -377,6 +379,11 @@ export default function DashboardPage() {
                               <div className="font-bold text-sm truncate">{item.companyName}</div>
                               <div className="flex items-center gap-2 mt-0.5">
                                  <Badge variant="outline" className="text-[9px] px-1 h-4">Score: {item.effectiveScore}</Badge>
+                                 {item.closeProbability !== undefined && (
+                                   <Badge className="text-[9px] h-4 bg-accent/10 text-accent border-accent/20 flex items-center gap-1">
+                                     <TrendingUp className="w-2.5 h-2.5" /> Close: {item.closeProbability}%
+                                   </Badge>
+                                 )}
                                  {isWARecommended && <Badge variant="outline" className="text-[8px] h-4 bg-green-50 text-green-700 border-green-200 flex items-center gap-1"><Zap className="w-2 h-2" /> WA Recomendado</Badge>}
                                  {isEmailRecommended && <Badge variant="outline" className="text-[8px] h-4 bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-1"><Zap className="w-2 h-2" /> E-mail Recomendado</Badge>}
                               </div>

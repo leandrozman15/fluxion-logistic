@@ -19,7 +19,8 @@ import {
   Send, Wand2, BrainCircuit, AlertCircle, SearchCode, 
   MailPlus, UserPlus, Info, Ban, ShieldAlert, MessageCircle, 
   ArrowLeft, Lightbulb, Clock, User, AlertTriangle, ShieldCheck, Zap,
-  Cpu, FileSearch, CheckCircle
+  Cpu, FileSearch, CheckCircle, TrendingUp, TrendingDown,
+  Target
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Prospect, ProspectStatus, EmailTemplate, OutboxState, SegmentStats } from "@/app/lib/types";
@@ -28,9 +29,11 @@ import { renderTemplate } from "@/lib/utils/template-renderer";
 import { generateEmailDraft } from "@/ai/flows/generate-email-draft-flow";
 import { generateWhatsAppMessage } from "@/ai/flows/generate-whatsapp-message-flow";
 import { analyzeWebsiteContent } from "@/ai/flows/analyze-website-content-flow";
+import { predictCloseProbability } from "@/ai/flows/predict-close-probability-flow";
 import { normalizePhoneBR, buildWaMeUrl, buildWhatsAppMessage } from "@/lib/utils/whatsapp";
 import { calculateNextAction } from "@/lib/utils/nba";
 import { calculateEffectiveScore } from "@/lib/utils/scoring";
+import { computeBaselineProbability } from "@/lib/utils/close-probability";
 import { checkEmailQuality, calculateSpamProbability, isEmailOnCooldown } from "@/lib/utils/deliverability";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -59,6 +62,7 @@ export default function ProspectDetailPage() {
   const [isAiDrafting, setIsAiDrafting] = useState(false);
   const [isAiWhatsAppDrafting, setIsAiWhatsAppDrafting] = useState(false);
   const [isAnalyzingWeb, setIsAnalyzingWeb] = useState(false);
+  const [isPredictingClose, setIsPredictingClose] = useState(false);
   
   const [customSubject, setCustomSubject] = useState<string | null>(null);
   const [customBody, setCustomBody] = useState<string | null>(null);
@@ -221,6 +225,45 @@ export default function ProspectDetailPage() {
       toast({ variant: "destructive", title: "Erro na análise", description: e.message });
     } finally {
       setIsAnalyzingWeb(false);
+    }
+  };
+
+  const handlePredictProbability = async () => {
+    if (!prospect || !prospectRef) return;
+    setIsPredictingClose(true);
+    try {
+      const { baseline, signals } = computeBaselineProbability(prospect, segmentData);
+      
+      const result = await predictCloseProbability({
+        baselineProbability: baseline,
+        deterministicSignals: signals,
+        prospect: {
+          companyName: prospect.companyName,
+          industryTags: prospect.industryTags,
+          status: prospect.status,
+          aiWebSummary: prospect.aiWebSummary,
+          aiDetectedKeywords: prospect.aiDetectedKeywords,
+          emailAttempts: prospect.emailAttempts,
+          lastContactAt: prospect.lastContactAt
+        },
+        segmentPreferredChannel: segmentData?.preferredChannel
+      });
+
+      const updates: Partial<Prospect> = {
+        closeProbability: result.closeProbability,
+        closeProbabilityConfidence: result.confidence,
+        closeProbabilityDrivers: result.drivers,
+        closeProbabilityUpdatedAt: new Date().toISOString(),
+        closeProbabilityModelVersion: "v1.0-genkit",
+        updatedAt: new Date().toISOString()
+      };
+
+      await updateDoc(prospectRef, updates as any);
+      toast({ title: "Previsão Atualizada", description: `Probabilidade de fechamento em ${result.closeProbability}%.` });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Erro na previsão", description: e.message });
+    } finally {
+      setIsPredictingClose(false);
     }
   };
 
@@ -572,7 +615,80 @@ export default function ProspectDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Website Intelligence Section (Layer 14) */}
+          {/* Close Probability Card (Layer 15) */}
+          <Card className="border-accent/20 bg-accent/5">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Target className="w-5 h-5 text-accent" /> Probabilidade de Fechamento
+                </CardTitle>
+                <CardDescription className="text-xs">Predição baseada em fit industrial, intenção e comportamento.</CardDescription>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="h-8 border-accent/30 text-accent hover:bg-accent/10"
+                onClick={handlePredictProbability}
+                disabled={isPredictingClose || prospect.doNotContact}
+              >
+                {isPredictingClose ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <TrendingUp className="w-3 h-3 mr-2" />}
+                Atualizar Previsão
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {prospect.closeProbability !== undefined ? (
+                <div className="space-y-6">
+                  <div className="flex items-end gap-4">
+                    <div className="text-4xl font-bold text-primary">{prospect.closeProbability}%</div>
+                    <div className="pb-1 space-y-1">
+                      <div className="text-[10px] font-bold text-muted-foreground uppercase">Confiança</div>
+                      <Badge variant="secondary" className="text-[10px] h-5 capitalize">
+                        {prospect.closeProbabilityConfidence || "Medium"}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-3">
+                      <h4 className="text-[10px] font-bold uppercase text-muted-foreground">Drivers do Modelo</h4>
+                      <div className="space-y-2">
+                        {prospect.closeProbabilityDrivers?.map((driver, i) => (
+                          <div key={i} className="flex items-start gap-2 p-2 bg-white rounded border border-accent/10 text-xs">
+                            {driver.impact === 'positive' ? (
+                              <TrendingUp className="w-3.5 h-3.5 text-green-600 mt-0.5 shrink-0" />
+                            ) : (
+                              <TrendingDown className="w-3.5 h-3.5 text-orange-600 mt-0.5 shrink-0" />
+                            )}
+                            <div>
+                              <div className="font-bold">{driver.factor}</div>
+                              <div className="text-[10px] text-muted-foreground">{driver.evidence}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="p-4 bg-primary/5 rounded-lg border border-primary/10 flex flex-col justify-center text-center">
+                       <p className="text-[10px] text-muted-foreground italic mb-2">Última recalibragem em {prospect.closeProbabilityUpdatedAt ? format(new Date(prospect.closeProbabilityUpdatedAt), "dd/MM HH:mm") : "-"}</p>
+                       <p className="text-xs font-medium text-primary">
+                         {prospect.closeProbability > 70 
+                           ? "Alta probabilidade! Priorize follow-up nominal hoje." 
+                           : prospect.closeProbability > 40 
+                           ? "Oportunidade média. Foque em coletar mais dados nominais." 
+                           : "Baixa probabilidade. Mantenha em nutrição automática."}
+                       </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 border border-dashed rounded-lg bg-white/50">
+                  <BrainCircuit className="w-8 h-8 mx-auto text-accent/30 mb-2" />
+                  <p className="text-xs text-muted-foreground">Nenhuma predição de fechamento calculada.</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">Clique em "Atualizar Previsão" para analisar a estratégia.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card className="border-purple-100 bg-purple-50/20">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <div>
