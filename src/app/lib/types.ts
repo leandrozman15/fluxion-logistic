@@ -31,13 +31,25 @@ export interface Prospect {
   domain?: string;
   contacts: Contact[];
   status: ProspectStatus;
-  aiScore: number; // Score puro de Genkit
-  effectiveScore: number; // Score ajustado por datos accionables
+  aiScore: number; 
+  effectiveScore: number; 
   scoreReasons: string[];
   isClaimedToday?: boolean;
   lastContactAt?: string;
   nextFollowUpAt?: string;
   notes?: string;
+}
+
+export interface EmailTemplate {
+  id: string;
+  tenantId: string;
+  name: string;
+  subject: string;
+  body: string;
+  variablesUsed: string[];
+  createdAt: any;
+  updatedAt: any;
+  createdBy: string;
 }
 
 export interface DailyTop {
