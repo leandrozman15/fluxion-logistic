@@ -2,7 +2,7 @@
 'use client';
 
 import { useMemo, useState } from "react";
-import { useFirestore, useCollection, useDoc } from "@/firebase";
+import { useFirestore, useCollection, useDoc, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { collection, query, where, orderBy, limit, doc, setDoc, getDocs, serverTimestamp, getDoc, runTransaction, updateDoc, addDoc } from "firebase/firestore";
 import { KPICard } from "@/components/dashboard/kpi-card";
@@ -14,17 +14,15 @@ import {
   ChevronRight, 
   Loader2,
   PieChart,
-  BarChart3,
   Factory,
-  MapPin,
   RefreshCw,
   Zap,
   Send,
   SearchCode,
   CheckCircle2,
   ExternalLink,
-  Ban,
-  MessageCircle
+  MessageCircle,
+  Lightbulb
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -49,7 +47,7 @@ import { TooltipProvider, Tooltip as UITooltip, TooltipTrigger, TooltipContent }
 import { useRouter } from "next/navigation";
 import { analyzeWebsiteContent } from "@/ai/flows/analyze-website-content-flow";
 import { normalizePhoneBR, buildWaMeUrl } from "@/lib/utils/whatsapp";
-import { useUser } from "@/firebase";
+import { calculateNextAction } from "@/lib/utils/nba";
 
 export default function DashboardPage() {
   const db = useFirestore();
@@ -222,64 +220,22 @@ export default function DashboardPage() {
     }
   };
 
-  const handleQuickAnalyze = async (prospect: { prospectId: string, companyName: string }) => {
-    if (!db || !tenantId) return;
-    setIsActionLoading(prospect.prospectId);
-    try {
-      const pRef = doc(db, "tenants", tenantId, "prospects", prospect.prospectId);
-      const pSnap = await getDoc(pRef);
-      const pData = pSnap.data() as Prospect;
-      
-      if (!pData.websiteUrl) {
-        toast({ title: "Atenção", description: "Sem website para analisar." });
-        return;
-      }
-
-      const result = await analyzeWebsiteContent({
-        websiteUrl: pData.websiteUrl,
-        companyName: pData.companyName
-      });
-
-      await updateDoc(pRef, {
-        aiWebSummary: result.summary,
-        aiWebAnalysisAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
-
-      toast({ title: "Análise concluída", description: "Resumo industrial gerado com sucesso." });
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Erro na análise", description: e.message });
-    } finally {
-      setIsActionLoading(null);
+  const handleActionClick = (prospectId: string, type: string) => {
+    switch (type) {
+      case 'suggest_emails':
+      case 'analyze_website':
+        router.push(`/prospects/${prospectId}`);
+        break;
+      case 'whatsapp_first':
+      case 'followup':
+        router.push(`/prospects/${prospectId}?action=whatsapp`);
+        break;
+      case 'prepare_email':
+        router.push(`/prospects/${prospectId}?action=prepare`);
+        break;
+      default:
+        router.push(`/prospects/${prospectId}`);
     }
-  };
-
-  const handleQuickWhatsApp = async (prospectId: string, companyName: string) => {
-    if (!db || !tenantId || !user) return;
-    
-    // Obter dados do prospecto para encontrar o telefone
-    const pSnap = await getDoc(doc(db, "tenants", tenantId, "prospects", prospectId));
-    const pData = pSnap.data() as Prospect;
-    
-    const phone = pData.contacts?.[0]?.phone || pData.contacts?.[0]?.whatsapp;
-    const normalized = normalizePhoneBR(phone || "");
-    
-    if (!normalized) {
-      toast({ variant: "destructive", title: "Telefone ausente", description: "Não há um telefone válido para este contato." });
-      return;
-    }
-
-    // Registrar evento de telemetria
-    await addDoc(collection(db, "tenants", tenantId, "events"), {
-      type: "whatsapp_opened",
-      prospectId,
-      companyName,
-      actorUid: user.uid,
-      createdAt: serverTimestamp(),
-      metadata: { phoneE164: normalized, hasPrefilledText: false }
-    });
-
-    window.open(buildWaMeUrl(normalized), "_blank");
   };
 
   const dailyQuotaUsed = stats?.quotaUsed || 0;
@@ -359,73 +315,27 @@ export default function DashboardPage() {
                             <div className="font-bold text-sm truncate">{item.companyName}</div>
                             <div className="flex items-center gap-2 mt-0.5">
                                <Badge variant="outline" className="text-[9px] px-1 h-4">Score: {item.effectiveScore}</Badge>
-                               {item.hasWebsite && <Badge variant="secondary" className="text-[8px] h-4"><ExternalLink className="w-2 h-2 mr-1" /> Web</Badge>}
                             </div>
                           </div>
                         </Link>
                         
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <TooltipProvider>
-                            <UITooltip>
-                              <TooltipTrigger asChild>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-8 w-8 text-accent" 
-                                  onClick={(e) => { e.preventDefault(); handleQuickAnalyze(item); }}
-                                  disabled={isActionLoading === item.prospectId || !item.hasWebsite}
-                                >
-                                  {isActionLoading === item.prospectId ? <Loader2 className="w-3 h-3 animate-spin" /> : <SearchCode className="w-4 h-4" />}
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Análise Rápida IA</TooltipContent>
-                            </UITooltip>
-
-                            <UITooltip>
-                              <TooltipTrigger asChild>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-8 w-8 text-green-500" 
-                                  onClick={(e) => { e.preventDefault(); handleQuickWhatsApp(item.prospectId, item.companyName); }}
-                                  disabled={isActionLoading === item.prospectId || !item.hasPhone}
-                                >
-                                  <MessageCircle className="w-4 h-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>WhatsApp Direto</TooltipContent>
-                            </UITooltip>
-                            
-                            <UITooltip>
-                              <TooltipTrigger asChild>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-8 w-8 text-blue-600" 
-                                  onClick={(e) => { e.preventDefault(); router.push(`/prospects/${item.prospectId}?action=prepare`); }}
-                                  disabled={isActionLoading === item.prospectId || !item.hasEmail}
-                                >
-                                  <Send className="w-4 h-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Preparar Email</TooltipContent>
-                            </UITooltip>
-
-                            <UITooltip>
-                              <TooltipTrigger asChild>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-8 w-8 text-green-600" 
-                                  onClick={(e) => { e.preventDefault(); handleQuickClaim(item.prospectId); }}
-                                  disabled={isActionLoading === item.prospectId}
-                                >
-                                  <CheckCircle2 className="w-4 h-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Ativar Agora</TooltipContent>
-                            </UITooltip>
-                          </TooltipProvider>
+                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button 
+                            variant="secondary" 
+                            size="sm" 
+                            className="h-8 text-[10px] font-bold"
+                            onClick={() => handleActionClick(item.prospectId, 'followup')}
+                          >
+                            <Lightbulb className="w-3 h-3 mr-1 text-accent" /> Próxima Ação
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 text-green-600" 
+                            onClick={() => handleQuickClaim(item.prospectId)}
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                          </Button>
                         </div>
                         <ChevronRight className="w-4 h-4 text-muted-foreground ml-2" />
                       </div>

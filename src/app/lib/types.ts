@@ -1,8 +1,11 @@
+
 export type ProspectStatus = 'new' | 'contacted' | 'interested' | 'demo' | 'client' | 'discarded';
 export type UserRole = 'admin' | 'sales' | 'viewer';
 export type OutboxState = 'draft' | 'queued' | 'sent' | 'failed' | 'canceled';
 export type AiConfidence = 'low' | 'medium' | 'high';
 export type CampaignStatus = 'draft' | 'running' | 'paused' | 'finished';
+export type TaskState = 'open' | 'done' | 'snoozed';
+export type TaskType = 'followup_whatsapp' | 'followup_email' | 'call' | 'check_website';
 
 export interface AppUser {
   uid: string;
@@ -68,6 +71,20 @@ export interface Prospect {
   doNotContact?: boolean;
   doNotContactReason?: string;
   doNotContactAt?: string;
+}
+
+export interface Task {
+  id: string;
+  tenantId: string;
+  prospectId: string;
+  companyName?: string; // Denormalized for UI
+  type: TaskType;
+  dueAt: any;
+  state: TaskState;
+  assignedTo: string;
+  createdAt: any;
+  createdBy: string;
+  notes?: string;
 }
 
 export interface EmailTemplate {

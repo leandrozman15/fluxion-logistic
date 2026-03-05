@@ -44,9 +44,14 @@ service cloud.firestore {
         allow create: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales');
         allow update: if belongsToTenant(tenantId) && (
           hasRole(tenantId, 'sales') || 
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['notes', 'status', 'updatedAt', 'doNotContact', 'doNotContactReason', 'doNotContactAt'])
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['notes', 'status', 'updatedAt', 'doNotContact', 'doNotContactReason', 'doNotContactAt', 'lastContactAt', 'nextFollowUpAt'])
         );
         allow delete: if hasRole(tenantId, 'admin');
+      }
+
+      match /tasks/{taskId} {
+        allow read: if belongsToTenant(tenantId);
+        allow write: if belongsToTenant(tenantId) && hasRole(tenantId, 'sales');
       }
 
       match /templates/{templateId} {
@@ -94,7 +99,7 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isSignedIn() && request.auth.uid == userId;
-      allow write: if isSignedIn() && request.auth.uid == userId; // Allow self-provisioning during login
+      allow write: if isSignedIn() && request.auth.uid == userId;
     }
   }
 }

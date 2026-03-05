@@ -13,19 +13,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Building2, Globe, MapPin, Mail, Phone, ExternalLink, MessageSquare, History, Sparkles, Loader2, CheckCircle2, Send, Wand2, BrainCircuit, AlertCircle, SearchCode, MailPlus, UserPlus, Info, Ban, ShieldAlert, MessageCircle, ArrowLeft } from "lucide-react";
+import { Building2, Globe, MapPin, Mail, Phone, ExternalLink, MessageSquare, History, Sparkles, Loader2, CheckCircle2, Send, Wand2, BrainCircuit, AlertCircle, SearchCode, MailPlus, UserPlus, Info, Ban, ShieldAlert, MessageCircle, ArrowLeft, Lightbulb, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Prospect, ProspectStatus, EmailTemplate, OutboxMessage, OutboxState, AiConfidence, Contact } from "@/app/lib/types";
+import { Prospect, ProspectStatus, EmailTemplate, OutboxMessage, OutboxState, AiConfidence, Contact, Task } from "@/app/lib/types";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { renderTemplate } from "@/lib/utils/template-renderer";
 import { generateEmailDraft } from "@/ai/flows/generate-email-draft-flow";
-import { calculateProspectAiScore } from "@/ai/flows/calculate-prospect-ai-score-flow";
-import { analyzeWebsiteContent, AnalyzeWebsiteOutput } from "@/ai/flows/analyze-website-content-flow";
 import { generateWhatsAppMessage } from "@/ai/flows/generate-whatsapp-message-flow";
-import { calculateEffectiveScore } from "@/lib/utils/scoring";
 import { normalizePhoneBR, buildWaMeUrl, buildWhatsAppMessage } from "@/lib/utils/whatsapp";
+import { calculateNextAction } from "@/lib/utils/nba";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Link from "next/link";
+import { addDays } from "date-fns";
 
 export default function ProspectDetailPage() {
   const { id } = useParams();
@@ -40,12 +39,12 @@ export default function ProspectDetailPage() {
   const [isOutboxDialogOpen, setIsOutboxDialogOpen] = useState(false);
   const [isDncDialogOpen, setIsDncDialogOpen] = useState(false);
   const [isWhatsAppDialogOpen, setIsWhatsAppDialogOpen] = useState(false);
+  const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
   
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [selectedContactIndex, setSelectedContactIndex] = useState<string>("0");
   const [isSavingOutbox, setIsSavingOutbox] = useState(false);
   const [isAiDrafting, setIsAiDrafting] = useState(false);
-  const [isScoring, setIsScoring] = useState(false);
   const [isAiWhatsAppDrafting, setIsAiWhatsAppDrafting] = useState(false);
   
   const [customSubject, setCustomSubject] = useState<string | null>(null);
@@ -73,11 +72,37 @@ export default function ProspectDetailPage() {
   const previewSubject = customSubject || (selectedTemplate && prospect ? renderTemplate(selectedTemplate.subject, prospect) : "");
   const previewBody = customBody || (selectedTemplate && prospect ? renderTemplate(selectedTemplate.body, prospect) : "");
 
+  const nba = useMemo(() => prospect ? calculateNextAction(prospect) : null, [prospect]);
+
   useEffect(() => {
     if (searchParams?.get('action') === 'prepare' && !loading && prospect) {
       setIsOutboxDialogOpen(true);
     }
+    if (searchParams?.get('action') === 'whatsapp' && !loading && prospect) {
+      handleOpenWhatsAppDialog();
+    }
   }, [searchParams, loading, prospect]);
+
+  const createFollowUpTask = async (type: 'followup_whatsapp' | 'followup_email') => {
+    if (!db || !tenantId || !prospect || !user) return;
+    try {
+      const dueAt = addDays(new Date(), 2);
+      await addDoc(collection(db, "tenants", tenantId, "tasks"), {
+        tenantId,
+        prospectId: prospect.id,
+        companyName: prospect.companyName,
+        type,
+        dueAt,
+        state: "open",
+        assignedTo: user.uid,
+        createdAt: serverTimestamp(),
+        createdBy: user.uid
+      });
+      toast({ title: "Follow-up agendado", description: "Tarefa criada para daqui a 2 dias." });
+    } catch (e) {
+      console.error("Error creating task:", e);
+    }
+  };
 
   const handleStatusChange = async (newStatus: ProspectStatus) => {
     if (!prospectRef || !db || !tenantId) return;
@@ -162,7 +187,7 @@ export default function ProspectDetailPage() {
       });
       setCustomSubject(result.subject);
       setCustomBody(result.body);
-      toast({ title: "Email melhorado com IA!" });
+      toast({ title: "Email mejorado con IA!" });
     } catch (e) {
       toast({ variant: "destructive", title: "Erro na IA" });
     } finally {
@@ -192,6 +217,15 @@ export default function ProspectDetailPage() {
         lastError: null,
         aiUsed: !!customBody
       });
+
+      await updateDoc(prospectRef as any, { 
+        lastContactAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+
+      if (state === 'queued') {
+        createFollowUpTask('followup_email');
+      }
 
       toast({ title: state === 'queued' ? "Email na fila!" : "Rascunho salvo!" });
       setIsOutboxDialogOpen(false);
@@ -251,8 +285,34 @@ export default function ProspectDetailPage() {
       metadata: { phoneE164: normalized, hasPrefilledText: !!whatsAppDraft }
     });
 
+    await updateDoc(prospectRef as any, { 
+      lastContactAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    createFollowUpTask('followup_whatsapp');
+
     window.open(buildWaMeUrl(normalized, whatsAppDraft), "_blank");
     setIsWhatsAppDialogOpen(false);
+  };
+
+  const executeNBA = () => {
+    if (!nba) return;
+    switch (nba.type) {
+      case 'suggest_emails':
+      case 'analyze_website':
+        toast({ title: "Ação Sugerida", description: nba.reason });
+        break;
+      case 'prepare_email':
+        setIsOutboxDialogOpen(true);
+        break;
+      case 'whatsapp_first':
+      case 'followup':
+        handleOpenWhatsAppDialog();
+        break;
+      default:
+        break;
+    }
   };
 
   if (loading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-muted-foreground" /></div>;
@@ -277,9 +337,13 @@ export default function ProspectDetailPage() {
             <div className="flex items-center gap-2 mt-1">
               <Badge variant="outline">{prospect.cnpj}</Badge>
               <Badge variant="default" className="bg-accent">Score Radar: {prospect.effectiveScore}</Badge>
-              {prospect.isClaimedToday && (
-                <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">
-                  <CheckCircle2 className="w-3 h-3 mr-1" /> No Radar de Hoje
+              {nba && nba.type !== 'none' && (
+                <Badge 
+                  variant="secondary" 
+                  className="bg-accent/10 text-accent border-accent/20 cursor-pointer hover:bg-accent/20"
+                  onClick={executeNBA}
+                >
+                  <Lightbulb className="w-3 h-3 mr-1" /> {nba.label}
                 </Badge>
               )}
             </div>
@@ -326,6 +390,19 @@ export default function ProspectDetailPage() {
         </div>
       </div>
 
+      {nba && nba.type !== 'none' && (
+        <div className="bg-accent/5 border border-accent/20 rounded-xl p-4 flex items-start gap-3">
+          <Lightbulb className="w-5 h-5 text-accent mt-0.5" />
+          <div className="flex-1">
+            <h4 className="text-sm font-bold text-primary">Próxima Melhor Ação</h4>
+            <p className="text-xs text-muted-foreground">{nba.reason}</p>
+          </div>
+          <Button size="sm" variant="outline" className="text-accent border-accent" onClick={executeNBA}>
+            {nba.label}
+          </Button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <Card>
@@ -346,6 +423,12 @@ export default function ProspectDetailPage() {
                   <div className="flex items-center gap-2 text-sm">
                     <MapPin className="w-4 h-4 text-muted-foreground" />
                     <span>{prospect.address?.city || "-"}, {prospect.address?.state || "-"}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Clock className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-xs">
+                      Último contato: {prospect.lastContactAt ? format(new Date(prospect.lastContactAt), "dd/MM HH:mm") : "Nunca"}
+                    </span>
                   </div>
                   <div className="pt-2">
                     <h4 className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Segmentos</h4>

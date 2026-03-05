@@ -2,7 +2,7 @@
 'use client';
 
 import { SidebarProvider, SidebarInset, Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarGroup, SidebarGroupLabel, SidebarGroupContent } from "@/components/ui/sidebar";
-import { LayoutDashboard, Users, Mail, FileSpreadsheet, Settings, Target, FileText, Inbox, LogOut, Building2, BarChart3, Loader2 } from "lucide-react";
+import { LayoutDashboard, Users, Mail, FileSpreadsheet, Settings, Target, FileText, Inbox, LogOut, Building2, BarChart3, Loader2, CheckSquare } from "lucide-react";
 import Link from "next/link";
 import { useAuth, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
@@ -15,7 +15,6 @@ import { Tenant } from "@/app/lib/types";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
-  const db = useAuth() ? null : null; // Para evitar erro de useFirestore não inicializado se auth sumir
   const { tenantId, loading: tenantLoading } = useTenant();
   const router = useRouter();
   const { toast } = useToast();
@@ -23,6 +22,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const menuItems = [
     { title: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
     { title: "Prospects", icon: Users, href: "/prospects" },
+    { title: "Tarefas", icon: CheckSquare, href: "/tasks" },
     { title: "Insights", icon: BarChart3, href: "/analytics" },
     { title: "Outbox", icon: Inbox, href: "/outbox" },
     { title: "Campanhas", icon: Target, href: "/campaigns" },
