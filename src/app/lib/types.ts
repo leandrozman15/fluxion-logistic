@@ -2,6 +2,7 @@ export type ProspectStatus = 'new' | 'contacted' | 'interested' | 'demo' | 'clie
 export type UserRole = 'admin' | 'sales' | 'viewer';
 export type OutboxState = 'draft' | 'queued' | 'sent' | 'failed' | 'canceled';
 export type AiConfidence = 'low' | 'medium' | 'high';
+export type CampaignStatus = 'draft' | 'running' | 'paused' | 'finished';
 
 export interface AppUser {
   uid: string;
@@ -79,6 +80,19 @@ export interface EmailTemplate {
   createdAt: any;
   updatedAt: any;
   createdBy: string;
+}
+
+export interface Campaign {
+  id: string;
+  tenantId: string;
+  name: string;
+  status: CampaignStatus;
+  templateId: string;
+  sentCount: number;
+  failedCount: number;
+  createdAt: any;
+  scheduledAt?: string;
+  finishedAt?: string;
 }
 
 export interface OutboxMessage {
