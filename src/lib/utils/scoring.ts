@@ -3,16 +3,16 @@ import { Prospect } from "@/app/lib/types";
 
 /**
  * Calcula el score efectivo basado en el score de IA y la calidad de los datos.
- * Reglas:
+ * Reglas para el MVP (Capa 1):
  * +10 si tiene email corporativo
  * +5 si tiene dominio
  * +5 si CNPJ es válido
  * -30 si NO tiene email ni teléfono (no accionable)
  */
 export function calculateEffectiveScore(prospect: Partial<Prospect>): number {
-  let score = prospect.aiScore || 0;
+  let score = prospect.aiScore || 50; // Empezamos en un neutro de 50 si no hay IA
 
-  const hasEmail = prospect.contacts?.some(c => !!c.email);
+  const hasEmail = prospect.contacts?.some(c => !!c.email && c.email.includes('@'));
   const hasPhone = prospect.contacts?.some(c => !!c.phone || !!c.whatsapp);
   const hasDomain = !!prospect.domain || !!prospect.websiteUrl;
   const hasValidCnpj = !!prospect.cnpj && prospect.cnpj.length >= 14;
