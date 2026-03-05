@@ -17,7 +17,7 @@ export interface Prospect {
   tenantId: string;
   createdAt: string;
   updatedAt: string;
-  createdBy: string; // User UID
+  createdBy: string;
   source: 'manual' | 'csv' | 'web' | 'referral';
   companyName: string;
   cnpj: string;
@@ -31,20 +31,32 @@ export interface Prospect {
   domain?: string;
   contacts: Contact[];
   status: ProspectStatus;
-  score: number;
+  aiScore: number; // Score puro de Genkit
+  effectiveScore: number; // Score ajustado por datos accionables
   scoreReasons: string[];
+  isClaimedToday?: boolean;
   lastContactAt?: string;
   nextFollowUpAt?: string;
   notes?: string;
-  auditLog: AuditEntry[];
 }
 
-export interface AuditEntry {
-  timestamp: string;
-  userId: string;
-  action: string;
-  previousValue?: any;
-  newValue?: any;
+export interface DailyTop {
+  id: string; // YYYY-MM-DD
+  date: string;
+  limit: number;
+  items: {
+    prospectId: string;
+    companyName: string;
+    effectiveScore: number;
+    reasons: string[];
+  }[];
+}
+
+export interface DailyStats {
+  id: string; // YYYY-MM-DD
+  quotaLimit: number;
+  quotaUsed: number;
+  emailsSent: number;
 }
 
 export interface Contact {
@@ -58,57 +70,9 @@ export interface Contact {
 export interface Tenant {
   id: string;
   name: string;
-  createdAt: string;
   plan: 'free' | 'pro';
   settings: {
+    dailyProspectingLimit: number;
     dailyEmailLimit: number;
-    hourlyEmailLimit: number;
-    timezone: string;
   };
-  isActive: boolean;
-}
-
-export interface Campaign {
-  id: string;
-  tenantId: string;
-  createdAt: string;
-  createdBy: string;
-  name: string;
-  channel: 'email';
-  templateId: string;
-  filters: {
-    statusIn?: ProspectStatus[];
-    minScore?: number;
-    statesIn?: string[];
-    tagsIn?: string[];
-  };
-  state: 'draft' | 'scheduled' | 'running' | 'paused' | 'finished';
-  scheduledAt?: string;
-  sentCount: number;
-  failedCount: number;
-  rateLimitConfig?: {
-    emailsPerHour: number;
-  };
-}
-
-export interface Template {
-  id: string;
-  tenantId: string;
-  createdAt: string;
-  createdBy: string;
-  name: string;
-  subject: string;
-  body: string;
-}
-
-export interface ImportRecord {
-  id: string;
-  tenantId: string;
-  createdAt: string;
-  createdBy: string;
-  fileName: string;
-  status: 'processing' | 'completed' | 'failed';
-  totalRows: number;
-  importedRows: number;
-  errorLog: string[];
 }

@@ -10,7 +10,8 @@
           "templates": { "description": "Plantillas de comunicación" },
           "campaigns": { "description": "Configuración y estado de campañas" },
           "imports": { "description": "Registro de importaciones de archivos" },
-          "outbox": { "description": "Cola de mensajes pendientes de envío" }
+          "dailyTop": { "description": "Listas curadas diarias de mejores prospects (Top 30)" },
+          "dailyStats": { "description": "Estadísticas de uso y cuotas por día (YYYY-MM-DD)" }
         }
       }
     }
