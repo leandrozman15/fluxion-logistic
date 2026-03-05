@@ -6,6 +6,7 @@ export type AiConfidence = 'low' | 'medium' | 'high';
 export type CampaignStatus = 'draft' | 'running' | 'paused' | 'finished';
 export type TaskState = 'open' | 'done' | 'snoozed';
 export type TaskType = 'followup_whatsapp' | 'followup_email' | 'call' | 'check_website';
+export type SequenceState = 'active' | 'paused' | 'completed' | 'canceled';
 
 export interface AppUser {
   uid: string;
@@ -43,7 +44,7 @@ export interface Prospect {
   aiScoreReasons: string[];
   aiScoreUpdatedAt?: string;
   
-  // AI Web Analysis Fields (Layer 14)
+  // AI Web Analysis Fields
   aiIndustrySuggestions?: string[];
   aiWebSummary?: string;
   aiWebAnalysisAt?: string;
@@ -87,6 +88,51 @@ export interface Prospect {
   // Discovery specific
   isRecentlyCreated?: boolean;
   isIndustrialHub?: boolean;
+
+  // Sequence state
+  activeSequenceId?: string;
+  activeSequenceStepIndex?: number;
+}
+
+export interface SequenceStep {
+  dayOffset: number;
+  channel: 'whatsapp' | 'email' | 'task_only';
+  templateId?: string;
+  useAgent?: boolean;
+  purpose: 'first_touch' | 'followup' | 'handoff' | 'final';
+}
+
+export interface Sequence {
+  id: string;
+  tenantId: string;
+  name: string;
+  isActive: boolean;
+  steps: SequenceStep[];
+  rules: {
+    cooldownDays: number;
+    maxEmailAttempts: number;
+    requireContactMethod: 'email_or_phone' | 'email_only' | 'none';
+    respectDNC: boolean;
+  };
+  createdAt: any;
+  updatedAt: any;
+}
+
+export interface SequenceEnrollment {
+  id: string;
+  tenantId: string;
+  prospectId: string;
+  sequenceId: string;
+  state: SequenceState;
+  startedAt: any;
+  nextStepIndex: number;
+  lastStepAt: any | null;
+  log: Array<{
+    stepIndex: number;
+    createdTaskId?: string;
+    createdOutboxId?: string;
+    createdAt: string;
+  }>;
 }
 
 export interface IndustryIndexCompany {
@@ -101,14 +147,14 @@ export interface IndustryIndexCompany {
   employeesRange: '1-10' | '11-50' | '51-200' | '201-500' | '500+';
   foundedYear: number;
   isIndustrialHub?: boolean;
-  radarScore?: number; // Estimated score before import
+  radarScore?: number;
 }
 
 export interface Task {
   id: string;
   tenantId: string;
   prospectId: string;
-  companyName?: string; // Denormalized for UI
+  companyName?: string;
   type: TaskType;
   dueAt: any;
   state: TaskState;
@@ -116,6 +162,8 @@ export interface Task {
   createdAt: any;
   createdBy: string;
   notes?: string;
+  sequenceEnrollmentId?: string;
+  sequenceStepIndex?: number;
 }
 
 export interface EmailTemplate {
@@ -156,19 +204,20 @@ export interface OutboxMessage {
   to: string;
   subject: string;
   body: string;
-  templateId: string;
+  templateId?: string;
   prospectId: string;
   campaignId: string | null;
   attempts: number;
   lastError: string | null;
-  dedupeKey: string;
+  dedupeKey?: string;
   aiUsed?: boolean;
   companyName: string;
   effectiveScore: number;
+  sequenceEnrollmentId?: string;
 }
 
 export interface DailyTop {
-  id: string; // YYYY-MM-DD
+  id: string;
   date: string;
   limit: number;
   generatedAt: string;
@@ -185,7 +234,7 @@ export interface DailyTop {
 }
 
 export interface DailyStats {
-  id: string; // YYYY-MM-DD
+  id: string;
   date: string;
   quotaLimit: number;
   quotaUsed: number;
@@ -199,13 +248,12 @@ export interface DailyStats {
 }
 
 export interface WeeklyStats {
-  id: string; // YYYY-WW
+  id: string;
   weekId: string;
   statusChangedTo_contacted: number;
   statusChangedTo_interested: number;
   statusChangedTo_demo: number;
   statusChangedTo_client: number;
-  // Channel Conversions
   emailsSentCount: number;
   emailInterestedCount: number;
   whatsappOpenedCount: number;
@@ -214,7 +262,7 @@ export interface WeeklyStats {
 }
 
 export interface SegmentStats {
-  id: string; // industryTag_state
+  id: string;
   tenantId: string;
   industryTag: string;
   state: string;
@@ -252,16 +300,12 @@ export interface TenantSettings {
   dailyEmailLimit: number;
   defaultTemplateId: string | null;
   onboardingCompleted?: boolean;
-
-  // Auto Discovery Settings
   autoDiscoveryEnabled: boolean;
   autoDiscoveryStates: string[];
   autoDiscoveryCNAE: string[];
   autoDiscoveryLimitPerWeek: number;
   lastDiscoveryRunAt?: string;
   lastDiscoveryCount?: number;
-
-  // Deliverability Settings
   warmupModeEnabled?: boolean;
   spamProtectionLevel?: 'low' | 'medium' | 'high';
   maxAttemptsPerProspect?: number;

@@ -4,7 +4,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { useFirestore, useDoc, useCollection, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc, updateDoc, runTransaction, serverTimestamp, collection, query, orderBy, increment, addDoc, where } from "firebase/firestore";
+import { doc, updateDoc, runTransaction, serverTimestamp, collection, query, orderBy, increment, addDoc, where, getDocs, limit } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,10 +20,10 @@ import {
   MailPlus, UserPlus, Info, Ban, ShieldAlert, MessageCircle, 
   ArrowLeft, Lightbulb, Clock, User, AlertTriangle, ShieldCheck, Zap,
   Cpu, FileSearch, CheckCircle, TrendingUp, TrendingDown,
-  Target, Bot
+  Target, Bot, Layers, Play
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Prospect, ProspectStatus, EmailTemplate, OutboxState, SegmentStats } from "@/app/lib/types";
+import { Prospect, ProspectStatus, EmailTemplate, OutboxState, SegmentStats, Sequence, SequenceEnrollment } from "@/app/lib/types";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { renderTemplate } from "@/lib/utils/template-renderer";
 import { generateEmailDraft } from "@/ai/flows/generate-email-draft-flow";
@@ -57,8 +57,10 @@ export default function ProspectDetailPage() {
   const [isDncDialogOpen, setIsDncDialogOpen] = useState(false);
   const [isWhatsAppDialogOpen, setIsWhatsAppDialogOpen] = useState(false);
   const [isAiAgentDialogOpen, setIsAiAgentDialogOpen] = useState(false);
+  const [isEnrollDialogOpen, setIsEnrollDialogOpen] = useState(false);
   
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [selectedSequenceId, setSelectedSequenceId] = useState<string>("");
   const [selectedContactIndex, setSelectedContactIndex] = useState<string>("0");
   const [isSavingOutbox, setIsSavingOutbox] = useState(false);
   const [isAiDrafting, setIsAiDrafting] = useState(false);
@@ -66,6 +68,7 @@ export default function ProspectDetailPage() {
   const [isAnalyzingWeb, setIsAnalyzingWeb] = useState(false);
   const [isPredictingClose, setIsPredictingClose] = useState(false);
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+  const [isEnrolling, setIsEnrolling] = useState(false);
   
   const [customSubject, setCustomSubject] = useState<string | null>(null);
   const [customBody, setCustomBody] = useState<string | null>(null);
@@ -79,6 +82,27 @@ export default function ProspectDetailPage() {
   }, [db, tenantId, id]);
 
   const { data: prospect, loading } = useDoc<Prospect>(prospectRef);
+
+  // Active Sequence Data
+  const enrollmentsQuery = useMemo(() => {
+    if (!db || !tenantId || !id) return null;
+    return query(collection(db, "tenants", tenantId, "sequenceEnrollments"), where("prospectId", "==", id), where("state", "==", "active"), limit(1));
+  }, [db, tenantId, id]);
+  const { data: enrollments } = useCollection<SequenceEnrollment>(enrollmentsQuery);
+  const activeEnrollment = enrollments?.[0];
+
+  const activeSequenceRef = useMemo(() => {
+    if (!db || !tenantId || !activeEnrollment) return null;
+    return doc(db, "tenants", tenantId, "sequences", activeEnrollment.sequenceId);
+  }, [db, tenantId, activeEnrollment]);
+  const { data: activeSequence } = useDoc<Sequence>(activeSequenceRef);
+
+  // All sequences for enrollment
+  const allSequencesQuery = useMemo(() => {
+    if (!db || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "sequences"), where("isActive", "==", true));
+  }, [db, tenantId]);
+  const { data: allSequences } = useCollection<Sequence>(allSequencesQuery);
 
   const segmentKey = useMemo(() => prospect ? getSegmentKey(prospect) : null, [prospect]);
   const segmentRef = useMemo(() => (db && tenantId && segmentKey) ? doc(db, "tenants", tenantId, "segmentStats", segmentKey) : null, [db, tenantId, segmentKey]);
@@ -113,7 +137,7 @@ export default function ProspectDetailPage() {
   const spamProb = previewBody ? calculateSpamProbability(previewSubject, previewBody) : 0;
   const onCooldown = prospect ? isEmailOnCooldown(prospect.lastEmailSentAt) : false;
 
-  const nba = useMemo(() => prospect ? calculateNextAction(prospect, segmentData) : null, [prospect, segmentData]);
+  const nba = useMemo(() => prospect ? calculateNextAction(prospect, segmentData, activeEnrollment, activeSequence) : null, [prospect, segmentData, activeEnrollment, activeSequence]);
 
   useEffect(() => {
     if (searchParams?.get('action') === 'prepare' && !loading && prospect) {
@@ -142,6 +166,48 @@ export default function ProspectDetailPage() {
       });
     } catch (e) {
       console.error("Error creating task:", e);
+    }
+  };
+
+  const handleStartSequence = async () => {
+    if (!db || !tenantId || !prospect || !selectedSequenceId || !user) return;
+    setIsEnrolling(true);
+    try {
+      const enrollmentRef = collection(db, "tenants", tenantId, "sequenceEnrollments");
+      const newEnrollment = {
+        tenantId,
+        prospectId: prospect.id,
+        sequenceId: selectedSequenceId,
+        state: "active",
+        startedAt: serverTimestamp(),
+        nextStepIndex: 0,
+        lastStepAt: null,
+        log: []
+      };
+      
+      const docRef = await addDoc(enrollmentRef, newEnrollment);
+      
+      await updateDoc(prospectRef as any, {
+        activeSequenceId: selectedSequenceId,
+        activeSequenceStepIndex: 0,
+        updatedAt: serverTimestamp()
+      });
+
+      await addDoc(collection(db, "tenants", tenantId, "events"), {
+        type: "sequence_enrolled",
+        prospectId: prospect.id,
+        companyName: prospect.companyName,
+        actorUid: user.uid,
+        createdAt: serverTimestamp(),
+        metadata: { sequenceId: selectedSequenceId, enrollmentId: docRef.id }
+      });
+
+      toast({ title: "Sequência iniciada!", description: "O motor processará o primeiro passo em breve." });
+      setIsEnrollDialogOpen(false);
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erro ao iniciar sequência" });
+    } finally {
+      setIsEnrolling(false);
     }
   };
 
@@ -268,7 +334,6 @@ export default function ProspectDetailPage() {
         updatedAt: new Date().toISOString()
       };
 
-      // Recalculate score with new info
       const newScore = calculateEffectiveScore({ ...prospect, ...updates });
       updates.effectiveScore = newScore;
 
@@ -412,7 +477,8 @@ export default function ProspectDetailPage() {
         effectiveScore: prospect.effectiveScore,
         attempts: 0,
         lastError: null,
-        aiUsed: !!customBody
+        aiUsed: !!customBody,
+        sequenceEnrollmentId: activeEnrollment?.id || null
       });
 
       await updateDoc(prospectRef as any, { 
@@ -428,7 +494,7 @@ export default function ProspectDetailPage() {
         companyName: prospect.companyName,
         actorUid: user.uid,
         createdAt: serverTimestamp(),
-        metadata: { state, to: selectedContact?.email, aiUsed: !!customBody, quality: emailQuality }
+        metadata: { state, to: selectedContact?.email, aiUsed: !!customBody, quality: emailQuality, enrollmentId: activeEnrollment?.id }
       });
 
       if (state === 'queued') {
@@ -490,7 +556,7 @@ export default function ProspectDetailPage() {
       companyName: prospect.companyName,
       actorUid: user.uid,
       createdAt: serverTimestamp(),
-      metadata: { phoneE164: normalized, hasPrefilledText: !!whatsAppDraft }
+      metadata: { phoneE164: normalized, hasPrefilledText: !!whatsAppDraft, enrollmentId: activeEnrollment?.id }
     });
 
     await updateDoc(prospectRef as any, { 
@@ -512,6 +578,7 @@ export default function ProspectDetailPage() {
         if (prospect?.websiteUrl) handleAnalyzeWebsite();
         else toast({ title: "Ação Sugerida", description: nba.reason });
         break;
+      case 'sequence_step':
       case 'prepare_email':
         setIsOutboxDialogOpen(true);
         break;
@@ -532,6 +599,7 @@ export default function ProspectDetailPage() {
       case 'dnc_enabled': return <Ban className="w-4 h-4 text-destructive" />;
       case 'website_analyzed': return <SearchCode className="w-4 h-4 text-purple-500" />;
       case 'approach_generated_ai': return <Bot className="w-4 h-4 text-accent" />;
+      case 'sequence_enrolled': return <Layers className="w-4 h-4 text-accent" />;
       default: return <Clock className="w-4 h-4 text-muted-foreground" />;
     }
   };
@@ -545,6 +613,7 @@ export default function ProspectDetailPage() {
       case 'dnc_disabled': return "Removido da lista DNC";
       case 'website_analyzed': return "Inteligência web extraída via IA";
       case 'approach_generated_ai': return `Plano de abordagem IA gerado (${event.metadata?.recommendedChannel})`;
+      case 'sequence_enrolled': return `Iniciado na sequência assistida`;
       default: return event.type;
     }
   };
@@ -574,7 +643,7 @@ export default function ProspectDetailPage() {
               {nba && nba.type !== 'none' && (
                 <Badge 
                   variant="secondary" 
-                  className="bg-accent/10 text-accent border-accent/20 cursor-pointer hover:bg-accent/20"
+                  className={`cursor-pointer transition-all ${nba.type === 'sequence_step' ? 'bg-orange-500 text-white animate-pulse' : 'bg-accent/10 text-accent border-accent/20 hover:bg-accent/20'}`}
                   onClick={executeNBA}
                 >
                   <Lightbulb className="w-3 h-3 mr-1" /> {nba.label}
@@ -638,6 +707,28 @@ export default function ProspectDetailPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
+          {activeEnrollment && activeSequence && (
+            <Card className="border-orange-200 bg-orange-50/30">
+              <CardContent className="pt-6 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
+                    <Layers className="w-5 h-5 text-orange-600" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-orange-600 uppercase">Sequência Ativa</div>
+                    <div className="font-bold text-primary">{activeSequence.name}</div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">
+                      Passo {activeEnrollment.nextStepIndex + 1} de {activeSequence.steps.length} • Próximo: D+{activeSequence.steps[activeEnrollment.nextStepIndex]?.dayOffset}
+                    </div>
+                  </div>
+                </div>
+                <Button variant="outline" size="sm" className="h-8 border-orange-200 text-orange-700 hover:bg-orange-100" onClick={() => setIsEnrollDialogOpen(true)}>
+                  Mudar Sequência
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle>Visão Geral</CardTitle>
@@ -899,6 +990,30 @@ export default function ProspectDetailPage() {
 
         <div className="space-y-6">
           <Card>
+            <CardHeader><CardTitle className="text-sm">Sequência Operacional</CardTitle></CardHeader>
+            <CardContent>
+               {!activeEnrollment ? (
+                 <Button className="w-full bg-accent hover:bg-accent/90 text-xs" onClick={() => setIsEnrollDialogOpen(true)} disabled={prospect.doNotContact}>
+                   <Play className="w-3 h-3 mr-2" /> Iniciar Sequência
+                 </Button>
+               ) : (
+                 <div className="space-y-3">
+                   <div className="flex justify-between items-center text-[10px]">
+                     <span className="text-muted-foreground">Progresso</span>
+                     <span className="font-bold">{Math.round(((activeEnrollment.nextStepIndex) / (activeSequence?.steps.length || 1)) * 100)}%</span>
+                   </div>
+                   <div className="w-full h-1.5 bg-secondary rounded-full overflow-hidden">
+                     <div className="h-full bg-orange-500" style={{ width: `${((activeEnrollment.nextStepIndex) / (activeSequence?.steps.length || 1)) * 100}%` }}></div>
+                   </div>
+                   <Button variant="outline" size="sm" className="w-full text-[10px] h-8" onClick={() => setIsEnrollDialogOpen(true)}>
+                     Gerenciar Enroll
+                   </Button>
+                 </div>
+               )}
+            </CardContent>
+          </Card>
+
+          <Card>
             <CardHeader><CardTitle className="text-sm">Status do Pipeline</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-2 gap-2">
               {['new', 'contacted', 'interested', 'demo', 'client', 'discarded'].map((s) => (
@@ -924,6 +1039,46 @@ export default function ProspectDetailPage() {
           </Card>
         </div>
       </div>
+
+      <Dialog open={isEnrollDialogOpen} onOpenChange={setIsEnrollDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Iniciar Sequência Assistida</DialogTitle>
+            <DialogDescription>Escolha um playbook para guiar os próximos contatos.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Selecionar Playbook</Label>
+              <Select value={selectedSequenceId} onValueChange={setSelectedSequenceId}>
+                <SelectTrigger><SelectValue placeholder="Selecione uma sequência" /></SelectTrigger>
+                <SelectContent>
+                  {allSequences.map(s => <SelectItem key={seq.id} value={s.id}>{s.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedSequenceId && (
+              <div className="space-y-2">
+                <Label className="text-xs">Preview dos Passos:</Label>
+                <div className="space-y-1">
+                  {allSequences.find(s => s.id === selectedSequenceId)?.steps.map((step, i) => (
+                    <div key={i} className="text-[10px] flex items-center justify-between p-2 bg-secondary/30 rounded">
+                      <span>D+{step.dayOffset} - {step.channel.toUpperCase()}</span>
+                      <span className="text-muted-foreground">{step.purpose}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEnrollDialogOpen(false)}>Cancelar</Button>
+            <Button className="bg-accent" onClick={handleStartSequence} disabled={isEnrolling || !selectedSequenceId}>
+              {isEnrolling ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Play className="w-4 h-4 mr-2" />}
+              Ativar Sequência
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isAiAgentDialogOpen} onOpenChange={setIsAiAgentDialogOpen}>
         <DialogContent className="max-w-2xl">

@@ -53,28 +53,17 @@
           "prospects": { "description": "Base de datos de leads industriais com histórico e auditoria" },
           "templates": { "description": "Plantillas de comunicação com suporte para variables" },
           "campaigns": { "description": "Configuração e estado de campaigns masivas" },
+          "sequences": { "description": "Definição de sequências de prospecção assistida" },
+          "sequenceEnrollments": { "description": "Registro de prospectos em sequências ativas" },
           "imports": { "description": "Registro de importaciones de arquivos CSV" },
           "dailyTop": { "description": "Ranking diario congelado de las melhores oportunidades (Top 30)" },
-          "events": { "description": "Registro de telemetria e auditoría de acciones" },
+          "events": { "description": "Registro de telemetria e auditoría de ações" },
           "dailyStats": { "description": "Estadísticas de uso, cuotas y métricas por dia" },
           "weeklyStats": { "description": "Métricas de conversión del pipeline por semana" },
           "segmentStats": { "description": "Inteligência de performance por segmento industrial" },
           "outbox": { "description": "Cola de mensagens operativos (draft, queued, sent, failed) com suporte para idempotencia" },
           "tasks": { 
-            "description": "Tarefas de seguimento e ações pendentes por prospecto",
-            "schema": {
-              "type": "object",
-              "properties": {
-                "prospectId": { "type": "string" },
-                "type": { "type": "string", "enum": ["followup_whatsapp", "followup_email", "call", "check_website"] },
-                "dueAt": { "type": "string", "format": "date-time" },
-                "state": { "type": "string", "enum": ["open", "done", "snoozed"] },
-                "assignedTo": { "type": "string" },
-                "createdAt": { "type": "string", "format": "date-time" },
-                "createdBy": { "type": "string" },
-                "notes": { "type": "string" }
-              }
-            }
+            "description": "Tarefas de seguimento e ações pendentes por prospecto"
           }
         }
       }

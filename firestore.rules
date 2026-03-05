@@ -72,6 +72,16 @@ service cloud.firestore {
         allow write: if belongsToTenant(tenantId);
       }
 
+      match /sequences/{sequenceId} {
+        allow read: if belongsToTenant(tenantId);
+        allow write: if belongsToTenant(tenantId);
+      }
+
+      match /sequenceEnrollments/{enrollmentId} {
+        allow read: if belongsToTenant(tenantId);
+        allow write: if belongsToTenant(tenantId);
+      }
+
       match /outbox/{messageId} {
         allow read: if belongsToTenant(tenantId);
         allow create: if belongsToTenant(tenantId);

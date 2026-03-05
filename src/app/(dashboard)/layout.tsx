@@ -2,7 +2,7 @@
 'use client';
 
 import { SidebarProvider, SidebarInset, Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarGroup, SidebarGroupLabel, SidebarGroupContent } from "@/components/ui/sidebar";
-import { LayoutDashboard, Users, Mail, FileSpreadsheet, Settings, Target, FileText, Inbox, LogOut, Building2, BarChart3, Loader2, CheckSquare, Search } from "lucide-react";
+import { LayoutDashboard, Users, Mail, FileSpreadsheet, Settings, Target, FileText, Inbox, LogOut, Building2, BarChart3, Loader2, CheckSquare, Search, Layers } from "lucide-react";
 import Link from "next/link";
 import { useAuth, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
@@ -23,6 +23,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { title: "Radar do Dia", icon: LayoutDashboard, href: "/dashboard" },
     { title: "Discovery", icon: Search, href: "/discovery" },
     { title: "Prospects", icon: Users, href: "/prospects" },
+    { title: "Sequências", icon: Layers, href: "/sequences" },
     { title: "Tarefas", icon: CheckSquare, href: "/tasks" },
     { title: "Insights", icon: BarChart3, href: "/analytics" },
     { title: "Outbox", icon: Inbox, href: "/outbox" },

@@ -1,5 +1,5 @@
 
-import { Prospect, SegmentStats } from "@/app/lib/types";
+import { Prospect, SegmentStats, SequenceEnrollment, Sequence } from "@/app/lib/types";
 
 export type NextActionType = 
   | "suggest_emails" 
@@ -7,6 +7,7 @@ export type NextActionType =
   | "whatsapp_first" 
   | "prepare_email" 
   | "followup" 
+  | "sequence_step"
   | "none";
 
 export interface NextAction {
@@ -15,15 +16,43 @@ export interface NextAction {
   reason: string;
   priority: "high" | "medium" | "low";
   channelRecommendation?: 'email' | 'whatsapp';
+  sequenceStepIndex?: number;
 }
 
 /**
- * Calculates the "Next Best Action" for a given prospect based on its current state
- * and segment performance data (Learning Loop).
+ * Calculates the "Next Best Action" for a given prospect based on its current state,
+ * segment performance data (Learning Loop), and active sequence enrollments.
  */
-export function calculateNextAction(prospect: Prospect, segmentStats?: SegmentStats | null): NextAction {
+export function calculateNextAction(
+  prospect: Prospect, 
+  segmentStats?: SegmentStats | null,
+  activeEnrollment?: SequenceEnrollment | null,
+  sequence?: Sequence | null
+): NextAction {
   if (prospect.doNotContact) {
     return { type: "none", label: "Não Contactar", reason: "Prospect em lista DNC.", priority: "low" };
+  }
+
+  // 1. Prioritize Sequence Steps if enrollment is active and due
+  if (activeEnrollment && activeEnrollment.state === 'active' && sequence) {
+    const nextStep = sequence.steps[activeEnrollment.nextStepIndex];
+    if (nextStep) {
+      const startedAt = activeEnrollment.startedAt?.toDate ? activeEnrollment.startedAt.toDate() : new Date(activeEnrollment.startedAt);
+      const now = new Date();
+      const diffDays = Math.floor((now.getTime() - startedAt.getTime()) / (1000 * 3600 * 24));
+      
+      if (diffDays >= nextStep.dayOffset) {
+        const channelLabel = nextStep.channel === 'whatsapp' ? 'WhatsApp' : nextStep.channel === 'email' ? 'E-mail' : 'Tarefa';
+        return {
+          type: "sequence_step",
+          label: `Próximo Passo: ${channelLabel}`,
+          reason: `Sequência "${sequence.name}" - Passo ${activeEnrollment.nextStepIndex + 1} disponível.`,
+          priority: "high",
+          channelRecommendation: nextStep.channel !== 'task_only' ? nextStep.channel : undefined,
+          sequenceStepIndex: activeEnrollment.nextStepIndex
+        };
+      }
+    }
   }
 
   const hasEmail = prospect.contacts?.some(c => !!c.email);
@@ -33,10 +62,10 @@ export function calculateNextAction(prospect: Prospect, segmentStats?: SegmentSt
   const lastContactAt = prospect.lastContactAt ? new Date(prospect.lastContactAt) : null;
   const now = new Date();
   
-  // Learning Loop integration: detect preferred channel
+  // Learning Loop integration
   const preferred = segmentStats?.preferredChannel || 'none';
   
-  // 1. If no contact info but has website -> Suggest Emails
+  // 2. Data Enrichment Actions
   if (!hasEmail && hasWebsite) {
     return { 
       type: "suggest_emails", 
@@ -46,7 +75,6 @@ export function calculateNextAction(prospect: Prospect, segmentStats?: SegmentSt
     };
   }
 
-  // 2. If has website but no AI analysis -> Analyze Website
   if (hasWebsite && !hasAiSummary) {
     return { 
       type: "analyze_website", 
@@ -56,7 +84,7 @@ export function calculateNextAction(prospect: Prospect, segmentStats?: SegmentSt
     };
   }
 
-  // 3. First Contact Logic (guided by Learning Loop)
+  // 3. First Contact Logic
   if (!lastContactAt) {
     if (hasPhone && (preferred === 'whatsapp' || !hasEmail)) {
       return { 
