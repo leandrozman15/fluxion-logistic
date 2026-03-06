@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo } from "react";
@@ -15,9 +14,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search, Building2, MapPin, Plus, Loader2, Sparkles, Factory, CheckCircle2, Zap, Globe, Users, ShieldCheck, AlertCircle, TrendingUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { calculateEffectiveScore } from "@/lib/utils/scoring";
-import { Prospect, IndustryIndexCompany, SegmentStats } from "@/app/lib/types";
-import { getSegmentKey } from "@/lib/utils/learning-loop";
-import { fetchCnpjData, ReceitaWSResponse } from "@/services/receita-ws";
+import { Prospect, IndustryIndexCompany } from "@/app/lib/types";
+import { fetchCnpjData, type ReceitaWSResponse } from "@/services/receita-ws";
 
 // Base Real que simula o Radar Nacional Indexado
 const MOCK_RADAR_INDEX: IndustryIndexCompany[] = [
@@ -70,17 +68,26 @@ export default function DiscoveryPage() {
   };
 
   const handleCnpjSearch = async () => {
-    if (!cnpjSearch || cnpjSearch.length < 14) {
+    if (!cnpjSearch || cnpjSearch.replace(/\D/g, "").length < 14) {
       toast({ variant: "destructive", title: "CNPJ inválido", description: "O CNPJ deve ter 14 dígitos." });
       return;
     }
+    
     setIsCnpjLoading(true);
     setCnpjResult(null);
+    
     try {
+      // Now calling the Server Action
       const data = await fetchCnpjData(cnpjSearch);
       setCnpjResult(data);
+      toast({ title: "Consulta Realizada", description: "Dados da Receita Federal carregados com sucesso." });
     } catch (e: any) {
-      toast({ variant: "destructive", title: "Erro na consulta", description: e.message });
+      console.error("CNPJ Search Error:", e);
+      toast({ 
+        variant: "destructive", 
+        title: "Erro na consulta", 
+        description: e.message || "Não foi possível obter os dados agora." 
+      });
     } finally {
       setIsCnpjLoading(false);
     }
@@ -116,7 +123,13 @@ export default function DiscoveryPage() {
         domain: isReceita ? undefined : item.website,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        contacts: isReceita ? [{ name: "Contato via ReceitaWS", role: "N/A", email: item.email || "", phone: item.telefone || "" }] : [],
+        contacts: isReceita ? [{ 
+          name: "Contato Principal", 
+          role: "N/A", 
+          email: item.email || "", 
+          phone: item.telefone || "",
+          source: "website"
+        }] : [],
         aiScore: 75,
         scoreReasons: ["Líder de segmento indexado", "Perfil industrial confirmado"]
       };
@@ -164,7 +177,7 @@ export default function DiscoveryPage() {
           <Card className="border-accent/20 bg-accent/5">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-bold flex items-center gap-2 text-accent">
-                <Sparkles className="w-4 h-4" /> Busca Inteligente no Ecossistema
+                <Search className="w-4 h-4" /> Busca Inteligente no Ecossistema
               </CardTitle>
               <CardDescription>Pesquise por nome, setor ou cidade nas empresas já mapeadas pela nossa inteligência.</CardDescription>
             </CardHeader>
@@ -224,10 +237,10 @@ export default function DiscoveryPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="text-[10px] text-muted-foreground">Funcionários: {item.employeesRange}</div>
+                        <div className="text-[10px] text-muted-foreground">Porte: {item.employeesRange}</div>
                       </TableCell>
                       <TableCell className="text-right">
-                        {existingCnpjs.has(item.cnpj) ? (
+                        {existingCnpjs.has(item.cnpj.replace(/\D/g, "")) ? (
                           <Badge variant="outline" className="bg-green-50 text-green-600 border-green-200">
                             <CheckCircle2 className="w-3 h-3 mr-1" /> No Pipeline
                           </Badge>
@@ -252,7 +265,7 @@ export default function DiscoveryPage() {
           </div>
           
           <div className="flex items-center justify-center gap-2 text-[10px] text-muted-foreground italic">
-            <TrendingUp className="w-3 h-3" /> Dados atualizados em tempo real conforme movimentações da JUCESP e Receita Federal.
+            <TrendingUp className="w-3 h-3" /> Dados atualizados em tempo real conforme movimentações da Receita Federal.
           </div>
         </TabsContent>
 
@@ -260,9 +273,9 @@ export default function DiscoveryPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-sm flex items-center gap-2">
-                <Building2 className="w-4 h-4" /> Consultar Base Governamental
+                <Building2 className="w-4 h-4" /> Consultar Base Governamental (Via Server)
               </CardTitle>
-              <CardDescription>Busca direta na base da Receita Federal para empresas que ainda não foram indexadas.</CardDescription>
+              <CardDescription>Busca direta e segura na base da Receita Federal para empresas que ainda não foram indexadas.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-2">
@@ -274,7 +287,7 @@ export default function DiscoveryPage() {
                 />
                 <Button onClick={handleCnpjSearch} disabled={isCnpjLoading} className="shrink-0">
                   {isCnpjLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4 mr-2" />}
-                  Consultar
+                  Consultar Agora
                 </Button>
               </div>
 
@@ -321,8 +334,8 @@ export default function DiscoveryPage() {
               <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg flex items-start gap-3 text-xs text-blue-700">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-bold mb-1">Aviso de Rate Limit</p>
-                  <p>A API pública da ReceitaWS permite até 3 consultas por minuto. Para volumes maiores, utilize o <strong>Radar Nacional Indexado</strong> acima.</p>
+                  <p className="font-bold mb-1">Sobre a Consulta</p>
+                  <p>A consulta agora é realizada via <strong>Server Actions</strong>, o que garante maior estabilidade. Lembre-se que a API pública tem um limite de 3 consultas por minuto.</p>
                 </div>
               </div>
             </CardContent>
