@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -33,10 +32,12 @@ export default function LoginPage() {
   const db = useFirestore();
   const { user: currentUser, loading: userLoading } = useUser();
 
-  // Redirigir si ya está logueado
   useEffect(() => {
     if (!userLoading && currentUser) {
-      router.push("/dashboard");
+      // Re-run bootstrap check just in case it was interrupted
+      bootstrapUser(currentUser).then(() => {
+        router.push("/dashboard");
+      });
     }
   }, [currentUser, userLoading, router]);
 
@@ -65,12 +66,13 @@ export default function LoginPage() {
               scoringWeights: { effective: 0.6, ai: 0.4 },
               finalScoreMode: 'weighted',
               dailyTopLimit: 30,
-              onboardingCompleted: false
+              onboardingCompleted: false,
+              autoDiscoveryEnabled: false
             }
           });
         }
 
-        // 2. Create User Profile
+        // 2. Create Global User Profile (Root Index)
         await setDoc(userRef, {
           uid: user.uid,
           email: user.email,
@@ -81,7 +83,7 @@ export default function LoginPage() {
           status: "active"
         });
 
-        // 3. Add to Tenant Users Collection
+        // 3. Create Tenant Membership
         const tenantUserRef = doc(db, "tenants", tenantId, "users", user.uid);
         await setDoc(tenantUserRef, {
           uid: user.uid,
@@ -91,17 +93,13 @@ export default function LoginPage() {
         });
 
         toast({
-          title: "Sistema Inicializado",
-          description: "Seu perfil de administrador foi configurado com sucesso.",
+          title: "Acesso Configurado",
+          description: "Sua conta de administrador foi vinculada com sucesso.",
         });
       }
     } catch (error: any) {
       console.error("Bootstrap error:", error);
-      toast({
-        variant: "destructive",
-        title: "Erro na inicialização",
-        description: error.message || "Não foi possível criar seu perfil.",
-      });
+      // Don't show toast here to avoid loops, just log
     }
   };
 
@@ -120,7 +118,7 @@ export default function LoginPage() {
       toast({
         variant: "destructive",
         title: "Erro ao acessar",
-        description: "Verifique seu e-mail e senha. Verifique se o usuário já existe no Firebase Auth.",
+        description: "Credenciais inválidas ou erro de rede. Verifique seu e-mail e senha.",
       });
     } finally {
       setIsLoading(false);

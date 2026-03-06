@@ -9,13 +9,9 @@ service cloud.firestore {
     =====================================================
     - Strict multi-tenant isolation
     - All business data lives under /tenants/{tenantId}
-    - Access requires membership in /tenants/{tenantId}/users/{uid}
+    - Root profile mapping at /users/{uid}
     =====================================================
     */
-
-    // ---------------------------------------------------
-    // BASIC AUTH HELPERS
-    // ---------------------------------------------------
 
     function isSignedIn() {
       return request.auth != null;
@@ -30,7 +26,15 @@ service cloud.firestore {
     }
 
     // ---------------------------------------------------
-    // TENANT MEMBERSHIP
+    // ROOT USER PROFILES (Connects UID to TenantId)
+    // ---------------------------------------------------
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // ---------------------------------------------------
+    // TENANT MEMBERSHIP HELPERS
     // ---------------------------------------------------
 
     function tenantUserPath(tenantId) {
@@ -51,17 +55,8 @@ service cloud.firestore {
     function isTenantAdmin(tenantId) {
       let user = tenantUser(tenantId);
       return belongsToTenant(tenantId) && (
-        user.role == "admin" || 
-        (user.get('roles', []).hasAny(["admin"]))
+        user.role == "admin" || (user.get('roles', []).hasAny(["admin"]))
       );
-    }
-
-    // ---------------------------------------------------
-    // ROOT USER PROFILES (Critical for Tenant Lookup)
-    // ---------------------------------------------------
-
-    match /users/{userId} {
-      allow read, write: if isOwner(userId);
     }
 
     // ---------------------------------------------------
@@ -71,13 +66,10 @@ service cloud.firestore {
     match /tenants/{tenantId} {
       allow get: if belongsToTenant(tenantId);
       allow list: if isSignedIn();
-      allow create: if isSignedIn(); // Bootstrap allowed
+      allow create: if isSignedIn(); 
       allow update: if isTenantAdmin(tenantId);
       allow delete: if false;
 
-      // ---------------------------------------------------
-      // TENANT USERS
-      // ---------------------------------------------------
       match /users/{userId} {
         allow get, list: if belongsToTenant(tenantId);
         allow create: if isOwner(userId) || isTenantAdmin(tenantId);
@@ -85,10 +77,6 @@ service cloud.firestore {
         allow delete: if isTenantAdmin(tenantId);
       }
 
-      // ---------------------------------------------------
-      // BUSINESS COLLECTIONS
-      // ---------------------------------------------------
-      
       match /prospects/{prospectId} {
         allow read, write: if belongsToTenant(tenantId);
       }
@@ -141,10 +129,6 @@ service cloud.firestore {
         allow read, write: if belongsToTenant(tenantId);
       }
     }
-
-    // ---------------------------------------------------
-    // GLOBAL INDUSTRY INDEX (Radar Nacional)
-    // ---------------------------------------------------
 
     match /industryIndex/{companyId} {
       allow get, list: if isSignedIn();
