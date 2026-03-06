@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState } from "react";
@@ -42,10 +41,6 @@ export default function AnalyticsPage() {
   const { toast } = useToast();
   const [range, setRange] = useState("30");
   const [isSyncing, setIsSyncing] = useState(false);
-
-  const userProfileRef = useMemo(() => (db && user ? doc(db, "users", user.uid) : null), [db, user]);
-  const { data: userProfileData } = useDoc<AppUser>(userProfileRef);
-  const isAdmin = userProfileData?.role === 'admin';
 
   const dailyStatsQuery = useMemo(() => {
     if (!db || !tenantId) return null;
@@ -125,7 +120,7 @@ export default function AnalyticsPage() {
   }, [weeklyStats]);
 
   const handleReconcileStats = async () => {
-    if (!db || !tenantId || !isAdmin) return;
+    if (!db || !tenantId) return;
     setIsSyncing(true);
     try {
       const yearWeek = `${new Date().getFullYear()}-${Math.ceil((new Date().getDate() + 6 - new Date().getDay()) / 7)}`;
@@ -211,9 +206,9 @@ export default function AnalyticsPage() {
 
       await batch.commit();
       toast({ title: "Sincronização completa", description: "Learning Loop atualizado com novos dados." });
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      toast({ variant: "destructive", title: "Erro na sincronização" });
+      toast({ variant: "destructive", title: "Erro na sincronização", description: e.message });
     } finally {
       setIsSyncing(false);
     }
@@ -242,12 +237,10 @@ export default function AnalyticsPage() {
           <p className="text-muted-foreground">Analise a saúde da sua prospecção e o aprendizado por segmento.</p>
         </div>
         <div className="flex items-center gap-2">
-          {isAdmin && (
-            <Button variant="outline" size="sm" onClick={handleReconcileStats} disabled={isSyncing}>
-              {isSyncing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-              Sincronizar Inteligência
-            </Button>
-          )}
+          <Button variant="outline" size="sm" onClick={handleReconcileStats} disabled={isSyncing}>
+            {isSyncing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+            Sincronizar Inteligência
+          </Button>
           <Select value={range} onValueChange={setRange}>
             <SelectTrigger className="w-[150px]">
               <SelectValue placeholder="Rango" />

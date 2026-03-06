@@ -37,7 +37,10 @@ export default function OutboxPage() {
 
   const filteredMessages = useMemo(() => {
     if (!messages) return [];
-    return messages.filter(m => m.companyName.toLowerCase().includes(searchTerm.toLowerCase()));
+    return messages.filter(m => 
+      m.companyName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      m.to?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
   }, [messages, searchTerm]);
 
   const getStateBadge = (state: OutboxState) => {
@@ -66,9 +69,10 @@ export default function OutboxPage() {
       }
 
       await updateDoc(msgRef, updates);
-      toast({ title: `Mensagem movida para ${newState}` });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Erro na operação", description: "Verifique suas permissões." });
+      toast({ title: "Estado atualizado!", description: `Mensagem movida para ${newState}` });
+    } catch (e: any) {
+      console.error(e);
+      toast({ variant: "destructive", title: "Erro ao atualizar", description: e.message });
     } finally {
       setIsActionLoading(null);
     }
@@ -79,8 +83,9 @@ export default function OutboxPage() {
     try {
       await deleteDoc(doc(db, "tenants", tenantId, "outbox", id));
       toast({ title: "Mensagem removida" });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Erro al excluir" });
+    } catch (e: any) {
+      console.error(e);
+      toast({ variant: "destructive", title: "Erro ao excluir", description: e.message });
     }
   };
 
@@ -171,22 +176,28 @@ export default function OutboxPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
-                        {msg.state === 'draft' && (
-                          <Button variant="ghost" size="icon" onClick={() => handleUpdateState(msg.id, 'queued')} title="Enfileirar">
-                            <Send className="w-4 h-4 text-blue-600" />
-                          </Button>
+                        {isActionLoading === msg.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin m-2" />
+                        ) : (
+                          <>
+                            {msg.state === 'draft' && (
+                              <Button variant="ghost" size="icon" onClick={() => handleUpdateState(msg.id, 'queued')} title="Enfileirar">
+                                <Send className="w-4 h-4 text-blue-600" />
+                              </Button>
+                            )}
+                            {(msg.state === 'failed' || msg.state === 'canceled') && (
+                              <Button variant="ghost" size="icon" onClick={() => handleUpdateState(msg.id, 'queued')} title="Reententar">
+                                <RotateCcw className="w-4 h-4 text-orange-600" />
+                              </Button>
+                            )}
+                            {msg.state === 'queued' && (
+                              <Button variant="ghost" size="icon" onClick={() => handleUpdateState(msg.id, 'canceled')} title="Cancelar">
+                                <XCircle className="w-4 h-4 text-muted-foreground" />
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete(msg.id)}><Trash2 className="w-4 h-4" /></Button>
+                          </>
                         )}
-                        {(msg.state === 'failed' || msg.state === 'canceled') && (
-                          <Button variant="ghost" size="icon" onClick={() => handleUpdateState(msg.id, 'queued')} title="Reententar">
-                            <RotateCcw className="w-4 h-4 text-orange-600" />
-                          </Button>
-                        )}
-                        {msg.state === 'queued' && (
-                          <Button variant="ghost" size="icon" onClick={() => handleUpdateState(msg.id, 'canceled')} title="Cancelar">
-                            <XCircle className="w-4 h-4 text-muted-foreground" />
-                          </Button>
-                        )}
-                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete(msg.id)}><Trash2 className="w-4 h-4" /></Button>
                       </div>
                     </TableCell>
                   </TableRow>
