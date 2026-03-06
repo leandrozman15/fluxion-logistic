@@ -19,9 +19,6 @@ import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import { isFirebaseConfigValid } from "@/firebase/config";
 
-const BOOTSTRAP_UID = "4zxTMJtXvbh5DjWF8xSrITJh1W33";
-const BOOTSTRAP_EMAIL = "leozman15@gmail.com";
-
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -44,52 +41,47 @@ export default function LoginPage() {
     if (!db) return;
 
     try {
+      const tenantId = "default_tenant";
+      
+      // No modo aberto, garantimos que todos os usuários tenham acesso ao tenant padrão
       const userRef = doc(db, "users", user.uid);
-      const userSnap = await getDoc(userRef);
+      
+      // 1. Create/Update Tenant
+      const tenantRef = doc(db, "tenants", tenantId);
+      await setDoc(tenantRef, {
+        id: tenantId,
+        name: "Fluxion Radar HQ (Public Test)",
+        plan: "pro",
+        updatedAt: serverTimestamp(),
+        settings: {
+          scoringWeights: { effective: 0.6, ai: 0.4 },
+          finalScoreMode: 'weighted',
+          dailyTopLimit: 30,
+          onboardingCompleted: true, // Bypass onboarding para testes
+          autoDiscoveryEnabled: true
+        }
+      }, { merge: true });
 
-      // Se o perfil não existe ou não tem tenantId, vamos forçar a criação
-      if (!userSnap.exists() || !userSnap.data().tenantId) {
-        const isInitialAdmin = user.uid === BOOTSTRAP_UID || user.email === BOOTSTRAP_EMAIL;
-        const tenantId = "default_tenant";
+      // 2. Create Global User Profile
+      await setDoc(userRef, {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName || user.email?.split('@')[0] || "User",
+        tenantId: tenantId,
+        role: "admin", // Todos são admin no modo teste
+        createdAt: new Date().toISOString(),
+        status: "active"
+      }, { merge: true });
 
-        // 1. Create/Update Tenant (Merge true evita erro de leitura se as regras forem estritas)
-        const tenantRef = doc(db, "tenants", tenantId);
-        await setDoc(tenantRef, {
-          id: tenantId,
-          name: "Fluxion Radar HQ",
-          plan: "pro",
-          updatedAt: serverTimestamp(),
-          settings: {
-            scoringWeights: { effective: 0.6, ai: 0.4 },
-            finalScoreMode: 'weighted',
-            dailyTopLimit: 30,
-            onboardingCompleted: false,
-            autoDiscoveryEnabled: false
-          }
-        }, { merge: true });
+      // 3. Create Tenant Membership
+      const tenantUserRef = doc(db, "tenants", tenantId, "users", user.uid);
+      await setDoc(tenantUserRef, {
+        uid: user.uid,
+        email: user.email,
+        role: "admin",
+        createdAt: new Date().toISOString()
+      }, { merge: true });
 
-        // 2. Create Global User Profile
-        await setDoc(userRef, {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName || user.email?.split('@')[0] || "Admin",
-          tenantId: tenantId,
-          role: isInitialAdmin ? "admin" : "sales",
-          createdAt: new Date().toISOString(),
-          status: "active"
-        }, { merge: true });
-
-        // 3. Create Tenant Membership
-        const tenantUserRef = doc(db, "tenants", tenantId, "users", user.uid);
-        await setDoc(tenantUserRef, {
-          uid: user.uid,
-          email: user.email,
-          role: isInitialAdmin ? "admin" : "sales",
-          createdAt: new Date().toISOString()
-        }, { merge: true });
-
-        console.log("Bootstrap completed for:", user.uid);
-      }
     } catch (error: any) {
       console.error("Bootstrap error:", error);
     }
@@ -110,7 +102,7 @@ export default function LoginPage() {
       toast({
         variant: "destructive",
         title: "Erro ao acessar",
-        description: "Credenciais inválidas ou erro de rede.",
+        description: "Credenciais inválidas.",
       });
     } finally {
       setIsLoading(false);
@@ -130,7 +122,7 @@ export default function LoginPage() {
       toast({
         variant: "destructive",
         title: "Erro na autenticação",
-        description: "Não foi possível entrar com Google.",
+        description: "Falha ao entrar com Google.",
       });
     } finally {
       setIsLoading(false);
@@ -145,7 +137,7 @@ export default function LoginPage() {
             <Target className="w-10 h-10" />
           </div>
           <h1 className="text-3xl font-bold text-primary">Fluxion Radar</h1>
-          <p className="text-muted-foreground">Inteligência Industrial de Prospecção</p>
+          <p className="text-muted-foreground">MODO DE TESTE ABERTO</p>
         </div>
 
         {!isFirebaseConfigValid && (
@@ -153,7 +145,7 @@ export default function LoginPage() {
             <CardContent className="pt-6 flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
               <div className="text-sm text-amber-800">
-                <strong>Configuração necessária:</strong> As credenciais do Firebase não estão configuradas corretamente.
+                <strong>Configuração necessária:</strong> As credenciais do Firebase não estão configuradas.
               </div>
             </CardContent>
           </Card>
@@ -161,17 +153,17 @@ export default function LoginPage() {
 
         <Card className="border shadow-lg">
           <CardHeader>
-            <CardTitle>Acesse sua conta</CardTitle>
-            <CardDescription>Entre com suas credenciais para gerenciar seus prospects.</CardDescription>
+            <CardTitle>Acesso Liberado</CardTitle>
+            <CardDescription>Qualquer conta terá permissão de administrador para testes.</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleEmailLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email corporativo</Label>
+                <Label htmlFor="email">Email</Label>
                 <Input 
                   id="email" 
                   type="email" 
-                  placeholder="nome@empresa.com.br" 
+                  placeholder="seu@email.com" 
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={isLoading || !isFirebaseConfigValid}
@@ -179,10 +171,7 @@ export default function LoginPage() {
                 />
               </div>
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Senha</Label>
-                  <Link href="#" className="text-xs text-accent hover:underline">Esqueceu a senha?</Link>
-                </div>
+                <Label htmlFor="password">Senha</Label>
                 <Input 
                   id="password" 
                   type="password" 
@@ -198,7 +187,7 @@ export default function LoginPage() {
                 disabled={isLoading || !isFirebaseConfigValid}
               >
                 {isLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                Entrar no Sistema
+                Entrar
               </Button>
             </form>
           </CardContent>
@@ -208,7 +197,7 @@ export default function LoginPage() {
                 <span className="w-full border-t"></span>
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">Ou continue com</span>
+                <span className="bg-card px-2 text-muted-foreground">Ou</span>
               </div>
             </div>
             <Button 
@@ -217,13 +206,7 @@ export default function LoginPage() {
               onClick={handleGoogleLogin}
               disabled={isLoading || !isFirebaseConfigValid}
             >
-              <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
-                <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
-                <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-              </svg>
-              Google Workspace
+              Entrar com Google
             </Button>
           </CardFooter>
         </Card>

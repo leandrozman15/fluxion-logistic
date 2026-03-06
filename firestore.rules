@@ -5,136 +5,16 @@ service cloud.firestore {
 
     /*
     =====================================================
-    CORE SECURITY MODEL
+    MODO DE TESTE ABERTO (OPEN TEST MODE)
     =====================================================
-    - Strict multi-tenant isolation
-    - All business data lives under /tenants/{tenantId}
-    - Root profile mapping at /users/{uid}
+    Este modo permite que qualquer pessoa acesse e edite
+    os dados para facilitar a homologação.
+    As restrições de isolamento serão reativadas após os testes.
     =====================================================
     */
 
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function uid() {
-      return request.auth.uid;
-    }
-
-    function isOwner(userId) {
-      return isSignedIn() && uid() == userId;
-    }
-
-    // ---------------------------------------------------
-    // ROOT USER PROFILES (Connects UID to TenantId)
-    // ---------------------------------------------------
-
-    match /users/{userId} {
-      // Permite ler e criar o próprio perfil para resolver o bootstrap
-      allow read, write: if isOwner(userId);
-    }
-
-    // ---------------------------------------------------
-    // TENANT MEMBERSHIP HELPERS
-    // ---------------------------------------------------
-
-    function tenantUserPath(tenantId) {
-      return /databases/$(database)/documents/tenants/$(tenantId)/users/$(uid());
-    }
-
-    function belongsToTenant(tenantId) {
-      return isSignedIn() && (
-        exists(tenantUserPath(tenantId)) || 
-        (exists(/databases/$(database)/documents/users/$(uid())) && get(/databases/$(database)/documents/users/$(uid())).data.tenantId == tenantId)
-      );
-    }
-
-    function tenantUser(tenantId) {
-      return exists(tenantUserPath(tenantId)) ? get(tenantUserPath(tenantId)).data : get(/databases/$(database)/documents/users/$(uid())).data;
-    }
-
-    function isTenantAdmin(tenantId) {
-      let user = tenantUser(tenantId);
-      return belongsToTenant(tenantId) && (
-        user.role == "admin" || (user.get('roles', []).hasAny(["admin"]))
-      );
-    }
-
-    // ---------------------------------------------------
-    // TENANT ROOT
-    // ---------------------------------------------------
-
-    match /tenants/{tenantId} {
-      // Permite ler o documento raiz da organização se estiver logado (necessário para bootstrap)
-      allow get: if isSignedIn();
-      allow list: if isSignedIn();
-      allow create: if isSignedIn(); 
-      allow update: if isTenantAdmin(tenantId);
-      allow delete: if false;
-
-      match /users/{userId} {
-        allow get, list: if belongsToTenant(tenantId);
-        allow create: if isOwner(userId) || isTenantAdmin(tenantId);
-        allow update: if isOwner(userId) || isTenantAdmin(tenantId);
-        allow delete: if isTenantAdmin(tenantId);
-      }
-
-      match /prospects/{prospectId} {
-        allow read, write: if belongsToTenant(tenantId);
-      }
-
-      match /campaigns/{campaignId} {
-        allow read, write: if belongsToTenant(tenantId);
-      }
-
-      match /templates/{templateId} {
-        allow read, write: if belongsToTenant(tenantId);
-      }
-
-      match /outbox/{messageId} {
-        allow read, create, update: if belongsToTenant(tenantId);
-        allow delete: if isTenantAdmin(tenantId);
-      }
-
-      match /imports/{importId} {
-        allow read, write: if belongsToTenant(tenantId);
-      }
-
-      match /dailyTop/{dateId} {
-        allow read, create, update: if belongsToTenant(tenantId);
-        allow delete: if isTenantAdmin(tenantId);
-      }
-
-      match /dailyStats/{dateId} {
-        allow read, create, update: if belongsToTenant(tenantId);
-        allow delete: if isTenantAdmin(tenantId);
-      }
-
-      match /segmentStats/{segmentId} {
-        allow read, create, update: if belongsToTenant(tenantId);
-        allow delete: if isTenantAdmin(tenantId);
-      }
-
-      match /events/{eventId} {
-        allow read, create: if belongsToTenant(tenantId);
-      }
-
-      match /tasks/{taskId} {
-        allow read, write: if belongsToTenant(tenantId);
-      }
-
-      match /sequences/{sequenceId} {
-        allow read, write: if belongsToTenant(tenantId);
-      }
-
-      match /sequenceEnrollments/{enrollmentId} {
-        allow read, write: if belongsToTenant(tenantId);
-      }
-    }
-
-    match /industryIndex/{companyId} {
-      allow get, list: if isSignedIn();
-      allow create, update, delete: if false;
+    match /{document=**} {
+      allow read, write: if true;
     }
   }
 }
