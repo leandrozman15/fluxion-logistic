@@ -61,7 +61,7 @@ export default function DashboardPage() {
   const { data: allProspects } = useCollection<Prospect>(industryStatsQuery);
 
   const handleGenerateDailyRadar = async () => {
-    if (!db || !tenantId) return;
+    if (!db || !tenantId || !statsRef) return;
     setIsGenerating(true);
     try {
       const topLimit = 30;
@@ -105,9 +105,12 @@ export default function DashboardPage() {
       };
 
       await runTransaction(db, async (transaction) => {
+        // REGRAS DE TRANSAÇÃO: LEITURAS PRIMEIRO
+        const statsDoc = await transaction.get(statsRef as any);
+        
+        // ESCRITAS DEPOIS
         transaction.set(doc(db, "tenants", tenantId, "dailyTop", today), dailyTopData);
         
-        const statsDoc = await transaction.get(statsRef as any);
         if (statsDoc.exists()) {
           transaction.update(statsRef as any, { radarAvgFinalScore: Math.round(avgScore) });
         } else {
