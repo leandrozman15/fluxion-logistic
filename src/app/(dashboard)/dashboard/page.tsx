@@ -23,7 +23,9 @@ import {
   Activity,
   MessageCircle,
   Globe,
-  TrendingUp
+  TrendingUp,
+  Search,
+  Play
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -109,14 +111,11 @@ export default function DashboardPage() {
     if (!db || !tenantId) return;
     setIsGenerating(true);
     try {
-      const settings = tenantData?.settings;
-      const topLimit = settings?.dailyTopLimit || 30;
-      const requireContact = settings?.requireContactMethod || 'email_or_phone';
+      const topLimit = 30;
 
       let q = query(
         collection(db, "tenants", tenantId, "prospects"),
         where("status", "in", ["new", "contacted"]),
-        where("doNotContact", "==", false),
         orderBy("effectiveScore", "desc"),
         limit(200)
       );
@@ -124,21 +123,10 @@ export default function DashboardPage() {
       const snapshot = await getDocs(q);
       let candidates = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Prospect));
       
-      if (requireContact !== 'none') {
-        candidates = candidates.filter(p => {
-          const hasEmail = p.contacts?.some(c => !!c.email);
-          const hasPhone = p.contacts?.some(c => !!c.phone || !!c.whatsapp);
-          if (requireContact === 'email_only') return hasEmail;
-          return hasEmail || hasPhone;
-        });
-      }
-
-      const topN = candidates
-        .filter(p => !p.isClaimedToday)
-        .slice(0, topLimit);
+      const topN = candidates.slice(0, topLimit);
 
       if (topN.length === 0) {
-        toast({ title: "Radar vazio", description: "Não há novos prospectos para gerar o radar hoje." });
+        toast({ title: "Radar vazio", description: "Clique em 'Simular Dados' para ver o radar em ação." });
         return;
       }
 
@@ -153,11 +141,11 @@ export default function DashboardPage() {
           prospectId: p.id,
           companyName: p.companyName,
           effectiveScore: p.effectiveScore,
-          closeProbability: p.closeProbability,
+          closeProbability: p.closeProbability || 50,
           hasEmail: p.contacts?.some(c => !!c.email) || false,
           hasPhone: p.contacts?.some(c => !!c.phone || !!c.whatsapp) || false,
           hasWebsite: !!p.websiteUrl,
-          reasons: p.aiScoreReasons || p.scoreReasons || []
+          reasons: p.aiScoreReasons || p.scoreReasons || ["Perfil industrial compatível"]
         }))
       };
 
@@ -190,148 +178,90 @@ export default function DashboardPage() {
     }
   };
 
-  const handleRunAutoDiscovery = async () => {
-    if (!db || !tenantId || !tenantData) return;
+  const handleSeedData = async () => {
+    if (!db || !tenantId) return;
     setIsRunningDiscovery(true);
     try {
-      const mockNewCompanies = [
-        { name: "Metalúrgica Alpha", state: "SP", sector: "Metalurgia" },
-        { name: "Tech Industrial Beta", state: "SC", sector: "Máquinas" },
-        { name: "Logística Gamma", state: "PR", sector: "Logística" }
+      const mockData = [
+        { name: "Metalúrgica Gerdau", state: "SP", sector: "Metalurgia", score: 85, web: "gerdau.com.br" },
+        { name: "WEG Motores", state: "SC", sector: "Eletrotécnica", score: 92, web: "weg.net" },
+        { name: "Marcopolo S.A.", state: "RS", sector: "Automotivo", score: 78, web: "marcopolo.com.br" }
       ];
 
       const batch = writeBatch(db);
-      for (const comp of mockNewCompanies) {
-        const id = `auto_${Math.random().toString(36).substr(2, 9)}`;
+      for (const comp of mockData) {
+        const id = `demo_${Math.random().toString(36).substr(2, 9)}`;
         const pRef = doc(db, "tenants", tenantId, "prospects", id);
-        
-        const data: Partial<Prospect> = {
+        batch.set(pRef, {
+          id,
+          tenantId,
           companyName: comp.name,
-          cnpj: `${Math.floor(Math.random() * 90 + 10)}.000.000/0001-${Math.floor(Math.random() * 90 + 10)}`,
+          cnpj: "00.000.000/0001-00",
           industryTags: [comp.sector],
-          address: { state: comp.state, city: "São Paulo", country: "Brasil" },
+          address: { state: comp.state, city: "Industrial City", country: "Brasil" },
           status: "new",
-          source: "auto_discovery",
-          aiScore: 70,
-          aiScoreReasons: ["Detectada via Auto Discovery", "Localizada em polo industrial"],
-          isRecentlyCreated: true,
+          source: "demo_seed",
+          effectiveScore: comp.score,
+          aiScore: comp.score,
+          aiScoreReasons: ["Líder de mercado detectado", "Alta maturidade digital"],
+          websiteUrl: `https://www.${comp.web}`,
+          contacts: [{ name: "João Silva", role: "Diretor Industrial", email: `comercial@${comp.web}`, phone: "11999999999" }],
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
-        };
-
-        const effectiveScore = calculateEffectiveScore(data, tenantData.settings);
-        batch.set(pRef, { ...data, id, effectiveScore });
+        });
       }
-
-      batch.update(tenantRef as any, {
-        "settings.lastDiscoveryRunAt": new Date().toISOString(),
-        "settings.lastDiscoveryCount": mockNewCompanies.length
-      });
-
       await batch.commit();
-      toast({ title: "Auto Discovery Concluído", description: `${mockNewCompanies.length} novas indústrias encontradas.` });
+      toast({ title: "Dados de Exemplo Criados!", description: "Agora você já pode ver o radar e as oportunidades." });
+      handleGenerateDailyRadar();
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro no Discovery" });
+      toast({ variant: "destructive", title: "Erro ao criar dados" });
     } finally {
       setIsRunningDiscovery(false);
     }
   };
 
-  const handleQuickClaim = async (prospectId: string) => {
-    if (!db || !tenantId) return;
-    setIsActionLoading(prospectId);
-    try {
-      const statsRef = doc(db, "tenants", tenantId, "dailyStats", today);
-      const pRef = doc(db, "tenants", tenantId, "prospects", prospectId);
-
-      await runTransaction(db, async (transaction) => {
-        const statsDoc = await transaction.get(statsRef);
-        let currentQuota = 0;
-        let quotaLimit = 30;
-
-        if (statsDoc.exists()) {
-          currentQuota = statsDoc.data().quotaUsed || 0;
-          quotaLimit = statsDoc.data().quotaLimit || 30;
-        }
-
-        if (currentQuota >= quotaLimit) throw new Error("Quota atingida");
-
-        transaction.update(pRef, {
-          isClaimedToday: true,
-          claimedAt: new Date().toISOString(),
-          status: 'contacted'
-        });
-
-        transaction.update(statsRef, { quotaUsed: currentQuota + 1 });
-      });
-      toast({ title: "Ativado!", description: "Prospect adicionado ao radar de hoje." });
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Erro", description: e.message });
-    } finally {
-      setIsActionLoading(null);
-    }
-  };
-
   const dailyQuotaUsed = stats?.quotaUsed || 0;
-  const dailyQuotaLimit = stats?.quotaLimit || tenantData?.settings?.dailyTopLimit || 30;
+  const dailyQuotaLimit = stats?.quotaLimit || 30;
   const quotaProgress = (dailyQuotaUsed / dailyQuotaLimit) * 100;
-
-  const kpis = [
-    { title: "Ativados Hoje", value: `${dailyQuotaUsed}/${dailyQuotaLimit}`, icon: Target, description: "Progresso da meta diária" },
-    { title: "Base Total", value: allProspects?.length || 0, icon: Users, description: "Empresas cadastradas" },
-    { title: "Emails na Fila", value: stats?.emailsSent || 0, icon: Mail, description: "Comunicações disparadas" },
-    { title: "Auto Discovery", value: tenantData?.settings?.lastDiscoveryCount || 0, icon: Sparkles, description: "Última busca semanal" },
-  ];
 
   return (
     <div className="space-y-6">
-      {tenantData && !tenantData.settings?.onboardingCompleted && (
+      {allProspects?.length === 0 && (
         <Card className="bg-primary text-white border-none shadow-lg overflow-hidden relative group">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110"></div>
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
           <CardHeader className="relative pb-2">
-            <CardTitle className="flex items-center gap-2"><Rocket className="w-5 h-5 text-accent" /> Comece com o pé direito</CardTitle>
-            <CardDescription className="text-white/70">Seu motor de prospecção ainda não foi calibrado.</CardDescription>
+            <CardTitle className="flex items-center gap-2"><Rocket className="w-5 h-5 text-accent" /> Comece agora (Modo Teste)</CardTitle>
+            <CardDescription className="text-white/70">O sistema está vazio. Vamos populá-lo com dados reais simulados.</CardDescription>
           </CardHeader>
           <CardContent className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <p className="text-sm">Complete o onboarding para configurar seus pesos de IA, importar leads e gerar seu primeiro radar.</p>
-            <Button variant="secondary" className="font-bold shrink-0" asChild>
-              <Link href="/onboarding">Configurar Agora <ChevronRight className="ml-1 w-4 h-4" /></Link>
+            <p className="text-sm">Clique no botão ao lado para criar prospects de exemplo e ver a IA em ação.</p>
+            <Button variant="secondary" className="font-bold shrink-0" onClick={handleSeedData} disabled={isRunningDiscovery}>
+              {isRunningDiscovery ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="mr-2 w-4 h-4" />}
+              Gerar Dados de Exemplo
             </Button>
           </CardContent>
         </Card>
       )}
 
       <div className="flex flex-col md:flex-row gap-4 items-start justify-between">
-        <div className="flex items-center gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-primary">Radar do Dia</h1>
-            <p className="text-muted-foreground">Foco nas melhores oportunidades industriais.</p>
-          </div>
-          {tenantData?.settings?.autoDiscoveryEnabled && (
-            <Badge variant="outline" className="h-fit py-1 px-3 border-accent/50 bg-accent/5 text-accent flex items-center gap-2">
-              <Activity className="w-3 h-3 animate-pulse" /> Auto Discovery Ativo
-            </Badge>
-          )}
+        <div>
+          <h1 className="text-2xl font-bold text-primary">Radar do Dia</h1>
+          <p className="text-muted-foreground">Priorização automática de leads industriais.</p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-          <Card className="w-full md:w-80 bg-accent/5 border-accent/20">
-            <CardContent className="pt-4 pb-4">
-              <div className="flex justify-between text-xs mb-2">
-                <span className="font-semibold text-accent flex items-center gap-1">
-                  <Target className="w-3 h-3" /> Progresso da Quota
-                </span>
-                <span>{dailyQuotaUsed}/{dailyQuotaLimit}</span>
-              </div>
-              <Progress value={quotaProgress} className="h-2" />
-            </CardContent>
-          </Card>
+        <div className="flex items-center gap-3 bg-accent/5 p-2 rounded-lg border border-accent/20">
+          <div className="text-right hidden sm:block">
+            <div className="text-[10px] font-bold uppercase text-accent">Quota Diária</div>
+            <div className="text-xs font-bold text-primary">{dailyQuotaUsed}/{dailyQuotaLimit}</div>
+          </div>
+          <Progress value={quotaProgress} className="w-32 h-2" />
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {kpis.map((kpi, i) => (
-          <KPICard key={i} {...kpi} />
-        ))}
+        <KPICard title="Ativados Hoje" value={dailyQuotaUsed} icon={Target} description="Progresso da meta" />
+        <KPICard title="Base Total" value={allProspects?.length || 0} icon={Users} description="Indústrias no CRM" />
+        <KPICard title="Sugestões" value={dailyTop?.items.length || 0} icon={Sparkles} description="Qualificados pela IA" />
+        <KPICard title="Performance" value="High" icon={Activity} description="Saúde do funil" />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -342,156 +272,83 @@ export default function DashboardPage() {
                 <Zap className="w-5 h-5 text-accent" /> Sugestões de Hoje
               </CardTitle>
               <CardDescription>
-                {dailyTop ? `Top ${dailyTop.items.length} oportunidades congeladas para hoje.` : 'O radar ainda não foi gerado.'}
+                {dailyTop ? `Top ${dailyTop.items.length} indústrias para abordar.` : 'Clique em atualizar para gerar o radar.'}
               </CardDescription>
             </div>
-            <div className="flex gap-2">
-              <Button onClick={handleGenerateDailyRadar} disabled={isGenerating} size="sm" className="bg-accent hover:bg-accent/90">
-                {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-              </Button>
-            </div>
+            <Button onClick={handleGenerateDailyRadar} disabled={isGenerating || allProspects?.length === 0} size="sm" className="bg-accent hover:bg-accent/90">
+              {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            </Button>
           </CardHeader>
           <CardContent>
             {dailyTopLoading ? (
               <div className="py-20 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>
-            ) : (
-              <div className="space-y-3">
-                {!dailyTop ? (
-                  <div className="text-center py-20 border-2 border-dashed rounded-xl space-y-4">
-                    <Factory className="w-12 h-12 mx-auto opacity-10" />
-                    <p className="text-sm font-semibold">Radar pronto para ser gerado</p>
-                    <Button onClick={handleGenerateDailyRadar} disabled={isGenerating}>Começar agora</Button>
-                  </div>
+            ) : !dailyTop ? (
+              <div className="text-center py-20 border-2 border-dashed rounded-xl space-y-4">
+                <Factory className="w-12 h-12 mx-auto opacity-10" />
+                <p className="text-sm font-semibold">Nenhum radar gerado hoje.</p>
+                {allProspects?.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Primeiro adicione empresas em 'Discovery' ou clique em 'Gerar Dados de Exemplo'.</p>
                 ) : (
-                  <div className="space-y-1">
-                    {dailyTop.items.map((item, i) => {
-                      const prospectRef = allProspects?.find(p => p.id === item.prospectId);
-                      const sKey = prospectRef ? getSegmentKey(prospectRef) : null;
-                      const segment = allSegments?.find(s => s.id === sKey);
-                      const isWARecommended = segment?.preferredChannel === 'whatsapp';
-                      const isEmailRecommended = segment?.preferredChannel === 'email';
-
-                      return (
-                        <div key={item.prospectId} className="flex items-center justify-between p-3 rounded-xl bg-secondary/20 border hover:border-accent/50 transition-all group">
-                          <Link href={`/prospects/${item.prospectId}`} className="flex items-center gap-4 flex-1">
-                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-xs shrink-0">#{i+1}</div>
-                            <div className="min-w-0">
-                              <div className="font-bold text-sm truncate">{item.companyName}</div>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                 <Badge variant="outline" className="text-[9px] px-1 h-4">Score: {item.effectiveScore}</Badge>
-                                 {item.closeProbability !== undefined && (
-                                   <Badge className="text-[9px] h-4 bg-accent/10 text-accent border-accent/20 flex items-center gap-1">
-                                     <TrendingUp className="w-2.5 h-2.5" /> Close: {item.closeProbability}%
-                                   </Badge>
-                                 )}
-                                 {isWARecommended && <Badge variant="outline" className="text-[8px] h-4 bg-green-50 text-green-700 border-green-200 flex items-center gap-1"><Zap className="w-2 h-2" /> WA Recomendado</Badge>}
-                                 {isEmailRecommended && <Badge variant="outline" className="text-[8px] h-4 bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-1"><Zap className="w-2 h-2" /> E-mail Recomendado</Badge>}
-                              </div>
-                            </div>
-                          </Link>
-                          
-                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {isWARecommended && <MessageCircle className="w-4 h-4 text-green-600 animate-bounce" />}
-                            <Button 
-                              variant="secondary" 
-                              size="sm" 
-                              className="h-8 text-[10px] font-bold"
-                              asChild
-                            >
-                              <Link href={`/prospects/${item.prospectId}`}>
-                                <Lightbulb className="w-3 h-3 mr-1 text-accent" /> Próxima Ação
-                              </Link>
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-8 w-8 text-green-600" 
-                              onClick={() => handleQuickClaim(item.prospectId)}
-                            >
-                              {isActionLoading === item.prospectId ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                            </Button>
-                          </div>
-                          <ChevronRight className="w-4 h-4 text-muted-foreground ml-2" />
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <Button onClick={handleGenerateDailyRadar}>Gerar Agora</Button>
                 )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {dailyTop.items.map((item, i) => (
+                  <div key={item.prospectId} className="flex items-center justify-between p-3 rounded-xl bg-secondary/20 border hover:border-accent/50 transition-all group">
+                    <Link href={`/prospects/${item.prospectId}`} className="flex items-center gap-4 flex-1">
+                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-xs">#{i+1}</div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-sm truncate">{item.companyName}</div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                           <Badge variant="outline" className="text-[9px]">Score: {item.effectiveScore}</Badge>
+                           <Badge className="text-[9px] bg-accent/10 text-accent border-accent/20">Close: {item.closeProbability}%</Badge>
+                        </div>
+                      </div>
+                    </Link>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                  </div>
+                ))}
               </div>
             )}
           </CardContent>
         </Card>
 
         <div className="space-y-6">
-          <Card className="bg-accent/5 border-accent/20">
+          <Card className="bg-secondary/30 border-dashed">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
-                <Globe className="w-4 h-4 text-accent" /> Radar Nacional
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-muted-foreground">Empresas indexadas:</span>
-                <span className="font-bold">124.842</span>
-              </div>
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-muted-foreground">Nuevos este mes:</span>
-                <span className="font-bold text-green-600">+3.210</span>
-              </div>
-              <div className="pt-2">
-                <Button size="sm" variant="outline" className="w-full h-8 text-[10px] border-accent/30 text-accent hover:bg-accent hover:text-white" asChild>
-                  <Link href="/discovery">Explorar Ecossistema <ChevronRight className="ml-1 w-3 h-3" /></Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-accent" /> Automação de Discovery
+                <Lightbulb className="w-4 h-4 text-accent" /> Como funciona?
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="p-4 rounded-xl bg-secondary/30 border border-border space-y-3">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-muted-foreground">Última execução:</span>
-                  <span className="font-semibold">{tenantData?.settings?.lastDiscoveryRunAt ? new Date(tenantData.settings.lastDiscoveryRunAt).toLocaleDateString() : 'Nunca'}</span>
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <div className="w-5 h-5 rounded-full bg-primary text-white text-[10px] flex items-center justify-center shrink-0">1</div>
+                  <p className="text-xs">Vá em <b>Discovery</b> e encontre empresas brasileiras.</p>
                 </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-muted-foreground">Novos encontrados:</span>
-                  <span className="font-semibold">{tenantData?.settings?.lastDiscoveryCount || 0}</span>
+                <div className="flex gap-2">
+                  <div className="w-5 h-5 rounded-full bg-primary text-white text-[10px] flex items-center justify-center shrink-0">2</div>
+                  <p className="text-xs">A IA analisa o site e dá uma <b>Nota (Score)</b>.</p>
                 </div>
-                <Button 
-                  onClick={handleRunAutoDiscovery} 
-                  disabled={isRunningDiscovery || !tenantData?.settings?.autoDiscoveryEnabled} 
-                  className="w-full h-8 text-[10px] bg-accent/10 text-accent hover:bg-accent hover:text-white border-accent/20"
-                  variant="outline"
-                >
-                  {isRunningDiscovery ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <RefreshCw className="w-3 h-3 mr-2" />}
-                  Executar Discovery Agora
-                </Button>
+                <div className="flex gap-2">
+                  <div className="w-5 h-5 rounded-full bg-primary text-white text-[10px] flex items-center justify-center shrink-0">3</div>
+                  <p className="text-xs">Todo dia o <b>Radar</b> te dá as Top 30 oportunidades.</p>
+                </div>
               </div>
+              <Button variant="outline" className="w-full text-xs" asChild>
+                <Link href="/discovery">Encontrar Empresas <Search className="ml-2 w-3 h-3" /></Link>
+              </Button>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2"><PieChart className="w-4 h-4" /> Mix de Indústrias</CardTitle>
+              <CardTitle className="text-sm flex items-center gap-2"><Globe className="w-4 h-4 text-accent" /> Radar Nacional</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-[150px] w-full">
-                {industryData.length > 0 ? (
-                  <ChartContainer config={{ value: { label: "Empresas", color: "hsl(var(--primary))" } }}>
-                    <BarChart data={industryData} layout="vertical" margin={{ left: -20, right: 20 }}>
-                      <XAxis type="number" hide />
-                      <YAxis dataKey="name" type="category" width={100} fontSize={10} axisLine={false} tickLine={false} />
-                      <Tooltip content={<ChartTooltipContent />} />
-                      <Bar dataKey="value" fill="var(--color-value)" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ChartContainer>
-                ) : <div className="flex items-center justify-center h-full text-xs text-muted-foreground italic">Dados insuficientes</div>}
-              </div>
+              <div className="text-2xl font-bold">124.8k</div>
+              <p className="text-[10px] text-muted-foreground uppercase font-bold mt-1">Indústrias brasileiras indexadas</p>
             </CardContent>
           </Card>
         </div>
