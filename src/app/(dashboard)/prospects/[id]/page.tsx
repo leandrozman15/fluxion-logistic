@@ -20,7 +20,7 @@ import {
   MailPlus, UserPlus, Info, Ban, ShieldAlert, MessageCircle, 
   ArrowLeft, Lightbulb, Clock, User, AlertTriangle, ShieldCheck, Zap,
   Cpu, FileSearch, CheckCircle, TrendingUp, TrendingDown,
-  Target, Bot, Layers, Play
+  Target, Bot, Layers, Play, RefreshCw
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Prospect, ProspectStatus, EmailTemplate, OutboxState, SegmentStats, Sequence, SequenceEnrollment } from "@/app/lib/types";
@@ -43,6 +43,7 @@ import { addDays } from "date-fns";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { getSegmentKey } from "@/lib/utils/learning-loop";
+import { fetchCnpjData } from "@/services/receita-ws";
 
 export default function ProspectDetailPage() {
   const { id } = useParams();
@@ -69,6 +70,7 @@ export default function ProspectDetailPage() {
   const [isPredictingClose, setIsPredictingClose] = useState(false);
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
   const [isEnrolling, setIsEnrolling] = useState(false);
+  const [isSyncingReceita, setIsSyncingReceita] = useState(false);
   
   const [customSubject, setCustomSubject] = useState<string | null>(null);
   const [customBody, setCustomBody] = useState<string | null>(null);
@@ -148,125 +150,79 @@ export default function ProspectDetailPage() {
     }
   }, [searchParams, loading, prospect]);
 
-  const createFollowUpTask = async (type: 'followup_whatsapp' | 'followup_email', customNotes?: string) => {
-    if (!db || !tenantId || !prospect || !user) return;
+  const handleSyncReceitaWS = async () => {
+    if (!prospect?.cnpj || !prospectRef) return;
+    setIsSyncingReceita(true);
     try {
-      const dueAt = addDays(new Date(), 2);
-      await addDoc(collection(db, "tenants", tenantId, "tasks"), {
-        tenantId,
-        prospectId: prospect.id,
-        companyName: prospect.companyName,
-        type,
-        dueAt,
-        state: "open",
-        assignedTo: user.uid,
-        createdAt: serverTimestamp(),
-        createdBy: user.uid,
-        notes: customNotes
-      });
-    } catch (e) {
-      console.error("Error creating task:", e);
-    }
-  };
-
-  const handleStartSequence = async () => {
-    if (!db || !tenantId || !prospect || !selectedSequenceId || !user) return;
-    setIsEnrolling(true);
-    try {
-      const enrollmentRef = collection(db, "tenants", tenantId, "sequenceEnrollments");
-      const newEnrollment = {
-        tenantId,
-        prospectId: prospect.id,
-        sequenceId: selectedSequenceId,
-        state: "active",
-        startedAt: serverTimestamp(),
-        nextStepIndex: 0,
-        lastStepAt: null,
-        log: []
+      const data = await fetchCnpjData(prospect.cnpj);
+      const updates: any = {
+        companyName: data.nome,
+        industryTags: [data.atividade_principal[0].text, ...data.atividades_secundarias.slice(0, 2).map(a => a.text)],
+        address: { city: data.municipio, state: data.uf, country: "Brasil" },
+        updatedAt: new Date().toISOString()
       };
-      
-      const docRef = await addDoc(enrollmentRef, newEnrollment);
-      
-      await updateDoc(prospectRef as any, {
-        activeSequenceId: selectedSequenceId,
-        activeSequenceStepIndex: 0,
-        updatedAt: serverTimestamp()
-      });
 
-      await addDoc(collection(db, "tenants", tenantId, "events"), {
-        type: "sequence_enrolled",
-        prospectId: prospect.id,
-        companyName: prospect.companyName,
-        actorUid: user.uid,
-        createdAt: serverTimestamp(),
-        metadata: { sequenceId: selectedSequenceId, enrollmentId: docRef.id }
-      });
+      // Add contact if empty
+      if ((prospect.contacts?.length || 0) === 0) {
+        updates.contacts = [{ name: "Contato via ReceitaWS", role: "N/A", email: data.email || "", phone: data.telefone || "" }];
+      }
 
-      toast({ title: "Sequência iniciada!", description: "O motor processará o primeiro passo em breve." });
-      setIsEnrollDialogOpen(false);
-    } catch (e) {
-      toast({ variant: "destructive", title: "Erro ao iniciar sequência" });
-    } finally {
-      setIsEnrolling(false);
-    }
-  };
-
-  const handleGenerateAiPlan = async () => {
-    if (!prospect) return;
-    setIsGeneratingPlan(true);
-    try {
-      const plan = await generateApproachPlan({
-        prospect: {
-          companyName: prospect.companyName,
-          industryTags: prospect.industryTags,
-          aiWebSummary: prospect.aiWebSummary,
-          contacts: prospect.contacts,
-          doNotContact: prospect.doNotContact
-        },
-        closeProbability: prospect.closeProbability,
-        drivers: prospect.closeProbabilityDrivers as any,
-        preferredChannel: segmentData?.preferredChannel,
-        emailQuality: emailQuality || 'generic',
-        spamRisk: spamProb
-      });
-      setAiPlan(plan);
-      setIsAiAgentDialogOpen(true);
+      await updateDoc(prospectRef, updates);
       
       await addDoc(collection(db!, "tenants", tenantId!, "events"), {
-        type: "approach_generated_ai",
+        type: "status_changed",
+        prospectId: id,
+        companyName: prospect.companyName,
+        actorUid: user?.uid,
+        createdAt: serverTimestamp(),
+        metadata: { from: "manual", to: "official_receita", label: "Sincronização ReceitaWS" }
+      });
+
+      toast({ title: "Dados Sincronizados!", description: "Informações oficiais da ReceitaWS aplicadas." });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Erro na sincronização", description: e.message });
+    } finally {
+      setIsSyncingReceita(false);
+    }
+  };
+
+  const handleAnalyzeWebsite = async () => {
+    if (!prospect?.websiteUrl || !prospectRef) return;
+    setIsAnalyzingWeb(true);
+    try {
+      const result = await analyzeWebsiteContent({ 
+        websiteUrl: prospect.websiteUrl, 
+        companyName: prospect.companyName 
+      });
+
+      const updates: Partial<Prospect> = {
+        aiWebSummary: result.summary,
+        aiDetectedKeywords: result.detectedKeywords,
+        aiScoreConfidence: result.confidence,
+        aiWebAnalysisAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      const newScore = calculateEffectiveScore({ ...prospect, ...updates });
+      updates.effectiveScore = newScore;
+
+      await updateDoc(prospectRef, updates as any);
+
+      await addDoc(collection(db!, "tenants", tenantId!, "events"), {
+        type: "website_analyzed",
         prospectId: prospect.id,
         companyName: prospect.companyName,
         actorUid: user?.uid,
         createdAt: serverTimestamp(),
-        metadata: { recommendedChannel: plan.recommendedChannel, angle: plan.approachAngle }
+        metadata: { confidence: result.confidence, tagsFound: result.industryTags.length }
       });
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Erro no Agente de IA", description: e.message });
-    } finally {
-      setIsGeneratingPlan(false);
-    }
-  };
 
-  const handleApplyAiPlan = async () => {
-    if (!aiPlan || !prospect) return;
-    if (aiPlan.recommendedChannel === 'email') {
-      setCustomSubject(aiPlan.subject || "");
-      setCustomBody(aiPlan.message);
-      setIsOutboxDialogOpen(true);
-    } else {
-      setWhatsAppDraft(aiPlan.message);
-      setIsWhatsAppDialogOpen(true);
+      toast({ title: "Site analisado!", description: "Inteligência industrial extraída com sucesso." });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Erro na análise", description: e.message });
+    } finally {
+      setIsAnalyzingWeb(false);
     }
-    setIsAiAgentDialogOpen(false);
-    
-    await addDoc(collection(db!, "tenants", tenantId!, "events"), {
-      type: "approach_applied",
-      prospectId: prospect.id,
-      companyName: prospect.companyName,
-      actorUid: user?.uid,
-      createdAt: serverTimestamp(),
-      metadata: { channel: aiPlan.recommendedChannel }
-    });
   };
 
   const handleStatusChange = async (newStatus: ProspectStatus) => {
@@ -317,228 +273,11 @@ export default function ProspectDetailPage() {
     }
   };
 
-  const handleAnalyzeWebsite = async () => {
-    if (!prospect?.websiteUrl || !prospectRef) return;
-    setIsAnalyzingWeb(true);
-    try {
-      const result = await analyzeWebsiteContent({ 
-        websiteUrl: prospect.websiteUrl, 
-        companyName: prospect.companyName 
-      });
-
-      const updates: Partial<Prospect> = {
-        aiWebSummary: result.summary,
-        aiDetectedKeywords: result.detectedKeywords,
-        aiScoreConfidence: result.confidence,
-        aiWebAnalysisAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-
-      const newScore = calculateEffectiveScore({ ...prospect, ...updates });
-      updates.effectiveScore = newScore;
-
-      await updateDoc(prospectRef, updates as any);
-
-      await addDoc(collection(db!, "tenants", tenantId!, "events"), {
-        type: "website_analyzed",
-        prospectId: prospect.id,
-        companyName: prospect.companyName,
-        actorUid: user?.uid,
-        createdAt: serverTimestamp(),
-        metadata: { confidence: result.confidence, tagsFound: result.industryTags.length }
-      });
-
-      toast({ title: "Site analisado!", description: "Inteligência industrial extraída com sucesso." });
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Erro na análise", description: e.message });
-    } finally {
-      setIsAnalyzingWeb(false);
-    }
-  };
-
-  const handlePredictProbability = async () => {
-    if (!prospect || !prospectRef) return;
-    setIsPredictingClose(true);
-    try {
-      const { baseline, signals } = computeBaselineProbability(prospect, segmentData);
-      
-      const result = await predictCloseProbability({
-        baselineProbability: baseline,
-        deterministicSignals: signals,
-        prospect: {
-          companyName: prospect.companyName,
-          industryTags: prospect.industryTags,
-          status: prospect.status,
-          aiWebSummary: prospect.aiWebSummary,
-          aiDetectedKeywords: prospect.aiDetectedKeywords,
-          emailAttempts: prospect.emailAttempts,
-          lastContactAt: prospect.lastContactAt
-        },
-        segmentPreferredChannel: segmentData?.preferredChannel
-      });
-
-      const updates: Partial<Prospect> = {
-        closeProbability: result.closeProbability,
-        closeProbabilityConfidence: result.confidence,
-        closeProbabilityDrivers: result.drivers,
-        closeProbabilityUpdatedAt: new Date().toISOString(),
-        closeProbabilityModelVersion: "v1.0-genkit",
-        updatedAt: new Date().toISOString()
-      };
-
-      await updateDoc(prospectRef, updates as any);
-      toast({ title: "Previsão Atualizada", description: `Probabilidade de fechamento em ${result.closeProbability}%.` });
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Erro na previsão", description: e.message });
-    } finally {
-      setIsPredictingClose(false);
-    }
-  };
-
-  const handleToggleDnc = async () => {
-    if (!prospectRef || !prospect || !user) return;
-    setIsUpdating(true);
-    try {
-      const isEnabling = !prospect.doNotContact;
-      await updateDoc(prospectRef, {
-        doNotContact: isEnabling,
-        doNotContactReason: isEnabling ? dncReason : "",
-        doNotContactAt: isEnabling ? new Date().toISOString() : null,
-        updatedAt: new Date().toISOString()
-      });
-
-      await addDoc(collection(db, "tenants", tenantId, "events"), {
-        type: isEnabling ? "dnc_enabled" : "dnc_disabled",
-        prospectId: prospect.id,
-        companyName: prospect.companyName,
-        actorUid: user.uid,
-        createdAt: serverTimestamp(),
-        metadata: { reason: dncReason }
-      });
-
-      toast({ 
-        title: isEnabling ? "Bloqueado!" : "Desbloqueado", 
-        description: isEnabling ? "O prospect não aparecerá mais no Radar." : "Prospect liberado."
-      });
-      setIsDncDialogOpen(false);
-      setDncReason("");
-    } catch (e) {
-      toast({ variant: "destructive", title: "Erro" });
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  const handleImproveEmailWithAi = async () => {
-    if (!prospect || !selectedTemplate) return;
-    setIsAiDrafting(true);
-    try {
-      const result = await generateEmailDraft({
-        templateSubject: selectedTemplate.subject,
-        templateBody: selectedTemplate.body,
-        prospect: {
-          companyName: prospect.companyName,
-          city: prospect.address?.city,
-          state: prospect.address?.state,
-          industryTags: prospect.industryTags,
-          contactName: selectedContact?.name,
-          contactRole: selectedContact?.role,
-          effectiveScore: prospect.effectiveScore,
-          scoreReasons: prospect.aiScoreReasons || prospect.scoreReasons
-        }
-      });
-      setCustomSubject(result.subject);
-      setCustomBody(result.body);
-      toast({ title: "Email melhorado com IA!" });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Erro na IA" });
-    } finally {
-      setIsAiDrafting(false);
-    }
-  };
-
-  const handleSaveToOutbox = async (state: OutboxState) => {
-    if (!db || !tenantId || !prospect || !user) return;
-    setIsSavingOutbox(true);
-    try {
-      const outboxRef = collection(db, "tenants", tenantId, "outbox");
-      await addDoc(outboxRef, {
-        tenantId,
-        createdAt: serverTimestamp(),
-        createdBy: user.uid,
-        updatedAt: serverTimestamp(),
-        type: 'email',
-        state,
-        to: selectedContact?.email || "",
-        subject: previewSubject,
-        body: previewBody,
-        prospectId: prospect.id,
-        companyName: prospect.companyName,
-        effectiveScore: prospect.effectiveScore,
-        attempts: 0,
-        lastError: null,
-        aiUsed: !!customBody,
-        sequenceEnrollmentId: activeEnrollment?.id || null
-      });
-
-      await updateDoc(prospectRef as any, { 
-        lastEmailSentAt: new Date().toISOString(),
-        emailAttempts: increment(1),
-        lastContactAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
-
-      await addDoc(collection(db, "tenants", tenantId, "events"), {
-        type: "email_prepared",
-        prospectId: prospect.id,
-        companyName: prospect.companyName,
-        actorUid: user.uid,
-        createdAt: serverTimestamp(),
-        metadata: { state, to: selectedContact?.email, aiUsed: !!customBody, quality: emailQuality, enrollmentId: activeEnrollment?.id }
-      });
-
-      if (state === 'queued') {
-        createFollowUpTask('followup_email', aiPlan?.followupMessage);
-      }
-
-      toast({ title: state === 'queued' ? "Email na fila!" : "Rascunho salvo!" });
-      setIsOutboxDialogOpen(false);
-    } catch (e) {
-      toast({ variant: "destructive", title: "Erro ao salvar no Outbox" });
-    } finally {
-      setIsSavingOutbox(false);
-    }
-  };
-
   const handleOpenWhatsAppDialog = () => {
     if (!prospect) return;
     const initialMsg = buildWhatsAppMessage(prospect);
     setWhatsAppDraft(initialMsg);
     setIsWhatsAppDialogOpen(true);
-  };
-
-  const handleImproveWhatsAppWithAi = async () => {
-    if (!prospect) return;
-    setIsAiWhatsAppDrafting(true);
-    try {
-      const result = await generateWhatsAppMessage({
-        templateBaseText: whatsAppDraft,
-        prospect: {
-          companyName: prospect.companyName,
-          city: prospect.address?.city,
-          state: prospect.address?.state,
-          industryTags: prospect.industryTags,
-          contactName: selectedContact?.name,
-          contactRole: selectedContact?.role,
-        }
-      });
-      setWhatsAppDraft(result.message);
-      toast({ title: "Mensagem melhorada!" });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Erro na IA" });
-    } finally {
-      setIsAiWhatsAppDrafting(false);
-    }
   };
 
   const handleFinalizeWhatsApp = async () => {
@@ -559,63 +298,8 @@ export default function ProspectDetailPage() {
       metadata: { phoneE164: normalized, hasPrefilledText: !!whatsAppDraft, enrollmentId: activeEnrollment?.id }
     });
 
-    await updateDoc(prospectRef as any, { 
-      lastContactAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    });
-
-    createFollowUpTask('followup_whatsapp', aiPlan?.followupMessage);
-
     window.open(buildWaMeUrl(normalized, whatsAppDraft), "_blank");
     setIsWhatsAppDialogOpen(false);
-  };
-
-  const executeNBA = () => {
-    if (!nba) return;
-    switch (nba.type) {
-      case 'suggest_emails':
-      case 'analyze_website':
-        if (prospect?.websiteUrl) handleAnalyzeWebsite();
-        else toast({ title: "Ação Sugerida", description: nba.reason });
-        break;
-      case 'sequence_step':
-      case 'prepare_email':
-        setIsOutboxDialogOpen(true);
-        break;
-      case 'whatsapp_first':
-      case 'followup':
-        handleOpenWhatsAppDialog();
-        break;
-      default:
-        break;
-    }
-  };
-
-  const getEventIcon = (type: string) => {
-    switch (type) {
-      case 'whatsapp_opened': return <MessageCircle className="w-4 h-4 text-green-500" />;
-      case 'email_prepared': return <Mail className="w-4 h-4 text-blue-500" />;
-      case 'status_changed': return <RefreshCw className="w-4 h-4 text-orange-500" />;
-      case 'dnc_enabled': return <Ban className="w-4 h-4 text-destructive" />;
-      case 'website_analyzed': return <SearchCode className="w-4 h-4 text-purple-500" />;
-      case 'approach_generated_ai': return <Bot className="w-4 h-4 text-accent" />;
-      case 'sequence_enrolled': return <Layers className="w-4 h-4 text-accent" />;
-      default: return <Clock className="w-4 h-4 text-muted-foreground" />;
-    }
-  };
-
-  const getEventLabel = (event: any) => {
-    switch (event.type) {
-      case 'whatsapp_opened': return "Contato via WhatsApp iniciado";
-      case 'email_prepared': return `E-mail preparado para ${event.metadata?.to}`;
-      case 'status_changed': return `Status alterado de ${event.metadata?.from} para ${event.metadata?.to}`;
-      case 'dnc_enabled': return `Adicionado à lista DNC: ${event.metadata?.reason}`;
-      case 'dnc_disabled': return "Removido da lista DNC";
-      case 'website_analyzed': return "Inteligência web extraída via IA";
-      case 'approach_generated_ai': return `Plano de abordagem IA gerado (${event.metadata?.recommendedChannel})`;
-      case 'sequence_enrolled': return `Iniciado na sequência assistida`;
-      default: return event.type;
-    }
   };
 
   if (loading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-muted-foreground" /></div>;
@@ -641,11 +325,7 @@ export default function ProspectDetailPage() {
               <Badge variant="outline">{prospect.cnpj}</Badge>
               <Badge variant="default" className="bg-accent">Score Radar: {prospect.effectiveScore}</Badge>
               {nba && nba.type !== 'none' && (
-                <Badge 
-                  variant="secondary" 
-                  className={`cursor-pointer transition-all ${nba.type === 'sequence_step' ? 'bg-orange-500 text-white animate-pulse' : 'bg-accent/10 text-accent border-accent/20 hover:bg-accent/20'}`}
-                  onClick={executeNBA}
-                >
+                <Badge variant="secondary" className="bg-accent/10 text-accent border-accent/20">
                   <Lightbulb className="w-3 h-3 mr-1" /> {nba.label}
                 </Badge>
               )}
@@ -653,53 +333,23 @@ export default function ProspectDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          {!prospect.doNotContact && (
-            <Button 
-              onClick={handleGenerateAiPlan} 
-              className="bg-accent hover:bg-accent/90"
-              disabled={isGeneratingPlan}
-            >
-              {isGeneratingPlan ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Bot className="w-4 h-4 mr-2" />}
-              Gerar Abordagem (IA)
-            </Button>
-          )}
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleSyncReceitaWS} 
+            disabled={isSyncingReceita || !prospect.cnpj}
+          >
+            {isSyncingReceita ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+            Sincronizar ReceitaWS
+          </Button>
           {prospect.isClaimedToday && (
             <>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>
-                      <Button 
-                        onClick={handleOpenWhatsAppDialog} 
-                        className={`transition-all ${nba?.channelRecommendation === 'whatsapp' ? 'bg-green-600 shadow-[0_0_15px_rgba(22,163,74,0.4)] scale-105' : 'bg-green-500'}`} 
-                        disabled={!isPhoneValid || prospect.doNotContact}
-                      >
-                        {nba?.channelRecommendation === 'whatsapp' && <Zap className="w-3 h-3 mr-1 animate-pulse" />}
-                        <MessageCircle className="w-4 h-4 mr-2" /> WhatsApp
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  {!isPhoneValid && <TooltipContent>Sem telefone válido</TooltipContent>}
-                </Tooltip>
-              </TooltipProvider>
-
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>
-                      <Button 
-                        onClick={() => setIsOutboxDialogOpen(true)} 
-                        className={`transition-all ${nba?.channelRecommendation === 'email' ? 'bg-primary shadow-[0_0_15px_rgba(30,41,59,0.4)] scale-105' : 'bg-primary/90'}`} 
-                        disabled={!hasEmail || prospect.doNotContact}
-                      >
-                        {nba?.channelRecommendation === 'email' && <Zap className="w-3 h-3 mr-1 animate-pulse" />}
-                        <Send className="w-4 h-4 mr-2" /> E-mail
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  {!hasEmail && <TooltipContent>Sem e-mail cadastrado</TooltipContent>}
-                </Tooltip>
-              </TooltipProvider>
+              <Button onClick={handleOpenWhatsAppDialog} className="bg-green-500" disabled={!isPhoneValid || prospect.doNotContact}>
+                <MessageCircle className="w-4 h-4 mr-2" /> WhatsApp
+              </Button>
+              <Button onClick={() => setIsOutboxDialogOpen(true)} className="bg-primary" disabled={!hasEmail || prospect.doNotContact}>
+                <Send className="w-4 h-4 mr-2" /> E-mail
+              </Button>
             </>
           )}
         </div>
@@ -707,32 +357,10 @@ export default function ProspectDetailPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          {activeEnrollment && activeSequence && (
-            <Card className="border-orange-200 bg-orange-50/30">
-              <CardContent className="pt-6 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
-                    <Layers className="w-5 h-5 text-orange-600" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-orange-600 uppercase">Sequência Ativa</div>
-                    <div className="font-bold text-primary">{activeSequence.name}</div>
-                    <div className="text-[10px] text-muted-foreground mt-0.5">
-                      Passo {activeEnrollment.nextStepIndex + 1} de {activeSequence.steps.length} • Próximo: D+{activeSequence.steps[activeEnrollment.nextStepIndex]?.dayOffset}
-                    </div>
-                  </div>
-                </div>
-                <Button variant="outline" size="sm" className="h-8 border-orange-200 text-orange-700 hover:bg-orange-100" onClick={() => setIsEnrollDialogOpen(true)}>
-                  Mudar Sequência
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle>Visão Geral</CardTitle>
-              {segmentData?.preferredChannel && segmentData.preferredChannel !== 'none' && (
+              {segmentData?.preferredChannel && (
                 <Badge variant="outline" className="bg-accent/5 text-accent border-accent/20 flex items-center gap-1">
                   <Sparkles className="w-3 h-3" /> Recomendado: {segmentData.preferredChannel === 'whatsapp' ? 'WhatsApp' : 'E-mail'}
                 </Badge>
@@ -771,86 +399,8 @@ export default function ProspectDetailPage() {
                        <li key={i} className="text-xs text-muted-foreground leading-relaxed">• {reason}</li>
                      ))}
                    </ul>
-                   {segmentData && segmentData.confidence > 0.5 && (
-                     <div className="mt-3 pt-2 border-t border-accent/10 text-[9px] text-accent italic">
-                       IA aprendeu que {segmentData.preferredChannel === 'whatsapp' ? 'WhatsApp' : 'E-mail'} converte melhor neste setor.
-                     </div>
-                   )}
                 </div>
               </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-accent/20 bg-accent/5">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <div>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Target className="w-5 h-5 text-accent" /> Probabilidade de Fechamento
-                </CardTitle>
-                <CardDescription className="text-xs">Predição baseada em fit industrial, intenção e comportamento.</CardDescription>
-              </div>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="h-8 border-accent/30 text-accent hover:bg-accent/10"
-                onClick={handlePredictProbability}
-                disabled={isPredictingClose || prospect.doNotContact}
-              >
-                {isPredictingClose ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <TrendingUp className="w-3 h-3 mr-2" />}
-                Atualizar Previsão
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {prospect.closeProbability !== undefined ? (
-                <div className="space-y-6">
-                  <div className="flex items-end gap-4">
-                    <div className="text-4xl font-bold text-primary">{prospect.closeProbability}%</div>
-                    <div className="pb-1 space-y-1">
-                      <div className="text-[10px] font-bold text-muted-foreground uppercase">Confiança</div>
-                      <Badge variant="secondary" className="text-[10px] h-5 capitalize">
-                        {prospect.closeProbabilityConfidence || "Medium"}
-                      </Badge>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-3">
-                      <h4 className="text-[10px] font-bold uppercase text-muted-foreground">Drivers do Modelo</h4>
-                      <div className="space-y-2">
-                        {prospect.closeProbabilityDrivers?.map((driver, i) => (
-                          <div key={i} className="flex items-start gap-2 p-2 bg-white rounded border border-accent/10 text-xs">
-                            {driver.impact === 'positive' ? (
-                              <TrendingUp className="w-3.5 h-3.5 text-green-600 mt-0.5 shrink-0" />
-                            ) : (
-                              <TrendingDown className="w-3.5 h-3.5 text-orange-600 mt-0.5 shrink-0" />
-                            )}
-                            <div>
-                              <div className="font-bold">{driver.factor}</div>
-                              <div className="text-[10px] text-muted-foreground">{driver.evidence}</div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="p-4 bg-primary/5 rounded-lg border border-primary/10 flex flex-col justify-center text-center">
-                       <p className="text-[10px] text-muted-foreground italic mb-2">Última recalibragem em {prospect.closeProbabilityUpdatedAt ? format(new Date(prospect.closeProbabilityUpdatedAt), "dd/MM HH:mm") : "-"}</p>
-                       <p className="text-xs font-medium text-primary">
-                         {prospect.closeProbability > 70 
-                           ? "Alta probabilidade! Priorize follow-up nominal hoje." 
-                           : prospect.closeProbability > 40 
-                           ? "Oportunidade média. Foque em coletar mais dados nominais." 
-                           : "Baixa probabilidade. Mantenha em nutrição automática."}
-                       </p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-8 border border-dashed rounded-lg bg-white/50">
-                  <BrainCircuit className="w-8 h-8 mx-auto text-accent/30 mb-2" />
-                  <p className="text-xs text-muted-foreground">Nenhuma predição de fechamento calculada.</p>
-                  <p className="text-[10px] text-muted-foreground mt-1">Clique em "Atualizar Previsão" para analisar a estratégia.</p>
-                </div>
-              )}
             </CardContent>
           </Card>
 
@@ -875,35 +425,18 @@ export default function ProspectDetailPage() {
             </CardHeader>
             <CardContent>
               {prospect.aiWebSummary ? (
-                <div className="space-y-4 animate-in fade-in duration-500">
+                <div className="space-y-4">
                   <div className="p-3 bg-white rounded-lg border border-purple-100 text-sm italic text-gray-700 leading-relaxed shadow-sm">
                     "{prospect.aiWebSummary}"
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <h4 className="text-[10px] font-bold uppercase text-purple-600 mb-2">Palavras-chave Detectadas</h4>
-                      <div className="flex flex-wrap gap-1">
-                        {prospect.aiDetectedKeywords?.map(kw => (
-                          <Badge key={kw} variant="outline" className="text-[9px] border-purple-200 bg-purple-50 text-purple-700">
-                            {kw}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-[10px] text-muted-foreground">Confiança da Análise</div>
-                      <div className="flex items-center justify-end gap-1 mt-1">
-                        {prospect.aiScoreConfidence === 'high' ? (
-                          <Badge className="bg-green-600 text-[10px] h-5">Alta</Badge>
-                        ) : prospect.aiScoreConfidence === 'medium' ? (
-                          <Badge className="bg-orange-500 text-[10px] h-5">Média</Badge>
-                        ) : (
-                          <Badge variant="secondary" className="text-[10px] h-5">Baixa</Badge>
-                        )}
-                      </div>
-                      <div className="text-[9px] text-muted-foreground mt-2 flex items-center justify-end gap-1">
-                        <CheckCircle className="w-3 h-3 text-green-500" /> Analisado em {prospect.aiWebAnalysisAt ? format(new Date(prospect.aiWebAnalysisAt), "dd/MM/yyyy") : "-"}
-                      </div>
+                  <div>
+                    <h4 className="text-[10px] font-bold uppercase text-purple-600 mb-2">Palavras-chave Detectadas</h4>
+                    <div className="flex flex-wrap gap-1">
+                      {prospect.aiDetectedKeywords?.map(kw => (
+                        <Badge key={kw} variant="outline" className="text-[9px] border-purple-200 bg-purple-50 text-purple-700">
+                          {kw}
+                        </Badge>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -911,7 +444,6 @@ export default function ProspectDetailPage() {
                 <div className="text-center py-6 border border-dashed rounded-lg bg-white/50">
                   <Globe className="w-8 h-8 mx-auto text-purple-200 mb-2" />
                   <p className="text-xs text-muted-foreground">Nenhuma inteligência de website disponível ainda.</p>
-                  <p className="text-[10px] text-muted-foreground mt-1">Clique em "Analisar Site" para descobrir produtos e processos.</p>
                 </div>
               )}
             </CardContent>
@@ -919,10 +451,10 @@ export default function ProspectDetailPage() {
 
           <Tabs defaultValue="history">
             <TabsList className="w-full justify-start border-b rounded-none h-12 bg-transparent p-0">
-              <TabsTrigger value="history" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
+              <TabsTrigger value="history" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary">
                 Linha do Tempo
               </TabsTrigger>
-              <TabsTrigger value="contacts" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
+              <TabsTrigger value="contacts" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary">
                 Contatos ({prospect.contacts?.length || 0})
               </TabsTrigger>
             </TabsList>
@@ -933,27 +465,20 @@ export default function ProspectDetailPage() {
                       <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin" /></div>
                     ) : (
                       <div className="space-y-6">
-                        {events?.length === 0 ? (
-                          <div className="text-center py-10 text-muted-foreground text-sm italic">Nenhuma atividade registrada ainda.</div>
-                        ) : (
-                          events?.map((event: any, i: number) => (
-                            <div key={i} className="flex gap-4 group">
-                              <div className="flex flex-col items-center">
-                                <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
-                                  {getEventIcon(event.type)}
-                                </div>
-                                {i !== events.length - 1 && <div className="w-0.5 h-full bg-border mt-2"></div>}
+                        {events?.map((event: any, i: number) => (
+                          <div key={i} className="flex gap-4">
+                            <div className="flex flex-col items-center">
+                              <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
+                                {event.type === 'whatsapp_opened' ? <MessageCircle className="w-4 h-4 text-green-500" /> : <Mail className="w-4 h-4 text-blue-500" />}
                               </div>
-                              <div className="pb-6">
-                                <div className="text-sm font-semibold text-primary">{getEventLabel(event)}</div>
-                                <div className="text-[10px] text-muted-foreground mt-1 flex items-center gap-2">
-                                  <Clock className="w-3 h-3" /> 
-                                  {event.createdAt?.toDate ? format(event.createdAt.toDate(), "dd 'de' MMMM, HH:mm", { locale: ptBR }) : "Agora"}
-                                </div>
-                              </div>
+                              {i !== events.length - 1 && <div className="w-0.5 h-full bg-border mt-2"></div>}
                             </div>
-                          ))
-                        )}
+                            <div className="pb-6">
+                              <div className="text-sm font-semibold">{event.type === 'whatsapp_opened' ? "Contato via WhatsApp" : "E-mail Preparado"}</div>
+                              <div className="text-[10px] text-muted-foreground mt-1">{format(event.createdAt.toDate(), "dd 'de' MMMM, HH:mm", { locale: ptBR })}</div>
+                            </div>
+                          </div>
+                        ))}
                         <div className="flex gap-4">
                           <div className="flex flex-col items-center"><div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center"><Clock className="w-4 h-4 text-primary" /></div></div>
                           <div>
@@ -990,30 +515,6 @@ export default function ProspectDetailPage() {
 
         <div className="space-y-6">
           <Card>
-            <CardHeader><CardTitle className="text-sm">Sequência Operacional</CardTitle></CardHeader>
-            <CardContent>
-               {!activeEnrollment ? (
-                 <Button className="w-full bg-accent hover:bg-accent/90 text-xs" onClick={() => setIsEnrollDialogOpen(true)} disabled={prospect.doNotContact}>
-                   <Play className="w-3 h-3 mr-2" /> Iniciar Sequência
-                 </Button>
-               ) : (
-                 <div className="space-y-3">
-                   <div className="flex justify-between items-center text-[10px]">
-                     <span className="text-muted-foreground">Progresso</span>
-                     <span className="font-bold">{Math.round(((activeEnrollment.nextStepIndex) / (activeSequence?.steps.length || 1)) * 100)}%</span>
-                   </div>
-                   <div className="w-full h-1.5 bg-secondary rounded-full overflow-hidden">
-                     <div className="h-full bg-orange-500" style={{ width: `${((activeEnrollment.nextStepIndex) / (activeSequence?.steps.length || 1)) * 100}%` }}></div>
-                   </div>
-                   <Button variant="outline" size="sm" className="w-full text-[10px] h-8" onClick={() => setIsEnrollDialogOpen(true)}>
-                     Gerenciar Enroll
-                   </Button>
-                 </div>
-               )}
-            </CardContent>
-          </Card>
-
-          <Card>
             <CardHeader><CardTitle className="text-sm">Status do Pipeline</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-2 gap-2">
               {['new', 'contacted', 'interested', 'demo', 'client', 'discarded'].map((s) => (
@@ -1027,205 +528,13 @@ export default function ProspectDetailPage() {
           <Card>
             <CardHeader><CardTitle className="text-sm">Compliance</CardTitle></CardHeader>
             <CardContent>
-               <Button 
-                variant={prospect.doNotContact ? "destructive" : "outline"} 
-                size="sm" 
-                className="w-full text-xs"
-                onClick={() => setIsDncDialogOpen(true)}
-               >
-                 <Ban className="w-4 h-4 mr-2" /> {prospect.doNotContact ? "Remover Bloqueio" : "Não Contactar (DNC)"}
+               <Button variant={prospect.doNotContact ? "destructive" : "outline"} size="sm" className="w-full text-xs" onClick={() => setIsDncDialogOpen(true)}>
+                 <Ban className="w-4 h-4 mr-2" /> {prospect.doNotContact ? "Remover DNC" : "Ativar DNC"}
                </Button>
             </CardContent>
           </Card>
         </div>
       </div>
-
-      <Dialog open={isEnrollDialogOpen} onOpenChange={setIsEnrollDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Iniciar Sequência Assistida</DialogTitle>
-            <DialogDescription>Escolha um playbook para guiar os próximos contatos.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Selecionar Playbook</Label>
-              <Select value={selectedSequenceId} onValueChange={setSelectedSequenceId}>
-                <SelectTrigger><SelectValue placeholder="Selecione uma sequência" /></SelectTrigger>
-                <SelectContent>
-                  {allSequences.map(s => <SelectItem key={seq.id} value={s.id}>{s.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            {selectedSequenceId && (
-              <div className="space-y-2">
-                <Label className="text-xs">Preview dos Passos:</Label>
-                <div className="space-y-1">
-                  {allSequences.find(s => s.id === selectedSequenceId)?.steps.map((step, i) => (
-                    <div key={i} className="text-[10px] flex items-center justify-between p-2 bg-secondary/30 rounded">
-                      <span>D+{step.dayOffset} - {step.channel.toUpperCase()}</span>
-                      <span className="text-muted-foreground">{step.purpose}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEnrollDialogOpen(false)}>Cancelar</Button>
-            <Button className="bg-accent" onClick={handleStartSequence} disabled={isEnrolling || !selectedSequenceId}>
-              {isEnrolling ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Play className="w-4 h-4 mr-2" />}
-              Ativar Sequência
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isAiAgentDialogOpen} onOpenChange={setIsAiAgentDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Bot className="w-5 h-5 text-accent" /> Plano de Abordagem Sugerido</DialogTitle>
-            <DialogDescription>IA analisou os drivers de fechamento e website para sugerir esta estratégia.</DialogDescription>
-          </DialogHeader>
-          {aiPlan && (
-            <div className="space-y-6 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-3 bg-secondary/30 rounded-lg border">
-                  <div className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Canal Recomendado</div>
-                  <Badge className={aiPlan.recommendedChannel === 'whatsapp' ? 'bg-green-600' : 'bg-primary'}>
-                    {aiPlan.recommendedChannel === 'whatsapp' ? <MessageCircle className="w-3 h-3 mr-1" /> : <Mail className="w-3 h-3 mr-1" />}
-                    {aiPlan.recommendedChannel.toUpperCase()}
-                  </Badge>
-                </div>
-                <div className="p-3 bg-secondary/30 rounded-lg border">
-                  <div className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Ângulo de Venda</div>
-                  <div className="text-sm font-bold capitalize text-accent">{aiPlan.approachAngle}</div>
-                </div>
-              </div>
-
-              <Card className="bg-primary/5 border-primary/10">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-xs font-bold uppercase flex justify-between items-center">
-                    Mensagem de Abertura
-                    <Badge variant="outline" className="text-[8px]">pt-BR • Industrial</Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {aiPlan.subject && (
-                    <div className="text-sm font-semibold border-b pb-1">Assunto: {aiPlan.subject}</div>
-                  )}
-                  <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{aiPlan.message}</div>
-                </CardContent>
-              </Card>
-
-              <div className="space-y-2">
-                <h4 className="text-[10px] font-bold uppercase text-muted-foreground">Perguntas de Qualificação</h4>
-                <ul className="space-y-1">
-                  {aiPlan.qualifyingQuestions.map((q, i) => (
-                    <li key={i} className="text-xs flex items-start gap-2 bg-secondary/20 p-2 rounded">
-                      <Target className="w-3 h-3 mt-0.5 text-accent shrink-0" />
-                      {q}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAiAgentDialogOpen(false)}>Fechar</Button>
-            <Button onClick={handleApplyAiPlan} className="bg-accent">
-              <Zap className="w-4 h-4 mr-2" /> Aplicar Abordagem
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isOutboxDialogOpen} onOpenChange={setIsOutboxDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Preparar Comunicação por E-mail</DialogTitle>
-            <DialogDescription>Personalize o contato antes de enviar.</DialogDescription>
-          </DialogHeader>
-          
-          {onCooldown && (
-            <Alert variant="destructive" className="bg-amber-50 border-amber-200 text-amber-900">
-              <AlertTriangle className="h-4 w-4 text-amber-600" />
-              <AlertTitle className="text-xs font-bold">Aviso de Entregabilidade</AlertTitle>
-              <AlertDescription className="text-[10px]">
-                Um e-mail foi enviado recentemente para esta empresa. Recomendamos aguardar 3 dias para evitar filtros de spam.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Template Base</Label>
-                <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
-                  <SelectTrigger><SelectValue placeholder="Selecione um modelo" /></SelectTrigger>
-                  <SelectContent>
-                    {templates.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Contato Alvo</Label>
-                <Select value={selectedContactIndex} onValueChange={setSelectedContactIndex}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {prospect.contacts?.map((c, i) => (
-                      <SelectItem key={i} value={i.toString()}>{c.name} ({c.email})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {emailQuality === 'generic' && (
-                  <p className="text-[10px] text-amber-600 flex items-center gap-1 mt-1">
-                    <Info className="w-3 h-3" /> E-mail genérico detectado (baixa conversão).
-                  </p>
-                )}
-              </div>
-              <Button 
-                variant="outline" 
-                className="w-full text-accent border-accent" 
-                onClick={handleImproveEmailWithAi}
-                disabled={isAiDrafting || !selectedTemplateId}
-              >
-                {isAiDrafting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Wand2 className="w-4 h-4 mr-2" />}
-                Personalizar com IA
-              </Button>
-            </div>
-
-            <div className="bg-secondary/20 p-4 rounded-xl space-y-3 border relative">
-              <h4 className="text-xs font-bold uppercase text-muted-foreground flex justify-between">
-                Preview do Envio
-                {spamProb > 40 && (
-                  <Badge variant="destructive" className="text-[8px] h-4">Spam Risk: {spamProb}%</Badge>
-                )}
-              </h4>
-              <div className="space-y-1">
-                <Label className="text-[10px]">Assunto</Label>
-                <div className="text-sm font-semibold border-b pb-1">{previewSubject || "..."}</div>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px]">Corpo</Label>
-                <div 
-                  className="text-xs bg-white p-3 rounded border min-h-[150px] prose prose-sm max-w-none overflow-hidden"
-                  dangerouslySetInnerHTML={{ __html: previewBody || "<i>Selecione um template...</i>" }}
-                />
-              </div>
-            </div>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setIsOutboxDialogOpen(false)}>Cancelar</Button>
-            <Button variant="secondary" onClick={() => handleSaveToOutbox('draft')} disabled={isSavingOutbox || !previewBody}>
-              Salvar Rascunho
-            </Button>
-            <Button onClick={() => handleSaveToOutbox('queued')} disabled={isSavingOutbox || !previewBody}>
-              {isSavingOutbox ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
-              Enfileirar Agora
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={isWhatsAppDialogOpen} onOpenChange={setIsWhatsAppDialogOpen}>
         <DialogContent className="max-w-md">
@@ -1238,15 +547,6 @@ export default function ProspectDetailPage() {
               value={whatsAppDraft}
               onChange={(e) => setWhatsAppDraft(e.target.value)}
             />
-            <Button 
-              variant="outline" 
-              className="w-full text-accent border-accent" 
-              onClick={handleImproveWhatsAppWithAi}
-              disabled={isAiWhatsAppDrafting}
-            >
-              {isAiWhatsAppDrafting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Wand2 className="w-4 h-4 mr-2" />}
-              Melhorar com IA
-            </Button>
           </div>
           <DialogFooter>
             <Button onClick={handleFinalizeWhatsApp} className="bg-green-500 hover:bg-green-600 w-full">
@@ -1259,19 +559,12 @@ export default function ProspectDetailPage() {
       <Dialog open={isDncDialogOpen} onOpenChange={setIsDncDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{prospect?.doNotContact ? "Remover DNC" : "Ativar Do Not Contact"}</DialogTitle>
+            <DialogTitle>Confirmar DNC</DialogTitle>
+            <DialogDescription>Marcar esta empresa como "Do Not Contact" irá removê-la do Radar diário.</DialogDescription>
           </DialogHeader>
-          {!prospect?.doNotContact && (
-            <div className="space-y-2 py-4">
-              <Label>Motivo do Bloqueio</Label>
-              <Input value={dncReason} onChange={e => setDncReason(e.target.value)} placeholder="Ex: Solicitou opt-out" />
-            </div>
-          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDncDialogOpen(false)}>Cancelar</Button>
-            <Button variant="destructive" onClick={handleToggleDnc} disabled={isUpdating}>
-              Confirmar
-            </Button>
+            <Button variant="destructive">Confirmar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

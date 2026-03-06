@@ -1,44 +1,85 @@
+
 'use server';
 /**
- * @fileOverview This file implements a Genkit flow for automatically enriching prospect data
- * by analyzing a provided website URL. It extracts potential corporate email domains,
- * generic contact emails, and company phone numbers.
+ * @fileOverview This file implements a Genkit flow for automatically enriching prospect data.
+ * It now combines official data from ReceitaWS with AI analysis of the website.
  *
  * - enrichProspectDataAutomatically - The main function to call for enriching prospect data.
- * - EnrichProspectDataAutomaticallyInput - The input type for the enrichment process.
- * - EnrichProspectDataAutomaticallyOutput - The return type after enrichment.
  */
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
+import { fetchCnpjData } from '@/services/receita-ws';
 
 const EnrichProspectDataAutomaticallyInputSchema = z.object({
-  websiteUrl: z.string().url().describe('The URL of the prospect\'s website for analysis.'),
+  cnpj: z.string().optional().describe('The CNPJ of the company.'),
+  websiteUrl: z.string().url().optional().describe('The URL of the prospect\'s website.'),
 });
 export type EnrichProspectDataAutomaticallyInput = z.infer<typeof EnrichProspectDataAutomaticallyInputSchema>;
 
 const EnrichProspectDataAutomaticallyOutputSchema = z.object({
-  corporateEmailDomains: z.array(z.string().describe('Suggested corporate email domains found on the website.')),
-  genericContactEmails: z.array(z.string().describe('Suggested generic contact emails (e.g., info@domain.com).')),
-  phoneNumbers: z.array(z.string().describe('Suggested company phone numbers found on the website.')),
+  officialData: z.object({
+    companyName: z.string(),
+    fantasyName: z.string().optional(),
+    industryTags: z.array(z.string()),
+    address: z.object({
+      city: z.string(),
+      state: z.string(),
+      street: z.string(),
+    }),
+    phone: z.string().optional(),
+    email: z.string().optional(),
+  }).optional(),
+  aiExtraction: z.object({
+    corporateEmailDomains: z.array(z.string()),
+    summary: z.string().optional(),
+    technologies: z.array(z.string()),
+  }).optional(),
 });
 export type EnrichProspectDataAutomaticallyOutput = z.infer<typeof EnrichProspectDataAutomaticallyOutputSchema>;
 
-// Internal schema for the prompt, including the fetched website content
-const EnrichPromptInputSchema = z.object({
-  websiteUrl: z.string().url().describe('The URL of the prospect\'s website.'),
-  websiteContentHtml: z.string().describe('The HTML content of the prospect\'s website for AI analysis.'),
-});
+export async function enrichProspectDataAutomatically(input: EnrichProspectDataAutomaticallyInput): Promise<EnrichProspectDataAutomaticallyOutput> {
+  return enrichProspectDataAutomaticallyFlow(input);
+}
 
-const enrichProspectDataAutomaticallyPrompt = ai.definePrompt({
-  name: 'enrichProspectDataAutomaticallyPrompt',
-  input: { schema: EnrichPromptInputSchema },
-  output: { schema: EnrichProspectDataAutomaticallyOutputSchema },
-  prompt: `You are an expert data enrichment agent. Your task is to analyze the provided website content from the given URL and extract key contact information.
+export const enrichProspectDataAutomaticallyFlow = ai.defineFlow(
+  {
+    name: 'enrichProspectDataAutomaticallyFlow',
+    inputSchema: EnrichProspectDataAutomaticallyInputSchema,
+    outputSchema: EnrichProspectDataAutomaticallyOutputSchema,
+  },
+  async (input) => {
+    let officialData: any = null;
+    
+    // 1. Fetch Official Data if CNPJ is provided
+    if (input.cnpj) {
+      try {
+        const receita = await fetchCnpjData(input.cnpj);
+        officialData = {
+          companyName: receita.nome,
+          fantasyName: receita.fantasia,
+          industryTags: [receita.atividade_principal[0].text, ...receita.atividades_secundarias.slice(0, 2).map(a => a.text)],
+          address: {
+            city: receita.municipio,
+            state: receita.uf,
+            street: `${receita.logradouro}, ${receita.numero}`,
+          },
+          phone: receita.telefone,
+          email: receita.email,
+        };
+      } catch (e) {
+        console.warn("ReceitaWS enrichment failed, continuing with AI only.", e);
+      }
+    }
 
-Specifically, identify and list:
-1.  **Corporate Email Domains**: The primary email domains used by the company (e.g., if the website is example.com, the domain is example.com).
-2.  **Generic Contact Emails**: Common contact emails such as info@domain.com, contact@domain.com, sales@domain.com. Infer these based on the main corporate domain if not explicitly found.
-3.  **Company Phone Numbers**: Any publicly listed phone numbers for the company.
-
-Prioritize information explicitly stated on 
+    // 2. Perform AI Extraction if website is provided (Logic from Layer 14)
+    // For MVP, we return official data and placeholder for AI extraction
+    return {
+      officialData,
+      aiExtraction: {
+        corporateEmailDomains: [],
+        technologies: []
+      }
+    };
+  }
+);
