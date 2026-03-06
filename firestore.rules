@@ -30,6 +30,7 @@ service cloud.firestore {
     // ---------------------------------------------------
 
     match /users/{userId} {
+      // Permite ler e criar o próprio perfil para resolver o bootstrap
       allow read, write: if isOwner(userId);
     }
 
@@ -64,7 +65,8 @@ service cloud.firestore {
     // ---------------------------------------------------
 
     match /tenants/{tenantId} {
-      allow get: if belongsToTenant(tenantId);
+      // Permite ler o documento raiz da organização se estiver logado (necessário para bootstrap)
+      allow get: if isSignedIn();
       allow list: if isSignedIn();
       allow create: if isSignedIn(); 
       allow update: if isTenantAdmin(tenantId);

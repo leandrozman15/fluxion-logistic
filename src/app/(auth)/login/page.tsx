@@ -34,7 +34,6 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!userLoading && currentUser) {
-      // Re-run bootstrap check just in case it was interrupted
       bootstrapUser(currentUser).then(() => {
         router.push("/dashboard");
       });
@@ -48,31 +47,28 @@ export default function LoginPage() {
       const userRef = doc(db, "users", user.uid);
       const userSnap = await getDoc(userRef);
 
-      if (!userSnap.exists()) {
+      // Se o perfil não existe ou não tem tenantId, vamos forçar a criação
+      if (!userSnap.exists() || !userSnap.data().tenantId) {
         const isInitialAdmin = user.uid === BOOTSTRAP_UID || user.email === BOOTSTRAP_EMAIL;
         const tenantId = "default_tenant";
 
-        // 1. Create Tenant if it doesn't exist
+        // 1. Create/Update Tenant (Merge true evita erro de leitura se as regras forem estritas)
         const tenantRef = doc(db, "tenants", tenantId);
-        const tenantSnap = await getDoc(tenantRef);
-        
-        if (!tenantSnap.exists()) {
-          await setDoc(tenantRef, {
-            id: tenantId,
-            name: "Fluxion Radar HQ",
-            plan: "pro",
-            createdAt: serverTimestamp(),
-            settings: {
-              scoringWeights: { effective: 0.6, ai: 0.4 },
-              finalScoreMode: 'weighted',
-              dailyTopLimit: 30,
-              onboardingCompleted: false,
-              autoDiscoveryEnabled: false
-            }
-          });
-        }
+        await setDoc(tenantRef, {
+          id: tenantId,
+          name: "Fluxion Radar HQ",
+          plan: "pro",
+          updatedAt: serverTimestamp(),
+          settings: {
+            scoringWeights: { effective: 0.6, ai: 0.4 },
+            finalScoreMode: 'weighted',
+            dailyTopLimit: 30,
+            onboardingCompleted: false,
+            autoDiscoveryEnabled: false
+          }
+        }, { merge: true });
 
-        // 2. Create Global User Profile (Root Index)
+        // 2. Create Global User Profile
         await setDoc(userRef, {
           uid: user.uid,
           email: user.email,
@@ -81,7 +77,7 @@ export default function LoginPage() {
           role: isInitialAdmin ? "admin" : "sales",
           createdAt: new Date().toISOString(),
           status: "active"
-        });
+        }, { merge: true });
 
         // 3. Create Tenant Membership
         const tenantUserRef = doc(db, "tenants", tenantId, "users", user.uid);
@@ -90,16 +86,12 @@ export default function LoginPage() {
           email: user.email,
           role: isInitialAdmin ? "admin" : "sales",
           createdAt: new Date().toISOString()
-        });
+        }, { merge: true });
 
-        toast({
-          title: "Acesso Configurado",
-          description: "Sua conta de administrador foi vinculada com sucesso.",
-        });
+        console.log("Bootstrap completed for:", user.uid);
       }
     } catch (error: any) {
       console.error("Bootstrap error:", error);
-      // Don't show toast here to avoid loops, just log
     }
   };
 
@@ -118,7 +110,7 @@ export default function LoginPage() {
       toast({
         variant: "destructive",
         title: "Erro ao acessar",
-        description: "Credenciais inválidas ou erro de rede. Verifique seu e-mail e senha.",
+        description: "Credenciais inválidas ou erro de rede.",
       });
     } finally {
       setIsLoading(false);
@@ -138,7 +130,7 @@ export default function LoginPage() {
       toast({
         variant: "destructive",
         title: "Erro na autenticação",
-        description: "Não foi possível entrar com Google Workspace.",
+        description: "Não foi possível entrar com Google.",
       });
     } finally {
       setIsLoading(false);
@@ -235,10 +227,6 @@ export default function LoginPage() {
             </Button>
           </CardFooter>
         </Card>
-        
-        <p className="text-center text-xs text-muted-foreground">
-          Ao entrar, você concorda com nossos <Link href="#" className="underline">Termos de Uso</Link> e <Link href="#" className="underline">Privacidade</Link>.
-        </p>
       </div>
     </div>
   );
