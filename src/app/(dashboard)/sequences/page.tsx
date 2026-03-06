@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState } from "react";
@@ -17,6 +16,7 @@ import { Sequence, SequenceStep, EmailTemplate } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import Link from "next/link";
 
 export default function SequencesPage() {
   const db = useFirestore();
