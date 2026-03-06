@@ -1,21 +1,19 @@
-
 'use client';
 
 import { SidebarProvider, SidebarInset, Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarGroup, SidebarGroupLabel, SidebarGroupContent } from "@/components/ui/sidebar";
-import { LayoutDashboard, Users, Mail, FileSpreadsheet, Settings, Target, FileText, Inbox, LogOut, Building2, BarChart3, Loader2, CheckSquare, Search, Layers } from "lucide-react";
+import { LayoutDashboard, Users, Mail, FileSpreadsheet, Settings, Target, FileText, Inbox, LogOut, Building2, BarChart3, Loader2, CheckSquare, Search, Layers, ShieldCheck } from "lucide-react";
 import Link from "next/link";
-import { useAuth, useDoc } from "@/firebase";
+import { useAuth, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { useMemo } from "react";
-import { doc } from "firebase/firestore";
-import { Tenant } from "@/app/lib/types";
+import { Badge } from "@/components/ui/badge";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
-  const { tenantId, loading: tenantLoading } = useTenant();
+  const { tenantId } = useTenant();
+  const { user } = useUser();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -32,20 +30,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { title: "Importações", icon: FileSpreadsheet, href: "/imports" },
   ];
 
-  const settingItems = [
-    { title: "Organização", icon: Building2, href: "/settings/tenant" },
-    { title: "Usuários", icon: Users, href: "/settings/users" },
-    { title: "Consumo", icon: Settings, href: "/settings/limits" },
-  ];
-
   const handleLogout = async () => {
     if (!auth) return;
     try {
       await signOut(auth);
       router.push("/login");
-      toast({ title: "Sessão encerrada", description: "Você saiu do sistema com sucesso." });
+      toast({ title: "Sessão encerrada" });
     } catch (error) {
-      toast({ variant: "destructive", title: "Erro ao sair", description: "Não foi possível encerrar a sessão." });
+      toast({ variant: "destructive", title: "Erro ao sair" });
     }
   };
 
@@ -82,16 +74,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <SidebarGroupLabel>Configurações</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {settingItems.map((item) => (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton asChild tooltip={item.title}>
-                        <Link href={item.href}>
-                          <item.icon />
-                          <span>{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild tooltip="Ajustes">
+                      <Link href="/settings/tenant">
+                        <Settings />
+                        <span>Ajustes do Motor</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
@@ -109,14 +99,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <SidebarInset className="bg-background">
           <header className="h-16 flex items-center justify-between px-6 border-b bg-card sticky top-0 z-10">
             <div className="flex items-center gap-4">
-              <h2 className="text-lg font-semibold text-primary">Painel de Controle</h2>
+              <h2 className="text-lg font-semibold text-primary">Operação Industrial</h2>
+              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-[10px] uppercase font-bold flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3" /> Produção Unlocked
+              </Badge>
             </div>
             <div className="flex items-center gap-4">
-               {tenantLoading ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /> : (
-                 <div className="text-sm text-muted-foreground hidden sm:block">ID Org: {tenantId || "N/A"}</div>
-               )}
-               <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center font-bold text-xs uppercase">
-                 USR
+               <div className="text-xs text-muted-foreground hidden sm:block">Org: {tenantId}</div>
+               <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white font-bold text-xs uppercase">
+                 AD
                </div>
             </div>
           </header>

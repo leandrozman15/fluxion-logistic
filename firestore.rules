@@ -5,11 +5,10 @@ service cloud.firestore {
 
     /*
     =====================================================
-    MODO DE TESTE ABERTO (OPEN TEST MODE)
+    MODO TOTALMENTE ABERTO (PRODUCTION UNLOCKED)
     =====================================================
     Este modo permite que qualquer pessoa acesse e edite
-    os dados para facilitar a homologação.
-    As restrições de isolamento serão reativadas após os testes.
+    os dados sem qualquer autenticação ou autorização.
     =====================================================
     */
 
