@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { 
   Building2, Globe, MapPin, Mail, Phone, ExternalLink, 
   Loader2, Send, BrainCircuit, MessageCircle, 
-  ArrowLeft, Clock, Cpu, FileSearch, RefreshCw, Plus, UserPlus, Trash2, Edit
+  ArrowLeft, Clock, Cpu, FileSearch, RefreshCw, Plus, UserPlus, Trash2, Edit, Sparkles, SearchCode
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Prospect, ProspectStatus, Contact } from "@/app/lib/types";
@@ -89,6 +89,31 @@ export default function ProspectDetailPage() {
       toast({ variant: "destructive", title: "Erro na sincronização", description: e.message });
     } finally {
       setIsSyncingReceita(false);
+    }
+  };
+
+  const handleAnalyzeWeb = async () => {
+    if (!prospect?.websiteUrl || !prospectRef) return;
+    setIsAnalyzingWeb(true);
+    try {
+      const analysis = await analyzeWebsiteContent({
+        websiteUrl: prospect.websiteUrl,
+        companyName: prospect.companyName
+      });
+
+      await updateDoc(prospectRef, {
+        aiWebSummary: analysis.summary,
+        aiDetectedKeywords: analysis.detectedKeywords,
+        aiIndustrySuggestions: analysis.industryTags,
+        aiWebAnalysisAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+
+      toast({ title: "Site Analisado!", description: "Inteligência extraída com sucesso." });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Erro na análise web", description: e.message });
+    } finally {
+      setIsAnalyzingWeb(false);
     }
   };
 
@@ -179,6 +204,10 @@ export default function ProspectDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleAnalyzeWeb} disabled={isAnalyzingWeb || !prospect.websiteUrl}>
+            {isAnalyzingWeb ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <SearchCode className="w-4 h-4 mr-2" />}
+            IA: Analisar Site
+          </Button>
           <Button variant="outline" size="sm" onClick={handleSyncReceitaWS} disabled={isSyncingReceita}>
             {isSyncingReceita ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
             Sincronizar ReceitaWS
@@ -197,14 +226,30 @@ export default function ProspectDetailPage() {
             </CardHeader>
             <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-muted-foreground"><Globe className="w-4 h-4" /> {prospect.websiteUrl || "Sem site"}</div>
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Globe className="w-4 h-4" /> 
+                  {prospect.websiteUrl ? (
+                    <a href={prospect.websiteUrl.startsWith('http') ? prospect.websiteUrl : `https://${prospect.websiteUrl}`} target="_blank" className="hover:underline flex items-center gap-1">
+                      {prospect.websiteUrl} <ExternalLink className="w-3 h-3" />
+                    </a>
+                  ) : "Sem site"}
+                </div>
                 <div className="flex items-center gap-2 text-muted-foreground"><MapPin className="w-4 h-4" /> {prospect.address?.city}, {prospect.address?.state}</div>
               </div>
               <div className="p-3 bg-accent/5 rounded-lg border">
-                <h4 className="text-[10px] font-bold uppercase text-accent mb-1">Motivos do Score</h4>
-                <ul className="text-xs space-y-1">
-                  {(prospect.aiScoreReasons || prospect.scoreReasons || []).map((r, i) => <li key={i}>• {r}</li>)}
-                </ul>
+                <h4 className="text-[10px] font-bold uppercase text-accent mb-1">Inteligência Extraída</h4>
+                <div className="space-y-2">
+                  {prospect.aiWebSummary ? (
+                    <p className="text-xs leading-relaxed">{prospect.aiWebSummary}</p>
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground italic">Site ainda não analisado pela IA.</p>
+                  )}
+                  <div className="flex flex-wrap gap-1">
+                    {(prospect.aiDetectedKeywords || []).map(kw => (
+                      <Badge key={kw} variant="secondary" className="text-[8px] h-4 bg-white border">{kw}</Badge>
+                    ))}
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -270,6 +315,25 @@ export default function ProspectDetailPage() {
         </div>
 
         <div className="space-y-6">
+          <Card className="bg-secondary/30 border-dashed border-2">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs flex items-center gap-2 uppercase tracking-widest text-muted-foreground">
+                <Sparkles className="w-3 h-3 text-accent" /> Próxima Melhor Ação
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div className="p-3 bg-white rounded-lg border shadow-sm">
+                  <div className="font-bold text-sm text-primary">Análise Profunda do Site</div>
+                  <p className="text-[10px] text-muted-foreground mt-1">A IA detectou que o site está disponível. Clique em "Analisar Site" para extrair tecnologias e o resumo operacional.</p>
+                </div>
+                <Button variant="outline" className="w-full text-xs font-bold" onClick={handleAnalyzeWeb} disabled={isAnalyzingWeb || !prospect.websiteUrl}>
+                  Executar Pesquisa Web
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader><CardTitle className="text-sm">Status Atual</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-2 gap-2">

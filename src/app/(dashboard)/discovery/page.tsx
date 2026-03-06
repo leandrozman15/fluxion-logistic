@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from "react";
@@ -12,11 +13,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, Building2, MapPin, Plus, Loader2, Globe, ShieldCheck, AlertCircle, TrendingUp, Filter, Factory, Calendar } from "lucide-react";
+import { Search, Building2, MapPin, Plus, Loader2, Globe, ShieldCheck, AlertCircle, TrendingUp, Filter, Factory, Calendar, Sparkles, BrainCircuit, Bot } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { calculateEffectiveScore } from "@/lib/utils/scoring";
 import { Prospect, IndustryIndexCompany } from "@/app/lib/types";
 import { fetchCnpjData, type ReceitaWSResponse } from "@/services/receita-ws";
+import { mineIndustries, type MineIndustriesOutput } from "@/ai/flows/mine-industries-flow";
 
 // Base Real Expandida para simular mineração profissional
 const MOCK_RADAR_INDEX: IndustryIndexCompany[] = [
@@ -45,6 +47,12 @@ export default function DiscoveryPage() {
   const [cnpjResult, setCnpjResult] = useState<ReceitaWSResponse | null>(null);
   const [isAddingId, setIsAddingId] = useState<string | null>(null);
 
+  // AI Mining State
+  const [miningQuery, setMiningMiningQuery] = useState("");
+  const [miningRegion, setMiningRegion] = useState("Joinville/SC");
+  const [isMining, setIsMining] = useState(false);
+  const [miningResults, setMiningResults] = useState<MineIndustriesOutput | null>(null);
+
   const prospectsQuery = useMemo(() => {
     if (!db || !tenantId) return null;
     return query(collection(db, "tenants", tenantId, "prospects"));
@@ -60,8 +68,6 @@ export default function DiscoveryPage() {
     setIsSearching(true);
     setTimeout(() => {
       let filtered = [...MOCK_RADAR_INDEX];
-      
-      // Filtro por termo
       if (searchTerm) {
         filtered = filtered.filter(r => 
           r.companyName.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -69,13 +75,9 @@ export default function DiscoveryPage() {
           r.city.toLowerCase().includes(searchTerm.toLowerCase())
         );
       }
-
-      // Filtro por porte
       if (porteFilter !== "all") {
         filtered = filtered.filter(r => r.employeesRange === porteFilter);
       }
-
-      // Filtro por idade
       const currentYear = new Date().getFullYear();
       if (idadeFilter === "new") {
         filtered = filtered.filter(r => (currentYear - r.foundedYear) <= 5);
@@ -84,7 +86,6 @@ export default function DiscoveryPage() {
       } else if (idadeFilter === "historical") {
         filtered = filtered.filter(r => (currentYear - r.foundedYear) > 20);
       }
-
       setResults(filtered);
       setIsSearching(false);
     }, 400);
@@ -106,34 +107,53 @@ export default function DiscoveryPage() {
     }
   };
 
-  const handleAddToPipeline = async (item: any, isReceita = false) => {
+  const handleAiMining = async () => {
+    if (!miningQuery) return;
+    setIsMining(true);
+    try {
+      const res = await mineIndustries({
+        niche: miningQuery,
+        region: miningRegion
+      });
+      setMiningResults(res);
+      toast({ title: "Mineração Concluída!", description: `Identificamos ${res.candidates.length} oportunidades via IA.` });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Erro na mineração IA", description: e.message });
+    } finally {
+      setIsMining(false);
+    }
+  };
+
+  const handleAddToPipeline = async (item: any, source: Prospect['source'] = 'radar_index') => {
     if (!db || !tenantId) return;
-    const cleanCnpj = (isReceita ? item.cnpj : item.cnpj).replace(/\D/g, "");
+    const cleanCnpj = (item.cnpj || `00000000000000`).replace(/\D/g, "");
     
-    if (existingCnpjs.has(cleanCnpj)) {
+    // Para candidatos de IA sem CNPJ, geramos um ID temporário
+    const id = item.cnpj ? (source === 'auto_discovery' ? `rf_${cleanCnpj}` : `idx_${cleanCnpj}`) : `ai_${Date.now()}`;
+    
+    if (cleanCnpj !== "00000000000000" && existingCnpjs.has(cleanCnpj)) {
       toast({ variant: "destructive", title: "Já cadastrada" });
       return;
     }
 
-    const id = isReceita ? `rf_${cleanCnpj}` : item.id;
     setIsAddingId(id);
     try {
       const prospectData: Partial<Prospect> = {
         id,
         tenantId,
-        companyName: isReceita ? item.nome : item.companyName,
+        companyName: item.nome || item.companyName,
         cnpj: cleanCnpj,
-        industryTags: isReceita ? [item.atividade_principal[0].text] : [item.industryTag],
+        industryTags: item.atividade_principal ? [item.atividade_principal[0].text] : [item.industryTag],
         address: { 
-          city: isReceita ? item.municipio : item.city, 
-          state: isReceita ? item.uf : item.state, 
+          city: item.municipio || item.city, 
+          state: item.uf || item.state, 
           country: "Brasil" 
         },
         status: "new",
-        source: isReceita ? "auto_discovery" : "radar_index",
-        websiteUrl: isReceita ? undefined : (item.website?.startsWith('http') ? item.website : `https://${item.website}`),
+        source: source,
+        websiteUrl: item.website || item.probableWebsite,
         aiScore: 75,
-        scoreReasons: ["Importado via Discovery Profile"]
+        scoreReasons: ["Importado via Agente de Descoberta"]
       };
 
       const effectiveScore = calculateEffectiveScore(prospectData);
@@ -146,7 +166,7 @@ export default function DiscoveryPage() {
       });
 
       toast({ title: "Importada!" });
-      if (isReceita) setCnpjResult(null);
+      if (source === 'auto_discovery') setCnpjResult(null);
     } catch (e) {
       toast({ variant: "destructive", title: "Erro ao adicionar" });
     } finally {
@@ -168,6 +188,7 @@ export default function DiscoveryPage() {
       <Tabs defaultValue="index" className="space-y-6">
         <TabsList className="bg-muted/50 p-1">
           <TabsTrigger value="index" className="flex items-center gap-2"><Globe className="w-4 h-4" /> Mineração de Base</TabsTrigger>
+          <TabsTrigger value="ai" className="flex items-center gap-2"><BrainCircuit className="w-4 h-4 text-accent" /> AI Mining Agent</TabsTrigger>
           <TabsTrigger value="cnpj" className="flex items-center gap-2"><ShieldCheck className="w-4 h-4" /> Busca Direta (CNPJ)</TabsTrigger>
         </TabsList>
 
@@ -288,6 +309,82 @@ export default function DiscoveryPage() {
           </div>
         </TabsContent>
 
+        <TabsContent value="ai" className="space-y-6">
+          <Card className="bg-primary text-white border-none shadow-xl overflow-hidden relative">
+            <div className="absolute top-0 right-0 p-8 opacity-10"><Bot className="w-32 h-32" /></div>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><BrainCircuit className="w-5 h-5 text-accent" /> Agente de Mineração Autônomo</CardTitle>
+              <CardDescription className="text-white/70">A IA utiliza inteligência de mercado para mapear empresas que não estão na base padrão.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 relative">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-white/80">O que você procura?</Label>
+                  <Input 
+                    placeholder="Ex: Fabricantes de moldes plásticos" 
+                    className="bg-white/10 border-white/20 text-white placeholder:text-white/40"
+                    value={miningQuery}
+                    onChange={e => setMiningMiningQuery(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-white/80">Onde?</Label>
+                  <Input 
+                    placeholder="Ex: Caxias do Sul / RS" 
+                    className="bg-white/10 border-white/20 text-white placeholder:text-white/40"
+                    value={miningRegion}
+                    onChange={e => setMiningRegion(e.target.value)}
+                  />
+                </div>
+              </div>
+              <Button 
+                onClick={handleAiMining} 
+                disabled={isMining || !miningQuery}
+                className="w-full bg-accent hover:bg-accent/90 text-primary font-bold"
+              >
+                {isMining ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                Comandar Agente de Busca
+              </Button>
+            </CardContent>
+          </Card>
+
+          {miningResults && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-bottom-4">
+              {miningResults.candidates.map((cand, i) => (
+                <Card key={i} className="border-accent/20 hover:border-accent transition-all cursor-default">
+                  <CardHeader className="pb-2">
+                    <div className="flex justify-between items-start">
+                      <Badge variant="outline" className="text-[10px] uppercase font-bold">{cand.industryTag}</Badge>
+                      <Badge className="bg-green-500/10 text-green-600 text-[10px]">{cand.confidence}% Match</Badge>
+                    </div>
+                    <CardTitle className="text-lg mt-2">{cand.companyName}</CardTitle>
+                    <CardDescription className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {cand.city}, {cand.state}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <p className="text-xs text-muted-foreground italic">"{cand.reason}"</p>
+                    <div className="flex gap-2">
+                      <Button 
+                        size="sm" 
+                        className="flex-1 bg-accent text-primary font-bold"
+                        onClick={() => handleAddToPipeline(cand, 'ai_mining')}
+                        disabled={isAddingId?.includes(cand.companyName)}
+                      >
+                        {isAddingId?.includes(cand.companyName) ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3 mr-1" />}
+                        Adicionar ao Funil
+                      </Button>
+                      {cand.probableWebsite && (
+                        <Button size="sm" variant="outline" asChild>
+                          <a href={cand.probableWebsite.startsWith('http') ? cand.probableWebsite : `https://${cand.probableWebsite}`} target="_blank"><Globe className="w-3 h-3" /></a>
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
         <TabsContent value="cnpj">
           <Card>
             <CardHeader>
@@ -305,7 +402,7 @@ export default function DiscoveryPage() {
                 <div className="p-4 border-2 border-accent/10 rounded-xl bg-accent/5 animate-in fade-in">
                   <h3 className="font-bold text-lg">{cnpjResult.nome}</h3>
                   <p className="text-sm text-muted-foreground mb-4">{cnpjResult.municipio}, {cnpjResult.uf}</p>
-                  <Button className="w-full bg-accent" onClick={() => handleAddToPipeline(cnpjResult, true)}>Adicionar ao Pipeline</Button>
+                  <Button className="w-full bg-accent" onClick={() => handleAddToPipeline(cnpjResult, 'auto_discovery')}>Adicionar ao Pipeline</Button>
                 </div>
               )}
             </CardContent>

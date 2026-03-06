@@ -24,7 +24,7 @@ export interface Prospect {
   createdAt: string;
   updatedAt: string;
   createdBy: string;
-  source: 'manual' | 'csv' | 'web' | 'referral' | 'auto_discovery' | 'radar_index';
+  source: 'manual' | 'csv' | 'web' | 'referral' | 'auto_discovery' | 'radar_index' | 'ai_mining';
   companyName: string;
   cnpj: string;
   industryTags: string[];

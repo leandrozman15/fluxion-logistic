@@ -11,3 +11,4 @@ import '@/ai/flows/suggest-corporate-emails-flow.ts';
 import '@/ai/flows/generate-whatsapp-message-flow.ts';
 import '@/ai/flows/predict-close-probability-flow.ts';
 import '@/ai/flows/generate-approach-plan-flow.ts';
+import '@/ai/flows/mine-industries-flow.ts';
