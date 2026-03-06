@@ -4,7 +4,7 @@
 import { useState, useMemo } from "react";
 import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, where, writeBatch, doc, serverTimestamp, runTransaction, increment } from "firebase/firestore";
+import { collection, query, orderBy, writeBatch, doc, serverTimestamp, runTransaction, increment, limit } from "firebase/firestore";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -17,9 +17,7 @@ import {
   FileDown, 
   MoreHorizontal, 
   Loader2, 
-  CheckCircle2, 
   Sparkles, 
-  Trash2, 
   ChevronDown,
   Building2,
   MapPin,
@@ -56,25 +54,27 @@ export default function ProspectsPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
 
+  // Query simplificada para evitar erro de índice
   const prospectsQuery = useMemo(() => {
     if (!db || !tenantId) return null;
-    let q = query(collection(db, "tenants", tenantId, "prospects"), orderBy("effectiveScore", "desc"));
-    
-    if (statusFilter !== "all") {
-      q = query(collection(db, "tenants", tenantId, "prospects"), where("status", "==", statusFilter), orderBy("effectiveScore", "desc"));
-    }
-    return q;
-  }, [db, tenantId, statusFilter]);
+    return query(
+      collection(db, "tenants", tenantId, "prospects"), 
+      orderBy("effectiveScore", "desc"),
+      limit(200)
+    );
+  }, [db, tenantId]);
 
   const { data: prospects, loading } = useCollection<Prospect>(prospectsQuery);
 
+  // Filtro feito em memória para evitar a necessidade de índices compostos durante o desenvolvimento
   const filteredProspects = useMemo(() => {
     if (!prospects) return [];
-    return prospects.filter(p => 
-      p.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.cnpj.includes(searchTerm)
-    );
-  }, [prospects, searchTerm]);
+    return prospects.filter(p => {
+      const matchSearch = p.companyName.toLowerCase().includes(searchTerm.toLowerCase()) || p.cnpj.includes(searchTerm);
+      const matchStatus = statusFilter === "all" || p.status === statusFilter;
+      return matchSearch && matchStatus;
+    });
+  }, [prospects, searchTerm, statusFilter]);
 
   const toggleSelectAll = () => {
     if (selectedIds.length === filteredProspects.length) {
@@ -181,12 +181,8 @@ export default function ProspectsPage() {
           transaction.set(weeklyStatsRef, { 
             id: yearWeek, 
             weekId: yearWeek, 
-            [field]: selectedIds.length,
-            statusChangedTo_contacted: newStatus === 'contacted' ? selectedIds.length : 0,
-            statusChangedTo_interested: newStatus === 'interested' ? selectedIds.length : 0,
-            statusChangedTo_demo: newStatus === 'demo' ? selectedIds.length : 0,
-            statusChangedTo_client: newStatus === 'client' ? selectedIds.length : 0
-          });
+            [field]: selectedIds.length
+          }, { merge: true });
         }
       });
 
@@ -234,7 +230,7 @@ export default function ProspectsPage() {
         <div className="p-4 bg-muted/20 border-b space-y-4">
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
             <div className="flex flex-1 items-center gap-3 w-full">
-              <div className="relative flex-1 max-w-sm">
+              <div className="relative flex-1 max-sm:w-full max-w-sm">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="search"
@@ -344,7 +340,6 @@ export default function ProspectsPage() {
                           <Link href={`/prospects/${prospect.id}`} className="font-bold hover:underline text-primary">
                             {prospect.companyName}
                           </Link>
-                          {prospect.isRecentlyCreated && <Badge className="bg-orange-500 text-[8px] h-4">Nova Empresa</Badge>}
                         </div>
                         <span className="text-[10px] font-mono text-muted-foreground">{prospect.cnpj}</span>
                       </div>
@@ -356,13 +351,7 @@ export default function ProspectsPage() {
                            {prospect.address?.city || "-"}, {prospect.address?.state || "-"}
                          </div>
                          <div className="flex items-center gap-1">
-                           {prospect.source === 'auto_discovery' ? (
-                             <Badge variant="secondary" className="text-[8px] px-1 py-0 bg-accent/10 text-accent border-accent/20">
-                               <Activity className="w-2 h-2 mr-1" /> Auto Discovery
-                             </Badge>
-                           ) : (
-                             <Badge variant="secondary" className="text-[8px] px-1 py-0">{prospect.source}</Badge>
-                           )}
+                           <Badge variant="secondary" className="text-[8px] px-1 py-0">{prospect.source}</Badge>
                          </div>
                        </div>
                     </TableCell>
@@ -390,11 +379,6 @@ export default function ProspectsPage() {
                           <DropdownMenuItem asChild>
                             <Link href={`/prospects/${prospect.id}`}>Ver Detalhes</Link>
                           </DropdownMenuItem>
-                          {!prospect.isClaimedToday && (
-                            <DropdownMenuItem onClick={() => toggleSelect(prospect.id)}>
-                              Selecionar para massa
-                            </DropdownMenuItem>
-                          )}
                           <DropdownMenuSeparator />
                           <DropdownMenuItem className="text-destructive">Excluir</DropdownMenuItem>
                         </DropdownMenuContent>

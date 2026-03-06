@@ -18,23 +18,20 @@ import {
   SearchCode, 
   Calendar,
   Loader2,
-  ChevronRight,
   ExternalLink,
   RotateCcw,
-  Bot,
   Zap
 } from "lucide-react";
-import { Task, TaskType, TaskState, Prospect } from "@/app/lib/types";
+import { Task, TaskType, TaskState } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
-import { format, isBefore, isToday, addDays, isAfter } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { isBefore, isToday, addDays, isAfter } from "date-fns";
 import Link from "next/link";
 import { normalizePhoneBR, buildWaMeUrl } from "@/lib/utils/whatsapp";
+import { formatSafeDate, toSafeDate } from "@/lib/utils/date-utils";
 
 export default function TasksPage() {
   const db = useFirestore();
   const { tenantId } = useTenant();
-  const { user } = useUser();
   const { toast } = useToast();
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
 
@@ -53,9 +50,18 @@ export default function TasksPage() {
     if (!tasks) return { overdue: [], today: [], upcoming: [] };
     const now = new Date();
     return {
-      overdue: tasks.filter(t => t.dueAt?.toDate && isBefore(t.dueAt.toDate(), now) && !isToday(t.dueAt.toDate())),
-      today: tasks.filter(t => t.dueAt?.toDate && isToday(t.dueAt.toDate())),
-      upcoming: tasks.filter(t => t.dueAt?.toDate && isAfter(t.dueAt.toDate(), now) && !isToday(t.dueAt.toDate()))
+      overdue: tasks.filter(t => {
+        const d = toSafeDate(t.dueAt);
+        return d && isBefore(d, now) && !isToday(d);
+      }),
+      today: tasks.filter(t => {
+        const d = toSafeDate(t.dueAt);
+        return d && isToday(d);
+      }),
+      upcoming: tasks.filter(t => {
+        const d = toSafeDate(t.dueAt);
+        return d && isAfter(d, now) && !isToday(d);
+      })
     };
   }, [tasks]);
 
@@ -84,7 +90,7 @@ export default function TasksPage() {
         dueAt: newDate,
         state: "open"
       });
-      toast({ title: `Adiada para ${format(newDate, "dd/MM")}` });
+      toast({ title: `Adiada para ${formatSafeDate(newDate, "dd/MM")}` });
     } catch (e) {
       toast({ variant: "destructive", title: "Erro ao adiar" });
     } finally {
@@ -95,7 +101,6 @@ export default function TasksPage() {
   const handleTaskAction = async (task: Task) => {
     if (!db || !tenantId) return;
     
-    // Logic for direct action based on type
     if (task.type === 'followup_whatsapp') {
       const pSnap = await getDoc(doc(db, "tenants", tenantId, "prospects", task.prospectId));
       const pData = pSnap.data();
@@ -143,26 +148,20 @@ export default function TasksPage() {
                   <span className="text-xs font-bold uppercase text-muted-foreground">
                     {task.type.replace('_', ' ')}
                   </span>
-                  {task.dueAt?.toDate && isBefore(task.dueAt.toDate(), new Date()) && !isToday(task.dueAt.toDate()) && (
+                  {toSafeDate(task.dueAt) && isBefore(toSafeDate(task.dueAt)!, new Date()) && !isToday(toSafeDate(task.dueAt)!) && (
                     <Badge variant="destructive" className="h-4 text-[9px]">Atrasada</Badge>
                   )}
                 </div>
                 <div className="font-bold text-sm truncate">{task.companyName || "Prospect Desconhecido"}</div>
                 <div className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
                   <Calendar className="w-3 h-3" /> 
-                  {task.dueAt?.toDate ? format(task.dueAt.toDate(), "dd 'de' MMM", { locale: ptBR }) : "Sem data"}
+                  {formatSafeDate(task.dueAt, "dd 'de' MMM")}
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
-              {task.notes && (
-                <div className="hidden lg:block text-[9px] max-w-[150px] italic text-muted-foreground truncate border-l pl-2">
-                  {task.notes}
-                </div>
-              )}
               <Button variant="ghost" size="sm" onClick={() => handleTaskAction(task)} className="h-8 text-xs font-bold text-accent">
-                {task.notes ? <Bot className="w-3 h-3 mr-1" /> : null}
                 Executar <ExternalLink className="w-3 h-3 ml-1" />
               </Button>
               <Button variant="ghost" size="icon" className="h-8 w-8 text-orange-600" onClick={() => handleSnoozeTask(task.id, 2)}>

@@ -4,26 +4,19 @@
 import { useMemo, useState } from "react";
 import { useFirestore, useCollection, useDoc, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, where, orderBy, limit, doc, getDocs, serverTimestamp, runTransaction, writeBatch } from "firebase/firestore";
+import { collection, query, orderBy, limit, doc, getDocs, serverTimestamp, runTransaction, writeBatch } from "firebase/firestore";
 import { KPICard } from "@/components/dashboard/kpi-card";
 import { 
   Users, 
-  Mail, 
   Target, 
   Sparkles, 
   ChevronRight, 
   Loader2,
-  PieChart,
   Factory,
   RefreshCw,
   Zap,
-  CheckCircle2,
-  Lightbulb,
   Rocket,
-  Activity,
-  MessageCircle,
   Globe,
-  TrendingUp,
   Search,
   Play,
   ShieldCheck
@@ -33,14 +26,13 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Prospect, DailyTop, Tenant, DailyStats, SegmentStats } from "@/app/lib/types";
+import { Prospect, DailyTop, DailyStats } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { calculateEffectiveScore } from "@/lib/utils/scoring";
 
 export default function DashboardPage() {
   const db = useFirestore();
   const { tenantId } = useTenant();
-  const { user } = useUser();
   const { toast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRunningDiscovery, setIsRunningDiscovery] = useState(false);
@@ -74,15 +66,17 @@ export default function DashboardPage() {
     try {
       const topLimit = 30;
 
+      // Query simplificada para evitar erro de índice durante testes
       let q = query(
         collection(db, "tenants", tenantId, "prospects"),
-        where("status", "in", ["new", "contacted"]),
         orderBy("effectiveScore", "desc"),
-        limit(200)
+        limit(100)
       );
       
       const snapshot = await getDocs(q);
-      let candidates = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Prospect));
+      let candidates = snapshot.docs
+        .map(d => ({ ...d.data(), id: d.id } as Prospect))
+        .filter(p => p.status === 'new' || p.status === 'contacted');
       
       const topN = candidates.slice(0, topLimit);
 
@@ -91,7 +85,7 @@ export default function DashboardPage() {
         return;
       }
 
-      const avgScore = topN.reduce((acc, p) => acc + p.effectiveScore, 0) / topN.length;
+      const avgScore = topN.reduce((acc, p) => acc + (p.effectiveScore || 0), 0) / topN.length;
 
       const dailyTopData: DailyTop = {
         id: today,
@@ -131,9 +125,9 @@ export default function DashboardPage() {
       });
       
       toast({ title: "Radar do Dia Gerado!", description: `Identificamos as ${topN.length} melhores oportunidades para hoje.` });
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      toast({ variant: "destructive", title: "Erro ao gerar radar" });
+      toast({ variant: "destructive", title: "Erro ao gerar radar", description: e.message });
     } finally {
       setIsGenerating(false);
     }
@@ -147,7 +141,7 @@ export default function DashboardPage() {
         { name: "Metalúrgica Gerdau S.A.", state: "SP", sector: "Metalurgia", score: 88, web: "gerdau.com.br", cnpj: "00.000.000/0001-91" },
         { name: "WEG Motores", state: "SC", sector: "Eletrotécnica", score: 94, web: "weg.net", cnpj: "84.429.695/0001-11" },
         { name: "Indústrias Romi S.A.", state: "SP", sector: "Máquinas e Equipamentos", score: 82, web: "romi.com", cnpj: "61.383.493/0001-80" },
-        { id: "idx_4", name: "Embraer S.A.", state: "SP", sector: "Aeroespacial", score: 91, web: "embraer.com", cnpj: "60.198.514/0001-43" },
+        { name: "Embraer S.A.", state: "SP", sector: "Aeroespacial", score: 91, web: "embraer.com", cnpj: "60.198.514/0001-43" },
       ];
 
       const batch = writeBatch(db);
@@ -222,7 +216,7 @@ export default function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <KPICard title="Empresas no Funil" value={allProspects?.length || 0} icon={Users} description="Indústrias monitoradas" />
         <KPICard title="Indexadas Brasil" value="124.8k" icon={Globe} description="Base Radar Nacional" />
-        <KPICard title="Sugestões IA" value={dailyTop?.items.length || 0} icon={Sparkles} description="Qualificação alta" />
+        <KPICard title="Sugestões IA" value={dailyTop?.items?.length || 0} icon={Sparkles} description="Qualificação alta" />
         <KPICard title="Saúde do Pipeline" value="98%" icon={ShieldCheck} description="Dados verificados" />
       </div>
 
@@ -244,7 +238,7 @@ export default function DashboardPage() {
           <CardContent className="pt-6">
             {dailyTopLoading ? (
               <div className="py-20 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>
-            ) : !dailyTop ? (
+            ) : !dailyTop || !dailyTop.items ? (
               <div className="text-center py-20 border-2 border-dashed rounded-xl space-y-4">
                 <Factory className="w-12 h-12 mx-auto opacity-10" />
                 <p className="text-sm font-semibold">O radar diário ainda não foi gerado.</p>
@@ -280,7 +274,7 @@ export default function DashboardPage() {
           <Card className="bg-secondary/30 border-dashed border-2">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
-                <Lightbulb className="w-4 h-4 text-accent" /> Fluxo de Operação
+                <Target className="w-4 h-4 text-accent" /> Fluxo de Operação
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">

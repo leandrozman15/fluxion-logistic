@@ -11,39 +11,22 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
 import { 
   Building2, Globe, MapPin, Mail, Phone, ExternalLink, 
-  MessageSquare, History, Sparkles, Loader2, CheckCircle2, 
-  Send, Wand2, BrainCircuit, AlertCircle, SearchCode, 
-  MailPlus, UserPlus, Info, Ban, ShieldAlert, MessageCircle, 
-  ArrowLeft, Lightbulb, Clock, User, AlertTriangle, ShieldCheck, Zap,
-  Cpu, FileSearch, CheckCircle, TrendingUp, TrendingDown,
-  Target, Bot, Layers, Play, RefreshCw
+  Loader2, Send, BrainCircuit, MessageCircle, 
+  ArrowLeft, Clock, Cpu, FileSearch, RefreshCw
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Prospect, ProspectStatus, EmailTemplate, OutboxState, SegmentStats, Sequence, SequenceEnrollment } from "@/app/lib/types";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { renderTemplate } from "@/lib/utils/template-renderer";
-import { generateEmailDraft } from "@/ai/flows/generate-email-draft-flow";
-import { generateWhatsAppMessage } from "@/ai/flows/generate-whatsapp-message-flow";
+import { Prospect, ProspectStatus, EmailTemplate, SequenceEnrollment, Sequence, SegmentStats } from "@/app/lib/types";
+import { useParams, useSearchParams } from "next/navigation";
 import { analyzeWebsiteContent } from "@/ai/flows/analyze-website-content-flow";
-import { predictCloseProbability } from "@/ai/flows/predict-close-probability-flow";
-import { generateApproachPlan, type GenerateApproachPlanOutput } from "@/ai/flows/generate-approach-plan-flow";
 import { normalizePhoneBR, buildWaMeUrl, buildWhatsAppMessage } from "@/lib/utils/whatsapp";
 import { calculateNextAction } from "@/lib/utils/nba";
 import { calculateEffectiveScore } from "@/lib/utils/scoring";
-import { computeBaselineProbability } from "@/lib/utils/close-probability";
-import { checkEmailQuality, calculateSpamProbability, isEmailOnCooldown } from "@/lib/utils/deliverability";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import Link from "next/link";
-import { addDays } from "date-fns";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { getSegmentKey } from "@/lib/utils/learning-loop";
 import { fetchCnpjData } from "@/services/receita-ws";
+import { formatSafeDate } from "@/lib/utils/date-utils";
 
 export default function ProspectDetailPage() {
   const { id } = useParams();
@@ -57,26 +40,9 @@ export default function ProspectDetailPage() {
   const [isOutboxDialogOpen, setIsOutboxDialogOpen] = useState(false);
   const [isDncDialogOpen, setIsDncDialogOpen] = useState(false);
   const [isWhatsAppDialogOpen, setIsWhatsAppDialogOpen] = useState(false);
-  const [isAiAgentDialogOpen, setIsAiAgentDialogOpen] = useState(false);
-  const [isEnrollDialogOpen, setIsEnrollDialogOpen] = useState(false);
-  
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
-  const [selectedSequenceId, setSelectedSequenceId] = useState<string>("");
-  const [selectedContactIndex, setSelectedContactIndex] = useState<string>("0");
-  const [isSavingOutbox, setIsSavingOutbox] = useState(false);
-  const [isAiDrafting, setIsAiDrafting] = useState(false);
-  const [isAiWhatsAppDrafting, setIsAiWhatsAppDrafting] = useState(false);
   const [isAnalyzingWeb, setIsAnalyzingWeb] = useState(false);
-  const [isPredictingClose, setIsPredictingClose] = useState(false);
-  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
-  const [isEnrolling, setIsEnrolling] = useState(false);
   const [isSyncingReceita, setIsSyncingReceita] = useState(false);
-  
-  const [customSubject, setCustomSubject] = useState<string | null>(null);
-  const [customBody, setCustomBody] = useState<string | null>(null);
-  const [dncReason, setDncReason] = useState("");
   const [whatsAppDraft, setWhatsAppDraft] = useState("");
-  const [aiPlan, setAiPlan] = useState<GenerateApproachPlanOutput | null>(null);
 
   const prospectRef = useMemo(() => {
     if (!db || !tenantId || !id) return null;
@@ -99,23 +65,9 @@ export default function ProspectDetailPage() {
   }, [db, tenantId, activeEnrollment]);
   const { data: activeSequence } = useDoc<Sequence>(activeSequenceRef);
 
-  // All sequences for enrollment
-  const allSequencesQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "sequences"), where("isActive", "==", true));
-  }, [db, tenantId]);
-  const { data: allSequences } = useCollection<Sequence>(allSequencesQuery);
-
   const segmentKey = useMemo(() => prospect ? getSegmentKey(prospect) : null, [prospect]);
   const segmentRef = useMemo(() => (db && tenantId && segmentKey) ? doc(db, "tenants", tenantId, "segmentStats", segmentKey) : null, [db, tenantId, segmentKey]);
   const { data: segmentData } = useDoc<SegmentStats>(segmentRef);
-
-  const templatesQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "templates"), orderBy("name"));
-  }, [db, tenantId]);
-
-  const { data: templates } = useCollection<EmailTemplate>(templatesQuery);
 
   const historyQuery = useMemo(() => {
     if (!db || !tenantId || !id) return null;
@@ -127,17 +79,6 @@ export default function ProspectDetailPage() {
   }, [db, tenantId, id]);
 
   const { data: events, loading: eventsLoading } = useCollection<any>(historyQuery);
-
-  const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
-  const selectedContact = prospect?.contacts?.[parseInt(selectedContactIndex)];
-
-  const previewSubject = customSubject || (selectedTemplate && prospect ? renderTemplate(selectedTemplate.subject, prospect) : "");
-  const previewBody = customBody || (selectedTemplate && prospect ? renderTemplate(selectedTemplate.body, prospect) : "");
-
-  // Deliverability Checks
-  const emailQuality = selectedContact?.email ? checkEmailQuality(selectedContact.email) : null;
-  const spamProb = previewBody ? calculateSpamProbability(previewSubject, previewBody) : 0;
-  const onCooldown = prospect ? isEmailOnCooldown(prospect.lastEmailSentAt) : false;
 
   const nba = useMemo(() => prospect ? calculateNextAction(prospect, segmentData, activeEnrollment, activeSequence) : null, [prospect, segmentData, activeEnrollment, activeSequence]);
 
@@ -162,7 +103,6 @@ export default function ProspectDetailPage() {
         updatedAt: new Date().toISOString()
       };
 
-      // Add contact if empty
       if ((prospect.contacts?.length || 0) === 0) {
         updates.contacts = [{ name: "Contato via ReceitaWS", role: "N/A", email: data.email || "", phone: data.telefone || "" }];
       }
@@ -256,11 +196,7 @@ export default function ProspectDetailPage() {
           transaction.set(weeklyStatsRef, { 
             id: yearWeek, 
             weekId: yearWeek, 
-            [field]: 1,
-            statusChangedTo_contacted: newStatus === 'contacted' ? 1 : 0,
-            statusChangedTo_interested: newStatus === 'interested' ? 1 : 0,
-            statusChangedTo_demo: newStatus === 'demo' ? 1 : 0,
-            statusChangedTo_client: newStatus === 'client' ? 1 : 0
+            [field]: 1
           }, { merge: true });
         }
       });
@@ -326,7 +262,7 @@ export default function ProspectDetailPage() {
               <Badge variant="default" className="bg-accent">Score Radar: {prospect.effectiveScore}</Badge>
               {nba && nba.type !== 'none' && (
                 <Badge variant="secondary" className="bg-accent/10 text-accent border-accent/20">
-                  <Lightbulb className="w-3 h-3 mr-1" /> {nba.label}
+                  <Zap className="w-3 h-3 mr-1" /> {nba.label}
                 </Badge>
               )}
             </div>
@@ -342,16 +278,12 @@ export default function ProspectDetailPage() {
             {isSyncingReceita ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
             Sincronizar ReceitaWS
           </Button>
-          {prospect.isClaimedToday && (
-            <>
-              <Button onClick={handleOpenWhatsAppDialog} className="bg-green-500" disabled={!isPhoneValid || prospect.doNotContact}>
-                <MessageCircle className="w-4 h-4 mr-2" /> WhatsApp
-              </Button>
-              <Button onClick={() => setIsOutboxDialogOpen(true)} className="bg-primary" disabled={!hasEmail || prospect.doNotContact}>
-                <Send className="w-4 h-4 mr-2" /> E-mail
-              </Button>
-            </>
-          )}
+          <Button onClick={handleOpenWhatsAppDialog} className="bg-green-500" disabled={!isPhoneValid || prospect.doNotContact}>
+            <MessageCircle className="w-4 h-4 mr-2" /> WhatsApp
+          </Button>
+          <Button onClick={() => setIsOutboxDialogOpen(true)} className="bg-primary" disabled={!hasEmail || prospect.doNotContact}>
+            <Send className="w-4 h-4 mr-2" /> E-mail
+          </Button>
         </div>
       </div>
 
@@ -362,7 +294,7 @@ export default function ProspectDetailPage() {
               <CardTitle>Visão Geral</CardTitle>
               {segmentData?.preferredChannel && (
                 <Badge variant="outline" className="bg-accent/5 text-accent border-accent/20 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3" /> Recomendado: {segmentData.preferredChannel === 'whatsapp' ? 'WhatsApp' : 'E-mail'}
+                  <BrainCircuit className="w-3 h-3" /> Recomendado: {segmentData.preferredChannel === 'whatsapp' ? 'WhatsApp' : 'E-mail'}
                 </Badge>
               )}
             </CardHeader>
@@ -475,7 +407,7 @@ export default function ProspectDetailPage() {
                             </div>
                             <div className="pb-6">
                               <div className="text-sm font-semibold">{event.type === 'whatsapp_opened' ? "Contato via WhatsApp" : "E-mail Preparado"}</div>
-                              <div className="text-[10px] text-muted-foreground mt-1">{format(event.createdAt.toDate(), "dd 'de' MMMM, HH:mm", { locale: ptBR })}</div>
+                              <div className="text-[10px] text-muted-foreground mt-1">{formatSafeDate(event.createdAt)}</div>
                             </div>
                           </div>
                         ))}
@@ -483,7 +415,7 @@ export default function ProspectDetailPage() {
                           <div className="flex flex-col items-center"><div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center"><Clock className="w-4 h-4 text-primary" /></div></div>
                           <div>
                             <div className="text-sm font-semibold">Prospecto adicionado ao sistema</div>
-                            <div className="text-[10px] text-muted-foreground">{format(new Date(prospect.createdAt), "dd 'de' MMMM, HH:mm", { locale: ptBR })}</div>
+                            <div className="text-[10px] text-muted-foreground">{formatSafeDate(prospect.createdAt)}</div>
                           </div>
                         </div>
                       </div>
@@ -524,15 +456,6 @@ export default function ProspectDetailPage() {
               ))}
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader><CardTitle className="text-sm">Compliance</CardTitle></CardHeader>
-            <CardContent>
-               <Button variant={prospect.doNotContact ? "destructive" : "outline"} size="sm" className="w-full text-xs" onClick={() => setIsDncDialogOpen(true)}>
-                 <Ban className="w-4 h-4 mr-2" /> {prospect.doNotContact ? "Remover DNC" : "Ativar DNC"}
-               </Button>
-            </CardContent>
-          </Card>
         </div>
       </div>
 
@@ -552,19 +475,6 @@ export default function ProspectDetailPage() {
             <Button onClick={handleFinalizeWhatsApp} className="bg-green-500 hover:bg-green-600 w-full">
               Abrir WhatsApp
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isDncDialogOpen} onOpenChange={setIsDncDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirmar DNC</DialogTitle>
-            <DialogDescription>Marcar esta empresa como "Do Not Contact" irá removê-la do Radar diário.</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDncDialogOpen(false)}>Cancelar</Button>
-            <Button variant="destructive">Confirmar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
