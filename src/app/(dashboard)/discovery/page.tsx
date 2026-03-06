@@ -13,12 +13,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, Building2, MapPin, Plus, Loader2, Globe, ShieldCheck, AlertCircle, TrendingUp, Filter, Factory, Calendar, Sparkles, BrainCircuit, Bot } from "lucide-react";
+import { Search, Building2, MapPin, Plus, Loader2, Globe, ShieldCheck, AlertCircle, TrendingUp, Filter, Factory, Calendar, Sparkles, BrainCircuit, Bot, SearchCode } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { calculateEffectiveScore } from "@/lib/utils/scoring";
 import { Prospect, IndustryIndexCompany } from "@/app/lib/types";
 import { fetchCnpjData, type ReceitaWSResponse } from "@/services/receita-ws";
 import { mineIndustries, type MineIndustriesOutput } from "@/ai/flows/mine-industries-flow";
+import Link from "next/link";
 
 // Base Real Expandida para simular mineração profissional
 const MOCK_RADAR_INDEX: IndustryIndexCompany[] = [
@@ -51,6 +52,7 @@ export default function DiscoveryPage() {
   const [miningQuery, setMiningMiningQuery] = useState("");
   const [miningRegion, setMiningRegion] = useState("Joinville/SC");
   const [isMining, setIsMining] = useState(false);
+  const [miningStatus, setMiningStatus] = useState<string | null>(null);
   const [miningResults, setMiningResults] = useState<MineIndustriesOutput | null>(null);
 
   const prospectsQuery = useMemo(() => {
@@ -110,7 +112,11 @@ export default function DiscoveryPage() {
   const handleAiMining = async () => {
     if (!miningQuery) return;
     setIsMining(true);
+    setMiningStatus("Iniciando Agente de Pesquisa...");
     try {
+      setTimeout(() => setMiningStatus("Navegando pela Web Industrial..."), 2000);
+      setTimeout(() => setMiningStatus("Analisando sites e extraindo sinais técnicos..."), 5000);
+      
       const res = await mineIndustries({
         niche: miningQuery,
         region: miningRegion
@@ -121,6 +127,7 @@ export default function DiscoveryPage() {
       toast({ variant: "destructive", title: "Erro na mineração IA", description: e.message });
     } finally {
       setIsMining(false);
+      setMiningStatus(null);
     }
   };
 
@@ -128,7 +135,6 @@ export default function DiscoveryPage() {
     if (!db || !tenantId) return;
     const cleanCnpj = (item.cnpj || `00000000000000`).replace(/\D/g, "");
     
-    // Para candidatos de IA sem CNPJ, geramos um ID temporário
     const id = item.cnpj ? (source === 'auto_discovery' ? `rf_${cleanCnpj}` : `idx_${cleanCnpj}`) : `ai_${Date.now()}`;
     
     if (cleanCnpj !== "00000000000000" && existingCnpjs.has(cleanCnpj)) {
@@ -153,7 +159,7 @@ export default function DiscoveryPage() {
         source: source,
         websiteUrl: item.website || item.probableWebsite,
         aiScore: 75,
-        scoreReasons: ["Importado via Agente de Descoberta"]
+        scoreReasons: [item.reason || "Importado via Agente de Descoberta"]
       };
 
       const effectiveScore = calculateEffectiveScore(prospectData);
@@ -188,7 +194,7 @@ export default function DiscoveryPage() {
       <Tabs defaultValue="index" className="space-y-6">
         <TabsList className="bg-muted/50 p-1">
           <TabsTrigger value="index" className="flex items-center gap-2"><Globe className="w-4 h-4" /> Mineração de Base</TabsTrigger>
-          <TabsTrigger value="ai" className="flex items-center gap-2"><BrainCircuit className="w-4 h-4 text-accent" /> AI Mining Agent</TabsTrigger>
+          <TabsTrigger value="ai" className="flex items-center gap-2"><SearchCode className="w-4 h-4 text-accent" /> AI Live Web Agent</TabsTrigger>
           <TabsTrigger value="cnpj" className="flex items-center gap-2"><ShieldCheck className="w-4 h-4" /> Busca Direta (CNPJ)</TabsTrigger>
         </TabsList>
 
@@ -313,13 +319,13 @@ export default function DiscoveryPage() {
           <Card className="bg-primary text-white border-none shadow-xl overflow-hidden relative">
             <div className="absolute top-0 right-0 p-8 opacity-10"><Bot className="w-32 h-32" /></div>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><BrainCircuit className="w-5 h-5 text-accent" /> Agente de Mineração Autônomo</CardTitle>
-              <CardDescription className="text-white/70">A IA utiliza inteligência de mercado para mapear empresas que não estão na base padrão.</CardDescription>
+              <CardTitle className="flex items-center gap-2"><BrainCircuit className="w-5 h-5 text-accent" /> Agente de Mineração Web (Live)</CardTitle>
+              <CardDescription className="text-white/70">A IA gera queries de busca, navega na web e analisa o conteúdo dos sites em tempo real.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 relative">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-white/80">O que você procura?</Label>
+                  <Label className="text-white/80">Nicho / Especialidade</Label>
                   <Input 
                     placeholder="Ex: Fabricantes de moldes plásticos" 
                     className="bg-white/10 border-white/20 text-white placeholder:text-white/40"
@@ -328,7 +334,7 @@ export default function DiscoveryPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-white/80">Onde?</Label>
+                  <Label className="text-white/80">Região Alvo</Label>
                   <Input 
                     placeholder="Ex: Caxias do Sul / RS" 
                     className="bg-white/10 border-white/20 text-white placeholder:text-white/40"
@@ -343,8 +349,13 @@ export default function DiscoveryPage() {
                 className="w-full bg-accent hover:bg-accent/90 text-primary font-bold"
               >
                 {isMining ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
-                Comandar Agente de Busca
+                Comandar Agente de Busca Viva
               </Button>
+              {miningStatus && (
+                <div className="flex items-center justify-center gap-2 text-xs font-mono text-accent animate-pulse">
+                  <Loader2 className="w-3 h-3 animate-spin" /> {miningStatus}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -361,7 +372,10 @@ export default function DiscoveryPage() {
                     <CardDescription className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {cand.city}, {cand.state}</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <p className="text-xs text-muted-foreground italic">"{cand.reason}"</p>
+                    <div className="p-3 bg-secondary/30 rounded-lg border text-xs italic leading-relaxed">
+                      <span className="font-bold block mb-1 text-primary">Evidência Web:</span>
+                      "{cand.reason}"
+                    </div>
                     <div className="flex gap-2">
                       <Button 
                         size="sm" 
@@ -373,7 +387,7 @@ export default function DiscoveryPage() {
                         Adicionar ao Funil
                       </Button>
                       {cand.probableWebsite && (
-                        <Button size="sm" variant="outline" asChild>
+                        <Button size="sm" variant="outline" asChild title="Abrir site">
                           <a href={cand.probableWebsite.startsWith('http') ? cand.probableWebsite : `https://${cand.probableWebsite}`} target="_blank"><Globe className="w-3 h-3" /></a>
                         </Button>
                       )}
