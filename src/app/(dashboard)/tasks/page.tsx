@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState } from "react";
@@ -35,35 +34,39 @@ export default function TasksPage() {
   const { toast } = useToast();
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
 
+  // Simplified query to avoid composite index requirement
   const tasksQuery = useMemo(() => {
     if (!db || !tenantId) return null;
     return query(
       collection(db, "tenants", tenantId, "tasks"),
-      where("state", "==", "open"),
       orderBy("dueAt", "asc")
     );
   }, [db, tenantId]);
 
-  const { data: tasks, loading } = useCollection<Task>(tasksQuery);
+  const { data: allTasks, loading } = useCollection<Task>(tasksQuery);
 
   const groupedTasks = useMemo(() => {
-    if (!tasks) return { overdue: [], today: [], upcoming: [] };
+    if (!allTasks) return { overdue: [], today: [], upcoming: [] };
+    
+    // Filter by open state in memory
+    const openTasks = allTasks.filter(t => t.state === 'open');
     const now = new Date();
+
     return {
-      overdue: tasks.filter(t => {
+      overdue: openTasks.filter(t => {
         const d = toSafeDate(t.dueAt);
         return d && isBefore(d, now) && !isToday(d);
       }),
-      today: tasks.filter(t => {
+      today: openTasks.filter(t => {
         const d = toSafeDate(t.dueAt);
         return d && isToday(d);
       }),
-      upcoming: tasks.filter(t => {
+      upcoming: openTasks.filter(t => {
         const d = toSafeDate(t.dueAt);
         return d && isAfter(d, now) && !isToday(d);
       })
     };
-  }, [tasks]);
+  }, [allTasks]);
 
   const handleCompleteTask = async (taskId: string) => {
     if (!db || !tenantId) return;

@@ -3,13 +3,13 @@
 import { useMemo, useState } from "react";
 import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, where, deleteDoc, doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, orderBy, deleteDoc, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, Loader2, Trash2, Clock, Send, CheckCircle2, AlertCircle, Eye, XCircle, RotateCcw, Info } from "lucide-react";
+import { Search, Loader2, Trash2, Clock, Send, CheckCircle2, AlertCircle, XCircle, RotateCcw, Info } from "lucide-react";
 import { OutboxMessage, OutboxState } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
@@ -24,24 +24,29 @@ export default function OutboxPage() {
   const [activeTab, setActiveTab] = useState<string>("all");
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
 
+  // Simplified query to avoid composite index requirement
   const outboxQuery = useMemo(() => {
     if (!db || !tenantId) return null;
-    let q = query(collection(db, "tenants", tenantId, "outbox"), orderBy("createdAt", "desc"));
-    if (activeTab !== "all") {
-      q = query(collection(db, "tenants", tenantId, "outbox"), where("state", "==", activeTab), orderBy("createdAt", "desc"));
-    }
-    return q;
-  }, [db, tenantId, activeTab]);
+    return query(collection(db, "tenants", tenantId, "outbox"), orderBy("createdAt", "desc"));
+  }, [db, tenantId]);
 
   const { data: messages, loading } = useCollection<OutboxMessage>(outboxQuery);
 
   const filteredMessages = useMemo(() => {
     if (!messages) return [];
-    return messages.filter(m => 
-      m.companyName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      m.to?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [messages, searchTerm]);
+    
+    return messages.filter(m => {
+      // Filter by Search Term
+      const matchesSearch = !searchTerm || 
+        m.companyName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        m.to?.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      // Filter by Tab (State) - Memory filtering bypasses index requirement
+      const matchesTab = activeTab === "all" || m.state === activeTab;
+
+      return matchesSearch && matchesTab;
+    });
+  }, [messages, searchTerm, activeTab]);
 
   const getStateBadge = (state: OutboxState) => {
     switch (state) {
