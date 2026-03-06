@@ -10,15 +10,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { 
   Building2, Globe, MapPin, Mail, Phone, ExternalLink, 
   Loader2, Send, BrainCircuit, MessageCircle, 
-  ArrowLeft, Clock, Cpu, FileSearch, RefreshCw
+  ArrowLeft, Clock, Cpu, FileSearch, RefreshCw, Plus, UserPlus, Trash2, Edit
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Prospect, ProspectStatus, EmailTemplate, SequenceEnrollment, Sequence, SegmentStats } from "@/app/lib/types";
-import { useParams, useSearchParams } from "next/navigation";
+import { Prospect, ProspectStatus, Contact } from "@/app/lib/types";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { analyzeWebsiteContent } from "@/ai/flows/analyze-website-content-flow";
 import { normalizePhoneBR, buildWaMeUrl, buildWhatsAppMessage } from "@/lib/utils/whatsapp";
 import { calculateNextAction } from "@/lib/utils/nba";
@@ -37,12 +39,15 @@ export default function ProspectDetailPage() {
   const { toast } = useToast();
   
   const [isUpdating, setIsUpdating] = useState(false);
-  const [isOutboxDialogOpen, setIsOutboxDialogOpen] = useState(false);
-  const [isDncDialogOpen, setIsDncDialogOpen] = useState(false);
   const [isWhatsAppDialogOpen, setIsWhatsAppDialogOpen] = useState(false);
+  const [isContactDialogOpen, setIsContactDialogOpen] = useState(false);
   const [isAnalyzingWeb, setIsAnalyzingWeb] = useState(false);
   const [isSyncingReceita, setIsSyncingReceita] = useState(false);
   const [whatsAppDraft, setWhatsAppDraft] = useState("");
+
+  // Contact Form State
+  const [editingContactIndex, setEditingContactIndex] = useState<number | null>(null);
+  const [contactForm, setContactForm] = useState<Contact>({ name: "", role: "", email: "", phone: "" });
 
   const prospectRef = useMemo(() => {
     if (!db || !tenantId || !id) return null;
@@ -50,24 +55,6 @@ export default function ProspectDetailPage() {
   }, [db, tenantId, id]);
 
   const { data: prospect, loading } = useDoc<Prospect>(prospectRef);
-
-  // Active Sequence Data
-  const enrollmentsQuery = useMemo(() => {
-    if (!db || !tenantId || !id) return null;
-    return query(collection(db, "tenants", tenantId, "sequenceEnrollments"), where("prospectId", "==", id), where("state", "==", "active"), limit(1));
-  }, [db, tenantId, id]);
-  const { data: enrollments } = useCollection<SequenceEnrollment>(enrollmentsQuery);
-  const activeEnrollment = enrollments?.[0];
-
-  const activeSequenceRef = useMemo(() => {
-    if (!db || !tenantId || !activeEnrollment) return null;
-    return doc(db, "tenants", tenantId, "sequences", activeEnrollment.sequenceId);
-  }, [db, tenantId, activeEnrollment]);
-  const { data: activeSequence } = useDoc<Sequence>(activeSequenceRef);
-
-  const segmentKey = useMemo(() => prospect ? getSegmentKey(prospect) : null, [prospect]);
-  const segmentRef = useMemo(() => (db && tenantId && segmentKey) ? doc(db, "tenants", tenantId, "segmentStats", segmentKey) : null, [db, tenantId, segmentKey]);
-  const { data: segmentData } = useDoc<SegmentStats>(segmentRef);
 
   const historyQuery = useMemo(() => {
     if (!db || !tenantId || !id) return null;
@@ -79,17 +66,6 @@ export default function ProspectDetailPage() {
   }, [db, tenantId, id]);
 
   const { data: events, loading: eventsLoading } = useCollection<any>(historyQuery);
-
-  const nba = useMemo(() => prospect ? calculateNextAction(prospect, segmentData, activeEnrollment, activeSequence) : null, [prospect, segmentData, activeEnrollment, activeSequence]);
-
-  useEffect(() => {
-    if (searchParams?.get('action') === 'prepare' && !loading && prospect) {
-      setIsOutboxDialogOpen(true);
-    }
-    if (searchParams?.get('action') === 'whatsapp' && !loading && prospect) {
-      handleOpenWhatsAppDialog();
-    }
-  }, [searchParams, loading, prospect]);
 
   const handleSyncReceitaWS = async () => {
     if (!prospect?.cnpj || !prospectRef) return;
@@ -108,17 +84,7 @@ export default function ProspectDetailPage() {
       }
 
       await updateDoc(prospectRef, updates);
-      
-      await addDoc(collection(db!, "tenants", tenantId!, "events"), {
-        type: "status_changed",
-        prospectId: id,
-        companyName: prospect.companyName,
-        actorUid: user?.uid,
-        createdAt: serverTimestamp(),
-        metadata: { from: "manual", to: "official_receita", label: "Sincronização ReceitaWS" }
-      });
-
-      toast({ title: "Dados Sincronizados!", description: "Informações oficiais da ReceitaWS aplicadas." });
+      toast({ title: "Dados Sincronizados!" });
     } catch (e: any) {
       toast({ variant: "destructive", title: "Erro na sincronização", description: e.message });
     } finally {
@@ -126,86 +92,41 @@ export default function ProspectDetailPage() {
     }
   };
 
-  const handleAnalyzeWebsite = async () => {
-    if (!prospect?.websiteUrl || !prospectRef) return;
-    setIsAnalyzingWeb(true);
+  const handleSaveContact = async () => {
+    if (!prospect || !prospectRef) return;
+    setIsUpdating(true);
     try {
-      const result = await analyzeWebsiteContent({ 
-        websiteUrl: prospect.websiteUrl, 
-        companyName: prospect.companyName 
-      });
+      const newContacts = [...(prospect.contacts || [])];
+      if (editingContactIndex !== null) {
+        newContacts[editingContactIndex] = contactForm;
+      } else {
+        newContacts.push(contactForm);
+      }
 
-      const updates: Partial<Prospect> = {
-        aiWebSummary: result.summary,
-        aiDetectedKeywords: result.detectedKeywords,
-        aiScoreConfidence: result.confidence,
-        aiWebAnalysisAt: new Date().toISOString(),
+      await updateDoc(prospectRef, { 
+        contacts: newContacts,
         updatedAt: new Date().toISOString()
-      };
-
-      const newScore = calculateEffectiveScore({ ...prospect, ...updates });
-      updates.effectiveScore = newScore;
-
-      await updateDoc(prospectRef, updates as any);
-
-      await addDoc(collection(db!, "tenants", tenantId!, "events"), {
-        type: "website_analyzed",
-        prospectId: prospect.id,
-        companyName: prospect.companyName,
-        actorUid: user?.uid,
-        createdAt: serverTimestamp(),
-        metadata: { confidence: result.confidence, tagsFound: result.industryTags.length }
       });
 
-      toast({ title: "Site analisado!", description: "Inteligência industrial extraída com sucesso." });
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Erro na análise", description: e.message });
+      toast({ title: editingContactIndex !== null ? "Contato atualizado" : "Contato adicionado" });
+      setIsContactDialogOpen(false);
+      setContactForm({ name: "", role: "", email: "", phone: "" });
+      setEditingContactIndex(null);
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erro ao salvar contato" });
     } finally {
-      setIsAnalyzingWeb(false);
+      setIsUpdating(false);
     }
   };
 
-  const handleStatusChange = async (newStatus: ProspectStatus) => {
-    if (!prospectRef || !db || !tenantId || !user) return;
-    setIsUpdating(true);
+  const handleDeleteContact = async (index: number) => {
+    if (!prospect || !prospectRef || !confirm("Remover este contato?")) return;
     try {
-      const today = new Date();
-      const yearWeek = `${today.getFullYear()}-${Math.ceil((today.getDate() + 6 - today.getDay()) / 7)}`;
-      const weeklyStatsRef = doc(db, "tenants", tenantId, "weeklyStats", yearWeek);
-
-      await runTransaction(db, async (transaction) => {
-        transaction.update(prospectRef, { 
-          status: newStatus,
-          updatedAt: new Date().toISOString()
-        });
-
-        transaction.set(doc(collection(db, "tenants", tenantId, "events")), {
-          type: "status_changed",
-          prospectId: id,
-          companyName: prospect?.companyName,
-          actorUid: user.uid,
-          createdAt: serverTimestamp(),
-          metadata: { from: prospect?.status, to: newStatus }
-        });
-
-        const statsDoc = await transaction.get(weeklyStatsRef);
-        const field = `statusChangedTo_${newStatus}`;
-        if (statsDoc.exists()) {
-          transaction.update(weeklyStatsRef, { [field]: increment(1) });
-        } else {
-          transaction.set(weeklyStatsRef, { 
-            id: yearWeek, 
-            weekId: yearWeek, 
-            [field]: 1
-          }, { merge: true });
-        }
-      });
-
-      toast({ title: "Status atualizado", description: `O prospect agora está como ${newStatus}.` });
+      const newContacts = prospect.contacts.filter((_, i) => i !== index);
+      await updateDoc(prospectRef, { contacts: newContacts });
+      toast({ title: "Contato removido" });
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro", description: "Não foi possível atualizar." });
-    } finally {
-      setIsUpdating(false);
+      toast({ variant: "destructive", title: "Erro ao remover" });
     }
   };
 
@@ -218,10 +139,10 @@ export default function ProspectDetailPage() {
 
   const handleFinalizeWhatsApp = async () => {
     if (!prospect || !db || !tenantId || !user) return;
-    const phone = prospect.contacts?.find(c => !!c.phone || !!c.whatsapp)?.phone || prospect.contacts?.find(c => !!c.phone || !!c.whatsapp)?.whatsapp;
-    const normalized = normalizePhoneBR(phone || "");
+    const primaryPhone = prospect.contacts?.find(c => !!c.phone || !!c.whatsapp)?.phone;
+    const normalized = normalizePhoneBR(primaryPhone || "");
     if (!normalized) {
-      toast({ variant: "destructive", title: "Telefone inválido" });
+      toast({ variant: "destructive", title: "Cadastre um telefone válido primeiro." });
       return;
     }
 
@@ -231,58 +152,39 @@ export default function ProspectDetailPage() {
       companyName: prospect.companyName,
       actorUid: user.uid,
       createdAt: serverTimestamp(),
-      metadata: { phoneE164: normalized, hasPrefilledText: !!whatsAppDraft, enrollmentId: activeEnrollment?.id }
+      metadata: { phoneE164: normalized }
     });
 
     window.open(buildWaMeUrl(normalized, whatsAppDraft), "_blank");
     setIsWhatsAppDialogOpen(false);
   };
 
-  if (loading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-muted-foreground" /></div>;
-  if (!prospect) return <div className="text-center py-20"><h2 className="text-xl font-bold">Prospect não encontrado.</h2></div>;
+  if (loading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin" /></div>;
+  if (!prospect) return <div className="text-center py-20">Prospect não encontrado.</div>;
 
-  const primaryPhone = prospect.contacts?.find(c => !!c.phone || !!c.whatsapp)?.phone || prospect.contacts?.find(c => !!c.phone || !!c.whatsapp)?.whatsapp;
+  const primaryPhone = prospect.contacts?.find(c => !!c.phone || !!c.whatsapp)?.phone;
   const isPhoneValid = !!normalizePhoneBR(primaryPhone || "");
-  const hasEmail = prospect.contacts?.some(c => !!c.email);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" asChild>
-            <Link href="/prospects"><ArrowLeft className="w-4 h-4" /></Link>
-          </Button>
-          <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center text-primary">
-            <Building2 className="w-8 h-8" />
-          </div>
+          <Button variant="ghost" size="icon" asChild><Link href="/prospects"><ArrowLeft className="w-4 h-4" /></Link></Button>
           <div>
             <h1 className="text-2xl font-bold text-primary">{prospect.companyName}</h1>
             <div className="flex items-center gap-2 mt-1">
               <Badge variant="outline">{prospect.cnpj}</Badge>
-              <Badge variant="default" className="bg-accent">Score Radar: {prospect.effectiveScore}</Badge>
-              {nba && nba.type !== 'none' && (
-                <Badge variant="secondary" className="bg-accent/10 text-accent border-accent/20">
-                  <Zap className="w-3 h-3 mr-1" /> {nba.label}
-                </Badge>
-              )}
+              <Badge className="bg-accent">Score: {prospect.effectiveScore}</Badge>
             </div>
           </div>
         </div>
         <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleSyncReceitaWS} 
-            disabled={isSyncingReceita || !prospect.cnpj}
-          >
+          <Button variant="outline" size="sm" onClick={handleSyncReceitaWS} disabled={isSyncingReceita}>
             {isSyncingReceita ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
             Sincronizar ReceitaWS
           </Button>
-          <Button onClick={handleOpenWhatsAppDialog} className="bg-green-500" disabled={!isPhoneValid || prospect.doNotContact}>
+          <Button onClick={handleOpenWhatsAppDialog} className="bg-green-600" disabled={!isPhoneValid}>
             <MessageCircle className="w-4 h-4 mr-2" /> WhatsApp
-          </Button>
-          <Button onClick={() => setIsOutboxDialogOpen(true)} className="bg-primary" disabled={!hasEmail || prospect.doNotContact}>
-            <Send className="w-4 h-4 mr-2" /> E-mail
           </Button>
         </div>
       </div>
@@ -290,167 +192,89 @@ export default function ProspectDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle>Visão Geral</CardTitle>
-              {segmentData?.preferredChannel && (
-                <Badge variant="outline" className="bg-accent/5 text-accent border-accent/20 flex items-center gap-1">
-                  <BrainCircuit className="w-3 h-3" /> Recomendado: {segmentData.preferredChannel === 'whatsapp' ? 'WhatsApp' : 'E-mail'}
-                </Badge>
-              )}
+            <CardHeader className="pb-2">
+              <CardTitle>Informações Gerais</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Globe className="w-4 h-4 text-muted-foreground" />
-                    {prospect.websiteUrl ? (
-                      <a href={prospect.websiteUrl} target="_blank" className="text-primary hover:underline flex items-center gap-1">
-                        {prospect.domain || "Website"} <ExternalLink className="w-3 h-3" />
-                      </a>
-                    ) : <span>Sem website</span>}
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <MapPin className="w-4 h-4 text-muted-foreground" />
-                    <span>{prospect.address?.city || "-"}, {prospect.address?.state || "-"}</span>
-                  </div>
-                  <div className="pt-2">
-                    <h4 className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Segmentos</h4>
-                    <div className="flex flex-wrap gap-1">
-                      {prospect.industryTags?.map(tag => (
-                        <Badge key={tag} variant="secondary" className="text-[10px]">{tag}</Badge>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-2 p-4 bg-accent/5 rounded-lg border border-accent/10">
-                   <h4 className="text-xs font-bold uppercase text-accent flex items-center gap-1">
-                     <BrainCircuit className="w-3 h-3" /> Análise de IA
-                   </h4>
-                   <ul className="space-y-1">
-                     {(prospect.aiScoreReasons || prospect.scoreReasons || [])?.map((reason, i) => (
-                       <li key={i} className="text-xs text-muted-foreground leading-relaxed">• {reason}</li>
-                     ))}
-                   </ul>
-                </div>
+            <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-muted-foreground"><Globe className="w-4 h-4" /> {prospect.websiteUrl || "Sem site"}</div>
+                <div className="flex items-center gap-2 text-muted-foreground"><MapPin className="w-4 h-4" /> {prospect.address?.city}, {prospect.address?.state}</div>
+              </div>
+              <div className="p-3 bg-accent/5 rounded-lg border">
+                <h4 className="text-[10px] font-bold uppercase text-accent mb-1">Motivos do Score</h4>
+                <ul className="text-xs space-y-1">
+                  {(prospect.aiScoreReasons || prospect.scoreReasons || []).map((r, i) => <li key={i}>• {r}</li>)}
+                </ul>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-purple-100 bg-purple-50/20">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <div>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <FileSearch className="w-5 h-5 text-purple-600" /> Website Intelligence
-                </CardTitle>
-                <CardDescription className="text-xs">Extração automática de produtos e processos industriais.</CardDescription>
+          <Tabs defaultValue="contacts">
+            <TabsList>
+              <TabsTrigger value="contacts">Contatos ({prospect.contacts?.length || 0})</TabsTrigger>
+              <TabsTrigger value="history">Histórico</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="contacts" className="space-y-4 pt-4">
+              <div className="flex justify-end">
+                <Button size="sm" onClick={() => { setEditingContactIndex(null); setContactForm({ name: "", role: "", email: "", phone: "" }); setIsContactDialogOpen(true); }}>
+                  <UserPlus className="w-4 h-4 mr-2" /> Novo Contato
+                </Button>
               </div>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="h-8 border-purple-200 text-purple-700 hover:bg-purple-100"
-                onClick={handleAnalyzeWebsite}
-                disabled={isAnalyzingWeb || !prospect.websiteUrl}
-              >
-                {isAnalyzingWeb ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <Cpu className="w-3 h-3 mr-2" />}
-                {prospect.aiWebSummary ? "Reanalisar Site" : "Analisar Site"}
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {prospect.aiWebSummary ? (
-                <div className="space-y-4">
-                  <div className="p-3 bg-white rounded-lg border border-purple-100 text-sm italic text-gray-700 leading-relaxed shadow-sm">
-                    "{prospect.aiWebSummary}"
-                  </div>
-                  <div>
-                    <h4 className="text-[10px] font-bold uppercase text-purple-600 mb-2">Palavras-chave Detectadas</h4>
-                    <div className="flex flex-wrap gap-1">
-                      {prospect.aiDetectedKeywords?.map(kw => (
-                        <Badge key={kw} variant="outline" className="text-[9px] border-purple-200 bg-purple-50 text-purple-700">
-                          {kw}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
+              
+              {prospect.contacts?.length === 0 ? (
+                <div className="text-center py-10 border-2 border-dashed rounded-xl text-muted-foreground">
+                  Nenhum contato cadastrado.
                 </div>
               ) : (
-                <div className="text-center py-6 border border-dashed rounded-lg bg-white/50">
-                  <Globe className="w-8 h-8 mx-auto text-purple-200 mb-2" />
-                  <p className="text-xs text-muted-foreground">Nenhuma inteligência de website disponível ainda.</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Tabs defaultValue="history">
-            <TabsList className="w-full justify-start border-b rounded-none h-12 bg-transparent p-0">
-              <TabsTrigger value="history" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary">
-                Linha do Tempo
-              </TabsTrigger>
-              <TabsTrigger value="contacts" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary">
-                Contatos ({prospect.contacts?.length || 0})
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="history" className="mt-6">
-               <Card>
-                 <CardContent className="pt-6">
-                    {eventsLoading ? (
-                      <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin" /></div>
-                    ) : (
-                      <div className="space-y-6">
-                        {events?.map((event: any, i: number) => (
-                          <div key={i} className="flex gap-4">
-                            <div className="flex flex-col items-center">
-                              <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
-                                {event.type === 'whatsapp_opened' ? <MessageCircle className="w-4 h-4 text-green-500" /> : <Mail className="w-4 h-4 text-blue-500" />}
-                              </div>
-                              {i !== events.length - 1 && <div className="w-0.5 h-full bg-border mt-2"></div>}
-                            </div>
-                            <div className="pb-6">
-                              <div className="text-sm font-semibold">{event.type === 'whatsapp_opened' ? "Contato via WhatsApp" : "E-mail Preparado"}</div>
-                              <div className="text-[10px] text-muted-foreground mt-1">{formatSafeDate(event.createdAt)}</div>
-                            </div>
-                          </div>
-                        ))}
-                        <div className="flex gap-4">
-                          <div className="flex flex-col items-center"><div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center"><Clock className="w-4 h-4 text-primary" /></div></div>
-                          <div>
-                            <div className="text-sm font-semibold">Prospecto adicionado ao sistema</div>
-                            <div className="text-[10px] text-muted-foreground">{formatSafeDate(prospect.createdAt)}</div>
+                prospect.contacts.map((contact, i) => (
+                  <Card key={i}>
+                    <CardContent className="p-4 flex justify-between items-center">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center font-bold text-primary">{contact.name.charAt(0)}</div>
+                        <div>
+                          <div className="font-bold">{contact.name}</div>
+                          <div className="text-xs text-muted-foreground">{contact.role}</div>
+                          <div className="flex gap-3 mt-1 text-xs">
+                            <span className="flex items-center gap-1"><Mail className="w-3 h-3" /> {contact.email || "-"}</span>
+                            <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {contact.phone || "-"}</span>
                           </div>
                         </div>
                       </div>
-                    )}
-                 </CardContent>
-               </Card>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => { setEditingContactIndex(i); setContactForm(contact); setIsContactDialogOpen(true); }}><Edit className="w-4 h-4" /></Button>
+                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteContact(i)}><Trash2 className="w-4 h-4" /></Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
             </TabsContent>
-            <TabsContent value="contacts" className="mt-6 space-y-4">
-              {prospect.contacts?.map((contact, i) => (
-                <Card key={i}>
-                  <CardContent className="p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center font-bold text-primary">{contact.name.charAt(0)}</div>
+
+            <TabsContent value="history" className="pt-4">
+              <Card><CardContent className="pt-6">
+                <div className="space-y-4">
+                  {events?.map((e: any, i: number) => (
+                    <div key={i} className="flex gap-3 text-sm border-l-2 pl-4 pb-4">
+                      <div className="font-bold text-xs whitespace-nowrap">{formatSafeDate(e.createdAt, "dd/MM")}</div>
                       <div>
-                        <div className="font-semibold">{contact.name}</div>
-                        <div className="text-xs text-muted-foreground">{contact.role}</div>
+                        <div className="font-semibold">{e.type === 'whatsapp_opened' ? "WhatsApp Aberto" : "Status Alterado"}</div>
+                        <div className="text-xs text-muted-foreground">{e.metadata?.phoneE164 || ""}</div>
                       </div>
                     </div>
-                    <div className="flex flex-col items-end">
-                      <span className="text-sm flex items-center gap-1"><Mail className="w-3 h-3" /> {contact.email || "-"}</span>
-                      <span className="text-sm flex items-center gap-1"><Phone className="w-3 h-3" /> {contact.phone || "-"}</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                  ))}
+                </div>
+              </CardContent></Card>
             </TabsContent>
           </Tabs>
         </div>
 
         <div className="space-y-6">
           <Card>
-            <CardHeader><CardTitle className="text-sm">Status do Pipeline</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-sm">Status Atual</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-2 gap-2">
               {['new', 'contacted', 'interested', 'demo', 'client', 'discarded'].map((s) => (
-                <Button key={s} disabled={isUpdating} variant={prospect.status === s ? 'default' : 'outline'} size="sm" onClick={() => handleStatusChange(s as any)} className="capitalize text-[10px] h-8">
+                <Button key={s} variant={prospect.status === s ? 'default' : 'outline'} size="sm" className="capitalize text-[10px]" onClick={() => updateDoc(prospectRef!, { status: s })}>
                   {s}
                 </Button>
               ))}
@@ -459,22 +283,47 @@ export default function ProspectDetailPage() {
         </div>
       </div>
 
-      <Dialog open={isWhatsAppDialogOpen} onOpenChange={setIsWhatsAppDialogOpen}>
-        <DialogContent className="max-w-md">
+      {/* Dialog para Contatos */}
+      <Dialog open={isContactDialogOpen} onOpenChange={setIsContactDialogOpen}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Preparar WhatsApp</DialogTitle>
+            <DialogTitle>{editingContactIndex !== null ? "Editar Contato" : "Novo Contato"}</DialogTitle>
+            <DialogDescription>Cadastre o telefone com DDD para habilitar o WhatsApp.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <Textarea 
-              className="min-h-[150px] text-sm" 
-              value={whatsAppDraft}
-              onChange={(e) => setWhatsAppDraft(e.target.value)}
-            />
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Nome Completo</Label>
+              <Input value={contactForm.name} onChange={e => setContactForm({...contactForm, name: e.target.value})} placeholder="Ex: João Silva" />
+            </div>
+            <div className="space-y-2">
+              <Label>Cargo</Label>
+              <Input value={contactForm.role} onChange={e => setContactForm({...contactForm, role: e.target.value})} placeholder="Ex: Diretor de Compras" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>E-mail</Label>
+                <Input value={contactForm.email} onChange={e => setContactForm({...contactForm, email: e.target.value})} placeholder="email@empresa.com" />
+              </div>
+              <div className="space-y-2">
+                <Label>Telefone / WhatsApp</Label>
+                <Input value={contactForm.phone} onChange={e => setContactForm({...contactForm, phone: e.target.value})} placeholder="(11) 99999-9999" />
+              </div>
+            </div>
           </div>
           <DialogFooter>
-            <Button onClick={handleFinalizeWhatsApp} className="bg-green-500 hover:bg-green-600 w-full">
-              Abrir WhatsApp
-            </Button>
+            <Button variant="outline" onClick={() => setIsContactDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleSaveContact} disabled={isUpdating || !contactForm.name}>Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog para WhatsApp */}
+      <Dialog open={isWhatsAppDialogOpen} onOpenChange={setIsWhatsAppDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Mensagem para {prospect.companyName}</DialogTitle></DialogHeader>
+          <Textarea className="min-h-[150px] mt-4" value={whatsAppDraft} onChange={e => setWhatsAppDraft(e.target.value)} />
+          <DialogFooter>
+            <Button onClick={handleFinalizeWhatsApp} className="bg-green-600 w-full">Abrir WhatsApp Web</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
