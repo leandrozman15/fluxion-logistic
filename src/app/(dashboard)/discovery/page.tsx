@@ -114,9 +114,6 @@ export default function DiscoveryPage() {
     setIsMining(true);
     setMiningStatus("Iniciando Agente de Pesquisa...");
     try {
-      setTimeout(() => setMiningStatus("Navegando pela Web Industrial..."), 2000);
-      setTimeout(() => setMiningStatus("Analisando sites e extraindo sinais técnicos..."), 5000);
-      
       const res = await mineIndustries({
         niche: miningQuery,
         region: miningRegion
@@ -149,17 +146,23 @@ export default function DiscoveryPage() {
         tenantId,
         companyName: item.nome || item.companyName,
         cnpj: cleanCnpj,
-        industryTags: item.atividade_principal ? [item.atividade_principal[0].text] : [item.industryTag],
+        industryTags: item.atividade_principal ? [item.atividade_principal[0].text] : [item.industryTag || "Geral"],
         address: { 
-          city: item.municipio || item.city, 
-          state: item.uf || item.state, 
+          city: item.municipio || item.city || "N/A", 
+          state: item.uf || item.state || "N/A", 
           country: "Brasil" 
         },
         status: "new",
         source: source,
-        websiteUrl: item.website || item.probableWebsite,
+        websiteUrl: item.website || item.probableWebsite || undefined,
         aiScore: 75,
-        scoreReasons: [item.reason || "Importado via Agente de Descoberta"]
+        scoreReasons: [item.reason || "Importado via Agente de Descoberta"],
+        contacts: item.email || item.telefone ? [{
+          name: "Contato Principal",
+          role: "N/A",
+          email: item.email || "",
+          phone: item.telefone || ""
+        }] : []
       };
 
       const effectiveScore = calculateEffectiveScore(prospectData);

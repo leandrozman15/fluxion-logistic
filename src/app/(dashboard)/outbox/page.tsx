@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Search, Loader2, Clock, CheckCircle2, AlertCircle, RotateCcw, Play, MessageCircle, Mail, ExternalLink, Zap, ArrowRight, ArrowLeft } from "lucide-react";
+import { Search, Loader2, Clock, CheckCircle2, AlertCircle, RotateCcw, Play, MessageCircle, Mail, ExternalLink, Zap, ArrowRight, ArrowLeft, RefreshCw } from "lucide-react";
 import { OutboxMessage, OutboxState, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
@@ -68,8 +68,10 @@ export default function OutboxPage() {
       const msgRef = doc(db, "tenants", tenantId, "outbox", id);
       await updateDoc(msgRef, { 
         state: newState,
+        lastError: newState === 'queued' ? null : undefined,
         updatedAt: serverTimestamp()
       });
+      toast({ title: newState === 'queued' ? "Mensagem resetada para a fila" : "Status atualizado" });
     } catch (e: any) {
       toast({ variant: "destructive", title: "Erro", description: e.message });
     } finally {
@@ -78,42 +80,59 @@ export default function OutboxPage() {
   };
 
   const handleProcessEmailQueue = async () => {
-    if (!db || !tenantId || !messages || !tenant?.settings?.smtpConfig) {
-      toast({ variant: "destructive", title: "SMTP não configurado", description: "Vá em Ajustes do Motor para configurar seu Gmail." });
+    if (!db || !tenantId || !messages) return;
+
+    const smtp = tenant?.settings?.smtpConfig;
+    if (!smtp || !smtp.user || !smtp.pass) {
+      toast({ 
+        variant: "destructive", 
+        title: "SMTP não configurado", 
+        description: "Vá em 'Ajustes do Motor' e insira seu Gmail e Senha de App de 16 dígitos." 
+      });
       return;
     }
 
     const queued = messages.filter(m => m.state === 'queued' && m.type === 'email');
     if (queued.length === 0) {
-      toast({ title: "Fila de E-mail Vazia" });
+      toast({ title: "Fila de E-mail Vazia", description: "Não há e-mails pendentes para disparar." });
       return;
     }
 
     setIsProcessingQueue(true);
-    const smtpConfig = tenant.settings.smtpConfig;
     
+    let successCount = 0;
+    let failCount = 0;
+
     for (const msg of queued) {
       try {
-        await sendRealEmail({ config: smtpConfig, to: msg.to, subject: msg.subject, body: msg.body });
+        await sendRealEmail({ config: smtp, to: msg.to, subject: msg.subject, body: msg.body });
         await updateDoc(doc(db, "tenants", tenantId, "outbox", msg.id), {
           state: 'sent',
           sentAt: serverTimestamp(),
-          attempts: increment(1)
+          attempts: increment(1),
+          lastError: null
         });
         if (msg.campaignId) {
           await updateDoc(doc(db, "tenants", tenantId, "campaigns", msg.campaignId), { sentCount: increment(1) });
         }
+        successCount++;
+        // Delay para evitar bloqueios de SPAM do Gmail
         await new Promise(resolve => setTimeout(resolve, 2000));
       } catch (err: any) {
+        failCount++;
         await updateDoc(doc(db, "tenants", tenantId, "outbox", msg.id), {
           state: 'failed',
-          lastError: err.message,
+          lastError: err.message || "Erro desconhecido no SMTP",
           attempts: increment(1)
         });
       }
     }
+    
     setIsProcessingQueue(false);
-    toast({ title: "Fila de e-mail processada!" });
+    toast({ 
+      title: "Processamento concluído", 
+      description: `${successCount} enviados com sucesso, ${failCount} falhas.` 
+    });
   };
 
   const startWhatsAppBlast = () => {
@@ -135,7 +154,6 @@ export default function OutboxPage() {
       return;
     }
 
-    // 1. Mark as sent in DB
     await updateDoc(doc(db, "tenants", tenantId, "outbox", current.id), {
       state: 'sent',
       sentAt: serverTimestamp(),
@@ -146,7 +164,6 @@ export default function OutboxPage() {
       await updateDoc(doc(db, "tenants", tenantId, "campaigns", current.campaignId), { sentCount: increment(1) });
     }
 
-    // 2. Add event
     await addDoc(collection(db, "tenants", tenantId, "events"), {
       type: "whatsapp_opened",
       prospectId: current.prospectId,
@@ -156,10 +173,8 @@ export default function OutboxPage() {
       metadata: { phoneE164: normalized }
     });
 
-    // 3. Open Web
     window.open(buildWaMeUrl(normalized, current.body), "_blank");
 
-    // 4. Move to next or close
     if (waCurrentIndex < waQueue.length - 1) {
       setWaCurrentIndex(prev => prev + 1);
     } else {
@@ -168,11 +183,23 @@ export default function OutboxPage() {
     }
   };
 
-  const getStateBadge = (state: OutboxState) => {
+  const getStateBadge = (state: OutboxState, error?: string | null) => {
     switch (state) {
       case 'queued': return <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50 animate-pulse"><Clock className="w-3 h-3 mr-1" /> Na Fila</Badge>;
       case 'sent': return <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50"><CheckCircle2 className="w-3 h-3 mr-1" /> Enviado</Badge>;
-      case 'failed': return <Badge variant="destructive"><AlertCircle className="w-3 h-3 mr-1" /> Falha</Badge>;
+      case 'failed': return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger>
+              <Badge variant="destructive" className="cursor-help"><AlertCircle className="w-3 h-3 mr-1" /> Falha</Badge>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs bg-destructive text-destructive-foreground">
+              <p className="text-xs font-bold mb-1">Motivo do Erro:</p>
+              <p className="text-[10px] leading-tight">{error || "Erro de conexão SMTP"}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
       default: return <Badge variant="secondary">{state}</Badge>;
     }
   };
@@ -190,7 +217,7 @@ export default function OutboxPage() {
           </Button>
           <Button className="bg-primary font-bold" onClick={handleProcessEmailQueue} disabled={isProcessingQueue}>
             {isProcessingQueue ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Mail className="w-4 h-4 mr-2" />}
-            Disparar E-mails
+            Disparar E-mails Reais
           </Button>
         </div>
       </div>
@@ -202,6 +229,7 @@ export default function OutboxPage() {
               <TabsTrigger value="all">Todos</TabsTrigger>
               <TabsTrigger value="queued">Fila</TabsTrigger>
               <TabsTrigger value="sent">Enviados</TabsTrigger>
+              <TabsTrigger value="failed">Falhas</TabsTrigger>
             </TabsList>
           </Tabs>
           <div className="relative w-full md:max-w-xs">
@@ -212,6 +240,10 @@ export default function OutboxPage() {
 
         {loading ? (
           <div className="p-20 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>
+        ) : filteredMessages.length === 0 ? (
+          <div className="p-20 text-center text-muted-foreground text-sm">
+            Nenhuma mensagem encontrada para os critérios selecionados.
+          </div>
         ) : (
           <Table>
             <TableHeader>
@@ -228,7 +260,7 @@ export default function OutboxPage() {
                   <TableCell>
                     <div className="flex flex-col">
                       <span className="font-bold text-primary">{msg.companyName}</span>
-                      <span className="text-[10px] text-muted-foreground">{msg.to}</span>
+                      <span className="text-[10px] text-muted-foreground">{msg.to || "Sem destino cadastrado"}</span>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -237,13 +269,27 @@ export default function OutboxPage() {
                       {msg.type}
                     </Badge>
                   </TableCell>
-                  <TableCell>{getStateBadge(msg.state)}</TableCell>
+                  <TableCell>{getStateBadge(msg.state, msg.lastError)}</TableCell>
                   <TableCell className="text-right">
-                    {msg.state === 'queued' && msg.type === 'whatsapp' && (
-                      <Button variant="ghost" size="sm" className="text-green-600 font-bold h-8" onClick={() => { setWaCurrentIndex(waQueue.findIndex(q => q.id === msg.id)); setIsWhatsAppBlastOpen(true); }}>
-                        Disparar <ExternalLink className="w-3 h-3 ml-1" />
-                      </Button>
-                    )}
+                    <div className="flex justify-end gap-2">
+                      {msg.state === 'failed' && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-8 text-blue-600 font-bold" 
+                          onClick={() => handleUpdateState(msg.id, 'queued')}
+                          disabled={isActionLoading === msg.id}
+                        >
+                          {isActionLoading === msg.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+                          Reenviar
+                        </Button>
+                      )}
+                      {msg.state === 'queued' && msg.type === 'whatsapp' && (
+                        <Button variant="ghost" size="sm" className="text-green-600 font-bold h-8" onClick={() => { setWaCurrentIndex(waQueue.findIndex(q => q.id === msg.id)); setIsWhatsAppBlastOpen(true); }}>
+                          Disparar <ExternalLink className="w-3 h-3 ml-1" />
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -264,7 +310,7 @@ export default function OutboxPage() {
             </DialogDescription>
           </DialogHeader>
           
-          {waQueue[waCurrentIndex] && (
+          {waQueue[waCurrentIndex] ? (
             <div className="py-6 space-y-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -285,6 +331,8 @@ export default function OutboxPage() {
                 </Button>
               </div>
             </div>
+          ) : (
+            <div className="py-10 text-center">Fim da fila de WhatsApp.</div>
           )}
         </DialogContent>
       </Dialog>
