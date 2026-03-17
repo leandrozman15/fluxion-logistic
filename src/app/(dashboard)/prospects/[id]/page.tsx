@@ -28,7 +28,7 @@ import { calculateEffectiveScore } from "@/lib/utils/scoring";
 import Link from "next/link";
 import { getSegmentKey } from "@/lib/utils/learning-loop";
 import { fetchCnpjData } from "@/services/receita-ws";
-import { formatSafeDate } from "@/lib/utils/date-utils";
+import { formatSafeDate, toSafeDate } from "@/lib/utils/date-utils";
 
 export default function ProspectDetailPage() {
   const { id } = useParams();
@@ -56,16 +56,26 @@ export default function ProspectDetailPage() {
 
   const { data: prospect, loading } = useDoc<Prospect>(prospectRef);
 
+  // Consulta simplificada para evitar erro de índice
   const historyQuery = useMemo(() => {
     if (!db || !tenantId || !id) return null;
     return query(
       collection(db, "tenants", tenantId, "events"),
-      where("prospectId", "==", id as string),
-      orderBy("createdAt", "desc")
+      where("prospectId", "==", id as string)
     );
   }, [db, tenantId, id]);
 
-  const { data: events, loading: eventsLoading } = useCollection<any>(historyQuery);
+  const { data: rawEvents, loading: eventsLoading } = useCollection<any>(historyQuery);
+
+  // Ordenação manual em memória
+  const sortedEvents = useMemo(() => {
+    if (!rawEvents) return [];
+    return [...rawEvents].sort((a, b) => {
+      const dateA = toSafeDate(a.createdAt)?.getTime() || 0;
+      const dateB = toSafeDate(b.createdAt)?.getTime() || 0;
+      return dateB - dateA;
+    });
+  }, [rawEvents]);
 
   const handleSyncReceitaWS = async () => {
     if (!prospect?.cnpj || !prospectRef) return;
@@ -299,7 +309,7 @@ export default function ProspectDetailPage() {
             <TabsContent value="history" className="pt-4">
               <Card><CardContent className="pt-6">
                 <div className="space-y-4">
-                  {events?.map((e: any, i: number) => (
+                  {sortedEvents?.map((e: any, i: number) => (
                     <div key={i} className="flex gap-3 text-sm border-l-2 pl-4 pb-4">
                       <div className="font-bold text-xs whitespace-nowrap">{formatSafeDate(e.createdAt, "dd/MM")}</div>
                       <div>
@@ -308,6 +318,9 @@ export default function ProspectDetailPage() {
                       </div>
                     </div>
                   ))}
+                  {sortedEvents.length === 0 && (
+                    <p className="text-center py-10 text-muted-foreground text-xs italic">Nenhuma ação registrada para este prospecto.</p>
+                  )}
                 </div>
               </CardContent></Card>
             </TabsContent>
