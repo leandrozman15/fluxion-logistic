@@ -9,11 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Save, Target, BrainCircuit, Mail, ShieldAlert, Sparkles, MapPin, Factory, ShieldCheck, UserCheck } from "lucide-react";
+import { Loader2, Save, Target, BrainCircuit, Mail, ShieldAlert, Sparkles, MapPin, Factory, ShieldCheck, UserCheck, Key, Lock } from "lucide-react";
 import { Tenant, TenantSettings } from "@/app/lib/types";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -51,7 +50,8 @@ export default function TenantSettingsPage() {
         autoDiscoveryLimitPerWeek: tenantData.settings.autoDiscoveryLimitPerWeek ?? 50,
         warmupModeEnabled: tenantData.settings.warmupModeEnabled ?? true,
         spamProtectionLevel: tenantData.settings.spamProtectionLevel ?? 'medium',
-        maxAttemptsPerProspect: tenantData.settings.maxAttemptsPerProspect ?? 3
+        maxAttemptsPerProspect: tenantData.settings.maxAttemptsPerProspect ?? 3,
+        smtpConfig: tenantData.settings.smtpConfig || { user: '', pass: '', fromName: 'Fluxion Radar' }
       });
     }
   }, [tenantData]);
@@ -107,6 +107,49 @@ export default function TenantSettingsPage() {
       </div>
 
       <div className="grid gap-6">
+        <Card className="border-2 border-primary/20 bg-primary/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Mail className="w-5 h-5 text-primary" /> Conexão de E-mail (Gmail SMTP)</CardTitle>
+            <CardDescription>Configure seu Gmail para disparar e-mails automáticos através do Outbox.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Seu Gmail</Label>
+                <Input 
+                  placeholder="exemplo@gmail.com" 
+                  value={settings.smtpConfig?.user || ''} 
+                  onChange={e => setSettings({...settings, smtpConfig: { ...settings.smtpConfig!, user: e.target.value }})}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1">Senha de App (16 dígitos) <Lock className="w-3 h-3" /></Label>
+                <Input 
+                  type="password"
+                  placeholder="xxxx xxxx xxxx xxxx" 
+                  value={settings.smtpConfig?.pass || ''} 
+                  onChange={e => setSettings({...settings, smtpConfig: { ...settings.smtpConfig!, pass: e.target.value }})}
+                />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label>Nome de Exibição (Quem envia)</Label>
+                <Input 
+                  placeholder="Ex: João da Fluxion" 
+                  value={settings.smtpConfig?.fromName || ''} 
+                  onChange={e => setSettings({...settings, smtpConfig: { ...settings.smtpConfig!, fromName: e.target.value }})}
+                />
+              </div>
+            </div>
+            <div className="bg-amber-50 p-4 rounded-lg border border-amber-100 flex items-start gap-3">
+              <ShieldAlert className="w-5 h-5 text-amber-600 mt-0.5" />
+              <div className="text-xs text-amber-800 space-y-1">
+                <p><strong>Importante:</strong> Não use sua senha normal do Gmail. Você deve gerar uma <b>"Senha de App"</b> nas configurações de segurança da sua conta Google.</p>
+                <p>O Gmail limita envios para evitar SPAM. Recomendamos não passar de 200 envios/dia.</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="border-2 border-accent/20 bg-accent/5">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><UserCheck className="w-5 h-5 text-accent" /> Definição de ICP (Perfil Ideal)</CardTitle>

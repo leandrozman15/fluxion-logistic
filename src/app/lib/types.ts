@@ -287,6 +287,12 @@ export interface Contact {
   quality?: "corporate" | "generic" | "spam";
 }
 
+export interface SmtpConfig {
+  user: string;
+  pass: string;
+  fromName: string;
+}
+
 export interface TenantSettings {
   scoringWeights: {
     effective: number;
@@ -309,6 +315,7 @@ export interface TenantSettings {
   warmupModeEnabled?: boolean;
   spamProtectionLevel?: 'low' | 'medium' | 'high';
   maxAttemptsPerProspect?: number;
+  smtpConfig?: SmtpConfig;
 }
 
 export interface Tenant {
