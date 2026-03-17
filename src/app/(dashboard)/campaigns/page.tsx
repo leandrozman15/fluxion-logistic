@@ -11,6 +11,7 @@ import {
   addDoc, 
   serverTimestamp, 
   doc, 
+  setDoc,
   updateDoc, 
   getDocs, 
   where, 
@@ -176,7 +177,8 @@ export default function CampaignsPage() {
 
           const outboxRef = doc(collection(db, "tenants", tenantId, "outbox"));
           
-          await updateDoc(doc(db, "tenants", tenantId, "outbox", outboxRef.id), {
+          // Correção: Usar setDoc para documentos novos em vez de updateDoc
+          await setDoc(outboxRef, {
             id: outboxRef.id,
             tenantId,
             prospectId: prospect.id,
@@ -194,7 +196,7 @@ export default function CampaignsPage() {
             effectiveScore: prospect.effectiveScore,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
-          } as any);
+          });
 
           await updateDoc(doc(db, "tenants", tenantId, "prospects", prospect.id), {
             status: 'contacted',
