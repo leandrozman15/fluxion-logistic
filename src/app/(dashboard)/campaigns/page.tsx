@@ -143,41 +143,36 @@ export default function CampaignsPage() {
           let subject = "";
           let body = "";
 
+          // GARANTIA DE DADOS PARA A IA (Prevenção de TypeError)
+          const prospectDataForAi = {
+            companyName: prospect.companyName || "Empresa",
+            city: prospect.address?.city || "N/A",
+            state: prospect.address?.state || "N/A",
+            industryTags: prospect.industryTags || [],
+            websiteUrl: prospect.websiteUrl || "",
+            effectiveScore: prospect.effectiveScore || 0,
+            contactName: prospect.contacts?.[0]?.name || "Responsável",
+            contactRole: prospect.contacts?.[0]?.role || "N/A"
+          };
+
           if (channel === 'email' && template) {
             const aiResponse = await generateEmailDraft({
               templateSubject: template.subject,
               templateBody: template.body,
-              prospect: {
-                companyName: prospect.companyName,
-                city: prospect.address?.city || "N/A",
-                state: prospect.address?.state || "N/A",
-                industryTags: prospect.industryTags,
-                websiteUrl: prospect.websiteUrl,
-                effectiveScore: prospect.effectiveScore,
-                contactName: prospect.contacts[0]?.name,
-                contactRole: prospect.contacts[0]?.role
-              }
+              prospect: prospectDataForAi
             });
             subject = aiResponse.subject;
             body = aiResponse.body;
           } else {
             const aiResponse = await generateWhatsAppMessage({
               templateBaseText: "Olá, gostaria de apresentar nossa solução industrial.",
-              prospect: {
-                companyName: prospect.companyName,
-                city: prospect.address?.city || "N/A",
-                state: prospect.address?.state || "N/A",
-                industryTags: prospect.industryTags,
-                contactName: prospect.contacts[0]?.name,
-                contactRole: prospect.contacts[0]?.role
-              }
+              prospect: prospectDataForAi
             });
             body = aiResponse.message;
           }
 
           const outboxRef = doc(collection(db, "tenants", tenantId, "outbox"));
           
-          // Correção: Usar setDoc para documentos novos em vez de updateDoc
           await setDoc(outboxRef, {
             id: outboxRef.id,
             tenantId,
@@ -185,15 +180,15 @@ export default function CampaignsPage() {
             companyName: prospect.companyName,
             campaignId: campaign.id,
             to: channel === 'email' 
-              ? prospect.contacts.find(c => !!c.email)?.email 
-              : prospect.contacts.find(c => !!c.phone || !!c.whatsapp)?.phone,
+              ? prospect.contacts?.find(c => !!c.email)?.email 
+              : prospect.contacts?.find(c => !!c.phone || !!c.whatsapp)?.phone,
             subject: subject,
             body: body,
             state: 'queued',
             type: channel,
             attempts: 0,
             aiUsed: true,
-            effectiveScore: prospect.effectiveScore,
+            effectiveScore: prospect.effectiveScore || 0,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
           });
