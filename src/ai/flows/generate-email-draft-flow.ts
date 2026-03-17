@@ -28,7 +28,7 @@ const GenerateEmailDraftInputSchema = z.object({
 export type GenerateEmailDraftInput = z.infer<typeof GenerateEmailDraftInputSchema>;
 
 const GenerateEmailDraftOutputSchema = z.object({
-  subject: z.string().max(55).describe('The improved, concise subject line.'),
+  subject: z.string().max(100).describe('The improved, concise subject line.'),
   body: z.string().describe('The improved, personalized email body.'),
 });
 export type GenerateEmailDraftOutput = z.infer<typeof GenerateEmailDraftOutputSchema>;
@@ -45,7 +45,7 @@ Regras Estritas:
 - Idioma: Português (pt-BR).
 - Tom: Industrial, direto, respeitoso. SEM marketing exagerado, SEM promessas milagrosas.
 - Comprimento: 90 a 140 palavras no corpo.
-- Assunto: Máximo de 55 caracteres.
+- Assunto: Tente manter abaixo de 55 caracteres, sendo muito impactante.
 - SEM emojis.
 - NÃO mencione "IA", "automação", nem "scraping".
 - Inclua 1 CTA (Chamada para Ação) simples no final (ex: "Podemos conversar por 15 min na próxima terça?").
