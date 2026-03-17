@@ -148,8 +148,8 @@ export default function CampaignsPage() {
               templateBody: template.body,
               prospect: {
                 companyName: prospect.companyName,
-                city: prospect.address.city,
-                state: prospect.address.state,
+                city: prospect.address?.city || "N/A",
+                state: prospect.address?.state || "N/A",
                 industryTags: prospect.industryTags,
                 websiteUrl: prospect.websiteUrl,
                 effectiveScore: prospect.effectiveScore,
@@ -164,8 +164,8 @@ export default function CampaignsPage() {
               templateBaseText: "Olá, gostaria de apresentar nossa solução industrial.",
               prospect: {
                 companyName: prospect.companyName,
-                city: prospect.address.city,
-                state: prospect.address.state,
+                city: prospect.address?.city || "N/A",
+                state: prospect.address?.state || "N/A",
                 industryTags: prospect.industryTags,
                 contactName: prospect.contacts[0]?.name,
                 contactRole: prospect.contacts[0]?.role
