@@ -1,15 +1,16 @@
+
 'use client';
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, deleteDoc, doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, orderBy, deleteDoc, doc, updateDoc, serverTimestamp, increment } from "firebase/firestore";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, Loader2, Trash2, Clock, Send, CheckCircle2, AlertCircle, XCircle, RotateCcw, Info } from "lucide-react";
+import { Search, Loader2, Trash2, Clock, Send, CheckCircle2, AlertCircle, XCircle, RotateCcw, Info, Zap, Play } from "lucide-react";
 import { OutboxMessage, OutboxState } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
@@ -23,8 +24,8 @@ export default function OutboxPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<string>("all");
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
+  const [isProcessingQueue, setIsProcessingQueue] = useState(false);
 
-  // Simplified query to avoid composite index requirement
   const outboxQuery = useMemo(() => {
     if (!db || !tenantId) return null;
     return query(collection(db, "tenants", tenantId, "outbox"), orderBy("createdAt", "desc"));
@@ -34,63 +35,95 @@ export default function OutboxPage() {
 
   const filteredMessages = useMemo(() => {
     if (!messages) return [];
-    
     return messages.filter(m => {
-      // Filter by Search Term
       const matchesSearch = !searchTerm || 
         m.companyName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
         m.to?.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      // Filter by Tab (State) - Memory filtering bypasses index requirement
       const matchesTab = activeTab === "all" || m.state === activeTab;
-
       return matchesSearch && matchesTab;
     });
   }, [messages, searchTerm, activeTab]);
-
-  const getStateBadge = (state: OutboxState) => {
-    switch (state) {
-      case 'draft': return <Badge variant="secondary"><Clock className="w-3 h-3 mr-1" /> Rascunho</Badge>;
-      case 'queued': return <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50"><Send className="w-3 h-3 mr-1" /> Na Fila</Badge>;
-      case 'sent': return <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50"><CheckCircle2 className="w-3 h-3 mr-1" /> Enviado</Badge>;
-      case 'failed': return <Badge variant="destructive"><AlertCircle className="w-3 h-3 mr-1" /> Falha</Badge>;
-      case 'canceled': return <Badge variant="outline"><XCircle className="w-3 h-3 mr-1" /> Cancelado</Badge>;
-      default: return <Badge>{state}</Badge>;
-    }
-  };
 
   const handleUpdateState = async (id: string, newState: OutboxState) => {
     if (!db || !tenantId) return;
     setIsActionLoading(id);
     try {
       const msgRef = doc(db, "tenants", tenantId, "outbox", id);
-      const updates: any = { 
+      await updateDoc(msgRef, { 
         state: newState,
-        updatedAt: serverTimestamp()
-      };
-      
-      if (newState === 'queued') {
-        updates.lastError = null;
-      }
-
-      await updateDoc(msgRef, updates);
-      toast({ title: "Estado atualizado!", description: `Mensagem movida para ${newState}` });
+        updatedAt: serverTimestamp(),
+        lastError: null
+      });
+      toast({ title: "Estado atualizado!" });
     } catch (e: any) {
-      console.error(e);
-      toast({ variant: "destructive", title: "Erro ao atualizar", description: e.message });
+      toast({ variant: "destructive", title: "Erro", description: e.message });
     } finally {
       setIsActionLoading(null);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!db || !tenantId || !confirm("Remover esta mensagem permanentemente?")) return;
-    try {
-      await deleteDoc(doc(db, "tenants", tenantId, "outbox", id));
-      toast({ title: "Mensagem removida" });
-    } catch (e: any) {
-      console.error(e);
-      toast({ variant: "destructive", title: "Erro ao excluir", description: e.message });
+  const handleProcessQueue = async () => {
+    if (!db || !tenantId || !messages) return;
+    const queued = messages.filter(m => m.state === 'queued');
+    if (queued.length === 0) {
+      toast({ title: "Fila Vazia", description: "Não há mensagens aguardando envio." });
+      return;
+    }
+
+    setIsProcessingQueue(true);
+    toast({ title: "Iniciando Worker", description: `Processando ${queued.length} e-mails da fila...` });
+
+    for (const msg of queued) {
+      try {
+        // Simulated sending delay
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        const msgRef = doc(db, "tenants", tenantId, "outbox", msg.id);
+        
+        // Simular falha aleatória para teste de robustez (5%)
+        const isSuccess = Math.random() > 0.05;
+
+        if (isSuccess) {
+          await updateDoc(msgRef, {
+            state: 'sent',
+            sentAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            attempts: increment(1)
+          });
+
+          // Update Campaign stats if linked
+          if (msg.campaignId) {
+            const campRef = doc(db, "tenants", tenantId, "campaigns", msg.campaignId);
+            await updateDoc(campRef, { sentCount: increment(1) });
+          }
+        } else {
+          await updateDoc(msgRef, {
+            state: 'failed',
+            lastError: "Servidor SMTP não respondeu (Timeout simulado)",
+            attempts: increment(1),
+            updatedAt: serverTimestamp()
+          });
+          
+          if (msg.campaignId) {
+            const campRef = doc(db, "tenants", tenantId, "campaigns", msg.campaignId);
+            await updateDoc(campRef, { failedCount: increment(1) });
+          }
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    setIsProcessingQueue(false);
+    toast({ title: "Processamento concluído", description: "A fila de e-mails foi finalizada." });
+  };
+
+  const getStateBadge = (state: OutboxState) => {
+    switch (state) {
+      case 'queued': return <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50 animate-pulse"><Clock className="w-3 h-3 mr-1" /> Na Fila</Badge>;
+      case 'sent': return <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50"><CheckCircle2 className="w-3 h-3 mr-1" /> Enviado</Badge>;
+      case 'failed': return <Badge variant="destructive"><AlertCircle className="w-3 h-3 mr-1" /> Falha</Badge>;
+      default: return <Badge variant="secondary">{state}</Badge>;
     }
   };
 
@@ -99,8 +132,16 @@ export default function OutboxPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-primary">Outbox</h1>
-          <p className="text-muted-foreground">Monitoramento e controle de comunicações enviadas e em fila.</p>
+          <p className="text-muted-foreground">Fila de saída monitorada em tempo real.</p>
         </div>
+        <Button 
+          className="bg-green-600 hover:bg-green-700 font-bold" 
+          onClick={handleProcessQueue} 
+          disabled={isProcessingQueue}
+        >
+          {isProcessingQueue ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Play className="w-4 h-4 mr-2" />}
+          Processar Fila Agora
+        </Button>
       </div>
 
       <div className="bg-card rounded-lg border shadow-sm">
@@ -108,9 +149,9 @@ export default function OutboxPage() {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
             <TabsList>
               <TabsTrigger value="all">Todos</TabsTrigger>
-              <TabsTrigger value="queued">Na Fila</TabsTrigger>
-              <TabsTrigger value="failed">Falhas</TabsTrigger>
+              <TabsTrigger value="queued">Fila</TabsTrigger>
               <TabsTrigger value="sent">Enviados</TabsTrigger>
+              <TabsTrigger value="failed">Falhas</TabsTrigger>
             </TabsList>
           </Tabs>
           <div className="relative w-full md:max-w-xs">
@@ -133,77 +174,39 @@ export default function OutboxPage() {
               <TableRow>
                 <TableHead>Empresa / Destino</TableHead>
                 <TableHead>Estado</TableHead>
-                <TableHead>Tentativas</TableHead>
-                <TableHead>Última Att</TableHead>
+                <TableHead>Score</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredMessages.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">
-                    Nenhuma mensagem encontrada nesta categoria.
+                  <TableCell colSpan={4} className="text-center py-10 text-muted-foreground">
+                    Nenhuma mensagem nesta categoria.
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredMessages.map((msg) => (
-                  <TableRow key={msg.id} className={msg.state === 'failed' ? 'bg-destructive/5' : ''}>
+                  <TableRow key={msg.id}>
                     <TableCell>
                       <div className="flex flex-col">
-                        <Link href={`/prospects/${msg.prospectId}`} className="font-semibold hover:underline text-primary">
-                          {msg.companyName}
-                        </Link>
-                        <span className="text-xs text-muted-foreground">{msg.to}</span>
+                        <span className="font-bold text-primary">{msg.companyName}</span>
+                        <span className="text-[10px] text-muted-foreground">{msg.to}</span>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-1">
                         {getStateBadge(msg.state)}
-                        {msg.lastError && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="text-[10px] text-destructive flex items-center gap-1 cursor-help truncate max-w-[150px]">
-                                  <Info className="w-2.5 h-2.5" /> {msg.lastError}
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent><p className="max-w-xs text-xs">{msg.lastError}</p></TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
+                        {msg.lastError && <span className="text-[9px] text-destructive italic">{msg.lastError}</span>}
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm font-mono">
-                      {msg.attempts} {msg.attempts > 0 && <span className="text-muted-foreground">/ 3</span>}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {msg.updatedAt?.toDate ? msg.updatedAt.toDate().toLocaleString() : '-'}
-                    </TableCell>
+                    <TableCell><Badge variant="outline" className="bg-accent/5">{msg.effectiveScore}</Badge></TableCell>
                     <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        {isActionLoading === msg.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin m-2" />
-                        ) : (
-                          <>
-                            {msg.state === 'draft' && (
-                              <Button variant="ghost" size="icon" onClick={() => handleUpdateState(msg.id, 'queued')} title="Enfileirar">
-                                <Send className="w-4 h-4 text-blue-600" />
-                              </Button>
-                            )}
-                            {(msg.state === 'failed' || msg.state === 'canceled') && (
-                              <Button variant="ghost" size="icon" onClick={() => handleUpdateState(msg.id, 'queued')} title="Reententar">
-                                <RotateCcw className="w-4 h-4 text-orange-600" />
-                              </Button>
-                            )}
-                            {msg.state === 'queued' && (
-                              <Button variant="ghost" size="icon" onClick={() => handleUpdateState(msg.id, 'canceled')} title="Cancelar">
-                                <XCircle className="w-4 h-4 text-muted-foreground" />
-                              </Button>
-                            )}
-                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete(msg.id)}><Trash2 className="w-4 h-4" /></Button>
-                          </>
-                        )}
-                      </div>
+                      {msg.state === 'failed' && (
+                        <Button variant="ghost" size="icon" onClick={() => handleUpdateState(msg.id, 'queued')} title="Reententar">
+                          <RotateCcw className="w-4 h-4 text-orange-600" />
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))
