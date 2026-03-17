@@ -16,21 +16,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search, Building2, MapPin, Plus, Loader2, Globe, ShieldCheck, AlertCircle, TrendingUp, Filter, Factory, Calendar, Sparkles, BrainCircuit, Bot, SearchCode } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { calculateEffectiveScore } from "@/lib/utils/scoring";
-import { Prospect, IndustryIndexCompany } from "@/app/lib/types";
+import { Prospect, IndustryIndexCompany, Contact } from "@/app/lib/types";
 import { fetchCnpjData, type ReceitaWSResponse } from "@/services/receita-ws";
 import { mineIndustries, type MineIndustriesOutput } from "@/ai/flows/mine-industries-flow";
 import Link from "next/link";
 
-// Base Real Expandida para simular mineração profissional
+// Base Real Expandida com contatos para testes de campanha
 const MOCK_RADAR_INDEX: IndustryIndexCompany[] = [
-  { id: "idx_1", companyName: "Metalúrgica Gerdau S.A.", cnpj: "00000000000191", city: "São Paulo", state: "SP", industryTag: "Metalurgia", cnae: "25", website: "gerdau.com.br", employeesRange: "500+", foundedYear: 1901 },
-  { id: "idx_2", companyName: "Indústrias Romi S.A.", cnpj: "61383493000180", city: "Santa Bárbara d'Oeste", state: "SP", industryTag: "Máquinas e Equipamentos", cnae: "28", website: "romi.com", employeesRange: "500+", foundedYear: 1930 },
-  { id: "idx_3", companyName: "WEG Equipamentos Elétricos", cnpj: "84429695000111", city: "Jaraguá do Sul", state: "SC", industryTag: "Eletrotécnica", cnae: "27", website: "weg.net", employeesRange: "500+", foundedYear: 1961 },
-  { id: "idx_4", companyName: "Embraer S.A.", cnpj: "60198514000143", city: "São José dos Campos", state: "SP", industryTag: "Aeroespacial", cnae: "30", website: "embraer.com", employeesRange: "500+", foundedYear: 1969 },
-  { id: "idx_5", companyName: "TechMetal Startups", cnpj: "12345678000100", city: "Florianópolis", state: "SC", industryTag: "Usinagem de Precisão", cnae: "25", website: "techmetal.io", employeesRange: "11-50", foundedYear: 2022 },
-  { id: "idx_6", companyName: "EcoFabril Sustentável", cnpj: "98765432000199", city: "Curitiba", state: "PR", industryTag: "Reciclagem Industrial", cnae: "38", website: "ecofabril.com.br", employeesRange: "51-200", foundedYear: 2018 },
-  { id: "idx_7", companyName: "Moldes Brasil Ltda", cnpj: "11223344000155", city: "Joinville", state: "SC", industryTag: "Injeção Plástica", cnae: "22", website: "moldesbrasil.com.br", employeesRange: "201-500", foundedYear: 1995 },
-  { id: "idx_8", companyName: "SolarIndustrial S.A.", cnpj: "55667788000122", city: "Betim", state: "MG", industryTag: "Energia Renovável", cnae: "35", website: "solarindustrial.ind.br", employeesRange: "1-10", foundedYear: 2023 },
+  { id: "idx_1", companyName: "Metalúrgica Gerdau S.A.", cnpj: "00000000000191", city: "São Paulo", state: "SP", industryTag: "Metalurgia", cnae: "25", website: "gerdau.com.br", employeesRange: "500+", foundedYear: 1901, email: "contato@gerdau.com.br", phone: "1130001000" },
+  { id: "idx_2", companyName: "Indústrias Romi S.A.", cnpj: "61383493000180", city: "Santa Bárbara d'Oeste", state: "SP", industryTag: "Máquinas e Equipamentos", cnae: "28", website: "romi.com", employeesRange: "500+", foundedYear: 1930, email: "vendas@romi.com", phone: "1934559000" },
+  { id: "idx_3", companyName: "WEG Equipamentos Elétricos", cnpj: "84429695000111", city: "Jaraguá do Sul", state: "SC", industryTag: "Eletrotécnica", cnae: "27", website: "weg.net", employeesRange: "500+", foundedYear: 1961, email: "info@weg.net", phone: "4732764000" },
+  { id: "idx_4", companyName: "Embraer S.A.", cnpj: "60198514000143", city: "São José dos Campos", state: "SP", industryTag: "Aeroespacial", cnae: "30", website: "embraer.com", employeesRange: "500+", foundedYear: 1969, email: "comercial@embraer.com", phone: "1239271000" },
+  { id: "idx_5", companyName: "TechMetal Startups", cnpj: "12345678000100", city: "Florianópolis", state: "SC", industryTag: "Usinagem de Precisão", cnae: "25", website: "techmetal.io", employeesRange: "11-50", foundedYear: 2022, email: "ola@techmetal.io", phone: "48999887766" },
+  { id: "idx_6", companyName: "EcoFabril Sustentável", cnpj: "98765432000199", city: "Curitiba", state: "PR", industryTag: "Reciclagem Industrial", cnae: "38", website: "ecofabril.com.br", employeesRange: "51-200", foundedYear: 2018, email: "contato@ecofabril.ind.br", phone: "4133221100" },
+  { id: "idx_7", companyName: "Moldes Brasil Ltda", cnpj: "11223344000155", city: "Joinville", state: "SC", industryTag: "Injeção Plástica", cnae: "22", website: "moldesbrasil.com.br", employeesRange: "201-500", foundedYear: 1995, email: "vendas@moldesbrasil.com", phone: "4734445566" },
+  { id: "idx_8", companyName: "SolarIndustrial S.A.", cnpj: "55667788000122", city: "Betim", state: "MG", industryTag: "Energia Renovável", cnae: "35", website: "solarindustrial.ind.br", employeesRange: "1-10", foundedYear: 2023, email: "diretoria@solarindustrial.ind.br", phone: "3122334455" },
 ];
 
 export default function DiscoveryPage() {
@@ -141,6 +141,29 @@ export default function DiscoveryPage() {
 
     setIsAddingId(id);
     try {
+      const contacts: Contact[] = [];
+      
+      // Mapeamento de contatos inteligente
+      if (item.email || item.telefone) {
+        contacts.push({
+          name: "Contato Principal",
+          role: "N/A",
+          email: item.email || "",
+          phone: item.telefone || "",
+          source: source === 'auto_discovery' ? 'website' : 'manual'
+        });
+      } else if (item.website || item.probableWebsite) {
+        // Se não tem e-mail mas tem site, sugere um padrão genérico para habilitar campanhas
+        const domain = (item.website || item.probableWebsite).replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+        contacts.push({
+          name: "Responsável",
+          role: "N/A",
+          email: `contato@${domain}`,
+          phone: "",
+          source: "ai_suggestion"
+        });
+      }
+
       const prospectData: Partial<Prospect> = {
         id,
         tenantId,
@@ -156,13 +179,8 @@ export default function DiscoveryPage() {
         source: source,
         websiteUrl: item.website || item.probableWebsite || undefined,
         aiScore: 75,
-        scoreReasons: [item.reason || "Importado via Agente de Descoberta"],
-        contacts: item.email || item.telefone ? [{
-          name: "Contato Principal",
-          role: "N/A",
-          email: item.email || "",
-          phone: item.telefone || ""
-        }] : []
+        scoreReasons: [item.reason || "Importado via Discovery"],
+        contacts: contacts
       };
 
       const effectiveScore = calculateEffectiveScore(prospectData);

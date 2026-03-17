@@ -144,6 +144,8 @@ export interface IndustryIndexCompany {
   industryTag: string;
   cnae: string;
   website?: string;
+  email?: string;
+  phone?: string;
   employeesRange: '1-10' | '11-50' | '51-200' | '201-500' | '500+';
   foundedYear: number;
   isIndustrialHub?: boolean;
@@ -184,8 +186,10 @@ export interface Campaign {
   name: string;
   status: CampaignStatus;
   templateId: string;
+  channel?: 'email' | 'whatsapp';
   sentCount: number;
   failedCount: number;
+  targetCount: number;
   createdAt: any;
   scheduledAt?: string;
   finishedAt?: string;
@@ -199,7 +203,7 @@ export interface OutboxMessage {
   updatedAt: any;
   updatedBy: string;
   sentAt: any | null;
-  type: 'email';
+  type: 'email' | 'whatsapp';
   state: OutboxState;
   to: string;
   subject: string;
