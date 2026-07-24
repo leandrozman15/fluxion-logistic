@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useMemo, useState } from "react";
@@ -12,18 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Save, Target, BrainCircuit, Mail, ShieldAlert, Sparkles, MapPin, Factory, ShieldCheck, UserCheck, Key, Lock } from "lucide-react";
-import { Tenant, TenantSettings } from "@/app/lib/types";
-import { Checkbox } from "@/components/ui/checkbox";
-
-const BRAZIL_STATES = ["SP", "SC", "PR", "RS", "MG", "RJ", "BA", "PE", "CE"];
-const INDUSTRIAL_SECTORS = [
-  { id: "25", label: "Metalurgia / Fabricação Metal" },
-  { id: "28", label: "Máquinas e Equipamentos" },
-  { id: "29", label: "Automotivo / Autopeças" },
-  { id: "30", label: "Outros Equip. Transporte" },
-  { id: "31", label: "Móveis / Marcenaria Industrial" }
-];
+import { Loader2, Save, Map as MapIcon, Globe, ShieldCheck, Key, Settings2, Building2 } from "lucide-react";
+import { Tenant, TenantSettings, MapProvider } from "@/app/lib/types";
 
 export default function TenantSettingsPage() {
   const db = useFirestore();
@@ -44,14 +35,16 @@ export default function TenantSettingsPage() {
     if (tenantData?.settings) {
       setSettings({
         ...tenantData.settings,
-        autoDiscoveryEnabled: tenantData.settings.autoDiscoveryEnabled ?? false,
-        autoDiscoveryStates: tenantData.settings.autoDiscoveryStates ?? ["SP"],
-        autoDiscoveryCNAE: tenantData.settings.autoDiscoveryCNAE ?? ["25", "28"],
-        autoDiscoveryLimitPerWeek: tenantData.settings.autoDiscoveryLimitPerWeek ?? 50,
-        warmupModeEnabled: tenantData.settings.warmupModeEnabled ?? true,
-        spamProtectionLevel: tenantData.settings.spamProtectionLevel ?? 'medium',
-        maxAttemptsPerProspect: tenantData.settings.maxAttemptsPerProspect ?? 3,
-        smtpConfig: tenantData.settings.smtpConfig || { user: '', pass: '', fromName: 'Fluxion Radar' }
+        mapProvider: tenantData.settings.mapProvider || 'google',
+        mapApiKey: tenantData.settings.mapApiKey || '',
+        fleetEngineEnabled: tenantData.settings.fleetEngineEnabled ?? false
+      });
+    } else if (tenantData) {
+      // Configurações padrão iniciais
+      setSettings({
+        mapProvider: 'google',
+        mapApiKey: '',
+        fleetEngineEnabled: false
       });
     }
   }, [tenantData]);
@@ -64,30 +57,12 @@ export default function TenantSettingsPage() {
         settings,
         updatedAt: serverTimestamp()
       }, { merge: true });
-      toast({ title: "Configurações salvas!", description: "O motor de prospeção foi atualizado." });
+      toast({ title: "Configurações salvas!", description: "O motor logístico foi atualizado." });
     } catch (e) {
       toast({ variant: "destructive", title: "Erro ao salvar" });
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const toggleState = (state: string) => {
-    if (!settings) return;
-    const current = settings.autoDiscoveryStates || [];
-    const updated = current.includes(state) 
-      ? current.filter(s => s !== state) 
-      : [...current, state];
-    setSettings({ ...settings, autoDiscoveryStates: updated });
-  };
-
-  const toggleCnae = (cnae: string) => {
-    if (!settings) return;
-    const current = settings.autoDiscoveryCNAE || [];
-    const updated = current.includes(cnae) 
-      ? current.filter(c => c !== cnae) 
-      : [...current, cnae];
-    setSettings({ ...settings, autoDiscoveryCNAE: updated });
   };
 
   if (loading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="animate-spin" /></div>;
@@ -97,151 +72,95 @@ export default function TenantSettingsPage() {
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-primary">Configurações do Motor</h1>
-          <p className="text-muted-foreground">Ajuste os parâmetros de mineração e operação do seu radar.</p>
+          <h1 className="text-2xl font-bold text-slate-900">Configuración del Sistema</h1>
+          <p className="text-slate-500 text-sm">Ajuste los parámetros globales y la integración de mapas.</p>
         </div>
-        <Button onClick={handleSave} disabled={isSaving} className="bg-accent">
+        <Button onClick={handleSave} disabled={isSaving} className="bg-blue-600">
           {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-          Salvar Alterações
+          Guardar Cambios
         </Button>
       </div>
 
       <div className="grid gap-6">
-        <Card className="border-2 border-primary/20 bg-primary/5">
+        {/* Configuración de Mapas */}
+        <Card className="border-blue-100 bg-blue-50/30">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Mail className="w-5 h-5 text-primary" /> Conexão de E-mail (Gmail SMTP)</CardTitle>
-            <CardDescription>Configure seu Gmail para disparar e-mails automáticos através do Outbox.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Seu Gmail</Label>
-                <Input 
-                  placeholder="exemplo@gmail.com" 
-                  value={settings.smtpConfig?.user || ''} 
-                  onChange={e => setSettings({...settings, smtpConfig: { ...settings.smtpConfig!, user: e.target.value }})}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1">Senha de App (16 dígitos) <Lock className="w-3 h-3" /></Label>
-                <Input 
-                  type="password"
-                  placeholder="xxxx xxxx xxxx xxxx" 
-                  value={settings.smtpConfig?.pass || ''} 
-                  onChange={e => setSettings({...settings, smtpConfig: { ...settings.smtpConfig!, pass: e.target.value }})}
-                />
-              </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label>Nome de Exibição (Quem envia)</Label>
-                <Input 
-                  placeholder="Ex: João da Fluxion" 
-                  value={settings.smtpConfig?.fromName || ''} 
-                  onChange={e => setSettings({...settings, smtpConfig: { ...settings.smtpConfig!, fromName: e.target.value }})}
-                />
-              </div>
-            </div>
-            <div className="bg-amber-50 p-4 rounded-lg border border-amber-100 flex items-start gap-3">
-              <ShieldAlert className="w-5 h-5 text-amber-600 mt-0.5" />
-              <div className="text-xs text-amber-800 space-y-1">
-                <p><strong>Importante:</strong> Não use sua senha normal do Gmail. Você deve gerar uma <b>"Senha de App"</b> nas configurações de segurança da sua conta Google.</p>
-                <p>O Gmail limita envios para evitar SPAM. Recomendamos não passar de 200 envios/dia.</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-2 border-accent/20 bg-accent/5">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><UserCheck className="w-5 h-5 text-accent" /> Definição de ICP (Perfil Ideal)</CardTitle>
-            <CardDescription>Configure qual tipo de empresa o sistema deve priorizar na mineração automática.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <Label>Porte Alvo (Colaboradores)</Label>
-              <Select defaultValue="medium">
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="micro">Micro (1-10)</SelectItem>
-                  <SelectItem value="small">Pequena (11-50)</SelectItem>
-                  <SelectItem value="medium">Média (51-500) - Recomendado</SelectItem>
-                  <SelectItem value="large">Grande (+500)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Maturidade da Empresa</Label>
-              <Select defaultValue="any">
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="any">Qualquer Maturidade</SelectItem>
-                  <SelectItem value="new">Novas (Até 5 anos)</SelectItem>
-                  <SelectItem value="historical">Históricas (+20 anos)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div className="space-y-1">
-              <CardTitle className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-accent" /> Auto Discovery (Semanal)
-              </CardTitle>
-              <CardDescription>Busca proativa de novas indústrias toda segunda-feira.</CardDescription>
-            </div>
-            <Switch 
-              checked={settings.autoDiscoveryEnabled} 
-              onCheckedChange={(v) => setSettings({...settings, autoDiscoveryEnabled: v})}
-            />
-          </CardHeader>
-          {settings.autoDiscoveryEnabled && (
-            <CardContent className="space-y-6 animate-in fade-in slide-in-from-top-2">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
-                <div className="space-y-4">
-                  <Label className="flex items-center gap-2"><MapPin className="w-4 h-4" /> Estados Selecionados</Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {BRAZIL_STATES.map(state => (
-                      <div key={state} className="flex items-center space-x-2 p-2 border rounded hover:bg-secondary/50 cursor-pointer" onClick={() => toggleState(state)}>
-                        <Checkbox id={`state-${state}`} checked={settings.autoDiscoveryStates?.includes(state)} />
-                        <label className="text-xs font-semibold cursor-pointer">{state}</label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <Label className="flex items-center gap-2"><Factory className="w-4 h-4" /> Setores (CNAE)</Label>
-                  <div className="space-y-2">
-                    {INDUSTRIAL_SECTORS.map(sector => (
-                      <div key={sector.id} className="flex items-center space-x-2 p-2 border rounded hover:bg-secondary/50 cursor-pointer" onClick={() => toggleCnae(sector.id)}>
-                        <Checkbox id={`cnae-${sector.id}`} checked={settings.autoDiscoveryCNAE?.includes(sector.id)} />
-                        <label className="text-[10px] font-medium leading-none cursor-pointer">{sector.label}</label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          )}
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-green-600" /> Proteção de Domínio</CardTitle>
-            <CardDescription>Evite que seu domínio caia em listas de SPAM.</CardDescription>
+            <CardTitle className="flex items-center gap-2 text-blue-900">
+              <MapIcon className="w-5 h-5" /> Motor de Mapas y Navegación
+            </CardTitle>
+            <CardDescription>Seleccione el proveedor de servicios geoespaciales para el seguimiento de flota.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="flex items-center justify-between p-4 bg-secondary/30 rounded-lg">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label>Proveedor de Mapas</Label>
+                <Select 
+                  value={settings.mapProvider} 
+                  onValueChange={(v: MapProvider) => setSettings({...settings, mapProvider: v})}
+                >
+                  <SelectTrigger className="bg-white">
+                    <SelectValue placeholder="Seleccionar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="google">Google Maps Platform</SelectItem>
+                    <SelectItem value="mapbox">Mapbox</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1">API Key / Access Token <Key className="w-3 h-3 text-slate-400" /></Label>
+                <Input 
+                  type="password"
+                  placeholder="Inserte su clave de API" 
+                  className="bg-white"
+                  value={settings.mapApiKey} 
+                  onChange={e => setSettings({...settings, mapApiKey: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between p-4 bg-white border rounded-lg">
               <div className="space-y-0.5">
-                <Label>Modo Warmup (Aquecimento)</Label>
-                <p className="text-xs text-muted-foreground">Escala gradualmente o envio de e-mails.</p>
+                <Label className="flex items-center gap-2">
+                  Habilitar Fleet Engine / Tracking Avanzado
+                  <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-200 text-[8px] uppercase">PRO</Badge>
+                </Label>
+                <p className="text-xs text-slate-500">Permite sincronización de alta frecuencia y algoritmos de optimización de rutas.</p>
               </div>
               <Switch 
-                checked={settings.warmupModeEnabled} 
-                onCheckedChange={(v) => setSettings({...settings, warmupModeEnabled: v})}
+                checked={settings.fleetEngineEnabled} 
+                onCheckedChange={v => setSettings({...settings, fleetEngineEnabled: v})}
               />
             </div>
+
+            <div className="p-4 bg-amber-50 border border-amber-100 rounded-lg flex items-start gap-3">
+              <Globe className="w-5 h-5 text-amber-600 mt-0.5" />
+              <div className="text-xs text-amber-800 space-y-1">
+                <p><strong>Diferencia de Datos:</strong> Google Maps ofrece mejor cobertura en Argentina. Mapbox permite personalización total del estilo del mapa.</p>
+                <p>El uso de estos servicios puede incurrir en costos adicionales según el volumen de la flota.</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Datos de Organización */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-slate-600" /> Identidad de Organización
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Razón Social / Nombre</Label>
+                  <Input defaultValue={tenantData?.name || "LogísticaAr HQ"} />
+                </div>
+                <div className="space-y-2">
+                  <Label>CUIT de la Empresa</Label>
+                  <Input placeholder="30-XXXXXXXX-X" />
+                </div>
+             </div>
           </CardContent>
         </Card>
       </div>

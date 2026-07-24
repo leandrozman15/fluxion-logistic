@@ -3,7 +3,7 @@
 
 import { useState, useMemo } from "react";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, orderBy, addDoc, serverTimestamp, deleteDoc, doc } from "firebase/firestore";
+import { collection, query, orderBy, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, writeBatch, getDocs } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -11,10 +11,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { 
   Building2, MapPin, Plus, Phone, Search, 
-  MoreVertical, Trash2, Globe, Loader2, Map as MapIcon, Crosshair
+  MoreVertical, Trash2, Globe, Loader2, Map as MapIcon, Crosshair, Star
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Hub, HubType } from "@/app/lib/types";
@@ -41,6 +42,7 @@ export default function SedesPage() {
     province: "Buenos Aires",
     type: "hub",
     phone: "",
+    isMainBase: false,
     lat: -34.6037,
     lng: -58.3816
   });
@@ -77,17 +79,42 @@ export default function SedesPage() {
     if (!db || !formData.name || !formData.address) return;
     setIsSubmitting(true);
     try {
+      // Se for marcar como base principal, desmarcar as outras
+      if (formData.isMainBase) {
+        const batch = writeBatch(db);
+        const snapshot = await getDocs(collection(db, "hubs"));
+        snapshot.docs.forEach(doc => {
+          if (doc.data().isMainBase) batch.update(doc.ref, { isMainBase: false });
+        });
+        await batch.commit();
+      }
+
       await addDoc(collection(db, "hubs"), {
         ...formData,
         createdAt: serverTimestamp()
       });
       toast({ title: "Sede Registrada", description: `La sede ${formData.name} ha sido añadida.` });
       setIsAddOpen(false);
-      setFormData({ name: "", address: "", city: "", province: "Buenos Aires", type: "hub", phone: "", lat: -34.6037, lng: -58.3816 });
+      setFormData({ name: "", address: "", city: "", province: "Buenos Aires", type: "hub", phone: "", isMainBase: false, lat: -34.6037, lng: -58.3816 });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al registrar" });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleSetMainBase = async (id: string) => {
+    if (!db) return;
+    try {
+      const batch = writeBatch(db);
+      const snapshot = await getDocs(collection(db, "hubs"));
+      snapshot.docs.forEach(doc => {
+        batch.update(doc.ref, { isMainBase: doc.id === id });
+      });
+      await batch.commit();
+      toast({ title: "Base Principal Actualizada", description: "La sede seleccionada ahora es su Casa Central." });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al actualizar" });
     }
   };
 
@@ -133,6 +160,13 @@ export default function SedesPage() {
               <div className="grid gap-2">
                 <Label htmlFor="name">Nombre de la Sede</Label>
                 <Input id="name" placeholder="Ej: Hub Buenos Aires Norte" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+              </div>
+              <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                <div className="space-y-0.5">
+                  <Label className="text-blue-900">Casa Central</Label>
+                  <p className="text-[10px] text-blue-700">Establecer como sede principal de la empresa.</p>
+                </div>
+                <Switch checked={formData.isMainBase} onCheckedChange={v => setFormData({...formData, isMainBase: v})} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
@@ -227,11 +261,14 @@ export default function SedesPage() {
                     <TableRow key={hub.id} className="hover:bg-slate-50 transition-colors">
                       <TableCell>
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
-                            <Building2 size={18} />
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${hub.isMainBase ? 'bg-amber-100 text-amber-600' : 'bg-blue-50 text-blue-600'}`}>
+                            {hub.isMainBase ? <Star size={20} fill="currentColor" /> : <Building2 size={18} />}
                           </div>
                           <div className="space-y-0.5">
-                            <div className="font-bold text-slate-900">{hub.name}</div>
+                            <div className="flex items-center gap-2">
+                              <div className="font-bold text-slate-900">{hub.name}</div>
+                              {hub.isMainBase && <Badge variant="secondary" className="bg-amber-50 text-amber-700 text-[8px] uppercase">Central</Badge>}
+                            </div>
                             {getHubTypeBadge(hub.type)}
                           </div>
                         </div>
@@ -255,6 +292,11 @@ export default function SedesPage() {
                              <Button variant="ghost" size="icon"><MoreVertical size={16} /></Button>
                            </DropdownMenuTrigger>
                            <DropdownMenuContent align="end">
+                             {!hub.isMainBase && (
+                               <DropdownMenuItem onClick={() => handleSetMainBase(hub.id)}>
+                                 <Star className="w-4 h-4 mr-2 text-amber-500" /> Definir como Principal
+                               </DropdownMenuItem>
+                             )}
                              <DropdownMenuItem onClick={() => window.open(`https://www.google.com/maps?q=${hub.lat},${hub.lng}`, '_blank')}>
                                <Globe className="w-4 h-4 mr-2" /> Ver en Google Maps
                              </DropdownMenuItem>

@@ -4,6 +4,7 @@ export type DriverStatus = 'active' | 'in_trip' | 'resting' | 'suspended' | 'ret
 export type LoadStatus = 'pending' | 'assigned' | 'on_route' | 'delivered' | 'incident' | 'cancelled';
 export type DocStatus = 'pending' | 'valid' | 'expired' | 'warning';
 export type HubType = 'hub' | 'warehouse' | 'office';
+export type MapProvider = 'google' | 'mapbox';
 
 export interface VehicleDocument {
   id: string;
@@ -81,6 +82,7 @@ export interface Hub {
   lng: number;
   type: HubType;
   phone: string;
+  isMainBase?: boolean;
   createdAt: any;
 }
 
@@ -103,7 +105,6 @@ export interface Load {
   serviceType: 'FTL' | 'LTL' | 'reefer' | 'dangerous' | 'oversized' | 'customs' | 'standard';
   clientName: string;
   
-  // Origen
   origin: {
     name: string;
     phone: string;
@@ -117,7 +118,6 @@ export interface Load {
     lng?: number;
   };
   
-  // Destino
   destination: {
     name: string;
     phone: string;
@@ -131,7 +131,6 @@ export interface Load {
     lng?: number;
   };
 
-  // Fechas
   pickupDate: string;
   pickupTimeFrom: string;
   pickupTimeTo: string;
@@ -139,7 +138,6 @@ export interface Load {
   deliveryTimeFrom: string;
   deliveryTimeTo: string;
 
-  // Detalles Carga
   description: string;
   classification: string;
   weightKg: number;
@@ -147,7 +145,6 @@ export interface Load {
   units: number;
   unitType: string;
 
-  // Datos específicos
   dangerousGoods?: {
     unClass: string;
     unNumber: string;
@@ -159,7 +156,6 @@ export interface Load {
     tolerance: number;
   };
 
-  // Financiero
   basePrice: number;
   additionalCosts: {
     peajes: number;
@@ -173,7 +169,6 @@ export interface Load {
   paymentMethod: string;
   billingStatus: 'pending' | 'partial' | 'total' | 'cancelled';
 
-  // Asignación
   priority: 'low' | 'medium' | 'high' | 'critical';
   status: LoadStatus;
   assignedTruckId?: string;
@@ -183,7 +178,6 @@ export interface Load {
   estimatedHours?: number;
   specialInstructions?: string;
 
-  // Telemetria em tempo real
   tracking?: {
     currentLat: number;
     currentLng: number;
@@ -203,5 +197,20 @@ export interface Load {
   };
 
   createdAt: any;
+  updatedAt: any;
+}
+
+export interface TenantSettings {
+  mapProvider: MapProvider;
+  mapApiKey?: string;
+  fleetEngineEnabled?: boolean;
+  onboardingCompleted?: boolean;
+}
+
+export interface Tenant {
+  id: string;
+  name: string;
+  plan: 'free' | 'pro';
+  settings?: TenantSettings;
   updatedAt: any;
 }
