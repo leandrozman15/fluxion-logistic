@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useEffect, useState } from "react";
@@ -118,7 +117,7 @@ export default function LoadOrderDocumentPage() {
               <h2 className="text-xs font-black uppercase bg-slate-900 text-white px-2 py-1 inline-block">Tipo de Servicio</h2>
               <div className="flex items-center gap-2">
                 {load.serviceType === 'customs' ? <Globe className="text-blue-600" /> : <Package className="text-blue-600" />}
-                <p className="text-lg font-bold capitalize">{load.serviceType.replace('_', ' ')}</p>
+                <p className="text-lg font-bold capitalize">{load.serviceType?.replace('_', ' ')}</p>
               </div>
             </div>
           </div>
@@ -132,7 +131,9 @@ export default function LoadOrderDocumentPage() {
               <div className="space-y-1">
                 <p className="font-bold text-slate-900">{load.origin.name}</p>
                 <p className="text-xs text-slate-600 leading-relaxed">{load.origin.address}</p>
-                <p className="text-[10px] font-black text-blue-600">{load.origin.province.toUpperCase()}, {load.origin.country.toUpperCase()}</p>
+                <p className="text-[10px] font-black text-blue-600">
+                  {(load.origin.province || 'N/A').toUpperCase()}, {(load.origin.country || 'N/A').toUpperCase()}
+                </p>
               </div>
             </div>
             <div className="space-y-3">
@@ -142,7 +143,9 @@ export default function LoadOrderDocumentPage() {
               <div className="space-y-1">
                 <p className="font-bold text-slate-900">{load.destination.name}</p>
                 <p className="text-xs text-slate-600 leading-relaxed">{load.destination.address}</p>
-                <p className="text-[10px] font-black text-blue-600">{load.destination.province.toUpperCase()}, {load.destination.country.toUpperCase()}</p>
+                <p className="text-[10px] font-black text-blue-600">
+                  {(load.destination.province || 'N/A').toUpperCase()}, {(load.destination.country || 'N/A').toUpperCase()}
+                </p>
               </div>
             </div>
           </div>
