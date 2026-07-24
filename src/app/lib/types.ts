@@ -7,6 +7,17 @@ export type HubType = 'hub' | 'warehouse' | 'office';
 export type MapProvider = 'google' | 'mapbox';
 export type Country = 'Argentina' | 'Chile' | 'Paraguay' | 'Uruguay' | 'Bolivia' | 'Brasil';
 
+export type LoadDocType = 'remito' | 'factura' | 'cot' | 'otro';
+
+export interface LoadDocument {
+  id: string;
+  type: LoadDocType;
+  number: string;
+  fileUrl?: string;
+  uploadedAt: any;
+  notes?: string;
+}
+
 export type ExpenseCategory = 
   | 'fuel' 
   | 'toll' 
@@ -265,6 +276,8 @@ export interface Load {
     totalBudget: number;
     categories: Partial<Record<ExpenseCategory, number>>;
   };
+
+  documents?: LoadDocument[];
 
   pickupDate: string;
   pickupTimeFrom: string;

@@ -4,7 +4,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, orderBy, deleteDoc, doc, updateDoc } from "firebase/firestore";
+import { collection, query, orderBy, deleteDoc, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -13,10 +13,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Package, Plus, Search, MapPin, Scale, DollarSign, 
   Loader2, MoreVertical, Trash2, Truck, CheckCircle2, 
-  Clock, AlertTriangle, FileText, ExternalLink, Printer, Wallet
+  Clock, AlertTriangle, FileText, ExternalLink, Printer, Wallet, FilePlus, Upload, Trash
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -26,9 +29,10 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Load, LoadStatus } from "@/app/lib/types";
+import { Load, LoadStatus, LoadDocType, LoadDocument } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 
 export default function CargasPage() {
   const db = useFirestore();
@@ -36,6 +40,13 @@ export default function CargasPage() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+
+  // Document management state
+  const [isDocsOpen, setIsDocsOpen] = useState(false);
+  const [selectedLoadForDocs, setSelectedLoadForDocs] = useState<Load | null>(null);
+  const [newDocType, setNewDocType] = useState<LoadDocType>("remito");
+  const [newDocNumber, setNewDocNumber] = useState("");
+  const [isSavingDoc, setIsSavingDoc] = useState(false);
 
   const loadsQuery = useMemo(() => {
     if (!db) return null;
@@ -78,10 +89,9 @@ export default function CargasPage() {
 
     const docRef = doc(db, "loads", id);
     
-    // Eliminación inmediata sin await para UI optimista
     deleteDoc(docRef)
       .then(() => {
-        toast({ title: "Operación eliminada", description: "El flete ha sido removido del sistema." });
+        toast({ title: "Operación eliminada" });
       })
       .catch(async (serverError) => {
         const permissionError = new FirestorePermissionError({
@@ -99,7 +109,7 @@ export default function CargasPage() {
     
     updateDoc(docRef, { 
       status: newStatus,
-      updatedAt: new Date().toISOString()
+      updatedAt: serverTimestamp()
     }).catch(async (serverError) => {
       const permissionError = new FirestorePermissionError({
         path: docRef.path,
@@ -109,7 +119,53 @@ export default function CargasPage() {
       errorEmitter.emit('permission-error', permissionError);
     });
 
-    toast({ title: `Estado actualizado: ${newStatus.replace('_', ' ')}` });
+    toast({ title: `Estado actualizado` });
+  };
+
+  const handleAddDocument = async () => {
+    if (!db || !selectedLoadForDocs || !newDocNumber) return;
+    setIsSavingDoc(true);
+
+    const newDocObj: LoadDocument = {
+      id: Math.random().toString(36).substring(7),
+      type: newDocType,
+      number: newDocNumber,
+      uploadedAt: new Date().toISOString(),
+      notes: ""
+    };
+
+    const updatedDocs = [...(selectedLoadForDocs.documents || []), newDocObj];
+    const docRef = doc(db, "loads", selectedLoadForDocs.id);
+
+    try {
+      await updateDoc(docRef, { 
+        documents: updatedDocs,
+        updatedAt: serverTimestamp()
+      });
+      setSelectedLoadForDocs({...selectedLoadForDocs, documents: updatedDocs});
+      setNewDocNumber("");
+      toast({ title: "Documento adjuntado" });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al guardar documento" });
+    } finally {
+      setIsSavingDoc(false);
+    }
+  };
+
+  const removeDocument = async (docId: string) => {
+    if (!db || !selectedLoadForDocs) return;
+    const updatedDocs = selectedLoadForDocs.documents?.filter(d => d.id !== docId) || [];
+    
+    try {
+      await updateDoc(doc(db, "loads", selectedLoadForDocs.id), { 
+        documents: updatedDocs,
+        updatedAt: serverTimestamp()
+      });
+      setSelectedLoadForDocs({...selectedLoadForDocs, documents: updatedDocs});
+      toast({ title: "Documento eliminado" });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error" });
+    }
   };
 
   return (
@@ -129,10 +185,10 @@ export default function CargasPage() {
         <div className="p-4 bg-slate-50 border-b flex flex-col md:flex-row gap-4 items-center justify-between">
           <div className="relative w-full max-w-sm">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-            <Input 
+            <input 
               type="search" 
               placeholder="Buscar por N° Orden o cliente..." 
-              className="pl-8 bg-white"
+              className="flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm pl-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
@@ -156,7 +212,7 @@ export default function CargasPage() {
                 <TableRow>
                   <TableHead>N° Orden / Carga</TableHead>
                   <TableHead>Ruta (Origen - Destino)</TableHead>
-                  <TableHead>Peso / Valor</TableHead>
+                  <TableHead>Docs / Peso</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
@@ -197,11 +253,13 @@ export default function CargasPage() {
                       </TableCell>
                       <TableCell>
                         <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                             <Badge variant="secondary" className="text-[9px] h-4 font-bold bg-slate-100">
+                               <FileText size={10} className="mr-1" /> {load.documents?.length || 0} Adjuntos
+                             </Badge>
+                          </div>
                           <div className="flex items-center gap-1 text-[10px] font-semibold text-slate-600">
                             <Scale size={10} /> {load.weightKg?.toLocaleString() || 0} Kg
-                          </div>
-                          <div className="flex items-center gap-1 text-xs font-bold text-green-600">
-                            <DollarSign size={10} /> {load.totalAmount?.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' }) || '$ 0,00'}
                           </div>
                         </div>
                       </TableCell>
@@ -215,6 +273,9 @@ export default function CargasPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Gestión de Flete</DropdownMenuLabel>
+                            <DropdownMenuItem onSelect={() => { setSelectedLoadForDocs(load); setIsDocsOpen(true); }}>
+                              <FilePlus className="w-4 h-4 mr-2" /> Cargar Remitos/Facturas
+                            </DropdownMenuItem>
                             <DropdownMenuItem onSelect={() => router.push(`/cargas/${load.id}/orden`)}>
                               <Printer className="w-4 h-4 mr-2" /> Generar Orden (PDF)
                             </DropdownMenuItem>
@@ -249,6 +310,88 @@ export default function CargasPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Dialog for Documents Management */}
+      <Dialog open={isDocsOpen} onOpenChange={setIsDocsOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FilePlus className="text-blue-600" /> Documentación del Flete
+            </DialogTitle>
+            <DialogDescription>
+              Adjunte los comprobantes legales (Remitos, COT, Facturas) de la orden {selectedLoadForDocs?.orderNumber}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end bg-slate-50 p-4 rounded-xl border border-dashed">
+              <div className="space-y-2">
+                <Label className="text-[10px] uppercase font-bold text-slate-400">Tipo de Documento</Label>
+                <Select value={newDocType} onValueChange={(v: LoadDocType) => setNewDocType(v)}>
+                  <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="remito">📄 Remito</SelectItem>
+                    <SelectItem value="factura">💰 Factura</SelectItem>
+                    <SelectItem value="cot">🚛 COT / Tránsito</SelectItem>
+                    <SelectItem value="otro">📎 Otro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] uppercase font-bold text-slate-400">Número de Documento</Label>
+                <Input 
+                  className="bg-white"
+                  placeholder="Ej: 0001-000456" 
+                  value={newDocNumber} 
+                  onChange={e => setNewDocNumber(e.target.value)} 
+                />
+              </div>
+              <Button 
+                onClick={handleAddDocument} 
+                disabled={!newDocNumber || isSavingDoc}
+                className="bg-blue-600 w-full"
+              >
+                {isSavingDoc ? <Loader2 className="animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                Adjuntar
+              </Button>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="text-[10px] uppercase font-bold text-slate-500 tracking-widest px-1">Documentos Registrados</h4>
+              {selectedLoadForDocs?.documents && selectedLoadForDocs.documents.length > 0 ? (
+                <div className="grid gap-2">
+                  {selectedLoadForDocs.documents.map((doc) => (
+                    <div key={doc.id} className="flex items-center justify-between p-3 bg-white border rounded-lg hover:bg-slate-50 transition-colors group">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded bg-blue-50 flex items-center justify-center text-blue-600">
+                           <FileText size={16} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold uppercase text-slate-700">{doc.type}</p>
+                          <p className="text-sm font-mono">{doc.number}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                         <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-600" onClick={() => removeDocument(doc.id)}>
+                            <Trash size={14} />
+                         </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-10 bg-slate-50 rounded-xl border border-dashed">
+                  <p className="text-xs text-slate-400 italic">No hay documentos adjuntos todavía.</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsDocsOpen(false)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
