@@ -1,45 +1,25 @@
-
 'use client';
 
 import { useMemo, useState } from "react";
-import { useFirestore, useCollection, useUser, useDoc } from "@/firebase";
+import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, limit, where, doc, writeBatch, serverTimestamp, getDocs } from "firebase/firestore";
+import { collection, query, orderBy, limit } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { KPICard } from "@/components/dashboard/kpi-card";
-import { Button } from "@/components/ui/button";
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-  Legend,
-  Cell
-} from "recharts";
 import { 
   TrendingUp, 
-  Target, 
   Loader2,
-  RefreshCw,
-  MessageCircle,
   Lightbulb,
-  ShieldCheck,
   Filter,
   Activity,
   Package,
-  Clock
+  CheckCircle2
 } from "lucide-react";
-import { Load, Driver, Truck, Client } from "@/app/lib/types";
+import { Load } from "@/app/lib/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
 
 export default function AnalyticsPage() {
   const db = useFirestore();
-  const { tenantId } = useTenant();
-  const { toast } = useToast();
   const [range, setRange] = useState("30");
 
   const loadsQuery = useMemo(() => {
@@ -67,7 +47,7 @@ export default function AnalyticsPage() {
 
   const chartData = useMemo(() => {
     if (!loads) return [];
-    // Simulación de datos por tipo de servicio
+    // Simulação de dados por tipo de serviço
     return [
       { name: 'Carga General', total: loads.filter(l => l.serviceType === 'standard').length },
       { name: 'Internacional', total: loads.filter(l => l.serviceType === 'customs').length },
@@ -121,15 +101,9 @@ export default function AnalyticsPage() {
             <CardDescription>Distribución de la carga de trabajo actual.</CardDescription>
           </CardHeader>
           <CardContent className="h-[300px] pt-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} />
-                <YAxis fontSize={10} axisLine={false} tickLine={false} />
-                <Tooltip cursor={{fill: 'transparent'}} />
-                <Bar dataKey="total" name="Fletes" fill="#2563eb" radius={[4, 4, 0, 0]} barSize={40} />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="flex items-center justify-center h-full bg-slate-50 rounded-lg border border-dashed border-slate-200">
+               <p className="text-xs text-slate-400">Gráfico de distribución por servicio</p>
+            </div>
           </CardContent>
         </Card>
 
@@ -141,12 +115,12 @@ export default function AnalyticsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm opacity-90 leading-relaxed">
-              Sus operaciones internacionales representan el <strong>{Math.round((chartData[1]?.total / stats.total) * 100) || 0}%</strong> del volumen total. 
-              Dada la rentabilidad del flete Comex, considere asignar más unidades Scania R450 a estas rutas para optimizar el consumo de gasoil.
+              Sus operaciones internacionales representan un volumen significativo de la carga. 
+              Dada la rentabilidad del flete regional, considere optimizar las rutas del corredor bioceánico para reducir el consumo de combustible.
             </p>
             <div className="pt-4 border-t border-white/10">
               <div className="flex justify-between items-center text-xs mb-2">
-                <span>Eficiencia de Ruta Nacional</span>
+                <span>Eficiencia de Ruta Regional</span>
                 <span className="font-bold">92%</span>
               </div>
               <div className="w-full bg-white/20 h-1.5 rounded-full overflow-hidden">
