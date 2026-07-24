@@ -1,6 +1,6 @@
 
 export type TruckStatus = 'available' | 'in_trip' | 'maintenance';
-export type DriverStatus = 'active' | 'resting' | 'suspended';
+export type DriverStatus = 'active' | 'in_trip' | 'resting' | 'suspended' | 'retired';
 export type LoadStatus = 'pending' | 'assigned' | 'on_route' | 'delivered';
 export type DocStatus = 'pending' | 'valid' | 'expired' | 'warning';
 
@@ -55,17 +55,43 @@ export interface Truck {
 
 export interface Driver {
   id: string;
-  name: string;
+  // Paso 1
+  docType: 'DNI' | 'LC' | 'LE' | 'Pasaporte' | 'CI';
   dni: string;
+  firstName: string;
+  lastName: string;
+  birthDate: string;
+  gender?: string;
+  nationality: string;
+
+  // Paso 2
   licenseNumber: string;
+  licenseClasses: string[];
+  licenseExpiry: string;
+  hasLinti: boolean;
+  lintiNumber?: string;
+  lintiExpiry?: string;
+  medicalCertificateExpiry: string;
+  experienceYears: number;
+
+  // Paso 3
   phone: string;
+  email: string;
+  emergencyContact: string;
+  emergencyPhone: string;
+  address: string;
+  bloodType: string;
+  healthInsurance: string;
+  medicalConditions?: string;
+
+  // Paso 4
+  hireDate: string;
+  contractType: string;
   status: DriverStatus;
-  lintiVencimiento?: string;
-  bloodType?: string;
-  emergencyContact?: string;
-  email?: string;
-  createdAt?: any;
-  updatedAt?: any;
+  observations?: string;
+
+  createdAt: any;
+  updatedAt: any;
 }
 
 export interface Load {
