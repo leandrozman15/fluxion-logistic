@@ -2,7 +2,7 @@
 'use client';
 
 import { SidebarProvider, SidebarInset, Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarGroup, SidebarGroupLabel, SidebarGroupContent } from "@/components/ui/sidebar";
-import { Truck, Users, Package, MapPin, TrendingUp, Settings, LogOut, LayoutDashboard, Route, History, Building2 } from "lucide-react";
+import { Truck, Users, Package, MapPin, TrendingUp, Settings, LogOut, LayoutDashboard, Route, History, Building2, Briefcase } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/firebase";
 import { signOut } from "firebase/auth";
@@ -19,6 +19,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { title: "Monitor Operativo", icon: LayoutDashboard, href: "/dashboard" },
     { title: "Flota de Camiones", icon: Truck, href: "/flota" },
     { title: "Gestión Choferes", icon: Users, href: "/choferes" },
+    { title: "Cartera Clientes", icon: Briefcase, href: "/clientes" },
     { title: "Cargas y Fletes", icon: Package, href: "/cargas" },
     { title: "Sedes Logísticas", icon: Building2, href: "/sedes" },
     { title: "Hoja de Ruta", icon: Route, href: "/rutas" },

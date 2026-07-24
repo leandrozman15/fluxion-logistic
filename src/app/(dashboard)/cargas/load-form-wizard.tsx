@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, serverTimestamp, doc, setDoc, updateDoc, query, where } from "firebase/firestore";
+import { collection, serverTimestamp, doc, setDoc, updateDoc, query, where, orderBy } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,11 +16,12 @@ import {
   Package, ArrowLeft, ArrowRight, Save, Loader2, 
   MapPin, Calendar, Clock, DollarSign, Truck, 
   Users, Info, AlertTriangle, ShieldCheck, 
-  Thermometer, Droplets, Anchor, CheckCircle2, ChevronRight, ChevronLeft
+  Thermometer, Droplets, Anchor, CheckCircle2, ChevronRight, ChevronLeft, Building2, UserPlus
 } from "lucide-react";
-import { Load, Truck as TruckType, Driver } from "@/app/lib/types";
+import { Load, Truck as TruckType, Driver, Client } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 const PROVINCIAS = [
   "Buenos Aires", "CABA", "Catamarca", "Chaco", "Chubut", "Córdoba", "Corrientes", 
@@ -50,6 +51,7 @@ export default function LoadFormWizard() {
     orderNumber: "FL-...", // Placeholder to avoid hydration mismatch
     serviceType: 'standard',
     clientName: "",
+    clientId: "",
     origin: { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", zip: "", instructions: "" },
     destination: { name: "", phone: "", contact: "", address: "", province: "CABA", zip: "", instructions: "" },
     pickupDate: "", pickupTimeFrom: "08:00", pickupTimeTo: "17:00",
@@ -69,9 +71,12 @@ export default function LoadFormWizard() {
     }));
   }, []);
 
-  // Queries for assignment
+  // Queries for selectors
+  const clientsQuery = useMemo(() => db ? query(collection(db, "clients"), orderBy("name")) : null, [db]);
   const trucksQuery = useMemo(() => db ? query(collection(db, "trucks"), where("status", "==", "available")) : null, [db]);
   const driversQuery = useMemo(() => db ? query(collection(db, "drivers"), where("status", "==", "active")) : null, [db]);
+  
+  const { data: clients } = useCollection<Client>(clientsQuery);
   const { data: availableTrucks } = useCollection<TruckType>(trucksQuery);
   const { data: availableDrivers } = useCollection<Driver>(driversQuery);
 
@@ -117,6 +122,26 @@ export default function LoadFormWizard() {
       }));
     } else {
       setFormData(prev => ({ ...prev, [path]: final }));
+    }
+  };
+
+  const handleSelectClient = (clientId: string) => {
+    const selected = clients?.find(c => c.id === clientId);
+    if (selected) {
+      setFormData({
+        ...formData,
+        clientId: selected.id,
+        clientName: selected.name,
+        // Auto-fill origin if it's empty
+        origin: formData.origin?.name ? formData.origin : {
+          ...formData.origin!,
+          name: selected.name,
+          address: selected.address,
+          city: selected.city,
+          province: selected.province,
+          phone: selected.phone
+        }
+      });
     }
   };
 
@@ -166,21 +191,39 @@ export default function LoadFormWizard() {
           <Card className="border-none shadow-sm">
             <CardHeader><CardTitle>Datos Generales del Flete</CardTitle></CardHeader>
             <CardContent className="space-y-8">
-              <div className="space-y-4">
-                <Label>Tipo de Servicio</Label>
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
-                  {SERVICE_TYPES.map(type => (
-                    <Button 
-                      key={type.id} 
-                      type="button" 
-                      variant={formData.serviceType === type.id ? "default" : "outline"}
-                      className="flex flex-col h-20 gap-1.5 p-2"
-                      onClick={() => setFormData({...formData, serviceType: type.id as any})}
-                    >
-                      <type.icon size={18} />
-                      <span className="text-[8px] uppercase font-bold leading-tight">{type.label}</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <Label className="flex items-center gap-2"><Building2 size={14} className="text-blue-600" /> Cliente / Dador de Carga</Label>
+                  <div className="flex gap-2">
+                    <Select value={formData.clientId} onValueChange={handleSelectClient}>
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Seleccionar cliente registrado" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {clients?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Button variant="outline" size="icon" asChild title="Nuevo Cliente">
+                      <Link href="/clientes"><UserPlus size={16} /></Link>
                     </Button>
-                  ))}
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <Label>Tipo de Servicio</Label>
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                    {SERVICE_TYPES.slice(0, 4).map(type => (
+                      <Button 
+                        key={type.id} 
+                        type="button" 
+                        variant={formData.serviceType === type.id ? "default" : "outline"}
+                        className="flex flex-col h-16 gap-1 p-2"
+                        onClick={() => setFormData({...formData, serviceType: type.id as any})}
+                      >
+                        <type.icon size={16} />
+                        <span className="text-[8px] uppercase font-bold leading-tight">{type.label}</span>
+                      </Button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -191,7 +234,7 @@ export default function LoadFormWizard() {
                     <MapPin size={14} /> Remitente (Origen)
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-[10px] uppercase text-slate-400">Razón Social</Label>
+                    <Label className="text-[10px] uppercase text-slate-400">Nombre / Razón Social</Label>
                     <Input className="bg-white" value={formData.origin?.name} onChange={e => setFormData({...formData, origin: {...formData.origin!, name: e.target.value}})} />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
@@ -219,7 +262,7 @@ export default function LoadFormWizard() {
                     <MapPin size={14} /> Destinatario (Destino)
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-[10px] uppercase text-slate-400">Razón Social</Label>
+                    <Label className="text-[10px] uppercase text-slate-400">Nombre / Razón Social</Label>
                     <Input className="bg-white" value={formData.destination?.name} onChange={e => setFormData({...formData, destination: {...formData.destination!, name: e.target.value}})} />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
@@ -399,7 +442,7 @@ export default function LoadFormWizard() {
 
               <div className="space-y-4">
                 <Label>Instruções Especiais para o Motorista</Label>
-                <Textarea placeholder="Ex: Chamar 30 min antes de chegar, o cliente só recebe pela manhã..." value={formData.specialInstructions} onChange={e => setFormData({...formData, specialInstructions: e.target.value})} />
+                <Textarea placeholder="Ex: Chamar 30 min antes de chegar, o cliente solo recibe pela manhã..." value={formData.specialInstructions} onChange={e => setFormData({...formData, specialInstructions: e.target.value})} />
               </div>
             </CardContent>
           </Card>

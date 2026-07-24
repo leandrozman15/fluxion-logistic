@@ -86,6 +86,20 @@ export interface Hub {
   createdAt: any;
 }
 
+export interface Client {
+  id: string;
+  name: string;
+  cuit: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  province: string;
+  status: 'active' | 'inactive';
+  createdAt: any;
+  updatedAt: any;
+}
+
 export interface TrackingPoint {
   lat: number;
   lng: number;
@@ -104,6 +118,7 @@ export interface Load {
   orderNumber: string;
   serviceType: 'FTL' | 'LTL' | 'reefer' | 'dangerous' | 'oversized' | 'customs' | 'standard';
   clientName: string;
+  clientId?: string;
   
   origin: {
     name: string;

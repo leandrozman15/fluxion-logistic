@@ -35,6 +35,20 @@
           }
         }
       },
+      "clients": {
+        "description": "Cartera de clientes dadores de carga.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "cuit": { "type": "string" },
+            "email": { "type": "string" },
+            "phone": { "type": "string" },
+            "status": { "type": "string", "enum": ["active", "inactive"] }
+          },
+          "required": ["name", "cuit"]
+        }
+      },
       "loads": {
         "description": "Órdenes de flete y transporte nacional.",
         "schema": {
