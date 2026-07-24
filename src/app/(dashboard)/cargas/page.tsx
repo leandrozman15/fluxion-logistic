@@ -5,6 +5,8 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, orderBy, deleteDoc, doc, updateDoc } from "firebase/firestore";
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -44,13 +46,17 @@ export default function CargasPage() {
 
   const filteredLoads = useMemo(() => {
     if (!loads) return [];
-    return loads.filter(l => 
-      (l.description || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (l.clientName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (l.origin?.address || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (l.destination?.address || "").toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [loads, searchTerm]);
+    return loads.filter(l => {
+      const matchesSearch = (l.description || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (l.clientName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (l.origin?.address || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (l.destination?.address || "").toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesStatus = statusFilter === "all" || l.status === statusFilter;
+      
+      return matchesSearch && matchesStatus;
+    });
+  }, [loads, searchTerm, statusFilter]);
 
   const getStatusBadge = (status: LoadStatus) => {
     switch (status) {
@@ -63,14 +69,41 @@ export default function CargasPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!db || !confirm("¿Desea eliminar este pedido?")) return;
-    try {
-      await deleteDoc(doc(db, "loads", id));
-      toast({ title: "Pedido eliminado" });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Error al eliminar" });
-    }
+  const handleDelete = (id: string) => {
+    if (!db || !confirm("¿Está seguro de eliminar esta operación? Esta acción no se puede deshacer.")) return;
+    
+    const docRef = doc(db, "loads", id);
+    
+    // No usamos await para permitir actualización optimista en la UI
+    deleteDoc(docRef).catch(async (serverError) => {
+      const permissionError = new FirestorePermissionError({
+        path: docRef.path,
+        operation: 'delete',
+      } satisfies SecurityRuleContext);
+      errorEmitter.emit('permission-error', permissionError);
+    });
+    
+    toast({ title: "Pedido eliminado correctamente" });
+  };
+
+  const handleUpdateStatus = (id: string, newStatus: LoadStatus) => {
+    if (!db) return;
+    
+    const docRef = doc(db, "loads", id);
+    
+    updateDoc(docRef, { 
+      status: newStatus,
+      updatedAt: new Date().toISOString()
+    }).catch(async (serverError) => {
+      const permissionError = new FirestorePermissionError({
+        path: docRef.path,
+        operation: 'update',
+        requestResourceData: { status: newStatus },
+      } satisfies SecurityRuleContext);
+      errorEmitter.emit('permission-error', permissionError);
+    });
+
+    toast({ title: `Estado actualizado: ${newStatus.replace('_', ' ')}` });
   };
 
   return (
@@ -90,10 +123,10 @@ export default function CargasPage() {
         <div className="p-4 bg-slate-50 border-b flex flex-col md:flex-row gap-4 items-center justify-between">
           <div className="relative w-full max-w-sm">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-            <Input 
+            <input 
               type="search" 
               placeholder="Buscar por mercadería, cliente o ciudad..." 
-              className="pl-8 bg-white"
+              className="flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 pl-8"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
@@ -103,6 +136,7 @@ export default function CargasPage() {
               <TabsTrigger value="all">Todas</TabsTrigger>
               <TabsTrigger value="pending">Pendientes</TabsTrigger>
               <TabsTrigger value="on_route">En Ruta</TabsTrigger>
+              <TabsTrigger value="delivered">Entregadas</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
@@ -125,7 +159,7 @@ export default function CargasPage() {
                 {filteredLoads.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-20 text-slate-400 italic">
-                      No hay operaciones registradas.
+                      No hay operaciones que coincidan con los filtros.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -180,10 +214,10 @@ export default function CargasPage() {
                               <Wallet className="w-4 h-4 mr-2" /> Ver Billetera / Gastos
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => updateDoc(doc(db!, "loads", load.id), { status: 'on_route' })}>
+                            <DropdownMenuItem onClick={() => handleUpdateStatus(load.id, 'on_route')}>
                               <Truck className="w-4 h-4 mr-2" /> Iniciar Tránsito
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => updateDoc(doc(db!, "loads", load.id), { status: 'delivered' })}>
+                            <DropdownMenuItem onClick={() => handleUpdateStatus(load.id, 'delivered')}>
                               <CheckCircle2 className="w-4 h-4 mr-2" /> Confirmar Entrega
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
