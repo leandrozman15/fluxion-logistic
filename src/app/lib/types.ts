@@ -31,7 +31,7 @@ export interface Truck {
   fuelType: string;
   tankLiters: number;
   status: TruckStatus;
-  location: { city: string; province: string; lat?: number; lng?: number };
+  location: { city: string; province: string; lat: number; lng: number };
   documentation: VehicleDocument[];
   createdAt: any;
   updatedAt: any;
