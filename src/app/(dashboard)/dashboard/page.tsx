@@ -182,7 +182,7 @@ export default function MonitorOperativoPage() {
                 attribution='&copy; OpenStreetMap contributors'
               />
               
-              {hubs?.map((hub) => (
+              {hubIcon && hubs?.map((hub) => (
                 <Marker key={hub.id} position={[hub.lat || -34.6, hub.lng || -58.3]} icon={hubIcon(!!hub.isMainBase)}>
                   <Popup>
                     <div className="p-1">
@@ -193,7 +193,7 @@ export default function MonitorOperativoPage() {
                 </Marker>
               ))}
 
-              {clients?.filter(c => c.address?.lat && c.address?.lng).map((client) => (
+              {clientIcon && clients?.filter(c => typeof c.address?.lat === 'number' && typeof c.address?.lng === 'number').map((client) => (
                 <Marker key={client.id} position={[client.address.lat!, client.address.lng!]} icon={clientIcon}>
                   <Popup>
                     <div className="p-1">
@@ -205,7 +205,7 @@ export default function MonitorOperativoPage() {
                 </Marker>
               ))}
 
-              {trucks?.filter(t => t.status === 'in_trip').map((truck) => (
+              {truckIcon && trucks?.filter(t => t.status === 'in_trip').map((truck) => (
                 <Marker key={truck.id} position={[truck.location?.lat || -34.6, truck.location?.lng || -58.3]} icon={truckIcon}>
                   <Popup>
                     <div className="p-1 font-bold text-sm">Patente: {truck.plate}</div>
