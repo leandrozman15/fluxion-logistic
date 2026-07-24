@@ -51,8 +51,6 @@ export default function CargasPage() {
       const matchesSearch = 
         (l.description || "").toLowerCase().includes(search) ||
         (l.clientName || "").toLowerCase().includes(search) ||
-        (l.origin?.address || "").toLowerCase().includes(search) ||
-        (l.destination?.address || "").toLowerCase().includes(search) ||
         (l.orderNumber || "").toLowerCase().includes(search);
       
       const matchesStatus = statusFilter === "all" || l.status === statusFilter;
@@ -75,10 +73,12 @@ export default function CargasPage() {
   const handleDelete = (id: string) => {
     if (!db || !id) return;
     
-    if (!confirm("¿Está seguro de eliminar esta operación? Esta acción no se puede deshacer.")) return;
-    
+    const shouldDelete = window.confirm("¿Está seguro de eliminar esta operación? Esta acción no se puede deshacer.");
+    if (!shouldDelete) return;
+
     const docRef = doc(db, "loads", id);
     
+    // Eliminación inmediata sin await para UI optimista
     deleteDoc(docRef)
       .then(() => {
         toast({ title: "Operación eliminada", description: "El flete ha sido removido del sistema." });
@@ -131,7 +131,7 @@ export default function CargasPage() {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
             <Input 
               type="search" 
-              placeholder="Buscar por N° Orden, cliente o ciudad..." 
+              placeholder="Buscar por N° Orden o cliente..." 
               className="pl-8 bg-white"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
@@ -209,26 +209,28 @@ export default function CargasPage() {
                       <TableCell className="text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon"><MoreVertical size={16} /></Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-100">
+                              <MoreVertical size={16} />
+                            </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Gestión de Flete</DropdownMenuLabel>
-                            <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/orden`)}>
+                            <DropdownMenuItem onSelect={() => router.push(`/cargas/${load.id}/orden`)}>
                               <Printer className="w-4 h-4 mr-2" /> Generar Orden (PDF)
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/billetera`)}>
+                            <DropdownMenuItem onSelect={() => router.push(`/cargas/${load.id}/billetera`)}>
                               <Wallet className="w-4 h-4 mr-2" /> Ver Billetera / Gastos
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => handleUpdateStatus(load.id, 'on_route')}>
+                            <DropdownMenuItem onSelect={() => handleUpdateStatus(load.id, 'on_route')}>
                               <Truck className="w-4 h-4 mr-2" /> Iniciar Tránsito
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleUpdateStatus(load.id, 'delivered')}>
+                            <DropdownMenuItem onSelect={() => handleUpdateStatus(load.id, 'delivered')}>
                               <CheckCircle2 className="w-4 h-4 mr-2" /> Confirmar Entrega
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem 
-                              className="text-red-600" 
+                              className="text-red-600 focus:bg-red-50 focus:text-red-600" 
                               onSelect={(e) => {
                                 e.preventDefault();
                                 handleDelete(load.id);
