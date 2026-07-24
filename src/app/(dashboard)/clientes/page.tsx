@@ -78,7 +78,7 @@ export default function ClientesPage() {
         
         <Button className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100" asChild>
           <Link href="/clientes/nuevo">
-            <Plus className="w-4 h-4 mr-2" /> Novo Cliente
+            <Plus className="w-4 h-4 mr-2" /> Nuevo Cliente
           </Link>
         </Button>
       </div>
@@ -88,7 +88,7 @@ export default function ClientesPage() {
           <div className="relative max-w-sm">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
             <Input 
-              placeholder="Buscar por nome, CUIT ou código..." 
+              placeholder="Buscar por nombre, CUIT o código..." 
               className="pl-8 bg-white"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
@@ -103,7 +103,7 @@ export default function ClientesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Cliente / Razón Social</TableHead>
-                  <TableHead>CUIT / Identificación</TableHead>
+                  <TableHead>Ubicación</TableHead>
                   <TableHead>Categoría</TableHead>
                   <TableHead>Contacto</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
@@ -126,14 +126,16 @@ export default function ClientesPage() {
                           </div>
                           <div>
                             <div className="font-bold text-slate-900">{client.name}</div>
-                            <div className="text-[10px] text-slate-400 font-mono">{client.internalCode}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">{client.cuit}</div>
                           </div>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col">
-                          <div className="text-xs font-mono font-bold text-slate-600">{client.cuit}</div>
-                          <div className="text-[10px] text-slate-400 uppercase">{client.ivaCondition}</div>
+                          <div className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+                            <Globe size={10} className="text-blue-500" /> {client.address?.country}
+                          </div>
+                          <div className="text-[10px] text-slate-500">{client.address?.city}, {client.address?.province}</div>
                         </div>
                       </TableCell>
                       <TableCell>{getCategoryBadge(client.category)}</TableCell>
@@ -154,12 +156,14 @@ export default function ClientesPage() {
                            </DropdownMenuTrigger>
                            <DropdownMenuContent align="end">
                              <DropdownMenuLabel>Gestión Comercial</DropdownMenuLabel>
-                             <DropdownMenuItem onClick={() => window.open(`https://wa.me/${client.mainContact?.phone}`, '_blank')}>
+                             <DropdownMenuItem onClick={() => window.open(`https://wa.me/${client.mainContact?.phone?.replace(/\D/g, '')}`, '_blank')}>
                                <Globe className="w-4 h-4 mr-2" /> WhatsApp Directo
                              </DropdownMenuItem>
-                             <DropdownMenuItem>
-                               <FileText className="w-4 h-4 mr-2" /> Historial de Fletes
-                             </DropdownMenuItem>
+                             {client.address?.lat && client.address?.lng && (
+                               <DropdownMenuItem onClick={() => window.open(`https://www.google.com/maps?q=${client.address.lat},${client.address.lng}`, '_blank')}>
+                                 <MapPin className="w-4 h-4 mr-2" /> Ver en Google Maps
+                               </DropdownMenuItem>
+                             )}
                              <DropdownMenuSeparator />
                              <DropdownMenuItem className="text-red-600" onClick={() => handleDelete(client.id)}>
                                <Trash2 className="w-4 h-4 mr-2" /> Eliminar Cliente

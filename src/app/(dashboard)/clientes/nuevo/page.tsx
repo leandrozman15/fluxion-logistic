@@ -32,13 +32,6 @@ const INDUSTRIES = [
   "Retail / Comercio", "Tecnología", "Textil", "Otro"
 ];
 
-const CLIENT_TYPES = [
-  { id: 'company', label: 'Empresa / S.A.', icon: Building2 },
-  { id: 'monotax', label: 'Individuo / Freelance', icon: User },
-  { id: 'government', label: 'Entidad Pública', icon: ShieldCheck },
-  { id: 'international', label: 'Comercio Exterior', icon: Globe },
-];
-
 export default function NewClientPage() {
   const db = useFirestore();
   const router = useRouter();
@@ -56,16 +49,10 @@ export default function NewClientPage() {
     status: "active",
     category: "regular",
     mainContact: { name: "", role: "", email: "", phone: "", whatsapp: "" },
-    address: { street: "", number: "", city: "", province: "", country: "Argentina", zip: "" },
+    address: { street: "", number: "", city: "", province: "", country: "Argentina", zip: "", lat: 0, lng: 0 },
     preferredPaymentMethod: "Transferencia",
     creditLimit: 0,
     standardLeadTimeHours: 48,
-    comex: {
-      countryOfOrigin: "Argentina",
-      impExpCode: "",
-      operatorType: "importer",
-      registrations: { sicnea: false, sita: false, malvina: false, vucea: false }
-    }
   });
 
   useEffect(() => {
@@ -74,6 +61,24 @@ export default function NewClientPage() {
       internalCode: `CLI-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
     }));
   }, []);
+
+  const handleGetLocation = () => {
+    if (typeof window !== 'undefined' && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        setFormData(prev => ({
+          ...prev,
+          address: { 
+            ...prev.address!, 
+            lat: pos.coords.latitude, 
+            lng: pos.coords.longitude 
+          }
+        }));
+        toast({ title: "Ubicación GPS capturada", description: "Las coordenadas se han actualizado correctamente." });
+      }, () => {
+        toast({ variant: "destructive", title: "Error", description: "No se pudo obtener la ubicación GPS." });
+      });
+    }
+  };
 
   const handleSubmit = async () => {
     if (!db) return;
@@ -114,7 +119,7 @@ export default function NewClientPage() {
         <div className="flex items-center justify-between">
           {[
             { id: 1, label: "Fiscal", icon: CreditCard },
-            { id: 2, label: "Contatos", icon: User },
+            { id: 2, label: "Contacto / GPS", icon: User },
             { id: 3, label: "Comex", icon: Anchor },
             { id: 4, label: "Comercial", icon: Briefcase }
           ].map((s) => (
@@ -171,24 +176,48 @@ export default function NewClientPage() {
 
         {step === 2 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Ubicación y Contacto</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Ubicación y Contacto Directo</CardTitle></CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Ciudad</Label>
-                  <Input value={formData.address?.city} onChange={e => setFormData({...formData, address: {...formData.address!, city: e.target.value}})} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Ciudad</Label>
+                      <Input value={formData.address?.city} onChange={e => setFormData({...formData, address: {...formData.address!, city: e.target.value}})} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Estado / Provincia</Label>
+                      <Input value={formData.address?.province} onChange={e => setFormData({...formData, address: {...formData.address!, province: e.target.value}})} />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Email Comercial</Label>
+                    <Input type="email" placeholder="comercial@empresa.com" value={formData.mainContact?.email} onChange={e => setFormData({...formData, mainContact: {...formData.mainContact!, email: e.target.value}})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Teléfono / WhatsApp</Label>
+                    <Input placeholder="Ej: +54 11 4444-3333" value={formData.mainContact?.phone} onChange={e => setFormData({...formData, mainContact: {...formData.mainContact!, phone: e.target.value}})} />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Estado / Provincia</Label>
-                  <Input value={formData.address?.province} onChange={e => setFormData({...formData, address: {...formData.address!, province: e.target.value}})} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Email Comercial</Label>
-                  <Input type="email" value={formData.mainContact?.email} onChange={e => setFormData({...formData, mainContact: {...formData.mainContact!, email: e.target.value}})} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Teléfono / WhatsApp</Label>
-                  <Input placeholder="+54 / +56 / +595..." value={formData.mainContact?.phone} onChange={e => setFormData({...formData, mainContact: {...formData.mainContact!, phone: e.target.value}})} />
+
+                <div className="p-4 bg-slate-50 border rounded-xl space-y-4">
+                   <div className="flex items-center justify-between">
+                     <Label className="text-blue-700 font-bold flex items-center gap-2"><MapPin size={14} /> Geolocalización para Mapa</Label>
+                     <Button variant="outline" size="sm" className="h-7 text-[10px]" onClick={handleGetLocation}>
+                        <Crosshair size={12} className="mr-1" /> GPS
+                     </Button>
+                   </div>
+                   <div className="grid grid-cols-2 gap-4">
+                     <div className="space-y-1">
+                       <Label className="text-[10px] uppercase text-slate-400">Latitud</Label>
+                       <Input className="bg-white" type="number" step="any" value={formData.address?.lat} onChange={e => setFormData({...formData, address: {...formData.address!, lat: parseFloat(e.target.value)}})} />
+                     </div>
+                     <div className="space-y-1">
+                       <Label className="text-[10px] uppercase text-slate-400">Longitud</Label>
+                       <Input className="bg-white" type="number" step="any" value={formData.address?.lng} onChange={e => setFormData({...formData, address: {...formData.address!, lng: parseFloat(e.target.value)}})} />
+                     </div>
+                   </div>
+                   <p className="text-[9px] text-slate-500 italic">Esta ubicación permitirá visualizar al cliente en el monitor operativo nacional.</p>
                 </div>
               </div>
             </CardContent>
