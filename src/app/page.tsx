@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Truck, Users, Package, MapPin, TrendingUp, ChevronRight, LayoutDashboard, Plus } from "lucide-react";
@@ -132,7 +131,7 @@ export default function HomePage() {
                   </div>
                 </div>
                 <Button variant="ghost" className="w-full text-xs text-slate-400 hover:text-white" size="sm">
-                  Ver todas as notificações
+                  Ver todas las notificaciones
                 </Button>
               </CardContent>
             </Card>

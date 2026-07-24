@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { FirebaseClientProvider } from "@/firebase";
 
 export const metadata: Metadata = {
-  title: 'LogísticaAr | Gestão de Frotas Argentina',
+  title: 'LogísticaAr | Gestión de Frotas Argentina',
   description: 'Sistema integral de transporte e logística de carga.',
 };
 
