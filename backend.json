@@ -2,68 +2,42 @@
 {
   "firestore": {
     "collections": {
-      "industryIndex": {
-        "description": "Índice global de indústrias brasileiras para prospecção ativa",
+      "trucks": {
+        "description": "Flota de camiones registrados",
         "schema": {
           "type": "object",
           "properties": {
-            "companyName": { "type": "string" },
-            "cnpj": { "type": "string" },
-            "city": { "type": "string" },
-            "state": { "type": "string" },
-            "industryTag": { "type": "string" },
-            "cnae": { "type": "string" },
-            "website": { "type": "string" },
-            "employeesRange": { "type": "string" },
-            "foundedYear": { "type": "number" },
-            "isIndustrialHub": { "type": "boolean" }
+            "plate": { "type": "string" },
+            "brand": { "type": "string" },
+            "model": { "type": "string" },
+            "year": { "type": "number" },
+            "capacityKg": { "type": "number" },
+            "status": { "type": "string", "enum": ["available", "in_trip", "maintenance"] }
           }
         }
       },
-      "tenants": {
-        "description": "Datos maestros de la organización/empresa",
+      "drivers": {
+        "description": "Choferes profesionales habilitados",
         "schema": {
           "type": "object",
           "properties": {
-            "name": { "type": "string" },
-            "plan": { "type": "string", "enum": ["free", "pro"] },
-            "settings": {
-              "type": "object",
-              "properties": {
-                "scoringWeights": {
-                  "type": "object",
-                  "properties": {
-                    "effective": { "type": "number" },
-                    "ai": { "type": "number" }
-                  }
-                },
-                "finalScoreMode": { "type": "string", "enum": ["weighted", "max"] },
-                "dailyTopLimit": { "type": "number" },
-                "requireContactMethod": { "type": "string", "enum": ["email_or_phone", "email_only", "none"] },
-                "cooldownDays": { "type": "number" },
-                "hourlyEmailLimit": { "type": "number" },
-                "dailyEmailLimit": { "type": "number" },
-                "defaultTemplateId": { "type": "string" }
-              }
-            }
+            "firstName": { "type": "string" },
+            "lastName": { "type": "string" },
+            "dni": { "type": "string" },
+            "status": { "type": "string", "enum": ["active", "in_trip", "resting", "suspended"] }
           }
-        },
-        "documents": {
-          "users": { "description": "Usuarios pertenecientes al tenant con roles" },
-          "prospects": { "description": "Base de datos de leads industriais com histórico e auditoria" },
-          "templates": { "description": "Plantillas de comunicação com suporte para variables" },
-          "campaigns": { "description": "Configuração e estado de campaigns masivas" },
-          "sequences": { "description": "Definição de sequências de prospecção assistida" },
-          "sequenceEnrollments": { "description": "Registro de prospectos em sequências ativas" },
-          "imports": { "description": "Registro de importaciones de arquivos CSV" },
-          "dailyTop": { "description": "Ranking diario congelado de las melhores oportunidades (Top 30)" },
-          "events": { "description": "Registro de telemetria e auditoría de ações" },
-          "dailyStats": { "description": "Estadísticas de uso, cuotas y métricas por dia" },
-          "weeklyStats": { "description": "Métricas de conversión del pipeline por semana" },
-          "segmentStats": { "description": "Inteligência de performance por segmento industrial" },
-          "outbox": { "description": "Cola de mensagens operativos (draft, queued, sent, failed) com suporte para idempotencia" },
-          "tasks": { 
-            "description": "Tarefas de seguimento e ações pendentes por prospecto"
+        }
+      },
+      "loads": {
+        "description": "Cargas y operaciones de flete",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "orderNumber": { "type": "string" },
+            "clientName": { "type": "string" },
+            "description": { "type": "string" },
+            "totalAmount": { "type": "number" },
+            "status": { "type": "string", "enum": ["pending", "assigned", "on_route", "delivered", "incident", "cancelled"] }
           }
         }
       }

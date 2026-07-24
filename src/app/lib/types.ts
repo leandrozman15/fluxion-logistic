@@ -1,7 +1,7 @@
 
 export type TruckStatus = 'available' | 'in_trip' | 'maintenance';
 export type DriverStatus = 'active' | 'in_trip' | 'resting' | 'suspended' | 'retired';
-export type LoadStatus = 'pending' | 'assigned' | 'on_route' | 'delivered';
+export type LoadStatus = 'pending' | 'assigned' | 'on_route' | 'delivered' | 'incident' | 'cancelled';
 export type DocStatus = 'pending' | 'valid' | 'expired' | 'warning';
 
 export interface VehicleDocument {
@@ -23,39 +23,22 @@ export interface Truck {
   year: number;
   axles: number;
   vehicleType: string;
-  
-  // Especificaciones
   capacityKg: number;
   volumeM3: number;
-  dimensions: {
-    length: number;
-    width: number;
-    height: number;
-  };
+  dimensions: { length: number; width: number; height: number };
   bodyType: string;
   grossWeight: number;
   fuelType: string;
   tankLiters: number;
-
-  // Ubicación y Estado
   status: TruckStatus;
-  location: {
-    city: string;
-    province: string;
-    lat?: number;
-    lng?: number;
-  };
-  
-  // Documentación (Checklist Digital)
+  location: { city: string; province: string; lat?: number; lng?: number };
   documentation: VehicleDocument[];
-  
   createdAt: any;
   updatedAt: any;
 }
 
 export interface Driver {
   id: string;
-  // Paso 1
   docType: 'DNI' | 'LC' | 'LE' | 'Pasaporte' | 'CI';
   dni: string;
   firstName: string;
@@ -63,8 +46,6 @@ export interface Driver {
   birthDate: string;
   gender?: string;
   nationality: string;
-
-  // Paso 2
   licenseNumber: string;
   licenseClasses: string[];
   licenseExpiry: string;
@@ -73,8 +54,6 @@ export interface Driver {
   lintiExpiry?: string;
   medicalCertificateExpiry: string;
   experienceYears: number;
-
-  // Paso 3
   phone: string;
   email: string;
   emergencyContact: string;
@@ -83,25 +62,94 @@ export interface Driver {
   bloodType: string;
   healthInsurance: string;
   medicalConditions?: string;
-
-  // Paso 4
   hireDate: string;
   contractType: string;
   status: DriverStatus;
   observations?: string;
-
   createdAt: any;
   updatedAt: any;
 }
 
 export interface Load {
   id: string;
-  description: string;
-  weightKg: number;
-  origin: string;
-  destination: string;
+  orderNumber: string;
+  serviceType: 'FTL' | 'LTL' | 'reefer' | 'dangerous' | 'oversized' | 'customs' | 'standard';
   clientName: string;
+  
+  // Origen
+  origin: {
+    name: string;
+    phone: string;
+    contact: string;
+    address: string;
+    province: string;
+    zip: string;
+    instructions: string;
+  };
+  
+  // Destino
+  destination: {
+    name: string;
+    phone: string;
+    contact: string;
+    address: string;
+    province: string;
+    zip: string;
+    instructions: string;
+  };
+
+  // Fechas
+  pickupDate: string;
+  pickupTimeFrom: string;
+  pickupTimeTo: string;
+  deliveryLimitDate: string;
+  deliveryTimeFrom: string;
+  deliveryTimeTo: string;
+
+  // Detalles Carga
+  description: string;
+  classification: string;
+  weightKg: number;
+  volumeM3: number;
+  units: number;
+  unitType: string;
+
+  // Datos específicos
+  dangerousGoods?: {
+    unClass: string;
+    unNumber: string;
+    packingGroup: string;
+    emergencyPhone: string;
+  };
+  reefer?: {
+    temp: number;
+    tolerance: number;
+  };
+
+  // Financiero
+  basePrice: number;
+  additionalCosts: {
+    peajes: number;
+    parking: number;
+    handling: number;
+    viaticos: number;
+    others: number;
+  };
+  totalTaxes: number;
+  totalAmount: number;
+  paymentMethod: string;
+  billingStatus: 'pending' | 'partial' | 'total' | 'cancelled';
+
+  // Asignación
+  priority: 'low' | 'medium' | 'high' | 'critical';
   status: LoadStatus;
-  priceArs: number;
+  assignedTruckId?: string;
+  assignedDriverId?: string;
+  routePlan?: string;
+  distanceKm?: number;
+  estimatedHours?: number;
+  specialInstructions?: string;
+
   createdAt: any;
+  updatedAt: any;
 }
