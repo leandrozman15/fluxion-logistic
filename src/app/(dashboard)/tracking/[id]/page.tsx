@@ -2,17 +2,18 @@
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc } from "@/firebase";
-import { doc, updateDoc, serverTimestamp, arrayUnion } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
   Truck, MapPin, Navigation, Clock, Gauge, 
-  Fuel, AlertTriangle, ArrowLeft, RefreshCw, 
+  Fuel, ArrowLeft, RefreshCw, 
   Activity, Phone, MessageSquare, ShieldAlert,
-  ChevronRight, Compass, Zap
+  Compass, Zap, Loader2
 } from "lucide-react";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, 
@@ -20,10 +21,17 @@ import {
 } from "recharts";
 import { Load } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
-import { calculateDistance, calculateAdjustedETA, estimateFuelFactor } from "@/lib/utils/tracking-math";
-import { format, addMinutes } from "date-fns";
-import { es } from "date-fns/locale";
+import { format } from "date-fns";
+import { estimateFuelFactor } from "@/lib/utils/tracking-math";
+
+// Dynamic import for the Map
+const MapContainer = dynamic(
+  () => import("react-leaflet").then((mod) => mod.MapContainer),
+  { ssr: false, loading: () => <div className="h-full w-full bg-slate-100 flex items-center justify-center"><Loader2 className="animate-spin" /></div> }
+);
+const TileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false });
+const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), { ssr: false });
+const Popup = dynamic(() => import("react-leaflet").then((mod) => mod.Popup), { ssr: false });
 
 export default function LiveTrackingPage() {
   const { id } = useParams();
@@ -31,6 +39,13 @@ export default function LiveTrackingPage() {
   const db = useFirestore();
   const { toast } = useToast();
   const [isSimulating, setIsSimulating] = useState(false);
+  const [L, setL] = useState<any>(null);
+
+  useEffect(() => {
+    import('leaflet').then((leaflet) => {
+      setL(leaflet.default);
+    });
+  }, []);
 
   const loadRef = useMemo(() => {
     if (!db || !id) return null;
@@ -39,7 +54,6 @@ export default function LiveTrackingPage() {
 
   const { data: load, loading } = useDoc<Load>(loadRef);
 
-  // Simulação de Dados em Tempo Real para MVP
   useEffect(() => {
     if (!isSimulating || !load || !loadRef) return;
 
@@ -59,7 +73,6 @@ export default function LiveTrackingPage() {
         alerts: []
       };
 
-      // Simular pequeno deslocamento
       const newLat = currentTracking.currentLat + 0.001;
       const newLng = currentTracking.currentLng + 0.001;
       const newSpeed = 70 + Math.floor(Math.random() * 15);
@@ -89,6 +102,13 @@ export default function LiveTrackingPage() {
 
     return () => clearInterval(interval);
   }, [isSimulating, load, loadRef]);
+
+  const truckIcon = L ? L.divIcon({
+    className: 'custom-truck-icon',
+    html: `<div class="bg-blue-600 text-white p-2 rounded-full shadow-2xl border-4 border-white animate-bounce"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9V4"/><path d="M19 18h2a1 1 0 0 0 1-1v-4.24a2 2 0 0 0-.81-1.6l-3.19-2.39A2 2 0 0 0 17 8.17V18Z"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg></div>`,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20]
+  }) : null;
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Activity className="animate-spin text-blue-600" /></div>;
   if (!load) return <div className="p-10 text-center">Operação não encontrada.</div>;
@@ -133,7 +153,6 @@ export default function LiveTrackingPage() {
         </div>
       </div>
 
-      {/* Grid de KPIs de Telemetría */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
         <Card className="bg-slate-900 text-white border-none shadow-sm">
           <CardContent className="pt-4 flex flex-col items-center text-center gap-1">
@@ -180,29 +199,41 @@ export default function LiveTrackingPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Mapa e Histórico */}
         <div className="lg:col-span-2 space-y-6">
-          <Card className="border-none shadow-sm overflow-hidden h-[400px] relative bg-slate-100">
-             <div className="absolute inset-0 bg-[url('https://placehold.co/1200x800/e2e8f0/94a3b8?text=Mapa+En+Vivo+de+la+Ruta')] bg-cover opacity-50"></div>
+          <Card className="border-none shadow-sm overflow-hidden h-[400px] relative">
+             {typeof window !== 'undefined' && (
+               <MapContainer 
+                 center={[tracking?.currentLat || -34.6037, tracking?.currentLng || -58.3816]} 
+                 zoom={13} 
+                 className="h-full w-full"
+                 zoomControl={false}
+               >
+                 <TileLayer
+                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                 />
+                 <Marker 
+                   position={[tracking?.currentLat || -34.6037, tracking?.currentLng || -58.3816]} 
+                   icon={truckIcon}
+                 >
+                   <Popup>
+                     <div className="font-bold">Orden: {load.orderNumber}</div>
+                     <div className="text-xs">Estado: {load.status.toUpperCase()}</div>
+                   </Popup>
+                 </Marker>
+               </MapContainer>
+             )}
              
-             {/* Marcador del Camión */}
-             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center">
-                <div className="bg-blue-600 text-white p-2 rounded-full shadow-2xl border-4 border-white animate-bounce">
-                  <Truck size={24} />
-                </div>
-                <Badge className="mt-2 bg-slate-900 text-white">{load.orderNumber}</Badge>
-             </div>
-
-             <div className="absolute bottom-4 left-4 z-20 space-y-2">
-                <div className="bg-white/90 backdrop-blur p-3 rounded-lg border shadow-sm space-y-2">
+             <div className="absolute bottom-4 left-4 z-[500] space-y-2 pointer-events-none">
+                <div className="bg-white/90 backdrop-blur p-3 rounded-lg border shadow-sm space-y-2 pointer-events-auto">
                    <p className="text-[10px] font-bold uppercase text-slate-400">Ubicación Actual (GPS)</p>
-                   <p className="text-xs font-mono font-bold">{tracking?.currentLat.toFixed(4)}, {tracking?.currentLng.toFixed(4)}</p>
-                   <Button size="sm" variant="outline" className="w-full h-7 text-[9px] uppercase font-bold">Centrar en Vehículo</Button>
+                   <p className="text-xs font-mono font-bold">
+                     {tracking?.currentLat?.toFixed(4) || "0.0000"}, {tracking?.currentLng?.toFixed(4) || "0.0000"}
+                   </p>
                 </div>
              </div>
           </Card>
 
-          {/* Gráfico de Velocidad */}
           <Card className="border-none shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -228,16 +259,10 @@ export default function LiveTrackingPage() {
                   />
                 </LineChart>
               </ResponsiveContainer>
-              <div className="flex justify-center gap-4 mt-2 text-[10px] uppercase font-bold">
-                 <div className="flex items-center gap-1 text-blue-600"><div className="w-2 h-2 rounded-full bg-blue-600"></div> Óptimo (70-85)</div>
-                 <div className="flex items-center gap-1 text-orange-500"><div className="w-2 h-2 rounded-full bg-orange-500"></div> Precaución (85-95)</div>
-                 <div className="flex items-center gap-1 text-red-600"><div className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></div> Exceso (+95)</div>
-              </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Sidebar Alertas y Acciones */}
         <div className="space-y-6">
            <Card className="border-none shadow-sm bg-slate-900 text-white">
               <CardHeader>
@@ -254,9 +279,7 @@ export default function LiveTrackingPage() {
                     ].map((alert, i) => (
                       <div key={i} className="flex gap-3 text-xs border-l border-white/10 pl-3">
                          <span className="opacity-40 font-mono">{alert.time}</span>
-                         <span className={cn(
-                           alert.type === 'warning' ? "text-yellow-400" : "text-green-400"
-                         )}>{alert.msg}</span>
+                         <span className={alert.type === 'warning' ? "text-yellow-400" : "text-green-400"}>{alert.msg}</span>
                       </div>
                     ))}
                  </div>
@@ -279,22 +302,8 @@ export default function LiveTrackingPage() {
                 <Button variant="outline" className="w-full h-12 text-slate-700 font-bold">
                    <Phone className="mr-2" /> Llamar Conductor
                 </Button>
-                <Button variant="secondary" className="w-full text-xs font-bold text-slate-500 uppercase py-6">
-                   Alertar Incidente Crítico
-                </Button>
              </CardContent>
            </Card>
-
-           <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shrink-0">
-                <Navigation size={18} />
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs font-bold text-blue-800">Próxima Parada Estimada</p>
-                <p className="text-[10px] text-blue-600 font-medium">Peaje Gral. Lagos (Km 270)</p>
-                <p className="text-[10px] text-blue-400">Arribo: 15:20 hs (+10 min delay)</p>
-              </div>
-           </div>
         </div>
       </div>
     </div>

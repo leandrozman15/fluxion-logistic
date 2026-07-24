@@ -3,6 +3,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Leaflet Styles */
+@import "leaflet/dist/leaflet.css";
+
 @layer base {
   :root {
     --background: 210 40% 98%;
@@ -35,4 +38,21 @@
   body {
     @apply bg-background text-foreground antialiased;
   }
+}
+
+/* Custom styles for Leaflet markers */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+.custom-truck-icon {
+  background: none;
+  border: none;
+}
+
+.custom-hub-icon {
+  background: none;
+  border: none;
 }

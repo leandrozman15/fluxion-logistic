@@ -1,7 +1,8 @@
 
 'use client';
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { collection, query, where, orderBy, limit, doc } from "firebase/firestore";
@@ -24,29 +25,41 @@ import {
   MoreVertical,
   Phone,
   FileText,
-  Map as MapIcon,
   Activity,
-  Zap,
-  Info,
   Navigation,
   Building2,
   Star,
-  Globe
+  Loader2
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
 import { Truck, Driver, Load, Hub, Tenant } from "@/app/lib/types";
-import { isBefore, addDays, parseISO, isToday, startOfMonth } from "date-fns";
+import { isToday, startOfMonth } from "date-fns";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+
+// Dynamic import for the Map to avoid SSR errors
+const MapContainer = dynamic(
+  () => import("react-leaflet").then((mod) => mod.MapContainer),
+  { ssr: false, loading: () => <div className="h-full w-full bg-slate-100 flex items-center justify-center"><Loader2 className="animate-spin" /></div> }
+);
+const TileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false });
+const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), { ssr: false });
+const Popup = dynamic(() => import("react-leaflet").then((mod) => mod.Popup), { ssr: false });
 
 export default function MonitorOperativoPage() {
   const db = useFirestore();
   const { tenantId } = useTenant();
   
   const [searchTerm, setSearchTerm] = useState("");
+  const [L, setL] = useState<any>(null);
+
+  useEffect(() => {
+    import('leaflet').then((leaflet) => {
+      setL(leaflet.default);
+    });
+  }, []);
 
   const trucksQuery = useMemo(() => db ? collection(db, "trucks") : null, [db]);
   const driversQuery = useMemo(() => db ? collection(db, "drivers") : null, [db]);
@@ -78,6 +91,20 @@ export default function MonitorOperativoPage() {
 
     return { deliveredToday, activeTrucks, availableTrucks, billingMonth, incidents, otif: 94.5 };
   }, [trucks, loads]);
+
+  const truckIcon = L ? L.divIcon({
+    className: 'custom-truck-icon',
+    html: `<div class="bg-blue-600 text-white p-2 rounded-full shadow-lg border-2 border-white"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9V4"/><path d="M19 18h2a1 1 0 0 0 1-1v-4.24a2 2 0 0 0-.81-1.6l-3.19-2.39A2 2 0 0 0 17 8.17V18Z"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg></div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16]
+  }) : null;
+
+  const hubIcon = (isMain: boolean) => L ? L.divIcon({
+    className: 'custom-hub-icon',
+    html: `<div class="${isMain ? 'bg-amber-500' : 'bg-slate-900'} text-white p-2 rounded-lg shadow-xl border-2 border-white flex items-center justify-center">${isMain ? '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' : '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/><path d="M3 9h18"/><path d="M3 15h18"/></svg>'}</div>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18]
+  }) : null;
 
   return (
     <div className="space-y-6">
@@ -126,59 +153,61 @@ export default function MonitorOperativoPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
-        <Card className="lg:col-span-7 border-none shadow-sm overflow-hidden h-[550px] relative bg-slate-100">
-          <div className="absolute inset-0 opacity-40 pointer-events-none">
-            {tenant?.settings?.mapProvider === 'mapbox' ? (
-              <div className="w-full h-full bg-slate-900 flex items-center justify-center text-slate-700 font-mono text-xs uppercase tracking-widest">
-                [ Mapbox Professional Layer Active ]
-              </div>
-            ) : (
-              <div className="w-full h-full bg-[url('https://placehold.co/1000x800/e2e8f0/94a3b8?text=Google+Maps+Platform+Active')] bg-cover"></div>
-            )}
-          </div>
+        <Card className="lg:col-span-7 border-none shadow-sm overflow-hidden h-[550px] relative">
+          {typeof window !== 'undefined' && (
+            <MapContainer 
+              center={[-34.6037, -58.3816]} 
+              zoom={5} 
+              className="h-full w-full"
+              zoomControl={false}
+            >
+              <TileLayer
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              />
+              
+              {/* Hubs / Sedes */}
+              {hubs?.map((hub) => (
+                <Marker 
+                  key={hub.id} 
+                  position={[hub.lat || -34.6, hub.lng || -58.3]} 
+                  icon={hubIcon(!!hub.isMainBase)}
+                >
+                  <Popup>
+                    <div className="p-1">
+                      <div className="font-bold text-sm">{hub.name}</div>
+                      <div className="text-xs text-slate-500">{hub.type.toUpperCase()} - {hub.city}</div>
+                    </div>
+                  </Popup>
+                </Marker>
+              ))}
+
+              {/* Camiones activos */}
+              {trucks?.filter(t => t.status === 'in_trip').map((truck) => (
+                <Marker 
+                  key={truck.id} 
+                  position={[truck.location?.lat || -34.6, truck.location?.lng || -58.3]} 
+                  icon={truckIcon}
+                >
+                  <Popup>
+                    <div className="p-1">
+                      <div className="font-bold text-sm">Caminhão: {truck.plate}</div>
+                      <div className="text-xs">{truck.brand} {truck.model}</div>
+                      <Badge className="mt-2 h-5 text-[10px]">EN RUTA</Badge>
+                    </div>
+                  </Popup>
+                </Marker>
+              ))}
+            </MapContainer>
+          )}
           
-          <div className="absolute top-4 left-4 z-10 space-y-2">
-            <div className="bg-white/90 backdrop-blur p-3 rounded-lg border shadow-sm text-[10px] font-bold uppercase space-y-2">
+          <div className="absolute top-4 left-4 z-[500] space-y-2 pointer-events-none">
+            <div className="bg-white/90 backdrop-blur p-3 rounded-lg border shadow-sm text-[10px] font-bold uppercase space-y-2 pointer-events-auto">
               <div className="flex items-center gap-2 text-blue-600"><div className="w-2 h-2 rounded-full bg-blue-600"></div> Camiones en Ruta</div>
               <div className="flex items-center gap-2 text-slate-900 font-bold"><Building2 className="w-3 h-3 text-slate-900" /> Sedes / Hubs</div>
               <div className="flex items-center gap-2 text-amber-600 font-bold"><Star className="w-3 h-3 text-amber-600 fill-current" /> Casa Central</div>
-              <div className="flex items-center gap-2 text-red-600"><div className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></div> Incidente Crítico</div>
             </div>
           </div>
-
-          {hubs?.map((hub, i) => (
-            <div 
-              key={hub.id}
-              className="absolute z-10 transition-transform hover:scale-110"
-              style={{ left: `${30 + (i * 10)}%`, top: `${20 + (i * 15)}%` }}
-            >
-              <div className={cn(
-                "p-2 rounded-lg shadow-xl border-2 flex flex-col items-center gap-1",
-                hub.isMainBase ? "bg-amber-500 text-white border-white" : "bg-slate-900 text-white border-white"
-              )}>
-                {hub.isMainBase ? <Star size={20} fill="currentColor" /> : <Building2 size={20} />}
-                <span className="text-[8px] font-bold whitespace-nowrap">{hub.name}</span>
-              </div>
-            </div>
-          ))}
-
-          {trucks?.filter(t => t.status === 'in_trip').map((truck, i) => (
-            <div 
-              key={truck.id}
-              className="absolute group cursor-pointer transition-transform hover:scale-110"
-              style={{ left: `${20 + (i * 15)}%`, top: `${45 + (i * 8)}%` }}
-            >
-              <div className="bg-blue-600 text-white p-1.5 rounded-full shadow-lg border-2 border-white">
-                <TruckIcon size={16} />
-              </div>
-            </div>
-          ))}
-
-          <CardHeader className="absolute bottom-0 right-0 p-4 pointer-events-none">
-            <Badge className="bg-white/80 text-slate-900 backdrop-blur border shadow-sm">
-              MOTOR: {tenant?.settings?.mapProvider?.toUpperCase() || 'GOOGLE MAPS'}
-            </Badge>
-          </CardHeader>
         </Card>
 
         <div className="lg:col-span-3 space-y-4">
