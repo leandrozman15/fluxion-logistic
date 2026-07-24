@@ -27,7 +27,8 @@ import {
   Map as MapIcon,
   Activity,
   Zap,
-  Info
+  Info,
+  Navigation
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -280,8 +281,12 @@ export default function MonitorOperativoPage() {
                   )}
 
                   <div className="flex gap-2 pt-1">
-                    <Button variant="outline" size="sm" className="h-7 text-[9px] flex-1">DETALLES</Button>
-                    <Button variant="secondary" size="sm" className="h-7 text-[9px] flex-1">MAPA</Button>
+                    <Button variant="outline" size="sm" className="h-7 text-[9px] flex-1" asChild>
+                      <Link href={`/tracking/${load.id}`}>LIVE MAP</Link>
+                    </Button>
+                    <Button variant="secondary" size="sm" className="h-7 text-[9px] flex-1" asChild>
+                      <Link href={`/cargas`}>DETALLES</Link>
+                    </Button>
                   </div>
                 </CardContent>
               </Card>

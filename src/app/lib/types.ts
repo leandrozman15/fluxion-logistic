@@ -70,6 +70,19 @@ export interface Driver {
   updatedAt: any;
 }
 
+export interface TrackingPoint {
+  lat: number;
+  lng: number;
+  speed: number;
+  timestamp: any;
+}
+
+export interface DrivingAlert {
+  type: 'info' | 'warning' | 'critical';
+  message: string;
+  timestamp: any;
+}
+
 export interface Load {
   id: string;
   orderNumber: string;
@@ -83,8 +96,11 @@ export interface Load {
     contact: string;
     address: string;
     province: string;
+    city?: string;
     zip: string;
     instructions: string;
+    lat?: number;
+    lng?: number;
   };
   
   // Destino
@@ -94,8 +110,11 @@ export interface Load {
     contact: string;
     address: string;
     province: string;
+    city?: string;
     zip: string;
     instructions: string;
+    lat?: number;
+    lng?: number;
   };
 
   // Fechas
@@ -149,6 +168,25 @@ export interface Load {
   distanceKm?: number;
   estimatedHours?: number;
   specialInstructions?: string;
+
+  // Telemetria em tempo real
+  tracking?: {
+    currentLat: number;
+    currentLng: number;
+    currentSpeed: number;
+    avgSpeed: number;
+    maxSpeed: number;
+    distanceTraveledKm: number;
+    distanceRemainingKm: number;
+    timeOnRouteMinutes: number;
+    timeStoppedMinutes: number;
+    estimatedFuelLiters: number;
+    etaEstimated?: any;
+    etaAdjusted?: any;
+    lastUpdateAt: any;
+    history: TrackingPoint[];
+    alerts: DrivingAlert[];
+  };
 
   createdAt: any;
   updatedAt: any;
