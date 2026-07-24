@@ -3,80 +3,90 @@
   "firestore": {
     "collections": {
       "trucks": {
-        "description": "Flota de veículos pesados com documentação e especificações técnicas.",
-        "schema": {
-          "type": "object",
-          "properties": {
-            "plate": { "type": "string" },
-            "brand": { "type": "string" },
-            "model": { "type": "string" },
-            "year": { "type": "number" },
-            "capacityKg": { "type": "number" },
-            "status": { "type": "string", "enum": ["available", "in_trip", "maintenance"] },
-            "location": {
-              "type": "object",
-              "properties": {
-                "city": { "type": "string" },
-                "province": { "type": "string" }
-              }
-            }
-          }
-        }
+        "description": "Flota de vehículos pesados con documentación y especificaciones técnicas.",
+        "schema": { "$ref": "#/backend/entities/Truck" }
       },
       "drivers": {
         "description": "Choferes profissionais com licencias nacionais e habilitação LINTI.",
-        "schema": {
-          "type": "object",
-          "properties": {
-            "firstName": { "type": "string" },
-            "lastName": { "type": "string" },
-            "dni": { "type": "string" },
-            "status": { "type": "string", "enum": ["active", "in_trip", "resting", "suspended"] }
-          }
-        }
+        "schema": { "$ref": "#/backend/entities/Driver" }
       },
       "clients": {
         "description": "Cartera de clientes dadores de carga.",
-        "schema": {
-          "type": "object",
-          "properties": {
-            "name": { "type": "string" },
-            "cuit": { "type": "string" },
-            "email": { "type": "string" },
-            "phone": { "type": "string" },
-            "status": { "type": "string", "enum": ["active", "inactive"] }
-          },
-          "required": ["name", "cuit"]
-        }
+        "schema": { "$ref": "#/backend/entities/Client" }
       },
       "loads": {
-        "description": "Órdenes de flete y transporte nacional.",
-        "schema": {
-          "type": "object",
-          "properties": {
-            "orderNumber": { "type": "string" },
-            "clientName": { "type": "string" },
-            "totalAmount": { "type": "number" },
-            "status": { "type": "string", "enum": ["pending", "assigned", "on_route", "delivered", "incident", "cancelled"] }
-          }
-        }
+        "description": "Órdenes de flete y transporte regional.",
+        "schema": { "$ref": "#/backend/entities/Load" }
+      },
+      "loads/{loadId}/expenses": {
+        "description": "Gastos registrados durante el viaje por el conductor.",
+        "schema": { "$ref": "#/backend/entities/Expense" }
       },
       "hubs": {
         "description": "Sedes y centros logísticos regionales.",
-        "schema": {
+        "schema": { "$ref": "#/backend/entities/Hub" }
+      }
+    }
+  },
+  "entities": {
+    "Truck": {
+      "title": "Truck",
+      "type": "object",
+      "properties": {
+        "plate": { "type": "string" },
+        "brand": { "type": "string" },
+        "model": { "type": "string" },
+        "status": { "type": "string" }
+      }
+    },
+    "Driver": {
+      "title": "Driver",
+      "type": "object",
+      "properties": {
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "dni": { "type": "string" }
+      }
+    },
+    "Client": {
+      "title": "Client",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "cuit": { "type": "string" }
+      }
+    },
+    "Load": {
+      "title": "Load",
+      "type": "object",
+      "properties": {
+        "orderNumber": { "type": "string" },
+        "status": { "type": "string" },
+        "budget": {
           "type": "object",
           "properties": {
-            "name": { "type": "string" },
-            "address": { "type": "string" },
-            "city": { "type": "string" },
-            "province": { "type": "string" },
-            "lat": { "type": "number" },
-            "lng": { "type": "number" },
-            "type": { "type": "string", "enum": ["hub", "warehouse", "office"] },
-            "phone": { "type": "string" }
-          },
-          "required": ["name", "address", "lat", "lng"]
+            "initialAdvance": { "type": "number" },
+            "totalBudget": { "type": "number" }
+          }
         }
+      }
+    },
+    "Expense": {
+      "title": "Expense",
+      "type": "object",
+      "properties": {
+        "category": { "type": "string" },
+        "amount": { "type": "number" },
+        "description": { "type": "string" },
+        "status": { "type": "string" }
+      }
+    },
+    "Hub": {
+      "title": "Hub",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "country": { "type": "string" }
       }
     }
   }

@@ -7,6 +7,38 @@ export type HubType = 'hub' | 'warehouse' | 'office';
 export type MapProvider = 'google' | 'mapbox';
 export type Country = 'Argentina' | 'Chile' | 'Paraguay' | 'Uruguay' | 'Bolivia' | 'Brasil';
 
+export type ExpenseCategory = 
+  | 'fuel' 
+  | 'toll' 
+  | 'meal' 
+  | 'lodging' 
+  | 'maintenance' 
+  | 'parking' 
+  | 'documentation' 
+  | 'loading_unloading' 
+  | 'emergency' 
+  | 'other';
+
+export type ExpenseStatus = 'registered' | 'pending_approval' | 'approved' | 'rejected';
+
+export interface Expense {
+  id: string;
+  loadId: string;
+  driverId: string;
+  category: ExpenseCategory;
+  subCategory?: string;
+  amount: number;
+  currency: string;
+  description: string;
+  location: string;
+  receiptUrl?: string;
+  status: ExpenseStatus;
+  createdAt: any;
+  approvedAt?: any;
+  approvedBy?: string;
+  observations?: string;
+}
+
 export interface VehicleDocument {
   id: string;
   name: string;
@@ -106,7 +138,7 @@ export interface Client {
   internalCode: string;
   type: ClientType;
   name: string;
-  cuit: string; // Genérico para Tax ID
+  cuit: string; 
   ivaCondition: string;
   industry: string;
   fiscalObservations?: string;
@@ -168,6 +200,7 @@ export interface Load {
   serviceType: 'FTL' | 'LTL' | 'reefer' | 'dangerous' | 'oversized' | 'customs' | 'standard';
   clientName: string;
   clientId?: string;
+  assignedDriverId?: string;
   
   origin: {
     name: string;
@@ -217,6 +250,12 @@ export interface Load {
     totalCustomsCostsUsd: number;
     relacionCargaAerea?: string;
     isMalvinaPresented?: boolean;
+  };
+
+  budget?: {
+    initialAdvance: number;
+    totalBudget: number;
+    categories: Partial<Record<ExpenseCategory, number>>;
   };
 
   pickupDate: string;
