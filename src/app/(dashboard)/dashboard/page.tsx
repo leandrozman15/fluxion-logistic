@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo } from "react";
@@ -16,7 +15,8 @@ import {
   CheckCircle2,
   Calendar,
   MapPin,
-  DollarSign
+  DollarSign,
+  Plus
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
