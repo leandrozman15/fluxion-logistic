@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, serverTimestamp, query, orderBy, deleteDoc, doc, setDoc } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   Truck, Plus, Search, MoreHorizontal, Trash2, Edit2, MapPin, Gauge, Loader2, 
   ChevronRight, ChevronLeft, InfoIcon, ShieldCheck, Box, Thermometer, Droplets, 
-  Anchor, Layers, Scale, Crosshair, CheckCircle2, AlertTriangle
+  Anchor, Layers, Scale, Crosshair, CheckCircle2, AlertTriangle, FileText
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Truck as TruckType, TruckStatus } from "@/app/lib/types";
@@ -49,6 +50,7 @@ const BODY_TYPES = [
 
 export default function FlotaPage() {
   const db = useFirestore();
+  const router = useRouter();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -73,8 +75,7 @@ export default function FlotaPage() {
     fuelType: "Diesel",
     tankLiters: 0,
     status: "available",
-    location: { city: "", province: "Buenos Aires", lat: 0, lng: 0 },
-    vencimientos: { soat: "", rto: "", seguro: "" }
+    location: { city: "", province: "Buenos Aires", lat: 0, lng: 0 }
   });
 
   const trucksQuery = useMemo(() => {
@@ -121,7 +122,7 @@ export default function FlotaPage() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
-      toast({ title: "Registro Exitoso", description: `Unidade ${formData.plate} ingresada al sistema.` });
+      toast({ title: "Registro Exitoso", description: `Unidad ${formData.plate} ingresada al sistema.` });
       setIsAddOpen(false);
       setStep(1);
       setFormData({
@@ -129,8 +130,7 @@ export default function FlotaPage() {
         axles: 2, vehicleType: "Camión Rígido", capacityKg: 0, volumeM3: 0,
         dimensions: { length: 0, width: 0, height: 0 }, bodyType: "furgon",
         grossWeight: 0, fuelType: "Diesel", tankLiters: 0, status: "available",
-        location: { city: "", province: "Buenos Aires" },
-        vencimientos: { soat: "", rto: "", seguro: "" }
+        location: { city: "", province: "Buenos Aires" }
       });
     } catch (error) {
       toast({ variant: "destructive", title: "Error al registrar" });
@@ -149,8 +149,8 @@ export default function FlotaPage() {
   };
 
   const handleNumericChange = (field: string, value: string, subField?: string) => {
-    const numValue = field === 'capacityKg' || field === 'tankLiters' || field === 'grossWeight' ? parseInt(value) : parseFloat(value);
-    const finalValue = isNaN(numValue) ? 0 : numValue;
+    const val = value === "" ? 0 : parseFloat(value);
+    const finalValue = isNaN(val) ? 0 : val;
     
     if (subField) {
       setFormData(prev => ({
@@ -167,7 +167,7 @@ export default function FlotaPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Flota de Camiones</h1>
-          <p className="text-slate-500 text-sm">Gestión integral de unidades pesadas.</p>
+          <p className="text-slate-500 text-sm">Gestión integral de unidades pesadas y cumplimiento normativo.</p>
         </div>
         
         <Dialog open={isAddOpen} onOpenChange={(v) => { setIsAddOpen(v); if(!v) setStep(1); }}>
@@ -181,12 +181,12 @@ export default function FlotaPage() {
               <DialogTitle className="text-xl flex items-center gap-2">
                 <Truck className="text-blue-600" /> Registro de Nueva Unidad
               </DialogTitle>
-              <DialogDescription>Complete los datos técnicos para habilitar el veículo en la red logística.</DialogDescription>
+              <DialogDescription>Complete los datos técnicos para habilitar el vehículo en la red logística.</DialogDescription>
             </DialogHeader>
             
             <div className="py-4">
               <div className="flex items-center justify-between mb-2">
-                {["Identificación", "Especificaciones", "Documentación"].map((label, i) => (
+                {["Identificación", "Especificaciones", "Ubicación"].map((label, i) => (
                   <div key={i} className="flex flex-col items-center gap-1">
                     <div className={cn(
                       "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all",
@@ -346,14 +346,13 @@ export default function FlotaPage() {
                   </Button>
                 </div>
                 <div className="space-y-4">
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase font-bold">Vencimiento RTO</Label>
-                    <Input type="date" value={formData.vencimientos?.rto} onChange={e => setFormData({...formData, vencimientos: {...formData.vencimientos!, rto: e.target.value}})} />
-                  </div>
-                  <div className="bg-amber-50 p-3 rounded-lg border border-amber-200 flex items-start gap-2">
-                    <AlertTriangle className="text-amber-600" size={16} />
-                    <p className="text-[10px] text-amber-800">Se registrará como "Disponible".</p>
-                  </div>
+                   <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
+                      <p className="text-xs font-bold text-blue-700 flex items-center gap-2"><InfoIcon size={14} /> Nota Operativa</p>
+                      <p className="text-[10px] text-blue-600 leading-relaxed">
+                        Al completar el registro, el sistema inicializará el Checklist Digital de Documentación (VTV, Seguro, Cédula). 
+                        Deberá cargar los archivos en el perfil del camión.
+                      </p>
+                   </div>
                 </div>
               </div>
             )}
@@ -368,7 +367,7 @@ export default function FlotaPage() {
                   ) : (
                     <Button onClick={handleAddTruck} className="bg-blue-600" disabled={isSubmitting}>
                       {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <ShieldCheck size={16} className="mr-2" />}
-                      Guardar
+                      Guardar y Habilitar
                     </Button>
                   )}
                 </div>
@@ -405,42 +404,62 @@ export default function FlotaPage() {
                 <TableRow>
                   <TableHead>Patente</TableHead>
                   <TableHead>Vehículo</TableHead>
-                  <TableHead>Capacidad</TableHead>
+                  <TableHead>Documentación</TableHead>
                   <TableHead>Ubicación</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredTrucks.map((truck) => (
-                  <TableRow key={truck.id}>
-                    <TableCell><div className="font-bold">{truck.plate}</div></TableCell>
-                    <TableCell>{truck.brand} {truck.model}</TableCell>
-                    <TableCell>{((truck.capacityKg || 0) / 1000).toFixed(1)} TN</TableCell>
-                    <TableCell>{truck.location?.city}</TableCell>
-                    <TableCell>{getStatusBadge(truck.status)}</TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Gestión</DropdownMenuLabel>
-                          <DropdownMenuItem className="cursor-pointer">
-                            <Edit2 className="w-4 h-4 mr-2" /> Editar
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem 
-                            className="text-red-600 cursor-pointer"
-                            onClick={() => deleteDoc(doc(db!, "trucks", truck.id))}
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" /> Eliminar
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {filteredTrucks.map((truck) => {
+                   const docCount = truck.documentation?.length || 0;
+                   const validDocs = truck.documentation?.filter(d => d.status === 'valid').length || 0;
+                   const isCritical = truck.documentation?.some(d => d.status === 'expired');
+
+                   return (
+                    <TableRow 
+                      key={truck.id} 
+                      className="cursor-pointer hover:bg-slate-50 transition-colors"
+                      onClick={() => router.push(`/flota/${truck.id}`)}
+                    >
+                      <TableCell><div className="font-bold">{truck.plate}</div></TableCell>
+                      <TableCell>{truck.brand} {truck.model}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Progress value={docCount > 0 ? (validDocs / docCount) * 100 : 0} className="h-1.5 w-16" />
+                          <span className={cn("text-[10px] font-bold", isCritical ? "text-red-600" : "text-slate-500")}>
+                            {validDocs}/{docCount}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>{truck.location?.city}</TableCell>
+                      <TableCell>{getStatusBadge(truck.status)}</TableCell>
+                      <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Gestión de Unidad</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={() => router.push(`/flota/${truck.id}`)}>
+                              <FileText className="w-4 h-4 mr-2" /> Ver Documentación
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              <Edit2 className="w-4 h-4 mr-2" /> Editar Ficha
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem 
+                              className="text-red-600"
+                              onClick={() => deleteDoc(doc(db!, "trucks", truck.id))}
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" /> Eliminar
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                   );
+                })}
               </TableBody>
             </Table>
           )}

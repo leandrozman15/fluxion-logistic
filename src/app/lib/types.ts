@@ -2,15 +2,26 @@
 export type TruckStatus = 'available' | 'in_trip' | 'maintenance';
 export type DriverStatus = 'active' | 'resting' | 'suspended';
 export type LoadStatus = 'pending' | 'assigned' | 'on_route' | 'delivered';
+export type DocStatus = 'pending' | 'valid' | 'expired' | 'warning';
+
+export interface VehicleDocument {
+  id: string;
+  name: string;
+  category: 'standard' | 'specific' | 'trip';
+  status: DocStatus;
+  expiryDate?: string;
+  fileUrl?: string;
+  description?: string;
+}
 
 export interface Truck {
   id: string;
-  plate: string; // Patente
-  chassis: string; // VIN
+  plate: string;
+  chassis: string;
   brand: string;
   model: string;
   year: number;
-  axles: number; // Ejes
+  axles: number;
   vehicleType: string;
   
   // Especificaciones
@@ -21,12 +32,12 @@ export interface Truck {
     width: number;
     height: number;
   };
-  bodyType: string; // Carrocería
-  grossWeight: number; // PBV
+  bodyType: string;
+  grossWeight: number;
   fuelType: string;
   tankLiters: number;
 
-  // Ubicación y Documentación
+  // Ubicación y Estado
   status: TruckStatus;
   location: {
     city: string;
@@ -34,11 +45,10 @@ export interface Truck {
     lat?: number;
     lng?: number;
   };
-  vencimientos: {
-    soat: string;
-    rto: string;
-    seguro: string;
-  };
+  
+  // Documentación (Checklist Digital)
+  documentation: VehicleDocument[];
+  
   createdAt: any;
   updatedAt: any;
 }
@@ -50,6 +60,7 @@ export interface Driver {
   licenseNumber: string;
   phone: string;
   status: DriverStatus;
+  lintiVencimiento?: string;
 }
 
 export interface Load {
