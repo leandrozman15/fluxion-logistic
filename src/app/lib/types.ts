@@ -61,6 +61,11 @@ export interface Driver {
   phone: string;
   status: DriverStatus;
   lintiVencimiento?: string;
+  bloodType?: string;
+  emergencyContact?: string;
+  email?: string;
+  createdAt?: any;
+  updatedAt?: any;
 }
 
 export interface Load {
