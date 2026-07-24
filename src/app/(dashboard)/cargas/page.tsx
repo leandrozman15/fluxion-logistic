@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Package, Plus, Search, MapPin, Scale, DollarSign, 
   Loader2, MoreVertical, Trash2, Truck, CheckCircle2, 
-  Clock, AlertTriangle, FileText, ExternalLink
+  Clock, AlertTriangle, FileText, ExternalLink, Printer, Wallet
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Load, LoadStatus } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
+import Link from "next/link";
 
 export default function CargasPage() {
   const db = useFirestore();
@@ -46,8 +47,8 @@ export default function CargasPage() {
     return loads.filter(l => 
       (l.description || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
       (l.clientName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (l.origin?.city || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (l.destination?.city || "").toLowerCase().includes(searchTerm.toLowerCase())
+      (l.origin?.address || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (l.destination?.address || "").toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [loads, searchTerm]);
 
@@ -172,6 +173,13 @@ export default function CargasPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Gestión de Flete</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/orden`)}>
+                              <Printer className="w-4 h-4 mr-2" /> Generar Orden (PDF)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/billetera`)}>
+                              <Wallet className="w-4 h-4 mr-2" /> Ver Billetera / Gastos
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => updateDoc(doc(db!, "loads", load.id), { status: 'on_route' })}>
                               <Truck className="w-4 h-4 mr-2" /> Iniciar Tránsito
                             </DropdownMenuItem>
