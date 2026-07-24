@@ -3,7 +3,7 @@
   "firestore": {
     "collections": {
       "trucks": {
-        "description": "Flota de vehículos pesados con documentación y especificaciones técnicas.",
+        "description": "Flota de veículos pesados com documentação e especificações técnicas.",
         "schema": {
           "type": "object",
           "properties": {
@@ -19,34 +19,19 @@
                 "city": { "type": "string" },
                 "province": { "type": "string" }
               }
-            },
-            "documentation": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "id": { "type": "string" },
-                  "name": { "type": "string" },
-                  "status": { "type": "string" },
-                  "expiryDate": { "type": "string" }
-                }
-              }
             }
           }
         }
       },
       "drivers": {
-        "description": "Choferes profesionales con licencias nacionales y habilitación LINTI.",
+        "description": "Choferes profissionais com licencias nacionais e habilitação LINTI.",
         "schema": {
           "type": "object",
           "properties": {
             "firstName": { "type": "string" },
             "lastName": { "type": "string" },
             "dni": { "type": "string" },
-            "status": { "type": "string", "enum": ["active", "in_trip", "resting", "suspended"] },
-            "licenseExpiry": { "type": "string" },
-            "hasLinti": { "type": "boolean" },
-            "lintiExpiry": { "type": "string" }
+            "status": { "type": "string", "enum": ["active", "in_trip", "resting", "suspended"] }
           }
         }
       },
@@ -58,10 +43,25 @@
             "orderNumber": { "type": "string" },
             "clientName": { "type": "string" },
             "totalAmount": { "type": "number" },
-            "status": { "type": "string", "enum": ["pending", "assigned", "on_route", "delivered", "incident", "cancelled"] },
-            "origin": { "type": "object" },
-            "destination": { "type": "object" }
+            "status": { "type": "string", "enum": ["pending", "assigned", "on_route", "delivered", "incident", "cancelled"] }
           }
+        }
+      },
+      "hubs": {
+        "description": "Sedes y centros logísticos regionales.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "address": { "type": "string" },
+            "city": { "type": "string" },
+            "province": { "type": "string" },
+            "lat": { "type": "number" },
+            "lng": { "type": "number" },
+            "type": { "type": "string", "enum": ["hub", "warehouse", "office"] },
+            "phone": { "type": "string" }
+          },
+          "required": ["name", "address", "lat", "lng"]
         }
       }
     }

@@ -3,6 +3,7 @@ export type TruckStatus = 'available' | 'in_trip' | 'maintenance';
 export type DriverStatus = 'active' | 'in_trip' | 'resting' | 'suspended' | 'retired';
 export type LoadStatus = 'pending' | 'assigned' | 'on_route' | 'delivered' | 'incident' | 'cancelled';
 export type DocStatus = 'pending' | 'valid' | 'expired' | 'warning';
+export type HubType = 'hub' | 'warehouse' | 'office';
 
 export interface VehicleDocument {
   id: string;
@@ -68,6 +69,19 @@ export interface Driver {
   observations?: string;
   createdAt: any;
   updatedAt: any;
+}
+
+export interface Hub {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  province: string;
+  lat: number;
+  lng: number;
+  type: HubType;
+  phone: string;
+  createdAt: any;
 }
 
 export interface TrackingPoint {

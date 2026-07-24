@@ -2,16 +2,17 @@
 'use client';
 
 import { SidebarProvider, SidebarInset, Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarGroup, SidebarGroupLabel, SidebarGroupContent } from "@/components/ui/sidebar";
-import { Truck, Users, Package, MapPin, TrendingUp, Settings, LogOut, LayoutDashboard, Route, History } from "lucide-react";
-import Link from "next/link";
+import { Truck, Users, Package, MapPin, TrendingUp, Settings, LogOut, LayoutDashboard, Route, History, Building2 } from "lucide-react";
+import Link from "next/navigation";
 import { useAuth } from "@/firebase";
 import { signOut } from "firebase/auth";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const { toast } = useToast();
 
   const menuItems = [
@@ -19,6 +20,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { title: "Flota de Camiones", icon: Truck, href: "/flota" },
     { title: "Gestión Choferes", icon: Users, href: "/choferes" },
     { title: "Cargas y Fletes", icon: Package, href: "/cargas" },
+    { title: "Sedes Logísticas", icon: Building2, href: "/sedes" },
     { title: "Hoja de Ruta", icon: Route, href: "/rutas" },
     { title: "Historial Viajes", icon: History, href: "/historial" },
   ];
@@ -53,11 +55,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <SidebarMenu>
                   {menuItems.map((item) => (
                     <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton asChild tooltip={item.title}>
-                        <Link href={item.href}>
+                      <SidebarMenuButton asChild tooltip={item.title} isActive={pathname === item.href}>
+                        <a href={item.href} onClick={(e) => { e.preventDefault(); router.push(item.href); }}>
                           <item.icon />
                           <span>{item.title}</span>
-                        </Link>
+                        </a>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
