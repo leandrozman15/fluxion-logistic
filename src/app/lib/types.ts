@@ -86,15 +86,62 @@ export interface Hub {
   createdAt: any;
 }
 
+export type ClientType = 'company' | 'monotax' | 'government' | 'cooperative' | 'international';
+export type ClientCategory = 'premium' | 'regular' | 'occasional' | 'potential' | 'inactive';
+
+export interface ClientContact {
+  name: string;
+  role: string;
+  email: string;
+  emailAlt?: string;
+  phone: string;
+  phoneAlt?: string;
+  whatsapp?: string;
+}
+
 export interface Client {
   id: string;
+  internalCode: string;
+  type: ClientType;
   name: string;
   cuit: string;
-  email: string;
-  phone: string;
-  address: string;
-  city: string;
-  province: string;
+  ivaCondition: string;
+  industry: string;
+  fiscalObservations?: string;
+  
+  mainContact: ClientContact;
+  secondaryContacts?: Partial<ClientContact>[];
+  
+  address: {
+    street: string;
+    number: string;
+    floor?: string;
+    city: string;
+    province: string;
+    zip: string;
+    lat?: number;
+    lng?: number;
+  };
+  
+  useSameForShipping?: boolean;
+  shippingAddress?: {
+    street: string;
+    number: string;
+    city: string;
+    province: string;
+    zip: string;
+  };
+  
+  category: ClientCategory;
+  preferredPaymentMethod: string;
+  creditLimit: number;
+  standardLeadTimeHours: number;
+  preferentialTariff?: {
+    type: 'km' | 'kg' | 'pallet';
+    amount: number;
+  };
+  internalNotes?: string;
+  
   status: 'active' | 'inactive';
   createdAt: any;
   updatedAt: any;
@@ -220,6 +267,19 @@ export interface TenantSettings {
   mapApiKey?: string;
   fleetEngineEnabled?: boolean;
   onboardingCompleted?: boolean;
+  finalScoreMode?: 'weighted' | 'max';
+  scoringWeights?: { effective: number; ai: number };
+  dailyTopLimit?: number;
+  requireContactMethod?: string;
+  cooldownDays?: number;
+  hourlyEmailLimit?: number;
+  dailyEmailLimit?: number;
+  defaultTemplateId?: string | null;
+  smtpConfig?: {
+    user: string;
+    pass: string;
+    fromName?: string;
+  };
 }
 
 export interface Tenant {
