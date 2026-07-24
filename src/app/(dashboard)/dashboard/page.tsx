@@ -54,8 +54,10 @@ export default function MonitorOperativoPage() {
   
   const [searchTerm, setSearchTerm] = useState("");
   const [L, setL] = useState<any>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     import('leaflet').then((leaflet) => {
       setL(leaflet.default);
     });
@@ -154,7 +156,7 @@ export default function MonitorOperativoPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
         <Card className="lg:col-span-7 border-none shadow-sm overflow-hidden h-[550px] relative">
-          {typeof window !== 'undefined' && (
+          {mounted && (
             <MapContainer 
               center={[-34.6037, -58.3816]} 
               zoom={5} 

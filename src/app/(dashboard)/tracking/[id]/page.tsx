@@ -40,8 +40,10 @@ export default function LiveTrackingPage() {
   const { toast } = useToast();
   const [isSimulating, setIsSimulating] = useState(false);
   const [L, setL] = useState<any>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     import('leaflet').then((leaflet) => {
       setL(leaflet.default);
     });
@@ -201,7 +203,7 @@ export default function LiveTrackingPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <Card className="border-none shadow-sm overflow-hidden h-[400px] relative">
-             {typeof window !== 'undefined' && (
+             {mounted && (
                <MapContainer 
                  center={[tracking?.currentLat || -34.6037, tracking?.currentLng || -58.3816]} 
                  zoom={13} 
@@ -239,7 +241,7 @@ export default function LiveTrackingPage() {
               <CardTitle className="text-sm flex items-center gap-2">
                 <Activity size={16} className="text-blue-600" /> Análisis de Velocidad (60 min)
               </CardTitle>
-              <CardDescription className="text-xs">Monitoreo de estabilidad y excesos en tiempo real.</CardDescription>
+              <CardDescription className="text-xs">Monitoreo de estabilidad y excesos en tempo real.</CardDescription>
             </CardHeader>
             <CardContent className="h-[250px] pt-4">
               <ResponsiveContainer width="100%" height="100%">
