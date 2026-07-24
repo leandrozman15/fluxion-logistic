@@ -148,6 +148,7 @@ export interface Client {
   ivaCondition: string;
   industry: string;
   fiscalObservations?: string;
+  facadePhotoUrl?: string;
   
   comex?: {
     countryOfOrigin: Country;
@@ -168,6 +169,7 @@ export interface Client {
     street: string;
     number: string;
     floor?: string;
+    barrio?: string; // Barrio o Zona Industrial
     city: string;
     province: string;
     country: Country;

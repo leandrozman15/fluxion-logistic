@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Users, Plus, Search, MoreVertical, Trash2, Edit2, 
   Building2, Phone, Mail, MapPin, Loader2, Globe, FileText,
-  ChevronRight, Star
+  ChevronRight, Star, Image as ImageIcon, Locate
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -72,13 +72,13 @@ export default function ClientesPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Cartera de Clientes</h1>
-          <p className="text-slate-500 text-sm">Gestión de dadores de carga y contactos comerciales.</p>
+          <h1 className="text-2xl font-bold text-slate-900">Cartera de Clientes / Destinos</h1>
+          <p className="text-slate-500 text-sm">Gestión de puntos de entrega georreferenciados para la red regional.</p>
         </div>
         
         <Button className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100" asChild>
           <Link href="/clientes/nuevo">
-            <Plus className="w-4 h-4 mr-2" /> Nuevo Cliente
+            <Plus className="w-4 h-4 mr-2" /> Nuevo Punto de Entrega
           </Link>
         </Button>
       </div>
@@ -102,9 +102,9 @@ export default function ClientesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Cliente / Razón Social</TableHead>
-                  <TableHead>Ubicación</TableHead>
-                  <TableHead>Categoría</TableHead>
+                  <TableHead>Punto de Destino / CUIT</TableHead>
+                  <TableHead>Dirección Exhaustiva</TableHead>
+                  <TableHead>Estado Mapa</TableHead>
                   <TableHead>Contacto</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
@@ -113,7 +113,7 @@ export default function ClientesPage() {
                 {filteredClients.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-20 text-slate-400 italic">
-                      No hay clientes registrados.
+                      No hay puntos de destino registrados.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -131,14 +131,29 @@ export default function ClientesPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex flex-col">
-                          <div className="text-xs font-semibold text-slate-700 flex items-center gap-1">
-                            <Globe size={10} className="text-blue-500" /> {client.address?.country}
+                        <div className="flex flex-col max-w-[250px]">
+                          <div className="text-xs font-bold text-slate-700 truncate">
+                            {client.address?.street} {client.address?.number} {client.address?.floor}
                           </div>
-                          <div className="text-[10px] text-slate-500">{client.address?.city}, {client.address?.province}</div>
+                          <div className="text-[10px] text-slate-500 uppercase font-bold truncate">
+                            {client.address?.barrio ? `Zona: ${client.address.barrio} | ` : ''}
+                            CP: {client.address?.zip}
+                          </div>
+                          <div className="text-[9px] text-blue-600 font-bold">
+                            {client.address?.city}, {client.address?.province} ({client.address?.country})
+                          </div>
                         </div>
                       </TableCell>
-                      <TableCell>{getCategoryBadge(client.category)}</TableCell>
+                      <TableCell>
+                        {client.address?.lat && client.address?.lng ? (
+                          <div className="flex flex-col gap-1">
+                            <Badge className="bg-green-100 text-green-700 border-none text-[8px] h-4">Georreferenciado</Badge>
+                            <div className="text-[8px] font-mono text-slate-400">{client.address.lat.toFixed(4)}, {client.address.lng.toFixed(4)}</div>
+                          </div>
+                        ) : (
+                          <Badge variant="outline" className="bg-red-50 text-red-700 border-red-100 text-[8px] h-4">Sin GPS</Badge>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-1 text-[10px] uppercase font-bold text-slate-500">
                           <span className="flex items-center gap-1">
@@ -155,18 +170,16 @@ export default function ClientesPage() {
                              <Button variant="ghost" size="icon"><MoreVertical size={16} /></Button>
                            </DropdownMenuTrigger>
                            <DropdownMenuContent align="end">
-                             <DropdownMenuLabel>Gestión Comercial</DropdownMenuLabel>
-                             <DropdownMenuItem onClick={() => window.open(`https://wa.me/${client.mainContact?.phone?.replace(/\D/g, '')}`, '_blank')}>
-                               <Globe className="w-4 h-4 mr-2" /> WhatsApp Directo
+                             <DropdownMenuLabel>Logística de Destino</DropdownMenuLabel>
+                             <DropdownMenuItem onClick={() => window.open(`https://www.google.com/maps?q=${client.address?.lat},${client.address?.lng}`, '_blank')}>
+                               <Locate className="w-4 h-4 mr-2" /> Ver en Google Maps
                              </DropdownMenuItem>
-                             {client.address?.lat && client.address?.lng && (
-                               <DropdownMenuItem onClick={() => window.open(`https://www.google.com/maps?q=${client.address.lat},${client.address.lng}`, '_blank')}>
-                                 <MapPin className="w-4 h-4 mr-2" /> Ver en Google Maps
-                               </DropdownMenuItem>
-                             )}
+                             <DropdownMenuItem>
+                               <ImageIcon className="w-4 h-4 mr-2" /> Ver Fachada
+                             </DropdownMenuItem>
                              <DropdownMenuSeparator />
                              <DropdownMenuItem className="text-red-600" onClick={() => handleDelete(client.id)}>
-                               <Trash2 className="w-4 h-4 mr-2" /> Eliminar Cliente
+                               <Trash2 className="w-4 h-4 mr-2" /> Eliminar Punto
                              </DropdownMenuItem>
                            </DropdownMenuContent>
                          </DropdownMenu>

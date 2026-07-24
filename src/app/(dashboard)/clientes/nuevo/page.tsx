@@ -18,7 +18,7 @@ import {
   MapPin, Phone, Mail, Globe, ShieldCheck, 
   User, CreditCard, Briefcase, Plus, Trash2, 
   CheckCircle2, ChevronRight, ChevronLeft, Star, 
-  Info, MessageSquare, Crosshair, Anchor
+  Info, MessageSquare, Crosshair, Anchor, Image as ImageIcon, Camera, Home, Locate
 } from "lucide-react";
 import { Client, ClientType, ClientCategory, Country } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -31,6 +31,8 @@ const INDUSTRIES = [
   "Farmacéutico", "Alimenticio", "Metalúrgico", "Minero", "Petróleo y Gas", 
   "Retail / Comercio", "Tecnología", "Textil", "Otro"
 ];
+
+const IVA_CONDITIONS = ["Responsable Inscripto", "Monotributista", "Exento", "No Responsable", "Consumidor Final"];
 
 export default function NewClientPage() {
   const db = useFirestore();
@@ -49,7 +51,11 @@ export default function NewClientPage() {
     status: "active",
     category: "regular",
     mainContact: { name: "", role: "", email: "", phone: "", whatsapp: "" },
-    address: { street: "", number: "", city: "", province: "", country: "Argentina", zip: "", lat: 0, lng: 0 },
+    address: { 
+      street: "", number: "", floor: "", barrio: "", 
+      city: "", province: "", country: "Argentina", 
+      zip: "", lat: -34.6037, lng: -58.3816 
+    },
     preferredPaymentMethod: "Transferencia",
     creditLimit: 0,
     standardLeadTimeHours: 48,
@@ -73,15 +79,20 @@ export default function NewClientPage() {
             lng: pos.coords.longitude 
           }
         }));
-        toast({ title: "Ubicación GPS capturada", description: "Las coordenadas se han actualizado correctamente." });
+        toast({ title: "GPS: Punto de entrega fijado", description: "Coordenadas capturadas con precisión." });
       }, () => {
-        toast({ variant: "destructive", title: "Error", description: "No se pudo obtener la ubicación GPS." });
+        toast({ variant: "destructive", title: "Error GPS", description: "Por favor, ingrese las coordenadas manualmente." });
       });
     }
   };
 
   const handleSubmit = async () => {
     if (!db) return;
+    if (!formData.name || !formData.cuit || !formData.address?.street) {
+      toast({ variant: "destructive", title: "Datos Incompletos", description: "La dirección y datos fiscales son obligatorios." });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const newRef = doc(collection(db, "clients"));
@@ -91,7 +102,7 @@ export default function NewClientPage() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
-      toast({ title: "Cliente Registrado", description: `${formData.name} ha sido habilitado en la red regional.` });
+      toast({ title: "Punto de Entrega Registrado", description: `${formData.name} ya está en el mapa operativo.` });
       router.push('/clientes');
     } catch (e) {
       toast({ variant: "destructive", title: "Error al guardar" });
@@ -106,8 +117,8 @@ export default function NewClientPage() {
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => router.back()}><ArrowLeft /></Button>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Nuevo Cliente Regional</h1>
-            <p className="text-sm text-slate-500">Registro de dador de carga para operaciones internacionales.</p>
+            <h1 className="text-2xl font-bold text-slate-900">Registro de Punto de Destino / Cliente</h1>
+            <p className="text-sm text-slate-500">Asegure la geolocalización exacta para evitar fallos en la entrega.</p>
           </div>
         </div>
         <Badge variant="outline" className="h-8 px-4 font-mono text-blue-600 bg-blue-50 border-blue-100">
@@ -119,9 +130,9 @@ export default function NewClientPage() {
         <div className="flex items-center justify-between">
           {[
             { id: 1, label: "Fiscal", icon: CreditCard },
-            { id: 2, label: "Contacto / GPS", icon: User },
-            { id: 3, label: "Comex", icon: Anchor },
-            { id: 4, label: "Comercial", icon: Briefcase }
+            { id: 2, label: "Ubicación Exacta", icon: MapPin },
+            { id: 3, label: "Aduana / Comex", icon: Anchor },
+            { id: 4, label: "Perfil Comercial", icon: Briefcase }
           ].map((s) => (
             <div key={s.id} className="flex flex-col items-center gap-1.5 flex-1 relative">
               <div className={cn(
@@ -142,28 +153,41 @@ export default function NewClientPage() {
       <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
         {step === 1 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Datos Identificatorios</CardTitle></CardHeader>
-            <CardContent className="space-y-8">
+            <CardHeader>
+              <CardTitle>Identificación Fiscal</CardTitle>
+              <CardDescription>Datos legales para facturación y guías de transporte.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label>País de Operación Principal</Label>
-                  <Select value={formData.address?.country} onValueChange={v => setFormData({...formData, address: {...formData.address!, country: v as Country}})}>
+                  <Label>Tipo de Cliente</Label>
+                  <Select value={formData.type} onValueChange={(v: any) => setFormData({...formData, type: v})}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {COUNTRIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      <SelectItem value="company">🏢 Empresa / Sociedad</SelectItem>
+                      <SelectItem value="monotax">👤 Responsable Inscripto</SelectItem>
+                      <SelectItem value="government">🏛️ Entidad Gubernamental</SelectItem>
+                      <SelectItem value="international">🌍 Cliente Internacional</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Tax ID (CUIT/RUT/RUC/CNPJ)</Label>
-                  <Input placeholder="Identificación Tributaria" value={formData.cuit} onChange={e => setFormData({...formData, cuit: e.target.value})} />
+                  <Label>Razón Social / Nombre</Label>
+                  <Input placeholder="Ej: ACME Corp S.A." value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Razón Social</Label>
-                  <Input placeholder="Nombre de la Empresa" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                  <Label>CUIT / Tax ID</Label>
+                  <Input placeholder="30-XXXXXXXX-X" value={formData.cuit} onChange={e => setFormData({...formData, cuit: e.target.value})} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Indústria</Label>
+                  <Label>Condición frente al IVA</Label>
+                  <Select value={formData.ivaCondition} onValueChange={v => setFormData({...formData, ivaCondition: v})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{IVA_CONDITIONS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Industria / Rubro</Label>
                   <Select value={formData.industry} onValueChange={v => setFormData({...formData, industry: v})}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>{INDUSTRIES.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}</SelectContent>
@@ -176,48 +200,78 @@ export default function NewClientPage() {
 
         {step === 2 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Ubicación y Contacto Directo</CardTitle></CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Locate className="text-blue-600" /> Georreferenciación de Destino</CardTitle>
+              <CardDescription>Cargue cada detalle para asegurar que el camión llegue al punto exacto.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="md:col-span-2 space-y-2">
+                  <Label>Calle / Avenida</Label>
+                  <Input value={formData.address?.street} onChange={e => setFormData({...formData, address: {...formData.address!, street: e.target.value}})} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Número</Label>
+                  <Input value={formData.address?.number} onChange={e => setFormData({...formData, address: {...formData.address!, number: e.target.value}})} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Piso / Depto / Galpón</Label>
+                  <Input placeholder="Ej: Galpón 4, Entrada Lateral" value={formData.address?.floor} onChange={e => setFormData({...formData, address: {...formData.address!, floor: e.target.value}})} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Barrio / Zona Industrial</Label>
+                  <Input placeholder="Ej: Parque Industrial Pilar" value={formData.address?.barrio} onChange={e => setFormData({...formData, address: {...formData.address!, barrio: e.target.value}})} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Código Postal</Label>
+                  <Input value={formData.address?.zip} onChange={e => setFormData({...formData, address: {...formData.address!, zip: e.target.value}})} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Ciudad / Localidad</Label>
+                  <Input value={formData.address?.city} onChange={e => setFormData({...formData, address: {...formData.address!, city: e.target.value}})} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Provincia / Estado</Label>
+                  <Input value={formData.address?.province} onChange={e => setFormData({...formData, address: {...formData.address!, province: e.target.value}})} />
+                </div>
+                <div className="space-y-2">
+                  <Label>País</Label>
+                  <Select value={formData.address?.country} onValueChange={v => setFormData({...formData, address: {...formData.address!, country: v as Country}})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{COUNTRIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t">
+                <div className="p-4 bg-slate-900 text-white rounded-xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-blue-400 font-bold flex items-center gap-2"><Locate size={14} /> Coordenadas GPS</Label>
+                    <Button variant="outline" size="sm" className="h-7 text-[10px] bg-white/10 border-white/20 hover:bg-white/20" onClick={handleGetLocation}>
+                      <Crosshair size={12} className="mr-1" /> Obtener GPS
+                    </Button>
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Ciudad</Label>
-                      <Input value={formData.address?.city} onChange={e => setFormData({...formData, address: {...formData.address!, city: e.target.value}})} />
+                    <div className="space-y-1">
+                      <Label className="text-[9px] uppercase text-white/40">Latitud</Label>
+                      <Input className="bg-white/5 border-white/10 h-8 font-mono text-xs" type="number" step="any" value={formData.address?.lat} onChange={e => setFormData({...formData, address: {...formData.address!, lat: parseFloat(e.target.value)}})} />
                     </div>
-                    <div className="space-y-2">
-                      <Label>Estado / Provincia</Label>
-                      <Input value={formData.address?.province} onChange={e => setFormData({...formData, address: {...formData.address!, province: e.target.value}})} />
+                    <div className="space-y-1">
+                      <Label className="text-[9px] uppercase text-white/40">Longitud</Label>
+                      <Input className="bg-white/5 border-white/10 h-8 font-mono text-xs" type="number" step="any" value={formData.address?.lng} onChange={e => setFormData({...formData, address: {...formData.address!, lng: parseFloat(e.target.value)}})} />
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Email Comercial</Label>
-                    <Input type="email" placeholder="comercial@empresa.com" value={formData.mainContact?.email} onChange={e => setFormData({...formData, mainContact: {...formData.mainContact!, email: e.target.value}})} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Teléfono / WhatsApp</Label>
-                    <Input placeholder="Ej: +54 11 4444-3333" value={formData.mainContact?.phone} onChange={e => setFormData({...formData, mainContact: {...formData.mainContact!, phone: e.target.value}})} />
                   </div>
                 </div>
 
-                <div className="p-4 bg-slate-50 border rounded-xl space-y-4">
-                   <div className="flex items-center justify-between">
-                     <Label className="text-blue-700 font-bold flex items-center gap-2"><MapPin size={14} /> Geolocalización para Mapa</Label>
-                     <Button variant="outline" size="sm" className="h-7 text-[10px]" onClick={handleGetLocation}>
-                        <Crosshair size={12} className="mr-1" /> GPS
-                     </Button>
-                   </div>
-                   <div className="grid grid-cols-2 gap-4">
-                     <div className="space-y-1">
-                       <Label className="text-[10px] uppercase text-slate-400">Latitud</Label>
-                       <Input className="bg-white" type="number" step="any" value={formData.address?.lat} onChange={e => setFormData({...formData, address: {...formData.address!, lat: parseFloat(e.target.value)}})} />
-                     </div>
-                     <div className="space-y-1">
-                       <Label className="text-[10px] uppercase text-slate-400">Longitud</Label>
-                       <Input className="bg-white" type="number" step="any" value={formData.address?.lng} onChange={e => setFormData({...formData, address: {...formData.address!, lng: parseFloat(e.target.value)}})} />
-                     </div>
-                   </div>
-                   <p className="text-[9px] text-slate-500 italic">Esta ubicación permitirá visualizar al cliente en el monitor operativo nacional.</p>
+                <div className="p-4 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center space-y-3 hover:bg-slate-50 transition-colors cursor-pointer group">
+                  <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
+                    <Camera />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-900 uppercase tracking-tighter">Foto de la Fachada / Entrada</p>
+                    <p className="text-[9px] text-slate-500">Indispensable para que el conductor identifique el destino.</p>
+                  </div>
+                  <Button variant="ghost" size="sm" className="h-7 text-[10px] text-blue-600 font-bold">SUBIR IMAGEN</Button>
                 </div>
               </div>
             </CardContent>
@@ -227,7 +281,7 @@ export default function NewClientPage() {
         {step === 3 && (
           <Card className="border-none shadow-sm">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Globe className="text-blue-600" /> Operaciones Internacionales</CardTitle>
+              <CardTitle className="flex items-center gap-2"><Anchor className="text-blue-600" /> Datos de Comercio Exterior</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -245,9 +299,16 @@ export default function NewClientPage() {
                     <Input placeholder="Código de Operador" value={formData.comex?.impExpCode} onChange={e => setFormData({...formData, comex: {...formData.comex!, impExpCode: e.target.value}})} />
                  </div>
                </div>
-               <div className="p-4 bg-blue-50 border rounded-xl flex items-start gap-3">
-                  <Info size={16} className="text-blue-600 mt-1" />
-                  <p className="text-xs text-blue-700">Para el mercado argentino se activarán los chequeos de MALVINA y SICNEA automáticamente si el país de origen es Argentina.</p>
+               <div className="p-4 bg-blue-50 border rounded-xl space-y-4">
+                  <p className="text-xs font-bold text-blue-800 flex items-center gap-2"><ShieldCheck size={16} /> Registros de Cumplimiento (Argentina)</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    {['sicnea', 'sita', 'malvina', 'vucea'].map(reg => (
+                      <div key={reg} className="flex items-center justify-between p-2 bg-white rounded border">
+                        <span className="text-[10px] font-bold uppercase">{reg}</span>
+                        <Switch />
+                      </div>
+                    ))}
+                  </div>
                </div>
             </CardContent>
           </Card>
@@ -259,7 +320,7 @@ export default function NewClientPage() {
             <CardContent className="space-y-6">
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <Label>Categoría</Label>
+                    <Label>Categoría de Cliente</Label>
                     <Select value={formData.category} onValueChange={(v: any) => setFormData({...formData, category: v})}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -270,8 +331,23 @@ export default function NewClientPage() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Límite de Crédito Autorizado</Label>
+                    <Label>Límite de Crédito Autorizado (ARS)</Label>
                     <Input type="number" value={formData.creditLimit} onChange={e => setFormData({...formData, creditLimit: parseFloat(e.target.value)})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Plazo de Entrega Estándar (Horas)</Label>
+                    <Input type="number" value={formData.standardLeadTimeHours} onChange={e => setFormData({...formData, standardLeadTimeHours: parseInt(e.target.value)})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Forma de Pago Preferida</Label>
+                    <Select value={formData.preferredPaymentMethod} onValueChange={v => setFormData({...formData, preferredPaymentMethod: v})}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Transferencia">Transferencia Bancaria</SelectItem>
+                        <SelectItem value="Cheque">Cheque Diferido</SelectItem>
+                        <SelectItem value="Contado">Contado</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                </div>
             </CardContent>

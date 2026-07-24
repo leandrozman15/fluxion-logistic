@@ -11,7 +11,7 @@
         "schema": { "$ref": "#/backend/entities/Driver" }
       },
       "clients": {
-        "description": "Cartera de clientes dadores de carga.",
+        "description": "Cartera de clientes dadores de carga con geolocalización de fachada.",
         "schema": { "$ref": "#/backend/entities/Client" }
       },
       "loads": {
@@ -53,7 +53,21 @@
       "type": "object",
       "properties": {
         "name": { "type": "string" },
-        "cuit": { "type": "string" }
+        "cuit": { "type": "string" },
+        "facadePhotoUrl": { "type": "string" },
+        "address": {
+          "type": "object",
+          "properties": {
+            "street": { "type": "string" },
+            "number": { "type": "string" },
+            "barrio": { "type": "string" },
+            "city": { "type": "string" },
+            "province": { "type": "string" },
+            "zip": { "type": "string" },
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        }
       }
     },
     "Load": {
