@@ -171,6 +171,9 @@ export default function ClientesPage() {
                            </DropdownMenuTrigger>
                            <DropdownMenuContent align="end">
                              <DropdownMenuLabel>Logística de Destino</DropdownMenuLabel>
+                             <DropdownMenuItem onClick={() => router.push(`/clientes/${client.id}/editar`)}>
+                               <Edit2 className="w-4 h-4 mr-2" /> Editar Punto de Entrega
+                             </DropdownMenuItem>
                              <DropdownMenuItem onClick={() => window.open(`https://www.google.com/maps?q=${client.address?.lat},${client.address?.lng}`, '_blank')}>
                                <Locate className="w-4 h-4 mr-2" /> Ver en Google Maps
                              </DropdownMenuItem>
