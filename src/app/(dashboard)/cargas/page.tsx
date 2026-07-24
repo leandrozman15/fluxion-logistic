@@ -47,11 +47,13 @@ export default function CargasPage() {
   const filteredLoads = useMemo(() => {
     if (!loads) return [];
     return loads.filter(l => {
-      const matchesSearch = (l.description || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (l.clientName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (l.origin?.address || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (l.destination?.address || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (l.orderNumber || "").toLowerCase().includes(searchTerm.toLowerCase());
+      const search = searchTerm.toLowerCase();
+      const matchesSearch = 
+        (l.description || "").toLowerCase().includes(search) ||
+        (l.clientName || "").toLowerCase().includes(search) ||
+        (l.origin?.address || "").toLowerCase().includes(search) ||
+        (l.destination?.address || "").toLowerCase().includes(search) ||
+        (l.orderNumber || "").toLowerCase().includes(search);
       
       const matchesStatus = statusFilter === "all" || l.status === statusFilter;
       
@@ -70,29 +72,27 @@ export default function CargasPage() {
     }
   };
 
-  const handleDelete = (id: string | undefined) => {
-    if (!id) {
-      toast({ variant: "destructive", title: "Error", description: "ID de carga no válido." });
-      return;
-    }
+  const handleDelete = (id: string) => {
+    if (!db || !id) return;
     
-    if (!db || !confirm("¿Está seguro de eliminar esta operación? Esta acción no se puede deshacer.")) return;
+    if (!confirm("¿Está seguro de eliminar esta operación? Esta acción no se puede deshacer.")) return;
     
     const docRef = doc(db, "loads", id);
     
-    // No usamos await para permitir actualización optimista en la UI
-    deleteDoc(docRef).catch(async (serverError) => {
-      const permissionError = new FirestorePermissionError({
-        path: docRef.path,
-        operation: 'delete',
-      } satisfies SecurityRuleContext);
-      errorEmitter.emit('permission-error', permissionError);
-    });
-    
-    toast({ title: "Pedido eliminado correctamente" });
+    deleteDoc(docRef)
+      .then(() => {
+        toast({ title: "Operación eliminada", description: "El flete ha sido removido del sistema." });
+      })
+      .catch(async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: docRef.path,
+          operation: 'delete',
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
+      });
   };
 
-  const handleUpdateStatus = (id: string | undefined, newStatus: LoadStatus) => {
+  const handleUpdateStatus = (id: string, newStatus: LoadStatus) => {
     if (!id || !db) return;
     
     const docRef = doc(db, "loads", id);
@@ -129,10 +129,10 @@ export default function CargasPage() {
         <div className="p-4 bg-slate-50 border-b flex flex-col md:flex-row gap-4 items-center justify-between">
           <div className="relative w-full max-w-sm">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-            <input 
+            <Input 
               type="search" 
               placeholder="Buscar por N° Orden, cliente o ciudad..." 
-              className="flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 pl-8"
+              className="pl-8 bg-white"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
@@ -190,18 +190,18 @@ export default function CargasPage() {
                             <div className="w-1.5 h-1.5 rounded-full bg-blue-600"></div>
                           </div>
                           <div className="flex flex-col gap-0.5">
-                            <span className="text-slate-500 truncate max-w-[200px]">{load.origin?.address || "Origen"}</span>
-                            <span className="font-bold truncate max-w-[200px]">{load.destination?.address || "Destino"}</span>
+                            <span className="text-slate-500 truncate max-w-[200px]">{load.origin?.address || "Origen no especificado"}</span>
+                            <span className="font-bold truncate max-w-[200px]">{load.destination?.address || "Destino no especificado"}</span>
                           </div>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="space-y-1">
                           <div className="flex items-center gap-1 text-[10px] font-semibold text-slate-600">
-                            <Scale size={10} /> {load.weightKg?.toLocaleString()} Kg
+                            <Scale size={10} /> {load.weightKg?.toLocaleString() || 0} Kg
                           </div>
                           <div className="flex items-center gap-1 text-xs font-bold text-green-600">
-                            <DollarSign size={10} /> {load.totalAmount?.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}
+                            <DollarSign size={10} /> {load.totalAmount?.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' }) || '$ 0,00'}
                           </div>
                         </div>
                       </TableCell>
@@ -213,21 +213,27 @@ export default function CargasPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Gestión de Flete</DropdownMenuLabel>
-                            <DropdownMenuItem onSelect={() => router.push(`/cargas/${load.id}/orden`)}>
+                            <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/orden`)}>
                               <Printer className="w-4 h-4 mr-2" /> Generar Orden (PDF)
                             </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => router.push(`/cargas/${load.id}/billetera`)}>
+                            <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/billetera`)}>
                               <Wallet className="w-4 h-4 mr-2" /> Ver Billetera / Gastos
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onSelect={() => handleUpdateStatus(load.id, 'on_route')}>
+                            <DropdownMenuItem onClick={() => handleUpdateStatus(load.id, 'on_route')}>
                               <Truck className="w-4 h-4 mr-2" /> Iniciar Tránsito
                             </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => handleUpdateStatus(load.id, 'delivered')}>
+                            <DropdownMenuItem onClick={() => handleUpdateStatus(load.id, 'delivered')}>
                               <CheckCircle2 className="w-4 h-4 mr-2" /> Confirmar Entrega
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-red-600" onSelect={() => handleDelete(load.id)}>
+                            <DropdownMenuItem 
+                              className="text-red-600" 
+                              onSelect={(e) => {
+                                e.preventDefault();
+                                handleDelete(load.id);
+                              }}
+                            >
                               <Trash2 className="w-4 h-4 mr-2" /> Eliminar Orden
                             </DropdownMenuItem>
                           </DropdownMenuContent>
