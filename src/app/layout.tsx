@@ -4,8 +4,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { FirebaseClientProvider } from "@/firebase";
 
 export const metadata: Metadata = {
-  title: 'Logística Argentina | Gestión de Flotas',
-  description: 'Sistema integral de logística y transporte de carga para Argentina.',
+  title: 'LogísticaAr | Gestão de Frotas Argentina',
+  description: 'Sistema integral de transporte e logística de carga.',
 };
 
 export default function RootLayout({
@@ -15,12 +15,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-      </head>
-      <body className="font-sans antialiased">
+      <body className="font-sans">
         <FirebaseClientProvider>
           {children}
           <Toaster />

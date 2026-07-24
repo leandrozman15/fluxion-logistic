@@ -1,16 +1,16 @@
 {
   "placeholderImages": [
     {
-      "id": "hero-industrial",
-      "description": "Industrial manufacturing facility",
-      "imageUrl": "https://picsum.photos/seed/fluxion1/1200/600",
-      "imageHint": "industrial manufacturing"
+      "id": "truck-fleet",
+      "description": "Freight trucks on the road",
+      "imageUrl": "https://picsum.photos/seed/truck1/1200/600",
+      "imageHint": "freight truck"
     },
     {
-      "id": "data-analytics",
-      "description": "Business data analytics dashboard",
-      "imageUrl": "https://picsum.photos/seed/fluxion2/600/400",
-      "imageHint": "business data"
+      "id": "logistics-warehouse",
+      "description": "Logistics distribution center",
+      "imageUrl": "https://picsum.photos/seed/ware1/600/400",
+      "imageHint": "logistics warehouse"
     }
   ]
 }
