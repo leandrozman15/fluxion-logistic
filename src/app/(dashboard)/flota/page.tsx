@@ -1,10 +1,10 @@
 
 'use client';
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, addDoc, serverTimestamp, query, orderBy, deleteDoc, doc, updateDoc, setDoc } from "firebase/firestore";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { collection, serverTimestamp, query, orderBy, deleteDoc, doc, setDoc } from "firebase/firestore";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,8 +14,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Truck, Plus, Search, MoreHorizontal, Trash2, Edit2, MapPin, Gauge, Loader2, 
-  ChevronRight, ChevronLeft, Info, InfoIcon, ShieldCheck, Box, Thermometer, Droplets, 
-  Anchor, Layers, Scale, Fuel, Timer, Calendar, CheckCircle2, AlertTriangle, Crosshair
+  ChevronRight, ChevronLeft, InfoIcon, ShieldCheck, Box, Thermometer, Droplets, 
+  Anchor, Layers, Scale, Crosshair, CheckCircle2, AlertTriangle
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Truck as TruckType, TruckStatus } from "@/app/lib/types";
@@ -45,7 +45,6 @@ const BODY_TYPES = [
   { id: "plataforma", label: "Plataforma", icon: Layers },
   { id: "cisterna", label: "Cisterna", icon: Droplets },
   { id: "volquete", label: "Volquete", icon: Anchor },
-  { id: "jaula", label: "Jaula", icon: Timer },
 ];
 
 export default function FlotaPage() {
@@ -106,7 +105,7 @@ export default function FlotaPage() {
           ...prev,
           location: { ...prev.location!, lat: pos.coords.latitude, lng: pos.coords.longitude }
         }));
-        toast({ title: "Ubicación obtenida", description: "Coordenadas GPS actualizadas." });
+        toast({ title: "Ubicación obtenida", description: "Coordenadas GPS atualizadas." });
       });
     }
   };
@@ -122,7 +121,7 @@ export default function FlotaPage() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
-      toast({ title: "Registro Exitoso", description: `Unidad ${formData.plate} ingresada al sistema.` });
+      toast({ title: "Registro Exitoso", description: `Unidade ${formData.plate} ingresada al sistema.` });
       setIsAddOpen(false);
       setStep(1);
       setFormData({
@@ -149,10 +148,6 @@ export default function FlotaPage() {
     }
   };
 
-  const isStep1Valid = !!(formData.plate && formData.chassis && formData.brand && formData.model);
-  const isStep2Valid = (formData.capacityKg || 0) > 0;
-
-  // Helper function to handle numeric input changes safely
   const handleNumericChange = (field: string, value: string, subField?: string) => {
     const numValue = field === 'capacityKg' || field === 'tankLiters' || field === 'grossWeight' ? parseInt(value) : parseFloat(value);
     const finalValue = isNaN(numValue) ? 0 : numValue;
@@ -189,7 +184,6 @@ export default function FlotaPage() {
               <DialogDescription>Complete los datos técnicos para habilitar el veículo en la red logística.</DialogDescription>
             </DialogHeader>
             
-            {/* PROGRESS INDICATOR */}
             <div className="py-4">
               <div className="flex items-center justify-between mb-2">
                 {["Identificación", "Especificaciones", "Documentación"].map((label, i) => (
@@ -209,17 +203,16 @@ export default function FlotaPage() {
               </div>
             </div>
 
-            {/* STEP 1: IDENTIFICACION */}
             {step === 1 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4 animate-in fade-in slide-in-from-right-4">
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">Patente / Matrícula <InfoIcon size={12} className="text-slate-400" /></Label>
-                    <Input placeholder="Ej: AE-123-BC" value={formData.plate} onChange={e => setFormData({...formData, plate: e.target.value.toUpperCase()})} />
+                    <Input placeholder="AE-123-BC" value={formData.plate} onChange={e => setFormData({...formData, plate: e.target.value.toUpperCase()})} />
                   </div>
                   <div className="space-y-2">
                     <Label>Número de Chasis (VIN)</Label>
-                    <Input placeholder="17 caracteres alfanuméricos" maxLength={17} value={formData.chassis} onChange={e => setFormData({...formData, chassis: e.target.value.toUpperCase()})} />
+                    <Input placeholder="17 caracteres" maxLength={17} value={formData.chassis} onChange={e => setFormData({...formData, chassis: e.target.value.toUpperCase()})} />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -244,7 +237,7 @@ export default function FlotaPage() {
                 </div>
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Año de Fabricación</Label>
+                    <Label>Año</Label>
                     <Select value={formData.year?.toString()} onValueChange={v => setFormData({...formData, year: parseInt(v)})}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -253,17 +246,17 @@ export default function FlotaPage() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Configuración de Ejes</Label>
+                    <Label>Ejes</Label>
                     <div className="grid grid-cols-2 gap-2">
                       {[2, 3, 4, 5].map(ax => (
                         <Button 
                           key={ax} 
                           type="button" 
                           variant={formData.axles === ax ? "default" : "outline"} 
-                          className="h-10 text-xs justify-start px-3"
+                          className="h-10 text-xs"
                           onClick={() => setFormData({...formData, axles: ax})}
                         >
-                          {ax} Ejes {ax > 2 ? "(Tándem)" : ""}
+                          {ax} Ejes
                         </Button>
                       ))}
                     </div>
@@ -272,47 +265,47 @@ export default function FlotaPage() {
               </div>
             )}
 
-            {/* STEP 2: ESPECIFICACIONES */}
             {step === 2 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4 animate-in fade-in slide-in-from-right-4">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Capacidad de Carga Máxima (Kg)</Label>
+                    <Label>Capacidad (Kg)</Label>
                     <Input 
                       type="number" 
-                      placeholder="Ej: 28000" 
-                      value={isNaN(formData.capacityKg!) ? '' : formData.capacityKg} 
+                      value={formData.capacityKg || ''} 
                       onChange={e => handleNumericChange('capacityKg', e.target.value)} 
                     />
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <div className="space-y-1">
-                      <Label className="text-[10px] uppercase font-bold">Largo (m)</Label>
+                      <Label className="text-[10px] uppercase font-bold">Largo</Label>
                       <Input 
                         type="number" 
-                        value={isNaN(formData.dimensions?.length!) ? '' : formData.dimensions?.length} 
+                        value={formData.dimensions?.length || ''} 
                         onChange={e => handleNumericChange('dimensions', e.target.value, 'length')} 
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[10px] uppercase font-bold">Ancho (m)</Label>
+                      <Label className="text-[10px] uppercase font-bold">Ancho</Label>
                       <Input 
                         type="number" 
-                        value={isNaN(formData.dimensions?.width!) ? '' : formData.dimensions?.width} 
+                        value={formData.dimensions?.width || ''} 
                         onChange={e => handleNumericChange('dimensions', e.target.value, 'width')} 
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[10px] uppercase font-bold">Alto (m)</Label>
+                      <Label className="text-[10px] uppercase font-bold">Alto</Label>
                       <Input 
                         type="number" 
-                        value={isNaN(formData.dimensions?.height!) ? '' : formData.dimensions?.height} 
+                        value={formData.dimensions?.height || ''} 
                         onChange={e => handleNumericChange('dimensions', e.target.value, 'height')} 
                       />
                     </div>
                   </div>
+                </div>
+                <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Tipo de Carrocería</Label>
+                    <Label>Tipo Carrocería</Label>
                     <div className="grid grid-cols-3 gap-2">
                       {BODY_TYPES.map(type => (
                         <Button 
@@ -329,80 +322,37 @@ export default function FlotaPage() {
                     </div>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {step === 3 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4 animate-in fade-in slide-in-from-right-4">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Combustible</Label>
-                    <Select value={formData.fuelType} onValueChange={v => setFormData({...formData, fuelType: v})}>
+                    <Label>Provincia Base</Label>
+                    <Select value={formData.location?.province} onValueChange={v => setFormData({...formData, location: {...formData.location!, province: v}})}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Diesel">Diésel (Gasoil)</SelectItem>
-                        <SelectItem value="GNC">Gas Natural (GNC)</SelectItem>
-                        <SelectItem value="Electrico">Eléctrico</SelectItem>
+                        {PROVINCIAS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Capacidad Tanque (L)</Label>
-                    <Input 
-                      type="number" 
-                      value={isNaN(formData.tankLiters!) ? '' : formData.tankLiters} 
-                      onChange={e => handleNumericChange('tankLiters', e.target.value)} 
-                    />
+                    <Label>Ciudad</Label>
+                    <Input value={formData.location?.city} onChange={e => setFormData({...formData, location: {...formData.location!, city: e.target.value}})} />
                   </div>
-                  <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
-                    <div className="flex gap-2 text-blue-700 mb-1">
-                      <Scale size={16} />
-                      <span className="text-xs font-bold uppercase">PBV Sugerido</span>
-                    </div>
-                    <p className="text-[10px] text-blue-600">Basado en {formData.axles} ejes, el Peso Bruto sugerido es {(formData.axles || 2) * 10000} Kg.</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* STEP 3: UBICACION Y DOCS */}
-            {step === 3 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4 animate-in fade-in slide-in-from-right-4">
-                <div className="space-y-4">
-                  <Card className="border-dashed border-2">
-                    <CardHeader className="pb-2"><CardTitle className="text-sm">Ubicación Base</CardTitle></CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="space-y-2">
-                        <Label>Provincia</Label>
-                        <Select value={formData.location?.province} onValueChange={v => setFormData({...formData, location: {...formData.location!, province: v}})}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {PROVINCIAS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Ciudad</Label>
-                        <Input placeholder="Ej: Rosario" value={formData.location?.city} onChange={e => setFormData({...formData, location: {...formData.location!, city: e.target.value}})} />
-                      </div>
-                      <Button variant="outline" className="w-full text-xs" size="sm" onClick={handleGetLocation}>
-                        <Crosshair size={14} className="mr-2" /> Obtener GPS atual
-                      </Button>
-                    </CardContent>
-                  </Card>
+                  <Button variant="outline" className="w-full text-xs" size="sm" onClick={handleGetLocation}>
+                    <Crosshair size={14} className="mr-2" /> GPS
+                  </Button>
                 </div>
                 <div className="space-y-4">
-                  <Card>
-                    <CardHeader className="pb-2"><CardTitle className="text-sm">Vencimientos Críticos</CardTitle></CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="space-y-1">
-                        <Label className="text-[10px] uppercase font-bold text-muted-foreground">Vencimiento RTO/ITV</Label>
-                        <Input type="date" value={formData.vencimientos?.rto} onChange={e => setFormData({...formData, vencimientos: {...formData.vencimientos!, rto: e.target.value}})} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] uppercase font-bold text-muted-foreground">Vencimiento Seguro</Label>
-                        <Input type="date" value={formData.vencimientos?.seguro} onChange={e => setFormData({...formData, vencimientos: {...formData.vencimientos!, seguro: e.target.value}})} />
-                      </div>
-                    </CardContent>
-                  </Card>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase font-bold">Vencimiento RTO</Label>
+                    <Input type="date" value={formData.vencimientos?.rto} onChange={e => setFormData({...formData, vencimientos: {...formData.vencimientos!, rto: e.target.value}})} />
+                  </div>
                   <div className="bg-amber-50 p-3 rounded-lg border border-amber-200 flex items-start gap-2">
                     <AlertTriangle className="text-amber-600" size={16} />
-                    <p className="text-[10px] text-amber-800 leading-tight">Recuerde que el camión quedará en estado <b>"Disponible"</b> al finalizar el registro.</p>
+                    <p className="text-[10px] text-amber-800">Se registrará como "Disponible".</p>
                   </div>
                 </div>
               </div>
@@ -412,13 +362,13 @@ export default function FlotaPage() {
               <div className="flex justify-between w-full">
                 <Button variant="ghost" onClick={() => setIsAddOpen(false)}>Cancelar</Button>
                 <div className="flex gap-2">
-                  {step > 1 && <Button variant="outline" onClick={handleBack}><ChevronLeft size={16} /> Anterior</Button>}
+                  {step > 1 && <Button variant="outline" onClick={handleBack}><ChevronLeft size={16} /></Button>}
                   {step < 3 ? (
-                    <Button onClick={handleNext} disabled={step === 1 && !isStep1Valid}>Siguiente <ChevronRight size={16} /></Button>
+                    <Button onClick={handleNext}>Siguiente <ChevronRight size={16} /></Button>
                   ) : (
                     <Button onClick={handleAddTruck} className="bg-blue-600" disabled={isSubmitting}>
                       {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <ShieldCheck size={16} className="mr-2" />}
-                      Guardar y Finalizar
+                      Guardar
                     </Button>
                   )}
                 </div>
@@ -434,111 +384,58 @@ export default function FlotaPage() {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
             <Input 
               type="search" 
-              placeholder="Buscar por patente, marca o modelo..." 
+              placeholder="Patente, marca o modelo..." 
               className="pl-8 bg-white"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
           </div>
           <div className="flex gap-2">
-            <Button 
-              variant={statusFilter === 'all' ? 'default' : 'outline'} 
-              size="sm" 
-              onClick={() => setStatusFilter('all')}
-              className={statusFilter === 'all' ? 'bg-slate-900' : ''}
-            >
-              Todos
-            </Button>
-            <Button 
-              variant={statusFilter === 'available' ? 'default' : 'outline'} 
-              size="sm" 
-              onClick={() => setStatusFilter('available')}
-              className={statusFilter === 'available' ? 'bg-green-600 hover:bg-green-700' : ''}
-            >
-              Disponibles
-            </Button>
-            <Button 
-              variant={statusFilter === 'in_trip' ? 'default' : 'outline'} 
-              size="sm" 
-              onClick={() => setStatusFilter('in_trip')}
-              className={statusFilter === 'in_trip' ? 'bg-blue-600 hover:bg-blue-700' : ''}
-            >
-              En Viaje
-            </Button>
+            <Button variant={statusFilter === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setStatusFilter('all')}>Todos</Button>
+            <Button variant={statusFilter === 'available' ? 'default' : 'outline'} size="sm" onClick={() => setStatusFilter('available')}>Disponibles</Button>
           </div>
         </div>
 
         <CardContent className="p-0">
           {loading ? (
-            <div className="p-20 flex flex-col items-center justify-center gap-2">
-              <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-              <p className="text-sm text-slate-500">Cargando flota...</p>
-            </div>
-          ) : filteredTrucks.length === 0 ? (
-            <div className="p-20 text-center space-y-4">
-              <Truck className="w-12 h-12 mx-auto text-slate-200" />
-              <p className="text-slate-500">No se encontraron camiones con estos filtros.</p>
-            </div>
+            <div className="p-20 flex justify-center"><Loader2 className="animate-spin" /></div>
           ) : (
             <Table>
               <TableHeader>
-                <TableRow className="bg-slate-50/50 hover:bg-slate-50/50">
-                  <TableHead className="w-[150px]">Patente</TableHead>
+                <TableRow>
+                  <TableHead>Patente</TableHead>
                   <TableHead>Vehículo</TableHead>
                   <TableHead>Capacidad</TableHead>
-                  <TableHead>Ubicación Actual</TableHead>
+                  <TableHead>Ubicación</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredTrucks.map((truck) => (
-                  <TableRow key={truck.id} className="group hover:bg-slate-50 transition-colors">
-                    <TableCell>
-                      <div className="font-bold text-slate-900 border border-slate-200 rounded px-2 py-1 bg-white inline-block shadow-sm">
-                        {truck.plate}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span className="font-semibold text-slate-700">{truck.brand} {truck.model}</span>
-                        <span className="text-[10px] text-slate-400 uppercase font-bold">Año: {truck.year} • {truck.axles} Ejes</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5 text-slate-600">
-                        <Gauge className="w-3.5 h-3.5" />
-                        <span className="text-sm">{((truck.capacityKg || 0) / 1000).toFixed(1)} TN</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5 text-slate-600">
-                        <MapPin className="w-3.5 h-3.5 text-red-400" />
-                        <span className="text-sm">{truck.location?.city}, {truck.location?.province}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {getStatusBadge(truck.status)}
-                    </TableCell>
+                  <TableRow key={truck.id}>
+                    <TableCell><div className="font-bold">{truck.plate}</div></TableCell>
+                    <TableCell>{truck.brand} {truck.model}</TableCell>
+                    <TableCell>{((truck.capacityKg || 0) / 1000).toFixed(1)} TN</TableCell>
+                    <TableCell>{truck.location?.city}</TableCell>
+                    <TableCell>{getStatusBadge(truck.status)}</TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 group-hover:text-slate-600">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </Button>
+                          <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-[160px]">
+                        <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Gestión</DropdownMenuLabel>
                           <DropdownMenuItem className="cursor-pointer">
-                            <Edit2 className="w-4 h-4 mr-2" /> Editar Datos
+                            <Edit2 className="w-4 h-4 mr-2" /> Editar
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem 
-                            className="text-red-600 cursor-pointer focus:text-red-600 focus:bg-red-50"
+                            className="text-red-600 cursor-pointer"
                             onClick={() => deleteDoc(doc(db!, "trucks", truck.id))}
                           >
                             <Trash2 className="w-4 h-4 mr-2" /> Eliminar
-                          </MenuItem>
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
