@@ -1,10 +1,11 @@
 
 'use client';
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection, useUser } from "@/firebase";
-import { doc, updateDoc, serverTimestamp, collection, addDoc } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp, collection, addDoc, increment } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,12 +17,21 @@ import {
   ArrowLeft, MapPin, Phone, MessageSquare, CheckCircle2, 
   Truck, Package, FileText, ShieldAlert, Clock, 
   Navigation, Info, ChevronRight, AlertTriangle,
-  Wallet, Plus, DollarSign, Camera, Fuel, Utensils, Bed, Wrench, Receipt
+  Wallet, Plus, DollarSign, Camera, Fuel, Utensils, Bed, Wrench, Receipt,
+  Zap, GpsFixed, Satellite, SignalHigh, Loader2, Compass, Gauge
 } from "lucide-react";
-import { Load, Expense, ExpenseCategory } from "@/app/lib/types";
+import { Load, Expense, ExpenseCategory, TrackingPoint } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { calculateDistance, estimateFuelFactor } from "@/lib/utils/tracking-math";
+
+// Carregamento dinâmico do Mapa para evitar erros de SSR
+const MapContainer = dynamic(
+  () => import("react-leaflet").then((mod) => mod.MapContainer),
+  { ssr: false, loading: () => <div className="h-48 w-full bg-slate-100 animate-pulse rounded-xl flex items-center justify-center text-xs text-slate-400">Cargando Mapa...</div> }
+);
+const TileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false });
+const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), { ssr: false });
 
 const EXPENSE_CATEGORIES: { id: ExpenseCategory; label: string; icon: any }[] = [
   { id: 'fuel', label: 'Combustible', icon: Fuel },
@@ -40,14 +50,24 @@ export default function RouteDetailPage() {
   const { toast } = useToast();
   const [isUpdating, setIsUpdating] = useState(false);
   const [isExpenseOpen, setIsExpenseOpen] = useState(false);
+  
+  // GPS State
+  const [gpsActive, setGpsActive] = useState(false);
+  const [watchId, setWatchId] = useState<number | null>(null);
+  const [L, setL] = useState<any>(null);
 
-  // Expense Form State
   const [expenseData, setExpenseData] = useState<Partial<Expense>>({
     category: 'fuel',
     amount: 0,
     description: "",
     location: ""
   });
+
+  useEffect(() => {
+    import('leaflet').then((leaflet) => {
+      setL(leaflet.default);
+    });
+  }, []);
 
   const loadRef = useMemo(() => {
     if (!db || !id) return null;
@@ -67,6 +87,49 @@ export default function RouteDetailPage() {
     return expenses?.reduce((acc, exp) => acc + (exp.amount || 0), 0) || 0;
   }, [expenses]);
 
+  // GPS Tracking Logic
+  const toggleGPS = () => {
+    if (gpsActive) {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      setGpsActive(false);
+      setWatchId(null);
+      toast({ title: "GPS Desactivado", description: "El rastreo se ha detenido." });
+    } else {
+      if (!navigator.geolocation) {
+        toast({ variant: "destructive", title: "GPS no soportado", description: "Su dispositivo no permite geolocalización." });
+        return;
+      }
+
+      const id = navigator.geolocation.watchPosition(
+        (pos) => {
+          if (!loadRef) return;
+          const { latitude, longitude, speed } = pos.coords;
+          const currentSpeed = (speed || 0) * 3.6; // m/s to km/h
+
+          // Atualizar Firestore com telemetria básica
+          updateDoc(loadRef, {
+            "tracking.currentLat": latitude,
+            "tracking.currentLng": longitude,
+            "tracking.currentSpeed": Math.round(currentSpeed),
+            "tracking.lastUpdateAt": serverTimestamp(),
+            // Simulação de acúmulo de distância no MVP
+            "tracking.distanceTraveledKm": increment(0.01)
+          });
+        },
+        (err) => {
+          console.error("GPS Error:", err);
+          toast({ variant: "destructive", title: "Error de GPS", description: "Asegúrese de dar permisos de ubicación." });
+          setGpsActive(false);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+
+      setWatchId(id);
+      setGpsActive(true);
+      toast({ title: "GPS Activado", description: "Transmitiendo ubicación a la base." });
+    }
+  };
+
   const handleUpdateStatus = async (newStatus: any) => {
     if (!loadRef) return;
     setIsUpdating(true);
@@ -76,6 +139,7 @@ export default function RouteDetailPage() {
         updatedAt: serverTimestamp() 
       });
       toast({ title: "Estado Actualizado", description: `Viaje marcado como ${newStatus}.` });
+      if (newStatus === 'on_route' && !gpsActive) toggleGPS();
     } catch (e) {
       toast({ variant: "destructive", title: "Error" });
     } finally {
@@ -104,7 +168,14 @@ export default function RouteDetailPage() {
     }
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center"><Clock className="animate-spin text-blue-600" /></div>;
+  const truckIcon = L ? L.divIcon({
+    className: 'custom-truck-icon',
+    html: `<div class="bg-blue-600 text-white p-1.5 rounded-full shadow-lg border-2 border-white"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9V4"/><path d="M19 18h2a1 1 0 0 0 1-1v-4.24a2 2 0 0 0-.81-1.6l-3.19-2.39A2 2 0 0 0 17 8.17V18Z"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg></div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12]
+  }) : null;
+
+  if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!load) return <div className="p-10 text-center">Viaje no encontrado.</div>;
 
   return (
@@ -115,7 +186,10 @@ export default function RouteDetailPage() {
           <h1 className="font-bold text-lg">Hoja de Ruta</h1>
           <p className="text-[10px] text-slate-500 font-mono uppercase tracking-widest">{load.orderNumber}</p>
         </div>
-        <Button variant="ghost" size="icon" className="text-red-500"><ShieldAlert /></Button>
+        <div className="flex items-center gap-2">
+           {gpsActive ? <SignalHigh size={20} className="text-green-500 animate-pulse" /> : <Satellite size={20} className="text-slate-300" />}
+           <Button variant="ghost" size="icon" className="text-red-500"><ShieldAlert /></Button>
+        </div>
       </div>
 
       <Tabs defaultValue="mission" className="w-full">
@@ -125,25 +199,69 @@ export default function RouteDetailPage() {
         </TabsList>
 
         <TabsContent value="mission" className="space-y-6 animate-in fade-in">
-          <Card className="bg-slate-900 text-white border-none overflow-hidden">
+          <Card className="bg-slate-900 text-white border-none overflow-hidden relative">
+            <div className="absolute top-2 right-2">
+              {gpsActive ? (
+                 <Badge className="bg-green-500 border-none text-[8px] animate-pulse">📡 GPS TRANSMITIENDO</Badge>
+              ) : (
+                 <Badge variant="outline" className="text-white/30 border-white/20 text-[8px]">📡 GPS APAGADO</Badge>
+              )}
+            </div>
             <CardContent className="p-6 text-center space-y-4">
               <div className="space-y-1">
                 <p className="text-[10px] uppercase font-bold text-white/50 tracking-widest">Estado de Misión</p>
                 <h2 className="text-2xl font-black uppercase italic">{load.status.replace('_', ' ')}</h2>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2">
                 {load.status === 'assigned' && (
-                  <Button className="w-full bg-blue-600 h-14 text-lg font-bold" onClick={() => handleUpdateStatus('on_route')} disabled={isUpdating}>
+                  <Button className="w-full bg-blue-600 h-14 text-lg font-bold shadow-lg shadow-blue-900/50" onClick={() => handleUpdateStatus('on_route')} disabled={isUpdating}>
                     INICIAR VIAJE
                   </Button>
                 )}
                 {load.status === 'on_route' && (
-                  <Button className="w-full bg-green-600 h-14 text-lg font-bold" onClick={() => handleUpdateStatus('delivered')} disabled={isUpdating}>
-                    CONFIRMAR ENTREGA
-                  </Button>
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                       <div className="p-3 bg-white/5 border border-white/10 rounded-xl">
+                          <p className="text-[9px] uppercase font-bold text-white/40">Velocidad</p>
+                          <p className="text-xl font-black">{load.tracking?.currentSpeed || 0} <span className="text-[10px] font-normal opacity-50">km/h</span></p>
+                       </div>
+                       <div className="p-3 bg-white/5 border border-white/10 rounded-xl">
+                          <p className="text-[9px] uppercase font-bold text-white/40">Recorrido</p>
+                          <p className="text-xl font-black">{load.tracking?.distanceTraveledKm?.toFixed(1) || 0} <span className="text-[10px] font-normal opacity-50">km</span></p>
+                       </div>
+                    </div>
+                    <Button className="w-full bg-green-600 h-14 text-lg font-bold shadow-lg shadow-green-900/50" onClick={() => handleUpdateStatus('delivered')} disabled={isUpdating}>
+                      CONFIRMAR ENTREGA
+                    </Button>
+                  </>
                 )}
               </div>
             </CardContent>
+          </Card>
+
+          {/* Mapa de Ruta */}
+          <Card className="border-none shadow-sm overflow-hidden h-48 relative">
+             {typeof window !== 'undefined' && L && (
+               <MapContainer 
+                 center={[load.tracking?.currentLat || load.origin.lat || -34.6, load.tracking?.currentLng || load.origin.lng || -58.3]} 
+                 zoom={13} 
+                 className="h-full w-full"
+                 zoomControl={false}
+               >
+                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                 {load.tracking?.currentLat && (
+                   <Marker position={[load.tracking.currentLat, load.tracking.currentLng]} icon={truckIcon} />
+                 )}
+               </MapContainer>
+             )}
+             <Button 
+              size="icon" 
+              variant="secondary" 
+              className="absolute bottom-2 right-2 z-[500] h-8 w-8 shadow-md"
+              onClick={toggleGPS}
+             >
+               {gpsActive ? <SignalHigh size={16} className="text-green-600" /> : <Satellite size={16} />}
+             </Button>
           </Card>
 
           <div className="space-y-6 px-2">
@@ -152,21 +270,17 @@ export default function RouteDetailPage() {
                 <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2", load.status !== 'pending' ? 'bg-green-500 border-green-500 text-white' : 'bg-white border-slate-200 text-slate-400')}>
                   {load.status !== 'pending' ? <CheckCircle2 size={16}/> : <Package size={16}/>}
                 </div>
-                <div className="w-0.5 h-full bg-slate-100 min-h-[80px]"></div>
+                <div className="w-0.5 h-full bg-slate-100 min-h-[60px]"></div>
               </div>
-              <div className="flex-1 space-y-4">
+              <div className="flex-1 space-y-2">
                 <div>
-                  <h3 className="font-bold text-slate-900 text-sm">Punto de Carga (Origen)</h3>
+                  <h3 className="font-bold text-slate-900 text-sm">Punto de Carga</h3>
                   <p className="text-xs text-slate-500">{load.origin.name}</p>
                 </div>
-                <Card className="bg-slate-50 border-none shadow-none">
-                  <CardContent className="p-3 space-y-3">
-                    <div className="flex items-start gap-2 text-xs">
-                      <MapPin size={14} className="text-blue-600 shrink-0 mt-0.5" />
-                      <span className="font-medium">{load.origin.address}, {load.origin.province}</span>
-                    </div>
-                  </CardContent>
-                </Card>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="h-8 flex-1 text-[10px] font-bold" onClick={() => window.open(`tel:${load.origin.phone}`)}><Phone size={12} className="mr-1" /> Llamar</Button>
+                  <Button variant="outline" size="sm" className="h-8 flex-1 text-[10px] font-bold" onClick={() => window.open(`https://wa.me/${load.origin.phone}`)}><MessageSquare size={12} className="mr-1" /> WhatsApp</Button>
+                </div>
               </div>
             </div>
 
@@ -176,19 +290,14 @@ export default function RouteDetailPage() {
                    <Navigation size={16}/>
                 </div>
               </div>
-              <div className="flex-1 space-y-4">
+              <div className="flex-1 space-y-2">
                 <div>
-                  <h3 className="font-bold text-slate-900 text-sm">Punto de Entrega (Destino)</h3>
+                  <h3 className="font-bold text-slate-900 text-sm">Destino Final</h3>
                   <p className="text-xs text-slate-500">{load.destination.name}</p>
                 </div>
-                <Card className="bg-slate-50 border-none shadow-none">
-                  <CardContent className="p-3 space-y-3">
-                    <div className="flex items-start gap-2 text-xs">
-                      <MapPin size={14} className="text-blue-600 shrink-0 mt-0.5" />
-                      <span className="font-medium">{load.destination.address}, {load.destination.province}</span>
-                    </div>
-                  </CardContent>
-                </Card>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="h-8 flex-1 text-[10px] font-bold" onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${load.destination.lat},${load.destination.lng}`)}><Navigation size={12} className="mr-1" /> Navegar</Button>
+                </div>
               </div>
             </div>
           </div>
@@ -259,17 +368,13 @@ export default function RouteDetailPage() {
                           className="pl-9" 
                           placeholder="0.00" 
                           value={expenseData.amount || ''} 
-                          onChange={e => setExpenseData({...expenseData, amount: parseFloat(e.target.value)})}
+                          onChange={e => setExpenseData({...expenseData, amount: parseFloat(e.target.value) || 0})}
                         />
                       </div>
                     </div>
                     <div className="space-y-2">
                       <Label>Lugar / Estación</Label>
-                      <Input placeholder="Ej: YPF Ruta 9 km 45" value={expenseData.location} onChange={e => setExpenseData({...expenseData, location: e.target.value})} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Descripción</Label>
-                      <Input placeholder="Ej: Carga 80L Gasoil" value={expenseData.description} onChange={e => setExpenseData({...expenseData, description: e.target.value})} />
+                      <Input placeholder="Ej: YPF Ruta 9 km 45" value={expenseData.location || ''} onChange={e => setAxisData({...expenseData, location: e.target.value})} />
                     </div>
                     <Button variant="outline" className="w-full border-dashed border-2 h-16 text-slate-500">
                       <Camera className="mr-2" /> Adjuntar Foto Ticket
@@ -277,7 +382,7 @@ export default function RouteDetailPage() {
                   </div>
                   <DialogFooter>
                     <Button className="w-full bg-blue-600 h-12 text-lg font-bold" onClick={handleAddExpense} disabled={isUpdating || !expenseData.amount}>
-                      {isUpdating ? <Clock className="animate-spin mr-2" /> : <DollarSign size={18} className="mr-2" />}
+                      {isUpdating ? <Loader2 className="animate-spin mr-2" /> : <DollarSign size={18} className="mr-2" />}
                       Guardar Gasto
                     </Button>
                   </DialogFooter>
@@ -304,7 +409,6 @@ export default function RouteDetailPage() {
                         <Badge variant="outline" className="text-[8px] uppercase h-5 font-bold">
                           {exp.status === 'registered' ? 'Registrado' : exp.status}
                         </Badge>
-                        <p className="text-[9px] text-slate-400 mt-1">14:30 hs</p>
                       </div>
                     </CardContent>
                   </Card>
@@ -319,10 +423,10 @@ export default function RouteDetailPage() {
       </Tabs>
 
       <div className="fixed bottom-6 left-6 right-6 flex gap-3 z-40">
-         <Button variant="destructive" className="flex-1 h-14 font-bold shadow-lg">
+         <Button variant="destructive" className="flex-1 h-14 font-bold shadow-lg shadow-red-900/20">
            <AlertTriangle className="mr-2" /> INCIDENTE
          </Button>
-         <Button className="bg-blue-600 flex-1 h-14 font-bold shadow-lg" onClick={() => window.open(`tel:0800-LOGISTICA`)}>
+         <Button className="bg-blue-600 flex-1 h-14 font-bold shadow-lg shadow-blue-900/20" onClick={() => window.open(`tel:0800-LOGISTICA`)}>
            <Phone className="mr-2" /> CENTRAL
          </Button>
       </div>
