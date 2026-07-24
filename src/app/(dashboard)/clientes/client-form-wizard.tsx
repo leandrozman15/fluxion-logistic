@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useDoc } from "@/firebase";
 import { collection, serverTimestamp, doc, setDoc, updateDoc } from "firebase/firestore";
@@ -44,6 +44,7 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<Partial<Client>>({
     internalCode: "",
@@ -126,6 +127,20 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
       }, () => {
         toast({ variant: "destructive", title: "Error GPS", description: "Por favor, ingrese las coordenadas manualmente." });
       });
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // En un entorno de producción aquí se subiría a Firebase Storage
+      // Por ahora simulamos la carga exitosa
+      toast({ 
+        title: "Foto cargada correctamente", 
+        description: `Archivo: ${file.name} listo para procesar.` 
+      });
+      // Placeholder para la URL de la imagen
+      setFormData(prev => ({ ...prev, facadePhotoUrl: URL.createObjectURL(file) }));
     }
   };
 
@@ -316,15 +331,29 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
                   </div>
                 </div>
 
-                <div className="p-4 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center space-y-3 hover:bg-slate-50 transition-colors cursor-pointer group">
+                <div 
+                  className="p-4 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center space-y-3 hover:bg-slate-50 transition-colors cursor-pointer group"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    className="hidden" 
+                    accept="image/*" 
+                    onChange={handleFileChange} 
+                  />
                   <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
-                    <Camera />
+                    {formData.facadePhotoUrl ? <ImageIcon /> : <Camera />}
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-slate-900 uppercase tracking-tighter">Foto de la Fachada / Entrada</p>
+                    <p className="text-xs font-bold text-slate-900 uppercase tracking-tighter">
+                      {formData.facadePhotoUrl ? "Imagen Seleccionada" : "Foto de la Fachada / Entrada"}
+                    </p>
                     <p className="text-[9px] text-slate-500">Indispensable para que el conductor identifique el destino.</p>
                   </div>
-                  <Button variant="ghost" size="sm" className="h-7 text-[10px] text-blue-600 font-bold">SUBIR IMAGEN</Button>
+                  <Button variant="ghost" size="sm" className="h-7 text-[10px] text-blue-600 font-bold">
+                    {formData.facadePhotoUrl ? "CAMBIAR IMAGEN" : "SUBIR IMAGEN"}
+                  </Button>
                 </div>
               </div>
             </CardContent>
@@ -388,11 +417,11 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
                   </div>
                   <div className="space-y-2">
                     <Label>Límite de Crédito Autorizado (ARS)</Label>
-                    <Input type="number" value={formData.creditLimit || 0} onChange={e => setFormData({...formData, creditLimit: parseFloat(e.target.value)})} />
+                    <Input type="number" value={formData.creditLimit || 0} onChange={e => setFormData({...formData, creditLimit: parseFloat(e.target.value) || 0})} />
                   </div>
                   <div className="space-y-2">
                     <Label>Plazo de Entrega Estándar (Horas)</Label>
-                    <Input type="number" value={formData.standardLeadTimeHours || 0} onChange={e => setFormData({...formData, standardLeadTimeHours: parseInt(e.target.value)})} />
+                    <Input type="number" value={formData.standardLeadTimeHours || 0} onChange={e => setFormData({...formData, standardLeadTimeHours: parseInt(e.target.value) || 0})} />
                   </div>
                   <div className="space-y-2">
                     <Label>Forma de Pago Preferida</Label>
