@@ -1,0 +1,70 @@
+{
+  "firestore": {
+    "collections": {
+      "trucks": {
+        "description": "Flota de camiones registrados",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "plate": { "type": "string", "description": "Patente del vehículo (Argentina format)" },
+            "model": { "type": "string" },
+            "brand": { "type": "string" },
+            "year": { "type": "number" },
+            "capacityKg": { "type": "number" },
+            "status": { "type": "string", "enum": ["available", "in_trip", "maintenance"] },
+            "location": {
+              "type": "object",
+              "properties": {
+                "city": { "type": "string" },
+                "province": { "type": "string" }
+              }
+            }
+          }
+        }
+      },
+      "drivers": {
+        "description": "Conductores de la flota",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "dni": { "type": "string" },
+            "licenseNumber": { "type": "string" },
+            "phone": { "type": "string" },
+            "status": { "type": "string", "enum": ["active", "resting", "suspended"] }
+          }
+        }
+      },
+      "loads": {
+        "description": "Cargas y pedidos de transporte",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "description": { "type": "string" },
+            "weightKg": { "type": "number" },
+            "origin": { "type": "string" },
+            "destination": { "type": "string" },
+            "clientName": { "type": "string" },
+            "status": { "type": "string", "enum": ["pending", "assigned", "on_route", "delivered"] },
+            "priceArs": { "type": "number" }
+          }
+        }
+      },
+      "trips": {
+        "description": "Viajes activos e históricos",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "truckId": { "type": "string" },
+            "driverId": { "type": "string" },
+            "loadId": { "type": "string" },
+            "startDate": { "type": "string", "format": "date-time" },
+            "estimatedEndDate": { "type": "string", "format": "date-time" },
+            "actualEndDate": { "type": "string", "format": "date-time" },
+            "currentProvince": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}
