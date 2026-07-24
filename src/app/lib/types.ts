@@ -5,16 +5,42 @@ export type LoadStatus = 'pending' | 'assigned' | 'on_route' | 'delivered';
 
 export interface Truck {
   id: string;
-  plate: string;
-  model: string;
+  plate: string; // Patente
+  chassis: string; // VIN
   brand: string;
+  model: string;
   year: number;
+  axles: number; // Ejes
+  vehicleType: string;
+  
+  // Especificaciones
   capacityKg: number;
+  volumeM3: number;
+  dimensions: {
+    length: number;
+    width: number;
+    height: number;
+  };
+  bodyType: string; // Carrocería
+  grossWeight: number; // PBV
+  fuelType: string;
+  tankLiters: number;
+
+  // Ubicación y Documentación
   status: TruckStatus;
   location: {
     city: string;
     province: string;
+    lat?: number;
+    lng?: number;
   };
+  vencimientos: {
+    soat: string;
+    rto: string;
+    seguro: string;
+  };
+  createdAt: any;
+  updatedAt: any;
 }
 
 export interface Driver {
