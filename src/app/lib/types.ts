@@ -1,4 +1,5 @@
 
+
 export type TruckStatus = 'available' | 'in_trip' | 'maintenance';
 export type DriverStatus = 'active' | 'in_trip' | 'resting' | 'suspended' | 'retired';
 export type LoadStatus = 'pending' | 'assigned' | 'on_route' | 'delivered' | 'incident' | 'cancelled';
