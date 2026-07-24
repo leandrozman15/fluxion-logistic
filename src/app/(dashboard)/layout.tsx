@@ -3,7 +3,7 @@
 
 import { SidebarProvider, SidebarInset, Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarGroup, SidebarGroupLabel, SidebarGroupContent } from "@/components/ui/sidebar";
 import { Truck, Users, Package, MapPin, TrendingUp, Settings, LogOut, LayoutDashboard, Route, History, Building2 } from "lucide-react";
-import Link from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { useRouter, usePathname } from "next/navigation";
@@ -56,10 +56,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   {menuItems.map((item) => (
                     <SidebarMenuItem key={item.href}>
                       <SidebarMenuButton asChild tooltip={item.title} isActive={pathname === item.href}>
-                        <a href={item.href} onClick={(e) => { e.preventDefault(); router.push(item.href); }}>
+                        <Link href={item.href}>
                           <item.icon />
                           <span>{item.title}</span>
-                        </a>
+                        </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
