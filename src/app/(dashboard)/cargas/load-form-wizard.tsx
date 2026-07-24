@@ -145,7 +145,7 @@ export default function LoadFormWizard() {
           </div>
         </div>
         <Badge variant="outline" className="h-8 px-4 font-mono text-blue-600 bg-blue-50 border-blue-100">
-          {formData.orderNumber}
+          {formData.orderNumber || ''}
         </Badge>
       </div>
 
@@ -219,10 +219,10 @@ export default function LoadFormWizard() {
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                  <div className="space-y-4">
                    <Label>Descripción</Label>
-                   <Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
+                   <Textarea value={formData.description || ''} onChange={e => setFormData({...formData, description: e.target.value})} />
                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1"><Label>Peso (Kg)</Label><Input type="number" value={formData.weightKg} onChange={e => setFormData({...formData, weightKg: parseFloat(e.target.value)})} /></div>
-                      <div className="space-y-1"><Label>Volumen (m³)</Label><Input type="number" value={formData.volumeM3} onChange={e => setFormData({...formData, volumeM3: parseFloat(e.target.value)})} /></div>
+                      <div className="space-y-1"><Label>Peso (Kg)</Label><Input type="number" value={formData.weightKg || 0} onChange={e => setFormData({...formData, weightKg: parseFloat(e.target.value)})} /></div>
+                      <div className="space-y-1"><Label>Volumen (m³)</Label><Input type="number" value={formData.volumeM3 || 0} onChange={e => setFormData({...formData, volumeM3: parseFloat(e.target.value)})} /></div>
                    </div>
                  </div>
                </div>
@@ -258,7 +258,7 @@ export default function LoadFormWizard() {
                  </div>
                  <div className="space-y-1">
                    <Label className="text-[10px] uppercase font-bold">N° Declaración (SIM)</Label>
-                   <Input value={formData.international?.declarationNumber} onChange={e => setFormData({...formData, international: {...formData.international!, declarationNumber: e.target.value}})} />
+                   <Input value={formData.international?.declarationNumber || ''} onChange={e => setFormData({...formData, international: {...formData.international!, declarationNumber: e.target.value}})} />
                  </div>
                </div>
 
@@ -268,8 +268,8 @@ export default function LoadFormWizard() {
                     <Badge variant="outline" className="bg-green-50 text-green-700">Protocolo ATIT</Badge>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
-                    <Input placeholder="Número MIC/DTA" value={formData.international?.micDtaNumber} onChange={e => setFormData({...formData, international: {...formData.international!, micDtaNumber: e.target.value}})} />
-                    <Input type="date" value={formData.international?.micDtaExpiry} onChange={e => setFormData({...formData, international: {...formData.international!, micDtaExpiry: e.target.value}})} />
+                    <Input placeholder="Número MIC/DTA" value={formData.international?.micDtaNumber || ''} onChange={e => setFormData({...formData, international: {...formData.international!, micDtaNumber: e.target.value}})} />
+                    <Input type="date" value={formData.international?.micDtaExpiry || ''} onChange={e => setFormData({...formData, international: {...formData.international!, micDtaExpiry: e.target.value}})} />
                   </div>
                   <div className="flex items-center gap-3 p-2 bg-white rounded border">
                     <Switch checked={formData.international?.isMalvinaPresented} onCheckedChange={v => setFormData({...formData, international: {...formData.international!, isMalvinaPresented: v}})} />
@@ -278,8 +278,8 @@ export default function LoadFormWizard() {
                </div>
 
                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t">
-                  <div className="space-y-1"><Label className="text-[10px] uppercase">Contenedor</Label><Input value={formData.international?.containerNumber} onChange={e => setFormData({...formData, international: {...formData.international!, containerNumber: e.target.value}})} /></div>
-                  <div className="space-y-1"><Label className="text-[10px] uppercase">Precinto/Sello</Label><Input value={formData.international?.sealNumber} onChange={e => setFormData({...formData, international: {...formData.international!, sealNumber: e.target.value}})} /></div>
+                  <div className="space-y-1"><Label className="text-[10px] uppercase">Contenedor</Label><Input value={formData.international?.containerNumber || ''} onChange={e => setFormData({...formData, international: {...formData.international!, containerNumber: e.target.value}})} /></div>
+                  <div className="space-y-1"><Label className="text-[10px] uppercase">Precinto/Sello</Label><Input value={formData.international?.sealNumber || ''} onChange={e => setFormData({...formData, international: {...formData.international!, sealNumber: e.target.value}})} /></div>
                   <div className="space-y-1">
                     <Label className="text-[10px] uppercase">Doc Transp.</Label>
                     <Select value={formData.international?.transportDocType} onValueChange={v => setFormData({...formData, international: {...formData.international!, transportDocType: v as any}})}>
@@ -291,7 +291,7 @@ export default function LoadFormWizard() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-1"><Label className="text-[10px] uppercase">N° Doc</Label><Input value={formData.international?.transportDocNumber} onChange={e => setFormData({...formData, international: {...formData.international!, transportDocNumber: e.target.value}})} /></div>
+                  <div className="space-y-1"><Label className="text-[10px] uppercase">N° Doc</Label><Input value={formData.international?.transportDocNumber || ''} onChange={e => setFormData({...formData, international: {...formData.international!, transportDocNumber: e.target.value}})} /></div>
                </div>
             </CardContent>
           </Card>
@@ -304,40 +304,40 @@ export default function LoadFormWizard() {
                 <CardTitle>Aspecto Financeiro</CardTitle>
                 <div className="text-right">
                   <p className="text-[10px] uppercase text-white/50">Total Aduanero (USD)</p>
-                  <p className="text-2xl font-bold text-green-400">${formData.international?.totalCustomsCostsUsd?.toFixed(2)}</p>
+                  <p className="text-2xl font-bold text-green-400">${formData.international?.totalCustomsCostsUsd?.toFixed(2) || '0.00'}</p>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="pt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-4">
                  <Label className="text-blue-600 font-bold flex items-center gap-2"><DollarSign size={14} /> Valor FOB (USD)</Label>
-                 <Input type="number" value={formData.international?.fobValueUsd} onChange={e => setFormData({...formData, international: {...formData.international!, fobValueUsd: parseFloat(e.target.value)}})} />
+                 <Input type="number" value={formData.international?.fobValueUsd || 0} onChange={e => setFormData({...formData, international: {...formData.international!, fobValueUsd: parseFloat(e.target.value)}})} />
               </div>
               <div className="space-y-4">
                  <Label className="text-slate-500 font-bold">Flete (USD)</Label>
-                 <Input type="number" value={formData.international?.freightValueUsd} onChange={e => setFormData({...formData, international: {...formData.international!, freightValueUsd: parseFloat(e.target.value)}})} />
+                 <Input type="number" value={formData.international?.freightValueUsd || 0} onChange={e => setFormData({...formData, international: {...formData.international!, freightValueUsd: parseFloat(e.target.value)}})} />
               </div>
               <div className="space-y-4">
                  <Label className="text-slate-500 font-bold">Seguro (USD)</Label>
-                 <Input type="number" value={formData.international?.insuranceValueUsd} onChange={e => setFormData({...formData, international: {...formData.international!, insuranceValueUsd: parseFloat(e.target.value)}})} />
+                 <Input type="number" value={formData.international?.insuranceValueUsd || 0} onChange={e => setFormData({...formData, international: {...formData.international!, insuranceValueUsd: parseFloat(e.target.value)}})} />
               </div>
               
               <div className="md:col-span-3 grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-xl border">
                  <div className="space-y-1">
                    <p className="text-[9px] uppercase font-bold text-slate-400">Valor CIF</p>
-                   <p className="font-bold">${formData.international?.cifValueUsd?.toFixed(2)}</p>
+                   <p className="font-bold">${formData.international?.cifValueUsd?.toFixed(2) || '0.00'}</p>
                  </div>
                  <div className="space-y-1">
                    <p className="text-[9px] uppercase font-bold text-slate-400">Direitos (15%)</p>
-                   <p className="font-bold text-red-500">${formData.international?.importDutiesUsd?.toFixed(2)}</p>
+                   <p className="font-bold text-red-500">${formData.international?.importDutiesUsd?.toFixed(2) || '0.00'}</p>
                  </div>
                  <div className="space-y-1">
                    <p className="text-[9px] uppercase font-bold text-slate-400">IVA (21%)</p>
-                   <p className="font-bold text-red-500">${formData.international?.customsIvaUsd?.toFixed(2)}</p>
+                   <p className="font-bold text-red-500">${formData.international?.customsIvaUsd?.toFixed(2) || '0.00'}</p>
                  </div>
                  <div className="space-y-1">
                    <p className="text-[9px] uppercase font-bold text-slate-400">Custo Total USD</p>
-                   <p className="font-bold text-green-600">${formData.international?.totalCustomsCostsUsd?.toFixed(2)}</p>
+                   <p className="font-bold text-green-600">${formData.international?.totalCustomsCostsUsd?.toFixed(2) || '0.00'}</p>
                  </div>
               </div>
             </CardContent>

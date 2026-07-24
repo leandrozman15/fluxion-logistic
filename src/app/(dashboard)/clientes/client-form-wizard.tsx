@@ -80,7 +80,25 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
 
   useEffect(() => {
     if (existingClient) {
-      setFormData(existingClient);
+      setFormData({
+        ...existingClient,
+        mainContact: {
+          name: existingClient.mainContact?.name || "",
+          role: existingClient.mainContact?.role || "",
+          email: existingClient.mainContact?.email || "",
+          phone: existingClient.mainContact?.phone || "",
+          whatsapp: existingClient.mainContact?.whatsapp || "",
+        },
+        address: {
+          ...existingClient.address,
+          street: existingClient.address?.street || "",
+          number: existingClient.address?.number || "",
+          city: existingClient.address?.city || "",
+          province: existingClient.address?.province || "",
+          zip: existingClient.address?.zip || "",
+          country: existingClient.address?.country || "Argentina",
+        }
+      });
     }
   }, [existingClient]);
 
@@ -157,7 +175,7 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
           </div>
         </div>
         <Badge variant="outline" className="h-8 px-4 font-mono text-blue-600 bg-blue-50 border-blue-100">
-          {formData.internalCode}
+          {formData.internalCode || ''}
         </Badge>
       </div>
 
@@ -208,11 +226,11 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
                 </div>
                 <div className="space-y-2">
                   <Label>Razón Social / Nombre</Label>
-                  <Input placeholder="Ej: ACME Corp S.A." value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                  <Input placeholder="Ej: ACME Corp S.A." value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} />
                 </div>
                 <div className="space-y-2">
                   <Label>CUIT / Tax ID</Label>
-                  <Input placeholder="30-XXXXXXXX-X" value={formData.cuit} onChange={e => setFormData({...formData, cuit: e.target.value})} />
+                  <Input placeholder="30-XXXXXXXX-X" value={formData.cuit || ''} onChange={e => setFormData({...formData, cuit: e.target.value})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Condición frente al IVA</Label>
@@ -243,31 +261,31 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="md:col-span-2 space-y-2">
                   <Label>Calle / Avenida</Label>
-                  <Input value={formData.address?.street} onChange={e => setFormData({...formData, address: {...formData.address!, street: e.target.value}})} />
+                  <Input value={formData.address?.street || ''} onChange={e => setFormData({...formData, address: {...formData.address!, street: e.target.value}})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Número</Label>
-                  <Input value={formData.address?.number} onChange={e => setFormData({...formData, address: {...formData.address!, number: e.target.value}})} />
+                  <Input value={formData.address?.number || ''} onChange={e => setFormData({...formData, address: {...formData.address!, number: e.target.value}})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Piso / Depto / Galpón</Label>
-                  <Input placeholder="Ej: Galpón 4, Entrada Lateral" value={formData.address?.floor} onChange={e => setFormData({...formData, address: {...formData.address!, floor: e.target.value}})} />
+                  <Input placeholder="Ej: Galpón 4, Entrada Lateral" value={formData.address?.floor || ''} onChange={e => setFormData({...formData, address: {...formData.address!, floor: e.target.value}})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Barrio / Zona Industrial</Label>
-                  <Input placeholder="Ej: Parque Industrial Pilar" value={formData.address?.barrio} onChange={e => setFormData({...formData, address: {...formData.address!, barrio: e.target.value}})} />
+                  <Input placeholder="Ej: Parque Industrial Pilar" value={formData.address?.barrio || ''} onChange={e => setFormData({...formData, address: {...formData.address!, barrio: e.target.value}})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Código Postal</Label>
-                  <Input value={formData.address?.zip} onChange={e => setFormData({...formData, address: {...formData.address!, zip: e.target.value}})} />
+                  <Input value={formData.address?.zip || ''} onChange={e => setFormData({...formData, address: {...formData.address!, zip: e.target.value}})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Ciudad / Localidad</Label>
-                  <Input value={formData.address?.city} onChange={e => setFormData({...formData, address: {...formData.address!, city: e.target.value}})} />
+                  <Input value={formData.address?.city || ''} onChange={e => setFormData({...formData, address: {...formData.address!, city: e.target.value}})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Provincia / Estado</Label>
-                  <Input value={formData.address?.province} onChange={e => setFormData({...formData, address: {...formData.address!, province: e.target.value}})} />
+                  <Input value={formData.address?.province || ''} onChange={e => setFormData({...formData, address: {...formData.address!, province: e.target.value}})} />
                 </div>
                 <div className="space-y-2">
                   <Label>País</Label>
@@ -289,11 +307,11 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <Label className="text-[9px] uppercase text-white/40">Latitud</Label>
-                      <Input className="bg-white/5 border-white/10 h-8 font-mono text-xs" type="number" step="any" value={formData.address?.lat} onChange={e => setFormData({...formData, address: {...formData.address!, lat: parseFloat(e.target.value)}})} />
+                      <Input className="bg-white/5 border-white/10 h-8 font-mono text-xs" type="number" step="any" value={formData.address?.lat || 0} onChange={e => setFormData({...formData, address: {...formData.address!, lat: parseFloat(e.target.value)}})} />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-[9px] uppercase text-white/40">Longitud</Label>
-                      <Input className="bg-white/5 border-white/10 h-8 font-mono text-xs" type="number" step="any" value={formData.address?.lng} onChange={e => setFormData({...formData, address: {...formData.address!, lng: parseFloat(e.target.value)}})} />
+                      <Input className="bg-white/5 border-white/10 h-8 font-mono text-xs" type="number" step="any" value={formData.address?.lng || 0} onChange={e => setFormData({...formData, address: {...formData.address!, lng: parseFloat(e.target.value)}})} />
                     </div>
                   </div>
                 </div>
@@ -331,7 +349,7 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
                  </div>
                  <div className="space-y-2">
                     <Label>N° de Registro Importador/Exportador</Label>
-                    <Input placeholder="Código de Operador" value={formData.comex?.impExpCode} onChange={e => setFormData({...formData, comex: {...formData.comex!, impExpCode: e.target.value}})} />
+                    <Input placeholder="Código de Operador" value={formData.comex?.impExpCode || ''} onChange={e => setFormData({...formData, comex: {...formData.comex!, impExpCode: e.target.value}})} />
                  </div>
                </div>
                <div className="p-4 bg-blue-50 border rounded-xl space-y-4">
@@ -370,11 +388,11 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
                   </div>
                   <div className="space-y-2">
                     <Label>Límite de Crédito Autorizado (ARS)</Label>
-                    <Input type="number" value={formData.creditLimit} onChange={e => setFormData({...formData, creditLimit: parseFloat(e.target.value)})} />
+                    <Input type="number" value={formData.creditLimit || 0} onChange={e => setFormData({...formData, creditLimit: parseFloat(e.target.value)})} />
                   </div>
                   <div className="space-y-2">
                     <Label>Plazo de Entrega Estándar (Horas)</Label>
-                    <Input type="number" value={formData.standardLeadTimeHours} onChange={e => setFormData({...formData, standardLeadTimeHours: parseInt(e.target.value)})} />
+                    <Input type="number" value={formData.standardLeadTimeHours || 0} onChange={e => setFormData({...formData, standardLeadTimeHours: parseInt(e.target.value)})} />
                   </div>
                   <div className="space-y-2">
                     <Label>Forma de Pago Preferida</Label>

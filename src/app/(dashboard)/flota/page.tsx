@@ -209,11 +209,11 @@ export default function FlotaPage() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">Patente / Matrícula <InfoIcon size={12} className="text-slate-400" /></Label>
-                    <Input placeholder="AE-123-BC" value={formData.plate} onChange={e => setFormData({...formData, plate: e.target.value.toUpperCase()})} />
+                    <Input placeholder="AE-123-BC" value={formData.plate || ''} onChange={e => setFormData({...formData, plate: e.target.value.toUpperCase()})} />
                   </div>
                   <div className="space-y-2">
                     <Label>Número de Chasis (VIN)</Label>
-                    <Input placeholder="17 caracteres" maxLength={17} value={formData.chassis} onChange={e => setFormData({...formData, chassis: e.target.value.toUpperCase()})} />
+                    <Input placeholder="17 caracteres" maxLength={17} value={formData.chassis || ''} onChange={e => setFormData({...formData, chassis: e.target.value.toUpperCase()})} />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -273,7 +273,7 @@ export default function FlotaPage() {
                     <Label>Capacidad (Kg)</Label>
                     <Input 
                       type="number" 
-                      value={formData.capacityKg || ''} 
+                      value={formData.capacityKg ?? 0} 
                       onChange={e => handleNumericChange('capacityKg', e.target.value)} 
                     />
                   </div>
@@ -282,7 +282,7 @@ export default function FlotaPage() {
                       <Label className="text-[10px] uppercase font-bold">Largo</Label>
                       <Input 
                         type="number" 
-                        value={formData.dimensions?.length || ''} 
+                        value={formData.dimensions?.length ?? 0} 
                         onChange={e => handleNumericChange('dimensions', e.target.value, 'length')} 
                       />
                     </div>
@@ -290,7 +290,7 @@ export default function FlotaPage() {
                       <Label className="text-[10px] uppercase font-bold">Ancho</Label>
                       <Input 
                         type="number" 
-                        value={formData.dimensions?.width || ''} 
+                        value={formData.dimensions?.width ?? 0} 
                         onChange={e => handleNumericChange('dimensions', e.target.value, 'width')} 
                       />
                     </div>
@@ -298,7 +298,7 @@ export default function FlotaPage() {
                       <Label className="text-[10px] uppercase font-bold">Alto</Label>
                       <Input 
                         type="number" 
-                        value={formData.dimensions?.height || ''} 
+                        value={formData.dimensions?.height ?? 0} 
                         onChange={e => handleNumericChange('dimensions', e.target.value, 'height')} 
                       />
                     </div>
@@ -340,7 +340,7 @@ export default function FlotaPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>Ciudad</Label>
-                    <Input value={formData.location?.city} onChange={e => setFormData({...formData, location: {...formData.location!, city: e.target.value}})} />
+                    <Input value={formData.location?.city || ''} onChange={e => setFormData({...formData, location: {...formData.location!, city: e.target.value}})} />
                   </div>
                   <Button variant="outline" className="w-full text-xs" size="sm" onClick={handleGetLocation}>
                     <Crosshair size={14} className="mr-2" /> GPS
@@ -360,13 +360,13 @@ export default function FlotaPage() {
 
             <DialogFooter className="border-t pt-4">
               <div className="flex justify-between w-full">
-                <Button variant="ghost" onClick={() => setIsAddOpen(false)}>Cancelar</Button>
+                <Button variant="ghost" type="button" onClick={() => setIsAddOpen(false)}>Cancelar</Button>
                 <div className="flex gap-2">
-                  {step > 1 && <Button variant="outline" onClick={handleBack}><ChevronLeft size={16} /></Button>}
+                  {step > 1 && <Button variant="outline" type="button" onClick={handleBack}><ChevronLeft size={16} /></Button>}
                   {step < 3 ? (
-                    <Button onClick={handleNext}>Siguiente <ChevronRight size={16} /></Button>
+                    <Button type="button" onClick={handleNext}>Siguiente <ChevronRight size={16} /></Button>
                   ) : (
-                    <Button onClick={handleAddTruck} className="bg-blue-600" disabled={isSubmitting}>
+                    <Button type="button" onClick={handleAddTruck} className="bg-blue-600" disabled={isSubmitting}>
                       {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <ShieldCheck size={16} className="mr-2" />}
                       Guardar y Habilitar
                     </Button>
@@ -423,8 +423,8 @@ export default function FlotaPage() {
                       className="cursor-pointer hover:bg-slate-50 transition-colors"
                       onClick={() => router.push(`/flota/${truck.id}`)}
                     >
-                      <TableCell><div className="font-bold">{truck.plate}</div></TableCell>
-                      <TableCell>{truck.brand} {truck.model}</TableCell>
+                      <TableCell><div className="font-bold">{truck.plate || ''}</div></TableCell>
+                      <TableCell>{truck.brand || ''} {truck.model || ''}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Progress value={docCount > 0 ? (validDocs / docCount) * 100 : 0} className="h-1.5 w-16" />
@@ -433,7 +433,7 @@ export default function FlotaPage() {
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell>{truck.location?.city}</TableCell>
+                      <TableCell>{truck.location?.city || ''}</TableCell>
                       <TableCell>{getStatusBadge(truck.status)}</TableCell>
                       <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                         <DropdownMenu>
