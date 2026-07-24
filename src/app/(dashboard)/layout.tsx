@@ -2,7 +2,7 @@
 'use client';
 
 import { SidebarProvider, SidebarInset, Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarGroup, SidebarGroupLabel, SidebarGroupContent } from "@/components/ui/sidebar";
-import { Truck, Users, Package, MapPin, TrendingUp, Settings, LogOut, LayoutDashboard, Route, History, Building2, Briefcase } from "lucide-react";
+import { Truck, Users, Package, MapPin, TrendingUp, Settings, LogOut, LayoutDashboard, Route, History, Building2, Briefcase, BarChart3, Mail } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/firebase";
 import { signOut } from "firebase/auth";
@@ -23,7 +23,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { title: "Cargas y Fletes", icon: Package, href: "/cargas" },
     { title: "Sedes Logísticas", icon: Building2, href: "/sedes" },
     { title: "Hoja de Ruta", icon: Route, href: "/rutas" },
-    { title: "Historial Viajes", icon: History, href: "/historial" },
+    { title: "Análisis de Datos", icon: BarChart3, href: "/analytics" },
   ];
 
   const handleLogout = async () => {
@@ -31,7 +31,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     try {
       await signOut(auth);
       router.push("/login");
-      toast({ title: "Sesión cerrada" });
+      toast({ title: "Sesión cerrada correctamente" });
     } catch (error) {
       toast({ variant: "destructive", title: "Error al salir" });
     }
@@ -51,7 +51,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </SidebarHeader>
           <SidebarContent>
             <SidebarGroup>
-              <SidebarGroupLabel>Operaciones</SidebarGroupLabel>
+              <SidebarGroupLabel>Centro de Mando</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   {menuItems.map((item) => (
@@ -64,6 +64,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+
+            <SidebarGroup>
+              <SidebarGroupLabel>Configuración</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={pathname === "/settings/tenant"}>
+                      <Link href="/settings/tenant">
+                        <Settings />
+                        <span>Ajustes del Sistema</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
@@ -84,9 +100,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <h2 className="text-sm font-bold text-slate-500 uppercase tracking-widest">Panel de Control Nacional</h2>
             </div>
             <div className="flex items-center gap-4">
-               <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs">
-                 OP
+               <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">
+                 AR
                </div>
+               <span className="text-sm font-semibold text-slate-700 hidden sm:block">Operador Central</span>
             </div>
           </header>
           <main className="p-6">
