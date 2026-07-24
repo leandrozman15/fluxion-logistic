@@ -28,10 +28,14 @@ import Link from "next/link";
 export default function DashboardPage() {
   const db = useFirestore();
 
-  // Queries para estatísticas
-  const { data: trucks } = useCollection<Truck>(db ? collection(db, "trucks") : null);
-  const { data: drivers } = useCollection<Driver>(db ? collection(db, "drivers") : null);
-  const { data: loads } = useCollection<Load>(db ? collection(db, "loads") : null);
+  // Memoizar as referências das coleções para evitar loops de renderização
+  const trucksQuery = useMemo(() => db ? collection(db, "trucks") : null, [db]);
+  const driversQuery = useMemo(() => db ? collection(db, "drivers") : null, [db]);
+  const loadsQuery = useMemo(() => db ? collection(db, "loads") : null, [db]);
+
+  const { data: trucks } = useCollection<Truck>(trucksQuery);
+  const { data: drivers } = useCollection<Driver>(driversQuery);
+  const { data: loads } = useCollection<Load>(loadsQuery);
 
   const stats = useMemo(() => {
     const activeTrucks = trucks?.filter(t => t.status === 'in_trip').length || 0;
