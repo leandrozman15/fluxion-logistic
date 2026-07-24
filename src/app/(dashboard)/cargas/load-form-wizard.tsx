@@ -47,7 +47,7 @@ export default function LoadFormWizard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState<Partial<Load>>({
-    orderNumber: `FL-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+    orderNumber: "FL-...", // Placeholder to avoid hydration mismatch
     serviceType: 'standard',
     clientName: "",
     origin: { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", zip: "", instructions: "" },
@@ -60,6 +60,14 @@ export default function LoadFormWizard() {
     totalTaxes: 0, totalAmount: 0, paymentMethod: "Contado", billingStatus: "pending",
     priority: "medium", status: "pending", specialInstructions: ""
   });
+
+  // Generate random order number ONLY on the client to avoid hydration mismatch
+  useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      orderNumber: `FL-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
+    }));
+  }, []);
 
   // Queries for assignment
   const trucksQuery = useMemo(() => db ? query(collection(db, "trucks"), where("status", "==", "available")) : null, [db]);
@@ -277,7 +285,7 @@ export default function LoadFormWizard() {
                         </div>
                       )}
                       <p className="text-[10px] text-amber-600 leading-tight">
-                        Nota: Al seleccionar servicios especiales, el sistema filtrará automáticamente la flota apta.
+                        Nota: Al seleccionar servicios especiais, o sistema filtrará automaticamente a frota apta.
                       </p>
                    </div>
                 </div>
@@ -288,25 +296,25 @@ export default function LoadFormWizard() {
 
         {step === 3 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Documentación y Trâmites</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Documentação e Trâmites</CardTitle></CardHeader>
             <CardContent className="space-y-6">
                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-4">
                     <Label>Documentos Requeridos</Label>
                     <div className="space-y-2">
-                       {['Remito / Guía de Despacho', 'Factura de Mercadería', 'Carta de Porte / Manifiesto'].map(doc => (
+                       {['Remito / Guia de Despacho', 'Fatura de Mercadoria', 'Carta de Porte / Manifesto'].map(doc => (
                          <div key={doc} className="flex items-center justify-between p-3 bg-slate-50 border rounded-lg">
                            <span className="text-sm font-medium">{doc}</span>
-                           <Button variant="outline" size="sm" className="h-7 text-[10px]">Adjuntar PDF</Button>
+                           <Button variant="outline" size="sm" className="h-7 text-[10px]">Anexar PDF</Button>
                          </div>
                        ))}
                     </div>
                   </div>
                   <div className="space-y-4">
-                    <Label>Impuestos y Tasas Asociados (ARS)</Label>
+                    <Label>Impostos e Taxas Associados (ARS)</Label>
                     <div className="grid grid-cols-2 gap-3">
                        <div className="space-y-1">
-                         <Label className="text-[10px] text-slate-400">IVA (Flete)</Label>
+                         <Label className="text-[10px] text-slate-400">IVA (Frete)</Label>
                          <Input type="number" value={formData.totalTaxes || ''} onChange={e => handleNumeric('totalTaxes', e.target.value)} />
                        </div>
                     </div>
@@ -321,11 +329,11 @@ export default function LoadFormWizard() {
             <CardHeader className="bg-slate-900 text-white pb-6">
               <div className="flex justify-between items-center">
                 <div>
-                  <CardTitle>Aspecto Financiero</CardTitle>
+                  <CardTitle>Aspecto Financeiro</CardTitle>
                   <CardDescription className="text-white/60">Controle de faturamento e custos logísticos.</CardDescription>
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] uppercase font-bold text-white/50">Total del Flete (ARS)</p>
+                  <p className="text-[10px] uppercase font-bold text-white/50">Total do Frete (ARS)</p>
                   <p className="text-3xl font-bold text-green-400">
                     {formData.totalAmount?.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}
                   </p>
@@ -334,16 +342,16 @@ export default function LoadFormWizard() {
             </CardHeader>
             <CardContent className="pt-8 grid grid-cols-1 md:grid-cols-3 gap-8">
                <div className="space-y-4">
-                 <Label className="font-bold flex items-center gap-2 text-blue-600"><DollarSign size={14} /> Valor Base del Flete</Label>
+                 <Label className="font-bold flex items-center gap-2 text-blue-600"><DollarSign size={14} /> Valor Base do Frete</Label>
                  <Input type="number" className="text-lg font-bold" value={formData.basePrice || ''} onChange={e => handleNumeric('basePrice', e.target.value)} />
                </div>
                <div className="md:col-span-2 grid grid-cols-2 gap-4">
                  <div className="space-y-2">
-                   <Label className="text-xs uppercase text-slate-400">Peajes / Eixos</Label>
+                   <Label className="text-xs uppercase text-slate-400">Pedágios / Eixos</Label>
                    <Input type="number" value={formData.additionalCosts?.peajes || ''} onChange={e => handleNumeric('additionalCosts', e.target.value, 'peajes')} />
                  </div>
                  <div className="space-y-2">
-                   <Label className="text-xs uppercase text-slate-400">Hospedaje / Viáticos</Label>
+                   <Label className="text-xs uppercase text-slate-400">Hospedagem / Viáticos</Label>
                    <Input type="number" value={formData.additionalCosts?.viaticos || ''} onChange={e => handleNumeric('additionalCosts', e.target.value, 'viaticos')} />
                  </div>
                </div>
@@ -351,11 +359,11 @@ export default function LoadFormWizard() {
             <CardFooter className="bg-slate-50 border-t flex justify-between items-center p-6">
                <div className="flex gap-4">
                   <div className="space-y-1">
-                    <Label className="text-[10px] uppercase">Forma de Pago</Label>
+                    <Label className="text-[10px] uppercase">Forma de Pagamento</Label>
                     <Select value={formData.paymentMethod} onValueChange={v => setFormData({...formData, paymentMethod: v})}>
                       <SelectTrigger className="w-[150px] bg-white"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {['Contado', 'Transferencia', '30 días', '60 días'].map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                        {['Contado', 'Transferência', '30 dias', '60 dias'].map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -366,22 +374,22 @@ export default function LoadFormWizard() {
 
         {step === 5 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Asignación de Unidad y Estado</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Atribuição de Unidade e Estado</CardTitle></CardHeader>
             <CardContent className="space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-4">
-                   <Label className="flex items-center gap-2"><Truck size={14} /> Camión Asignado</Label>
+                   <Label className="flex items-center gap-2"><Truck size={14} /> Caminhão Atribuído</Label>
                    <Select value={formData.assignedTruckId} onValueChange={v => setFormData({...formData, assignedTruckId: v})}>
-                     <SelectTrigger><SelectValue placeholder="Seleccionar de flota disponible" /></SelectTrigger>
+                     <SelectTrigger><SelectValue placeholder="Selecionar da frota disponível" /></SelectTrigger>
                      <SelectContent>
                        {availableTrucks?.map(t => <SelectItem key={t.id} value={t.id}>{t.plate} - {t.brand} {t.model} ({t.capacityKg/1000}TN)</SelectItem>)}
                      </SelectContent>
                    </Select>
                 </div>
                 <div className="space-y-4">
-                   <Label className="flex items-center gap-2"><Users size={14} /> Conductor Asignado</Label>
+                   <Label className="flex items-center gap-2"><Users size={14} /> Motorista Atribuído</Label>
                    <Select value={formData.assignedDriverId} onValueChange={v => setFormData({...formData, assignedDriverId: v})}>
-                     <SelectTrigger><SelectValue placeholder="Seleccionar conductor activo" /></SelectTrigger>
+                     <SelectTrigger><SelectValue placeholder="Selecionar motorista ativo" /></SelectTrigger>
                      <SelectContent>
                        {availableDrivers?.map(d => <SelectItem key={d.id} value={d.id}>{d.lastName}, {d.firstName} ({d.licenseClasses.join('/')})</SelectItem>)}
                      </SelectContent>
@@ -390,8 +398,8 @@ export default function LoadFormWizard() {
               </div>
 
               <div className="space-y-4">
-                <Label>Instrucciones Especiales para el Conductor</Label>
-                <Textarea placeholder="Ej: Llamar 30 min antes de llegar, el cliente solo recibe por la mañana..." value={formData.specialInstructions} onChange={e => setFormData({...formData, specialInstructions: e.target.value})} />
+                <Label>Instruções Especiais para o Motorista</Label>
+                <Textarea placeholder="Ex: Chamar 30 min antes de chegar, o cliente só recebe pela manhã..." value={formData.specialInstructions} onChange={e => setFormData({...formData, specialInstructions: e.target.value})} />
               </div>
             </CardContent>
           </Card>
@@ -402,7 +410,7 @@ export default function LoadFormWizard() {
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center z-50">
         <div className="max-w-5xl w-full flex justify-between items-center px-4">
           <Button variant="ghost" onClick={handleBack} disabled={step === 1 || isSubmitting}>
-            <ChevronLeft className="mr-2" size={16} /> Volver
+            <ChevronLeft className="mr-2" size={16} /> Voltar
           </Button>
           <div className="flex gap-2">
             {step < 5 ? (
@@ -412,7 +420,7 @@ export default function LoadFormWizard() {
             ) : (
               <Button onClick={handleSubmit} className="bg-green-600 min-w-[150px]" disabled={isSubmitting}>
                 {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" size={16} />}
-                Confirmar y Registrar
+                Confirmar e Registrar
               </Button>
             )}
           </div>
