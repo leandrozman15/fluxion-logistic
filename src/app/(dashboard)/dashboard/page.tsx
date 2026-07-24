@@ -14,22 +14,22 @@ import {
   Package, 
   TrendingUp, 
   AlertTriangle, 
-  Clock, 
   CheckCircle2,
   Calendar,
   MapPin,
   DollarSign,
   Plus,
   Search,
-  Filter,
   MoreVertical,
-  Phone,
-  FileText,
   Activity,
   Navigation,
   Building2,
   Star,
-  Loader2
+  Loader2,
+  ShieldCheck,
+  Zap,
+  Globe,
+  FileText
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -82,7 +82,6 @@ export default function MonitorOperativoPage() {
 
     const deliveredToday = loads?.filter(l => l.status === 'delivered' && isToday(new Date(l.updatedAt?.seconds * 1000 || l.updatedAt))).length || 0;
     const activeTrucks = trucks?.filter(t => t.status === 'in_trip').length || 0;
-    const availableTrucks = trucks?.filter(t => t.status === 'available').length || 0;
     
     const billingMonth = loads?.filter(l => 
       l.status === 'delivered' && 
@@ -91,7 +90,21 @@ export default function MonitorOperativoPage() {
 
     const incidents = loads?.filter(l => l.status === 'incident').length || 0;
 
-    return { deliveredToday, activeTrucks, availableTrucks, billingMonth, incidents, otif: 94.5 };
+    // Analytics de Valor
+    const totalComexValue = loads?.filter(l => l.serviceType === 'customs' && l.status !== 'cancelled')
+      .reduce((acc, l) => acc + (l.international?.cifValueUsd || 0), 0) || 0;
+
+    const docCompliance = trucks ? (trucks.filter(t => t.documentation?.every(d => d.status === 'valid')).length / (trucks.length || 1)) * 100 : 0;
+
+    return { 
+      deliveredToday, 
+      activeTrucks, 
+      billingMonth, 
+      incidents, 
+      otif: 94.5,
+      totalComexValue,
+      docCompliance
+    };
   }, [trucks, loads]);
 
   const truckIcon = L ? L.divIcon({
@@ -127,7 +140,7 @@ export default function MonitorOperativoPage() {
             <Button size="sm" className="bg-blue-600 hover:bg-blue-700" asChild>
               <Link href="/cargas/nuevo"><Plus size={16} className="mr-1" /> Nueva Carga</Link>
             </Button>
-            <Button variant="outline" size="sm" asChild>
+            <Button variant="outline" size="sm" className="bg-white" asChild>
               <Link href="/sedes"><Building2 size={16} className="mr-1" /> Gestionar Sedes</Link>
             </Button>
           </div>
@@ -154,8 +167,9 @@ export default function MonitorOperativoPage() {
         <KPICard title="Incidencias" value={stats.incidents} icon={AlertTriangle} description="Atención inmediata" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
-        <Card className="lg:col-span-7 border-none shadow-sm overflow-hidden h-[550px] relative">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Mapa y Control Operativo */}
+        <Card className="lg:col-span-8 border-none shadow-sm overflow-hidden h-[550px] relative">
           {mounted && (
             <MapContainer 
               center={[-34.6037, -58.3816]} 
@@ -193,7 +207,7 @@ export default function MonitorOperativoPage() {
                 >
                   <Popup>
                     <div className="p-1">
-                      <div className="font-bold text-sm">Caminhão: {truck.plate}</div>
+                      <div className="font-bold text-sm">Patente: {truck.plate}</div>
                       <div className="text-xs">{truck.brand} {truck.model}</div>
                       <Badge className="mt-2 h-5 text-[10px]">EN RUTA</Badge>
                     </div>
@@ -212,37 +226,138 @@ export default function MonitorOperativoPage() {
           </div>
         </Card>
 
-        <div className="lg:col-span-3 space-y-4">
-          <h3 className="text-sm font-bold flex items-center gap-2 text-slate-800 uppercase tracking-tight">
-            <Building2 size={16} className="text-blue-600" /> Sedes Activas
-          </h3>
-          <div className="space-y-3 overflow-y-auto max-h-[480px] pr-2">
-            {hubs?.map((hub) => (
-              <Card key={hub.id} className={cn(
-                "border shadow-none hover:shadow-md transition-all",
-                hub.isMainBase && "border-amber-200 bg-amber-50/30"
-              )}>
-                <CardContent className="p-3">
-                   <div className="flex justify-between items-start mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className="font-bold text-xs">{hub.name}</div>
-                        {hub.isMainBase && <Star size={12} className="text-amber-500 fill-current" />}
-                      </div>
-                      <Badge variant="outline" className="text-[8px] uppercase">{hub.type}</Badge>
-                   </div>
-                   <div className="flex items-center gap-2 text-[10px] text-slate-500">
-                      <MapPin size={10} /> {hub.city}, {hub.province}
-                   </div>
-                </CardContent>
-              </Card>
-            ))}
-            {(!hubs || hubs.length === 0) && (
-              <div className="text-center py-10 text-slate-400 text-xs italic border-2 border-dashed rounded-xl">
-                No hay sedes registradas.
+        {/* Panel de Valor y Compliance */}
+        <div className="lg:col-span-4 space-y-6">
+          <Card className="border-none shadow-sm bg-slate-900 text-white overflow-hidden">
+            <CardHeader className="pb-2 border-b border-white/10">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Zap className="w-4 h-4 text-yellow-400" /> Business Value Insights
+              </CardTitle>
+              <CardDescription className="text-white/50 text-[10px]">Análisis de rentabilidad y riesgo de mercado.</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6 space-y-6">
+              <div className="space-y-1">
+                <p className="text-[10px] uppercase font-bold text-white/40 tracking-wider">Valor en Tránsito (Comex)</p>
+                <div className="flex items-end gap-2">
+                  <span className="text-3xl font-bold text-green-400">
+                    {stats.totalComexValue.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
+                  </span>
+                  <Badge variant="outline" className="border-green-400/30 text-green-400 text-[8px] mb-1.5">CIF USD</Badge>
+                </div>
               </div>
-            )}
-          </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+                  <p className="text-[9px] uppercase font-bold text-white/40 mb-1">OTIF Global</p>
+                  <p className="text-xl font-bold text-blue-400">{stats.otif}%</p>
+                  <div className="w-full bg-white/10 h-1 rounded-full mt-2">
+                    <div className="bg-blue-400 h-full rounded-full" style={{ width: `${stats.otif}%` }}></div>
+                  </div>
+                </div>
+                <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+                  <p className="text-[9px] uppercase font-bold text-white/40 mb-1">Compliance Legal</p>
+                  <p className="text-xl font-bold text-yellow-400">{Math.round(stats.docCompliance)}%</p>
+                  <div className="w-full bg-white/10 h-1 rounded-full mt-2">
+                    <div className="bg-yellow-400 h-full rounded-full" style={{ width: `${stats.docCompliance}%` }}></div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-white/10 space-y-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-white/60">Ahorro Est. Combustible</span>
+                  <span className="text-green-400 font-bold">+12%</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-white/60">Riesgo de Multas (CNRT)</span>
+                  <span className="text-red-400 font-bold">Bajo</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-none shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs font-bold uppercase text-slate-500">Últimas Cargas Comex</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+               <div className="divide-y">
+                 {loads?.filter(l => l.serviceType === 'customs').slice(0, 3).map((load) => (
+                   <div key={load.id} className="p-3 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+                          <Globe size={14} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">{load.orderNumber}</p>
+                          <p className="text-[10px] text-slate-400 truncate max-w-[120px]">{load.clientName}</p>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="text-[8px] uppercase">{load.status}</Badge>
+                   </div>
+                 ))}
+                 {loads?.filter(l => l.serviceType === 'customs').length === 0 && (
+                   <div className="p-6 text-center text-[10px] text-slate-400 italic">No hay operaciones de aduana activas.</div>
+                 )}
+               </div>
+               <div className="p-3 border-t">
+                 <Button variant="ghost" className="w-full text-[10px] uppercase font-bold text-blue-600 h-8" asChild>
+                   <Link href="/cargas">Ver todas las operaciones <TrendingUp className="ml-1 w-3 h-3" /></Link>
+                 </Button>
+               </div>
+            </CardContent>
+          </Card>
         </div>
+      </div>
+
+      {/* Alertas Críticas (Zona 4) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card className="border-none shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Activity className="w-4 h-4 text-blue-600" /> Actividad Reciente de Flota
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+             {[
+               { time: '15:30', msg: 'Carga #FL-2024-1234 entregada en CABA', user: 'Juan Pérez' },
+               { time: '14:15', msg: 'Camión AE-123-BC asignado a nueva ruta', user: 'Admin' },
+               { time: '13:45', msg: 'Incidencia reportada en Rosario (Demora)', user: 'Carlos L.' }
+             ].map((log, i) => (
+               <div key={i} className="flex gap-4 text-xs border-l-2 border-slate-100 pl-4 pb-2">
+                  <span className="font-mono text-slate-400">{log.time}</span>
+                  <div>
+                    <p className="font-bold text-slate-800">{log.msg}</p>
+                    <p className="text-[10px] text-slate-400">Operador: {log.user}</p>
+                  </div>
+               </div>
+             ))}
+          </CardContent>
+        </Card>
+
+        <Card className="border-none shadow-sm bg-red-50/30 border-red-100">
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2 text-red-700">
+              <AlertTriangle className="w-4 h-4" /> Alertas de Cumplimiento (CNRT/AFIP)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+             <div className="p-3 bg-white border border-red-100 rounded-xl flex items-start gap-3 shadow-sm">
+                <ShieldCheck className="text-red-500 mt-0.5" size={16} />
+                <div>
+                  <p className="text-xs font-bold text-red-900">VTV Vencida: AE-555-ZZ</p>
+                  <p className="text-[10px] text-red-600">La unidad no puede ser asignada a cargas internacionales.</p>
+                </div>
+             </div>
+             <div className="p-3 bg-white border border-orange-100 rounded-xl flex items-start gap-3 shadow-sm">
+                <FileText className="text-orange-500 mt-0.5" size={16} />
+                <div>
+                  <p className="text-xs font-bold text-orange-900">Licencia LINTI por vencer</p>
+                  <p className="text-[10px] text-orange-600">Conductor: Ricardo Darín (Vence en 5 días).</p>
+                </div>
+             </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
