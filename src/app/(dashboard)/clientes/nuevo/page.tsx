@@ -20,16 +20,11 @@ import {
   CheckCircle2, ChevronRight, ChevronLeft, Star, 
   Info, MessageSquare, Crosshair, Anchor
 } from "lucide-react";
-import { Client, ClientType, ClientCategory } from "@/app/lib/types";
+import { Client, ClientType, ClientCategory, Country } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-const PROVINCIAS = [
-  "Buenos Aires", "CABA", "Catamarca", "Chaco", "Chubut", "Córdoba", "Corrientes", 
-  "Entre Ríos", "Formosa", "Jujuy", "La Pampa", "La Rioja", "Mendoza", "Misiones", 
-  "Neuquén", "Río Negro", "Salta", "San Juan", "San Luis", "Santa Cruz", "Santa Fe", 
-  "Santiago del Estero", "Tierra del Fuego", "Tucumán"
-];
+const COUNTRIES: Country[] = ["Argentina", "Chile", "Paraguay", "Bolivia", "Uruguay", "Brasil"];
 
 const INDUSTRIES = [
   "Agropecuario", "Automotriz", "Construcción", "Electrónica", "Energía", 
@@ -39,10 +34,9 @@ const INDUSTRIES = [
 
 const CLIENT_TYPES = [
   { id: 'company', label: 'Empresa / S.A.', icon: Building2 },
-  { id: 'monotax', label: 'Monotributista', icon: User },
+  { id: 'monotax', label: 'Individuo / Freelance', icon: User },
   { id: 'government', label: 'Entidad Pública', icon: ShieldCheck },
-  { id: 'cooperative', label: 'Cooperativa', icon: Globe },
-  { id: 'international', label: 'Internacional', icon: Globe },
+  { id: 'international', label: 'Comercio Exterior', icon: Globe },
 ];
 
 export default function NewClientPage() {
@@ -62,8 +56,8 @@ export default function NewClientPage() {
     status: "active",
     category: "regular",
     mainContact: { name: "", role: "", email: "", phone: "", whatsapp: "" },
-    address: { street: "", number: "", city: "", province: "Buenos Aires", zip: "" },
-    preferredPaymentMethod: "Contado",
+    address: { street: "", number: "", city: "", province: "", country: "Argentina", zip: "" },
+    preferredPaymentMethod: "Transferencia",
     creditLimit: 0,
     standardLeadTimeHours: 48,
     comex: {
@@ -92,7 +86,7 @@ export default function NewClientPage() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
-      toast({ title: "Cliente Registrado", description: `${formData.name} já está ativo.` });
+      toast({ title: "Cliente Registrado", description: `${formData.name} ha sido habilitado en la red regional.` });
       router.push('/clientes');
     } catch (e) {
       toast({ variant: "destructive", title: "Error al guardar" });
@@ -107,8 +101,8 @@ export default function NewClientPage() {
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => router.back()}><ArrowLeft /></Button>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Novo Cliente / Dador de Carga</h1>
-            <p className="text-sm text-slate-500">Cadastro integral e dados de Comércio Exterior.</p>
+            <h1 className="text-2xl font-bold text-slate-900">Nuevo Cliente Regional</h1>
+            <p className="text-sm text-slate-500">Registro de dador de carga para operaciones internacionales.</p>
           </div>
         </div>
         <Badge variant="outline" className="h-8 px-4 font-mono text-blue-600 bg-blue-50 border-blue-100">
@@ -116,7 +110,6 @@ export default function NewClientPage() {
         </Badge>
       </div>
 
-      {/* Steps Indicator */}
       <div className="bg-white p-4 rounded-xl border shadow-sm">
         <div className="flex items-center justify-between">
           {[
@@ -144,43 +137,25 @@ export default function NewClientPage() {
       <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
         {step === 1 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Dados Fiscais e Legais</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Datos Identificatorios</CardTitle></CardHeader>
             <CardContent className="space-y-8">
-              <div className="space-y-4">
-                <Label>Tipo de Cliente</Label>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                  {CLIENT_TYPES.map(type => (
-                    <Button 
-                      key={type.id} 
-                      type="button" 
-                      variant={formData.type === type.id ? "default" : "outline"}
-                      className="flex flex-col h-16 gap-1 p-2"
-                      onClick={() => setFormData({...formData, type: type.id as any})}
-                    >
-                      <type.icon size={16} />
-                      <span className="text-[9px] uppercase font-bold text-center leading-tight">{type.label}</span>
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label>Razão Social</Label>
-                  <Input placeholder="ACME S.A." value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <Label>CUIT (Argentina)</Label>
-                  <Input placeholder="30-XXXXXXXX-X" value={formData.cuit} onChange={e => setFormData({...formData, cuit: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Condição IVA</Label>
-                  <Select value={formData.ivaCondition} onValueChange={v => setFormData({...formData, ivaCondition: v})}>
+                  <Label>País de Operación Principal</Label>
+                  <Select value={formData.address?.country} onValueChange={v => setFormData({...formData, address: {...formData.address!, country: v as Country}})}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {['Responsable Inscripto', 'Monotributista', 'Exento', 'Consumidor Final'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      {COUNTRIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Tax ID (CUIT/RUT/RUC/CNPJ)</Label>
+                  <Input placeholder="Identificación Tributaria" value={formData.cuit} onChange={e => setFormData({...formData, cuit: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Razón Social</Label>
+                  <Input placeholder="Nombre de la Empresa" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Indústria</Label>
@@ -196,37 +171,24 @@ export default function NewClientPage() {
 
         {step === 2 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Contatos e Endereço</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Ubicación y Contacto</CardTitle></CardHeader>
             <CardContent className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Nome do Contato Principal</Label>
-                  <Input value={formData.mainContact?.name} onChange={e => setFormData({...formData, mainContact: {...formData.mainContact!, name: e.target.value}})} />
+                  <Label>Ciudad</Label>
+                  <Input value={formData.address?.city} onChange={e => setFormData({...formData, address: {...formData.address!, city: e.target.value}})} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Cargo</Label>
-                  <Input value={formData.mainContact?.role} onChange={e => setFormData({...formData, mainContact: {...formData.mainContact!, role: e.target.value}})} />
+                  <Label>Estado / Provincia</Label>
+                  <Input value={formData.address?.province} onChange={e => setFormData({...formData, address: {...formData.address!, province: e.target.value}})} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Email</Label>
+                  <Label>Email Comercial</Label>
                   <Input type="email" value={formData.mainContact?.email} onChange={e => setFormData({...formData, mainContact: {...formData.mainContact!, email: e.target.value}})} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Telefone / WhatsApp</Label>
-                  <Input value={formData.mainContact?.phone} onChange={e => setFormData({...formData, mainContact: {...formData.mainContact!, phone: e.target.value}})} />
-                </div>
-              </div>
-              <div className="pt-4 border-t space-y-4">
-                <Label className="text-blue-600 font-bold">Endereço Fiscal</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="col-span-2 space-y-1">
-                    <Label className="text-[10px] uppercase">Rua</Label>
-                    <Input value={formData.address?.street} onChange={e => setFormData({...formData, address: {...formData.address!, street: e.target.value}})} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase">N°</Label>
-                    <Input value={formData.address?.number} onChange={e => setFormData({...formData, address: {...formData.address!, number: e.target.value}})} />
-                  </div>
+                  <Label>Teléfono / WhatsApp</Label>
+                  <Input placeholder="+54 / +56 / +595..." value={formData.mainContact?.phone} onChange={e => setFormData({...formData, mainContact: {...formData.mainContact!, phone: e.target.value}})} />
                 </div>
               </div>
             </CardContent>
@@ -236,81 +198,52 @@ export default function NewClientPage() {
         {step === 3 && (
           <Card className="border-none shadow-sm">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Globe className="text-blue-600" /> Datos de Comercio Exterior</CardTitle>
-              <CardDescription>Informações necessárias para fletes internacionais e aduana.</CardDescription>
+              <CardTitle className="flex items-center gap-2"><Globe className="text-blue-600" /> Operaciones Internacionales</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label>País de Origem / Constituição</Label>
-                  <Select value={formData.comex?.countryOfOrigin} onValueChange={v => setFormData({...formData, comex: {...formData.comex!, countryOfOrigin: v}})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {['Argentina', 'Brasil', 'Chile', 'Uruguay', 'Paraguay', 'Bolivia', 'Perú'].map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Código Importador/Exportador (DGA)</Label>
-                  <Input placeholder="Reg. Aduaneiro" value={formData.comex?.impExpCode} onChange={e => setFormData({...formData, comex: {...formData.comex!, impExpCode: e.target.value}})} />
-                </div>
-              </div>
-
-              <div className="p-4 bg-blue-50 border rounded-xl space-y-4">
-                <Label className="text-blue-900 font-bold uppercase text-[10px]">Registros Sistêmicos Aduaneiros (Argentina)</Label>
-                <div className="grid grid-cols-2 gap-4">
-                   {['sicnea', 'sita', 'malvina', 'vucea'].map(reg => (
-                     <div key={reg} className="flex items-center justify-between p-2 bg-white rounded border">
-                       <span className="text-xs font-bold uppercase">{reg}</span>
-                       <Switch 
-                        checked={(formData.comex?.registrations as any)?.[reg]} 
-                        onCheckedChange={v => setFormData({
-                          ...formData, 
-                          comex: {
-                            ...formData.comex!, 
-                            registrations: {...formData.comex!.registrations, [reg]: v}
-                          }
-                        })} 
-                       />
-                     </div>
-                   ))}
-                </div>
-              </div>
-
-              <div className="bg-amber-50 p-3 rounded-lg border border-amber-200 flex items-start gap-2">
-                <Info className="w-4 h-4 text-amber-600 mt-0.5" />
-                <p className="text-[10px] text-amber-800 leading-relaxed">
-                  <strong>Atenção:</strong> O CUIT do cliente deve figurar em todos os documentos de transporte internacional para evitar atrasos na aduana.
-                </p>
-              </div>
+            <CardContent className="space-y-6">
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="space-y-2">
+                    <Label>País de Origen de Carga</Label>
+                    <Select value={formData.comex?.countryOfOrigin} onValueChange={v => setFormData({...formData, comex: {...formData.comex!, countryOfOrigin: v as Country}})}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {COUNTRIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                 </div>
+                 <div className="space-y-2">
+                    <Label>N° de Registro Importador/Exportador</Label>
+                    <Input placeholder="Código de Operador" value={formData.comex?.impExpCode} onChange={e => setFormData({...formData, comex: {...formData.comex!, impExpCode: e.target.value}})} />
+                 </div>
+               </div>
+               <div className="p-4 bg-blue-50 border rounded-xl flex items-start gap-3">
+                  <Info size={16} className="text-blue-600 mt-1" />
+                  <p className="text-xs text-blue-700">Para el mercado argentino se activarán los chequeos de MALVINA y SICNEA automáticamente si el país de origen es Argentina.</p>
+               </div>
             </CardContent>
           </Card>
         )}
 
         {step === 4 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Perfil Comercial</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Condiciones Comerciales</CardTitle></CardHeader>
             <CardContent className="space-y-6">
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <Label>Categoria</Label>
+                    <Label>Categoría</Label>
                     <Select value={formData.category} onValueChange={(v: any) => setFormData({...formData, category: v})}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="premium">💎 Premium</SelectItem>
+                        <SelectItem value="premium">💎 Cliente Premium</SelectItem>
                         <SelectItem value="regular">⭐ Regular</SelectItem>
                         <SelectItem value="occasional">📦 Ocasional</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Limite de Crédito (ARS)</Label>
+                    <Label>Límite de Crédito Autorizado</Label>
                     <Input type="number" value={formData.creditLimit} onChange={e => setFormData({...formData, creditLimit: parseFloat(e.target.value)})} />
                   </div>
-               </div>
-               <div className="space-y-2">
-                 <Label>Observações Internas</Label>
-                 <Textarea value={formData.internalNotes} onChange={e => setFormData({...formData, internalNotes: e.target.value})} />
                </div>
             </CardContent>
           </Card>
@@ -320,17 +253,17 @@ export default function NewClientPage() {
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center z-50">
         <div className="max-w-5xl w-full flex justify-between items-center px-4">
           <Button variant="ghost" onClick={() => step > 1 ? setStep(step - 1) : router.back()}>
-            <ChevronLeft className="mr-2" size={16} /> Voltar
+            <ChevronLeft size={16} className="mr-1" /> Volver
           </Button>
           <div className="flex gap-2">
             {step < 4 ? (
               <Button onClick={() => setStep(step + 1)} className="bg-blue-600 min-w-[120px]">
-                Próximo <ChevronRight className="ml-2" size={16} />
+                Siguiente <ChevronRight size={16} className="ml-1" />
               </Button>
             ) : (
               <Button onClick={handleSubmit} className="bg-green-600 min-w-[150px]" disabled={isSubmitting}>
                 {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" size={16} />}
-                Registrar Cliente
+                Confirmar Registro
               </Button>
             )}
           </div>

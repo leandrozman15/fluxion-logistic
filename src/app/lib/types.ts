@@ -1,11 +1,11 @@
 
-
 export type TruckStatus = 'available' | 'in_trip' | 'maintenance';
 export type DriverStatus = 'active' | 'in_trip' | 'resting' | 'suspended' | 'retired';
 export type LoadStatus = 'pending' | 'assigned' | 'on_route' | 'delivered' | 'incident' | 'cancelled';
 export type DocStatus = 'pending' | 'valid' | 'expired' | 'warning';
 export type HubType = 'hub' | 'warehouse' | 'office';
 export type MapProvider = 'google' | 'mapbox';
+export type Country = 'Argentina' | 'Chile' | 'Paraguay' | 'Uruguay' | 'Bolivia' | 'Brasil';
 
 export interface VehicleDocument {
   id: string;
@@ -34,7 +34,7 @@ export interface Truck {
   fuelType: string;
   tankLiters: number;
   status: TruckStatus;
-  location: { city: string; province: string; lat: number; lng: number };
+  location: { city: string; province: string; country: Country; lat: number; lng: number };
   documentation: VehicleDocument[];
   createdAt: any;
   updatedAt: any;
@@ -42,7 +42,7 @@ export interface Truck {
 
 export interface Driver {
   id: string;
-  docType: 'DNI' | 'LC' | 'LE' | 'Pasaporte' | 'CI';
+  docType: 'DNI' | 'LC' | 'LE' | 'Pasaporte' | 'CI' | 'RUT' | 'RUC' | 'CPF';
   dni: string;
   firstName: string;
   lastName: string;
@@ -79,6 +79,7 @@ export interface Hub {
   address: string;
   city: string;
   province: string;
+  country: Country;
   lat: number;
   lng: number;
   type: HubType;
@@ -105,14 +106,13 @@ export interface Client {
   internalCode: string;
   type: ClientType;
   name: string;
-  cuit: string;
+  cuit: string; // Genérico para Tax ID
   ivaCondition: string;
   industry: string;
   fiscalObservations?: string;
   
-  // Comércio Exterior
   comex?: {
-    countryOfOrigin: string;
+    countryOfOrigin: Country;
     impExpCode: string;
     operatorType: 'importer' | 'exporter' | 'agent' | 'carrier';
     registrations: {
@@ -132,6 +132,7 @@ export interface Client {
     floor?: string;
     city: string;
     province: string;
+    country: Country;
     zip: string;
     lat?: number;
     lng?: number;
@@ -175,6 +176,7 @@ export interface Load {
     address: string;
     province: string;
     city?: string;
+    country: Country;
     zip: string;
     instructions: string;
     lat?: number;
@@ -188,13 +190,13 @@ export interface Load {
     address: string;
     province: string;
     city?: string;
+    country: Country;
     zip: string;
     instructions: string;
     lat?: number;
     lng?: number;
   };
 
-  // Comércio Exterior / Aduana
   international?: {
     operationType: 'import' | 'export' | 'transit';
     exitCustoms: string;
@@ -231,34 +233,10 @@ export interface Load {
   units: number;
   unitType: string;
 
-  dangerousGoods?: {
-    unClass: string;
-    unNumber: string;
-    packingGroup: string;
-    emergencyPhone: string;
-  };
-  reefer?: {
-    temp: number;
-    tolerance: number;
-  };
-
   basePrice: number;
-  additionalCosts: {
-    peajes: number;
-    parking: number;
-    handling: number;
-    viaticos: number;
-    others: number;
-  };
-  totalTaxes: number;
+  currency: 'ARS' | 'USD' | 'CLP' | 'BRL' | 'PYG' | 'BOB';
   totalAmount: number;
-  paymentMethod: string;
-  billingStatus: 'pending' | 'partial' | 'total' | 'cancelled';
-
-  priority: 'low' | 'medium' | 'high' | 'critical';
   status: LoadStatus;
-  assignedTruckId?: string;
-  assignedDriverId?: string;
   createdAt: any;
   updatedAt: any;
 
