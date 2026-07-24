@@ -12,13 +12,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { 
   Building2, ArrowLeft, ArrowRight, Save, Loader2, 
   MapPin, Phone, Mail, Globe, ShieldCheck, 
   User, CreditCard, Briefcase, Plus, Trash2, 
   CheckCircle2, ChevronRight, ChevronLeft, Star, 
-  Info, MessageSquare, Crosshair
+  Info, MessageSquare, Crosshair, Anchor
 } from "lucide-react";
 import { Client, ClientType, ClientCategory } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -53,7 +53,7 @@ export default function NewClientPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState<Partial<Client>>({
-    internalCode: "CLI-...", // To avoid hydration mismatch
+    internalCode: "",
     type: 'company',
     name: "",
     cuit: "",
@@ -62,24 +62,24 @@ export default function NewClientPage() {
     status: "active",
     category: "regular",
     mainContact: { name: "", role: "", email: "", phone: "", whatsapp: "" },
-    secondaryContacts: [],
-    address: { street: "", number: "", city: "", province: "Buenos Aires", zip: "", lat: 0, lng: 0 },
+    address: { street: "", number: "", city: "", province: "Buenos Aires", zip: "" },
     preferredPaymentMethod: "Contado",
     creditLimit: 0,
     standardLeadTimeHours: 48,
-    internalNotes: ""
+    comex: {
+      countryOfOrigin: "Argentina",
+      impExpCode: "",
+      operatorType: "importer",
+      registrations: { sicnea: false, sita: false, malvina: false, vucea: false }
+    }
   });
 
-  // Generate internal code only on client
   useEffect(() => {
     setFormData(prev => ({
       ...prev,
       internalCode: `CLI-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
     }));
   }, []);
-
-  const handleNext = () => setStep(s => s + 1);
-  const handleBack = () => setStep(s => s - 1);
 
   const handleSubmit = async () => {
     if (!db) return;
@@ -101,31 +101,6 @@ export default function NewClientPage() {
     }
   };
 
-  const handleAddSecondaryContact = () => {
-    setFormData({
-      ...formData,
-      secondaryContacts: [...(formData.secondaryContacts || []), { name: "", role: "", email: "", phone: "" }]
-    });
-  };
-
-  const handleRemoveSecondaryContact = (index: number) => {
-    const updated = [...(formData.secondaryContacts || [])];
-    updated.splice(index, 1);
-    setFormData({ ...formData, secondaryContacts: updated });
-  };
-
-  const handleGetLocation = () => {
-    if (typeof window !== 'undefined' && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition((pos) => {
-        setFormData(prev => ({
-          ...prev,
-          address: { ...prev.address!, lat: pos.coords.latitude, lng: pos.coords.longitude }
-        }));
-        toast({ title: "Localização capturada" });
-      });
-    }
-  };
-
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-24">
       <div className="flex items-center justify-between">
@@ -133,7 +108,7 @@ export default function NewClientPage() {
           <Button variant="ghost" size="icon" onClick={() => router.back()}><ArrowLeft /></Button>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Novo Cliente / Dador de Carga</h1>
-            <p className="text-sm text-slate-500">Cadastro integral de parceiros comerciais e dados fiscais.</p>
+            <p className="text-sm text-slate-500">Cadastro integral e dados de Comércio Exterior.</p>
           </div>
         </div>
         <Badge variant="outline" className="h-8 px-4 font-mono text-blue-600 bg-blue-50 border-blue-100">
@@ -147,7 +122,7 @@ export default function NewClientPage() {
           {[
             { id: 1, label: "Fiscal", icon: CreditCard },
             { id: 2, label: "Contatos", icon: User },
-            { id: 3, label: "Endereços", icon: MapPin },
+            { id: 3, label: "Comex", icon: Anchor },
             { id: 4, label: "Comercial", icon: Briefcase }
           ].map((s) => (
             <div key={s.id} className="flex flex-col items-center gap-1.5 flex-1 relative">
@@ -191,36 +166,29 @@ export default function NewClientPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label>Razão Social / Nome Completo</Label>
-                  <Input placeholder="Ex: ACME Corp S.A." value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                  <Label>Razão Social</Label>
+                  <Input placeholder="ACME S.A." value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
                 </div>
                 <div className="space-y-2">
-                  <Label>CUIT / Identificação Tributária</Label>
+                  <Label>CUIT (Argentina)</Label>
                   <Input placeholder="30-XXXXXXXX-X" value={formData.cuit} onChange={e => setFormData({...formData, cuit: e.target.value})} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Condição frente ao IVA</Label>
+                  <Label>Condição IVA</Label>
                   <Select value={formData.ivaCondition} onValueChange={v => setFormData({...formData, ivaCondition: v})}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {['Responsable Inscripto', 'Monotributista', 'Exento', 'No Responsable', 'Consumidor Final'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      {['Responsable Inscripto', 'Monotributista', 'Exento', 'Consumidor Final'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Ramo de Atividade / Indústria</Label>
+                  <Label>Indústria</Label>
                   <Select value={formData.industry} onValueChange={v => setFormData({...formData, industry: v})}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {INDUSTRIES.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}
-                    </SelectContent>
+                    <SelectContent>{INDUSTRIES.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Observações Fiscais</Label>
-                <Textarea placeholder="Ej: Cliente isento de retenção..." value={formData.fiscalObservations} onChange={e => setFormData({...formData, fiscalObservations: e.target.value})} />
               </div>
             </CardContent>
           </Card>
@@ -228,65 +196,37 @@ export default function NewClientPage() {
 
         {step === 2 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Contatos de Referência</CardTitle></CardHeader>
-            <CardContent className="space-y-8">
-              <div className="p-4 bg-slate-50 rounded-xl border border-dashed space-y-4">
-                <div className="flex items-center gap-2 text-blue-600 font-bold text-xs uppercase mb-2">
-                  <Star size={14} /> Contato Principal
+            <CardHeader><CardTitle>Contatos e Endereço</CardTitle></CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Nome do Contato Principal</Label>
+                  <Input value={formData.mainContact?.name} onChange={e => setFormData({...formData, mainContact: {...formData.mainContact!, name: e.target.value}})} />
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase text-slate-400">Nome Completo</Label>
-                    <Input className="bg-white" value={formData.mainContact?.name} onChange={e => setFormData({...formData, mainContact: {...formData.mainContact!, name: e.target.value}})} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase text-slate-400">Cargo / Função</Label>
-                    <Input className="bg-white" value={formData.mainContact?.role} onChange={e => setFormData({...formData, mainContact: {...formData.mainContact!, role: e.target.value}})} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase text-slate-400">Email Comercial</Label>
-                    <Input className="bg-white" type="email" value={formData.mainContact?.email} onChange={e => setFormData({...formData, mainContact: {...formData.mainContact!, email: e.target.value}})} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase text-slate-400">Telefone / WhatsApp</Label>
-                    <Input className="bg-white" value={formData.mainContact?.phone} onChange={e => setFormData({...formData, mainContact: {...formData.mainContact!, phone: e.target.value}})} />
-                  </div>
+                <div className="space-y-2">
+                  <Label>Cargo</Label>
+                  <Input value={formData.mainContact?.role} onChange={e => setFormData({...formData, mainContact: {...formData.mainContact!, role: e.target.value}})} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input type="email" value={formData.mainContact?.email} onChange={e => setFormData({...formData, mainContact: {...formData.mainContact!, email: e.target.value}})} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Telefone / WhatsApp</Label>
+                  <Input value={formData.mainContact?.phone} onChange={e => setFormData({...formData, mainContact: {...formData.mainContact!, phone: e.target.value}})} />
                 </div>
               </div>
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs uppercase font-bold text-slate-500">Contatos Secundários / Apoio</Label>
-                  <Button variant="outline" size="sm" onClick={handleAddSecondaryContact}><Plus size={14} className="mr-1" /> Adicionar</Button>
-                </div>
-                <div className="grid gap-3">
-                  {formData.secondaryContacts?.map((contact, i) => (
-                    <div key={i} className="grid grid-cols-1 md:grid-cols-4 gap-3 p-3 bg-white border rounded-lg relative group">
-                      <Input placeholder="Nome" value={contact.name} onChange={e => {
-                        const updated = [...formData.secondaryContacts!];
-                        updated[i].name = e.target.value;
-                        setFormData({...formData, secondaryContacts: updated});
-                      }} />
-                      <Input placeholder="Cargo" value={contact.role} onChange={e => {
-                        const updated = [...formData.secondaryContacts!];
-                        updated[i].role = e.target.value;
-                        setFormData({...formData, secondaryContacts: updated});
-                      }} />
-                      <Input placeholder="Telefone" value={contact.phone} onChange={e => {
-                        const updated = [...formData.secondaryContacts!];
-                        updated[i].phone = e.target.value;
-                        setFormData({...formData, secondaryContacts: updated});
-                      }} />
-                      <div className="flex gap-2">
-                        <Input placeholder="Email" className="flex-1" value={contact.email} onChange={e => {
-                          const updated = [...formData.secondaryContacts!];
-                          updated[i].email = e.target.value;
-                          setFormData({...formData, secondaryContacts: updated});
-                        }} />
-                        <Button variant="ghost" size="icon" className="text-red-500 opacity-0 group-hover:opacity-100" onClick={() => handleRemoveSecondaryContact(i)}><Trash2 size={14} /></Button>
-                      </div>
-                    </div>
-                  ))}
+              <div className="pt-4 border-t space-y-4">
+                <Label className="text-blue-600 font-bold">Endereço Fiscal</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="col-span-2 space-y-1">
+                    <Label className="text-[10px] uppercase">Rua</Label>
+                    <Input value={formData.address?.street} onChange={e => setFormData({...formData, address: {...formData.address!, street: e.target.value}})} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase">N°</Label>
+                    <Input value={formData.address?.number} onChange={e => setFormData({...formData, address: {...formData.address!, number: e.target.value}})} />
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -295,59 +235,53 @@ export default function NewClientPage() {
 
         {step === 3 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Localização e Logística</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Globe className="text-blue-600" /> Datos de Comercio Exterior</CardTitle>
+              <CardDescription>Informações necessárias para fletes internacionais e aduana.</CardDescription>
+            </CardHeader>
             <CardContent className="space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <Label>Endereço Fiscal</Label>
-                    <Button variant="outline" size="sm" className="h-7 text-[10px]" onClick={handleGetLocation}><Crosshair size={12} className="mr-1" /> GPS</Button>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="col-span-2 space-y-1">
-                      <Label className="text-[10px] uppercase text-slate-400">Rua / Avenida</Label>
-                      <Input value={formData.address?.street} onChange={e => setFormData({...formData, address: {...formData.address!, street: e.target.value}})} />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase text-slate-400">Número</Label>
-                      <Input value={formData.address?.number} onChange={e => setFormData({...formData, address: {...formData.address!, number: e.target.value}})} />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase text-slate-400">Cidade</Label>
-                      <Input value={formData.address?.city} onChange={e => setFormData({...formData, address: {...formData.address!, city: e.target.value}})} />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase text-slate-400">Província</Label>
-                      <Select value={formData.address?.province} onValueChange={v => setFormData({...formData, address: {...formData.address!, province: v}})}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>{PROVINCIAS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+                <div className="space-y-2">
+                  <Label>País de Origem / Constituição</Label>
+                  <Select value={formData.comex?.countryOfOrigin} onValueChange={v => setFormData({...formData, comex: {...formData.comex!, countryOfOrigin: v}})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {['Argentina', 'Brasil', 'Chile', 'Uruguay', 'Paraguay', 'Bolivia', 'Perú'].map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
-                
-                <div className="space-y-4">
-                  <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl space-y-3">
-                    <div className="flex items-center gap-2 text-amber-700 font-bold text-xs uppercase">
-                      <Info size={14} /> Direções Especiais
-                    </div>
-                    <p className="text-[10px] text-amber-600 leading-relaxed">
-                      O sistema utiliza estas coordenadas para otimizar o cálculo de quilometragem e tempo de viagem nos fletes atribuídos.
-                    </p>
-                    <div className="flex gap-2">
-                      <div className="flex-1 space-y-1">
-                        <Label className="text-[9px] uppercase font-bold text-amber-400">Latitud</Label>
-                        <Input className="bg-white h-8 text-xs" value={formData.address?.lat} readOnly />
-                      </div>
-                      <div className="flex-1 space-y-1">
-                        <Label className="text-[9px] uppercase font-bold text-amber-400">Longitud</Label>
-                        <Input className="bg-white h-8 text-xs" value={formData.address?.lng} readOnly />
-                      </div>
-                    </div>
-                  </div>
+                <div className="space-y-2">
+                  <Label>Código Importador/Exportador (DGA)</Label>
+                  <Input placeholder="Reg. Aduaneiro" value={formData.comex?.impExpCode} onChange={e => setFormData({...formData, comex: {...formData.comex!, impExpCode: e.target.value}})} />
                 </div>
+              </div>
+
+              <div className="p-4 bg-blue-50 border rounded-xl space-y-4">
+                <Label className="text-blue-900 font-bold uppercase text-[10px]">Registros Sistêmicos Aduaneiros (Argentina)</Label>
+                <div className="grid grid-cols-2 gap-4">
+                   {['sicnea', 'sita', 'malvina', 'vucea'].map(reg => (
+                     <div key={reg} className="flex items-center justify-between p-2 bg-white rounded border">
+                       <span className="text-xs font-bold uppercase">{reg}</span>
+                       <Switch 
+                        checked={(formData.comex?.registrations as any)?.[reg]} 
+                        onCheckedChange={v => setFormData({
+                          ...formData, 
+                          comex: {
+                            ...formData.comex!, 
+                            registrations: {...formData.comex!.registrations, [reg]: v}
+                          }
+                        })} 
+                       />
+                     </div>
+                   ))}
+                </div>
+              </div>
+
+              <div className="bg-amber-50 p-3 rounded-lg border border-amber-200 flex items-start gap-2">
+                <Info className="w-4 h-4 text-amber-600 mt-0.5" />
+                <p className="text-[10px] text-amber-800 leading-relaxed">
+                  <strong>Atenção:</strong> O CUIT do cliente deve figurar em todos os documentos de transporte internacional para evitar atrasos na aduana.
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -355,66 +289,48 @@ export default function NewClientPage() {
 
         {step === 4 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Perfil Comercial e Configurações</CardTitle></CardHeader>
-            <CardContent className="space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="space-y-2">
-                  <Label>Categoria do Cliente</Label>
-                  <Select value={formData.category} onValueChange={(v: ClientCategory) => setFormData({...formData, category: v})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="premium">💎 Premium</SelectItem>
-                      <SelectItem value="regular">⭐ Regular</SelectItem>
-                      <SelectItem value="occasional">📦 Ocasional</SelectItem>
-                      <SelectItem value="potential">🆕 Potencial</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Forma de Pagamento Preferida</Label>
-                  <Select value={formData.preferredPaymentMethod} onValueChange={v => setFormData({...formData, preferredPaymentMethod: v})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {['Contado', '30 dias', '60 dias', 'Contraentrega', 'Transferência'].map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Limite de Crédito (ARS)</Label>
-                  <Input type="number" value={formData.creditLimit} onChange={e => setFormData({...formData, creditLimit: parseFloat(e.target.value) || 0})} />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label>Prazo de Entrega Padrão (Horas)</Label>
-                  <Input type="number" value={formData.standardLeadTimeHours} onChange={e => setFormData({...formData, standardLeadTimeHours: parseInt(e.target.value) || 48})} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Observações Internas (Privado)</Label>
-                  <Textarea placeholder="Notas de uso exclusivo administrativo..." value={formData.internalNotes} onChange={e => setFormData({...formData, internalNotes: e.target.value})} />
-                </div>
-              </div>
+            <CardHeader><CardTitle>Perfil Comercial</CardTitle></CardHeader>
+            <CardContent className="space-y-6">
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label>Categoria</Label>
+                    <Select value={formData.category} onValueChange={(v: any) => setFormData({...formData, category: v})}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="premium">💎 Premium</SelectItem>
+                        <SelectItem value="regular">⭐ Regular</SelectItem>
+                        <SelectItem value="occasional">📦 Ocasional</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Limite de Crédito (ARS)</Label>
+                    <Input type="number" value={formData.creditLimit} onChange={e => setFormData({...formData, creditLimit: parseFloat(e.target.value)})} />
+                  </div>
+               </div>
+               <div className="space-y-2">
+                 <Label>Observações Internas</Label>
+                 <Textarea value={formData.internalNotes} onChange={e => setFormData({...formData, internalNotes: e.target.value})} />
+               </div>
             </CardContent>
           </Card>
         )}
       </div>
 
-      {/* Footer Navigation */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center z-50">
         <div className="max-w-5xl w-full flex justify-between items-center px-4">
-          <Button variant="ghost" onClick={handleBack} disabled={step === 1 || isSubmitting}>
+          <Button variant="ghost" onClick={() => step > 1 ? setStep(step - 1) : router.back()}>
             <ChevronLeft className="mr-2" size={16} /> Voltar
           </Button>
           <div className="flex gap-2">
             {step < 4 ? (
-              <Button onClick={handleNext} className="bg-blue-600 min-w-[120px]">
+              <Button onClick={() => setStep(step + 1)} className="bg-blue-600 min-w-[120px]">
                 Próximo <ChevronRight className="ml-2" size={16} />
               </Button>
             ) : (
               <Button onClick={handleSubmit} className="bg-green-600 min-w-[150px]" disabled={isSubmitting}>
                 {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" size={16} />}
-                Confirmar e Registrar
+                Registrar Cliente
               </Button>
             )}
           </div>

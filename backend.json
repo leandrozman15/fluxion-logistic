@@ -28,16 +28,39 @@
           }
         }
       },
+      "clients": {
+        "description": "Cartera de clientes locales e internacionales",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "cuit": { "type": "string" },
+            "comex": {
+              "type": "object",
+              "properties": {
+                "countryOfOrigin": { "type": "string" },
+                "impExpCode": { "type": "string" }
+              }
+            }
+          }
+        }
+      },
       "loads": {
-        "description": "Cargas y operaciones de flete",
+        "description": "Cargas y operaciones de flete nacional/internacional",
         "schema": {
           "type": "object",
           "properties": {
             "orderNumber": { "type": "string" },
             "clientName": { "type": "string" },
-            "description": { "type": "string" },
-            "totalAmount": { "type": "number" },
-            "status": { "type": "string", "enum": ["pending", "assigned", "on_route", "delivered", "incident", "cancelled"] }
+            "status": { "type": "string", "enum": ["pending", "assigned", "on_route", "delivered", "incident", "cancelled"] },
+            "international": {
+              "type": "object",
+              "properties": {
+                "operationType": { "type": "string" },
+                "declarationNumber": { "type": "string" },
+                "cifValueUsd": { "type": "number" }
+              }
+            }
           }
         }
       }

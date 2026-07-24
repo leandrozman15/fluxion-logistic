@@ -109,6 +109,19 @@ export interface Client {
   industry: string;
   fiscalObservations?: string;
   
+  // Comércio Exterior
+  comex?: {
+    countryOfOrigin: string;
+    impExpCode: string;
+    operatorType: 'importer' | 'exporter' | 'agent' | 'carrier';
+    registrations: {
+      sicnea: boolean;
+      sita: boolean;
+      malvina: boolean;
+      vucea: boolean;
+    }
+  };
+
   mainContact: ClientContact;
   secondaryContacts?: Partial<ClientContact>[];
   
@@ -123,23 +136,10 @@ export interface Client {
     lng?: number;
   };
   
-  useSameForShipping?: boolean;
-  shippingAddress?: {
-    street: string;
-    number: string;
-    city: string;
-    province: string;
-    zip: string;
-  };
-  
   category: ClientCategory;
   preferredPaymentMethod: string;
   creditLimit: number;
   standardLeadTimeHours: number;
-  preferentialTariff?: {
-    type: 'km' | 'kg' | 'pallet';
-    amount: number;
-  };
   internalNotes?: string;
   
   status: 'active' | 'inactive';
@@ -193,6 +193,29 @@ export interface Load {
     lng?: number;
   };
 
+  // Comércio Exterior / Aduana
+  international?: {
+    operationType: 'import' | 'export' | 'transit';
+    exitCustoms: string;
+    entryCustoms: string;
+    declarationNumber: string;
+    micDtaNumber: string;
+    micDtaExpiry?: string;
+    containerNumber: string;
+    sealNumber: string;
+    transportDocType: 'BL' | 'CP' | 'AWB';
+    transportDocNumber: string;
+    fobValueUsd: number;
+    freightValueUsd: number;
+    insuranceValueUsd: number;
+    cifValueUsd: number;
+    importDutiesUsd: number;
+    customsIvaUsd: number;
+    totalCustomsCostsUsd: number;
+    relacionCargaAerea?: string;
+    isMalvinaPresented?: boolean;
+  };
+
   pickupDate: string;
   pickupTimeFrom: string;
   pickupTimeTo: string;
@@ -235,10 +258,8 @@ export interface Load {
   status: LoadStatus;
   assignedTruckId?: string;
   assignedDriverId?: string;
-  routePlan?: string;
-  distanceKm?: number;
-  estimatedHours?: number;
-  specialInstructions?: string;
+  createdAt: any;
+  updatedAt: any;
 
   tracking?: {
     currentLat: number;
@@ -251,15 +272,10 @@ export interface Load {
     timeOnRouteMinutes: number;
     timeStoppedMinutes: number;
     estimatedFuelLiters: number;
-    etaEstimated?: any;
-    etaAdjusted?: any;
     lastUpdateAt: any;
     history: TrackingPoint[];
     alerts: DrivingAlert[];
   };
-
-  createdAt: any;
-  updatedAt: any;
 }
 
 export interface TenantSettings {
@@ -267,19 +283,6 @@ export interface TenantSettings {
   mapApiKey?: string;
   fleetEngineEnabled?: boolean;
   onboardingCompleted?: boolean;
-  finalScoreMode?: 'weighted' | 'max';
-  scoringWeights?: { effective: number; ai: number };
-  dailyTopLimit?: number;
-  requireContactMethod?: string;
-  cooldownDays?: number;
-  hourlyEmailLimit?: number;
-  dailyEmailLimit?: number;
-  defaultTemplateId?: string | null;
-  smtpConfig?: {
-    user: string;
-    pass: string;
-    fromName?: string;
-  };
 }
 
 export interface Tenant {

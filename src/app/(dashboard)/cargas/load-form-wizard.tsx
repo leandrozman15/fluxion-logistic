@@ -12,16 +12,16 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { 
   Package, ArrowLeft, ArrowRight, Save, Loader2, 
   MapPin, Calendar, Clock, DollarSign, Truck, 
   Users, Info, AlertTriangle, ShieldCheck, 
-  Thermometer, Droplets, Anchor, CheckCircle2, ChevronRight, ChevronLeft, Building2, UserPlus
+  Thermometer, Anchor, CheckCircle2, ChevronRight, ChevronLeft, Building2, Globe, FileText, Zap
 } from "lucide-react";
 import { Load, Truck as TruckType, Driver, Client } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import Link from "next/link";
 
 const PROVINCIAS = [
   "Buenos Aires", "CABA", "Catamarca", "Chaco", "Chubut", "Córdoba", "Corrientes", 
@@ -30,14 +30,14 @@ const PROVINCIAS = [
   "Santiago del Estero", "Tierra del Fuego", "Tucumán"
 ];
 
+const ADUANAS = ["Ezeiza", "Puerto Buenos Aires", "Santos (BR)", "Paso de los Libres", "Uruguaiana (BR)", "Mendoza (Los Andes)"];
+
 const SERVICE_TYPES = [
   { id: 'standard', label: 'Carga General', icon: Package },
   { id: 'FTL', label: 'Carga Completa (FTL)', icon: Truck },
-  { id: 'LTL', label: 'Carga Fraccionada (LTL)', icon: Anchor },
   { id: 'reefer', label: 'Refrigerado', icon: Thermometer },
   { id: 'dangerous', label: 'Carga Peligrosa', icon: AlertTriangle },
-  { id: 'oversized', label: 'Sobredimensionada', icon: Info },
-  { id: 'customs', label: 'Aduana (Imp/Exp)', icon: ShieldCheck },
+  { id: 'customs', label: 'Internacional / Aduana', icon: Globe },
 ];
 
 export default function LoadFormWizard() {
@@ -48,10 +48,9 @@ export default function LoadFormWizard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState<Partial<Load>>({
-    orderNumber: "FL-...", // Placeholder to avoid hydration mismatch
+    orderNumber: "",
     serviceType: 'standard',
     clientName: "",
-    clientId: "",
     origin: { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", zip: "", instructions: "" },
     destination: { name: "", phone: "", contact: "", address: "", province: "CABA", zip: "", instructions: "" },
     pickupDate: "", pickupTimeFrom: "08:00", pickupTimeTo: "17:00",
@@ -60,10 +59,28 @@ export default function LoadFormWizard() {
     basePrice: 0, 
     additionalCosts: { peajes: 0, parking: 0, handling: 0, viaticos: 0, others: 0 },
     totalTaxes: 0, totalAmount: 0, paymentMethod: "Contado", billingStatus: "pending",
-    priority: "medium", status: "pending", specialInstructions: ""
+    priority: "medium", status: "pending",
+    international: {
+      operationType: 'export',
+      exitCustoms: "Ezeiza",
+      entryCustoms: "Santos (BR)",
+      declarationNumber: "",
+      micDtaNumber: "",
+      containerNumber: "",
+      sealNumber: "",
+      transportDocType: 'BL',
+      transportDocNumber: "",
+      fobValueUsd: 0,
+      freightValueUsd: 0,
+      insuranceValueUsd: 0,
+      cifValueUsd: 0,
+      importDutiesUsd: 0,
+      customsIvaUsd: 0,
+      totalCustomsCostsUsd: 0,
+      isMalvinaPresented: false
+    }
   });
 
-  // Generate random order number ONLY on the client to avoid hydration mismatch
   useEffect(() => {
     setFormData(prev => ({
       ...prev,
@@ -71,26 +88,31 @@ export default function LoadFormWizard() {
     }));
   }, []);
 
-  // Queries for selectors
-  const clientsQuery = useMemo(() => db ? query(collection(db, "clients"), orderBy("name")) : null, [db]);
-  const trucksQuery = useMemo(() => db ? query(collection(db, "trucks"), where("status", "==", "available")) : null, [db]);
-  const driversQuery = useMemo(() => db ? query(collection(db, "drivers"), where("status", "==", "active")) : null, [db]);
-  
-  const { data: clients } = useCollection<Client>(clientsQuery);
-  const { data: availableTrucks } = useCollection<TruckType>(trucksQuery);
-  const { data: availableDrivers } = useCollection<Driver>(driversQuery);
-
-  // Auto-calculate Total
+  // Auto-calculo Comex CIF
   useEffect(() => {
-    const base = formData.basePrice || 0;
-    const add = formData.additionalCosts || { peajes: 0, parking: 0, handling: 0, viaticos: 0, others: 0 };
-    const addTotal = add.peajes + add.parking + add.handling + add.viaticos + add.others;
-    const taxes = formData.totalTaxes || 0;
-    setFormData(prev => ({ ...prev, totalAmount: base + addTotal + taxes }));
-  }, [formData.basePrice, formData.additionalCosts, formData.totalTaxes]);
+    if (formData.serviceType === 'customs' && formData.international) {
+      const fob = formData.international.fobValueUsd || 0;
+      const flete = formData.international.freightValueUsd || 0;
+      const seguro = formData.international.insuranceValueUsd || 0;
+      const cif = fob + flete + seguro;
+      const duties = cif * 0.15; // Simulação de taxa
+      const iva = (cif + duties) * 0.21;
+      
+      setFormData(prev => ({
+        ...prev,
+        international: {
+          ...prev.international!,
+          cifValueUsd: cif,
+          importDutiesUsd: duties,
+          customsIvaUsd: iva,
+          totalCustomsCostsUsd: duties + iva
+        }
+      }));
+    }
+  }, [formData.international?.fobValueUsd, formData.international?.freightValueUsd, formData.international?.insuranceValueUsd, formData.serviceType]);
 
-  const handleNext = () => setStep(s => s + 1);
-  const handleBack = () => setStep(s => s - 1);
+  const clientsQuery = useMemo(() => db ? query(collection(db, "clients"), orderBy("name")) : null, [db]);
+  const { data: clients } = useCollection<Client>(clientsQuery);
 
   const handleSubmit = async () => {
     if (!db) return;
@@ -112,39 +134,6 @@ export default function LoadFormWizard() {
     }
   };
 
-  const handleNumeric = (path: string, val: string, sub?: string) => {
-    const num = val === "" ? 0 : parseFloat(val);
-    const final = isNaN(num) ? 0 : num;
-    if (sub) {
-      setFormData(prev => ({
-        ...prev,
-        [path]: { ...((prev as any)[path] || {}), [sub]: final }
-      }));
-    } else {
-      setFormData(prev => ({ ...prev, [path]: final }));
-    }
-  };
-
-  const handleSelectClient = (clientId: string) => {
-    const selected = clients?.find(c => c.id === clientId);
-    if (selected) {
-      setFormData({
-        ...formData,
-        clientId: selected.id,
-        clientName: selected.name,
-        // Auto-fill origin if it's empty
-        origin: formData.origin?.name ? formData.origin : {
-          ...formData.origin!,
-          name: selected.name,
-          address: selected.address,
-          city: selected.city,
-          province: selected.province,
-          phone: selected.phone
-        }
-      });
-    }
-  };
-
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-24">
       <div className="flex items-center justify-between">
@@ -152,7 +141,7 @@ export default function LoadFormWizard() {
           <Button variant="ghost" size="icon" onClick={() => router.back()}><ArrowLeft /></Button>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Nueva Operación Logística</h1>
-            <p className="text-sm text-slate-500">Registro integral de fletes, mercadería y aspectos financieros.</p>
+            <p className="text-sm text-slate-500">Gestión de fletes nacionales e internacionales.</p>
           </div>
         </div>
         <Badge variant="outline" className="h-8 px-4 font-mono text-blue-600 bg-blue-50 border-blue-100">
@@ -160,13 +149,12 @@ export default function LoadFormWizard() {
         </Badge>
       </div>
 
-      {/* Steps Indicator */}
       <div className="bg-white p-4 rounded-xl border shadow-sm">
         <div className="flex items-center justify-between">
           {[
             { id: 1, label: "Gerais", icon: Info },
             { id: 2, label: "Carga", icon: Package },
-            { id: 3, label: "Docs", icon: ShieldCheck },
+            { id: 3, label: "Aduana", icon: Globe },
             { id: 4, label: "Financeiro", icon: DollarSign },
             { id: 5, label: "Asignación", icon: Truck }
           ].map((s) => (
@@ -186,32 +174,26 @@ export default function LoadFormWizard() {
         </div>
       </div>
 
-      <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <div className="animate-in fade-in duration-300">
         {step === 1 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Datos Generales del Flete</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Configuración Inicial</CardTitle></CardHeader>
             <CardContent className="space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
-                  <Label className="flex items-center gap-2"><Building2 size={14} className="text-blue-600" /> Cliente / Dador de Carga</Label>
-                  <div className="flex gap-2">
-                    <Select value={formData.clientId} onValueChange={handleSelectClient}>
-                      <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="Seleccionar cliente registrado" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {clients?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <Button variant="outline" size="icon" asChild title="Nuevo Cliente">
-                      <Link href="/clientes"><UserPlus size={16} /></Link>
-                    </Button>
-                  </div>
+                  <Label>Cliente / Dador de Carga</Label>
+                  <Select value={formData.clientId} onValueChange={v => {
+                    const c = clients?.find(cl => cl.id === v);
+                    setFormData({...formData, clientId: v, clientName: c?.name || ""});
+                  }}>
+                    <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                    <SelectContent>{clients?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-4">
                   <Label>Tipo de Servicio</Label>
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-                    {SERVICE_TYPES.slice(0, 4).map(type => (
+                  <div className="grid grid-cols-5 gap-2">
+                    {SERVICE_TYPES.map(type => (
                       <Button 
                         key={type.id} 
                         type="button" 
@@ -220,67 +202,9 @@ export default function LoadFormWizard() {
                         onClick={() => setFormData({...formData, serviceType: type.id as any})}
                       >
                         <type.icon size={16} />
-                        <span className="text-[8px] uppercase font-bold leading-tight">{type.label}</span>
+                        <span className="text-[7px] uppercase font-bold leading-tight">{type.label}</span>
                       </Button>
                     ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* Origen */}
-                <div className="space-y-4 p-4 bg-slate-50 rounded-xl border border-dashed">
-                  <div className="flex items-center gap-2 text-blue-600 font-bold text-xs uppercase mb-2">
-                    <MapPin size={14} /> Remitente (Origen)
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-[10px] uppercase text-slate-400">Nombre / Razón Social</Label>
-                    <Input className="bg-white" value={formData.origin?.name} onChange={e => setFormData({...formData, origin: {...formData.origin!, name: e.target.value}})} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase text-slate-400">Teléfono</Label>
-                      <Input className="bg-white" value={formData.origin?.phone} onChange={e => setFormData({...formData, origin: {...formData.origin!, phone: e.target.value}})} />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase text-slate-400">Provincia</Label>
-                      <Select value={formData.origin?.province} onValueChange={v => setFormData({...formData, origin: {...formData.origin!, province: v}})}>
-                        <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                        <SelectContent>{PROVINCIAS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-[10px] uppercase text-slate-400">Dirección Completa</Label>
-                    <Input className="bg-white" value={formData.origin?.address} onChange={e => setFormData({...formData, origin: {...formData.origin!, address: e.target.value}})} />
-                  </div>
-                </div>
-
-                {/* Destino */}
-                <div className="space-y-4 p-4 bg-blue-50/30 rounded-xl border border-dashed border-blue-200">
-                  <div className="flex items-center gap-2 text-blue-700 font-bold text-xs uppercase mb-2">
-                    <MapPin size={14} /> Destinatario (Destino)
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-[10px] uppercase text-slate-400">Nombre / Razón Social</Label>
-                    <Input className="bg-white" value={formData.destination?.name} onChange={e => setFormData({...formData, destination: {...formData.destination!, name: e.target.value}})} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase text-slate-400">Teléfono</Label>
-                      <Input className="bg-white" value={formData.destination?.phone} onChange={e => setFormData({...formData, destination: {...formData.destination!, phone: e.target.value}})} />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase text-slate-400">Provincia</Label>
-                      <Select value={formData.destination?.province} onValueChange={v => setFormData({...formData, destination: {...formData.destination!, province: v}})}>
-                        <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                        <SelectContent>{PROVINCIAS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-[10px] uppercase text-slate-400">Dirección Completa</Label>
-                    <Input className="bg-white" value={formData.destination?.address} onChange={e => setFormData({...formData, destination: {...formData.destination!, address: e.target.value}})} />
                   </div>
                 </div>
               </div>
@@ -290,78 +214,84 @@ export default function LoadFormWizard() {
 
         {step === 2 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Detalle de la Carga</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Detalle de la Mercadería</CardTitle></CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Descripción de la Mercadería</Label>
-                    <Textarea placeholder="Ej: Bobinas de acero, Granos, Pallets..." value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Peso Total (Kg)</Label>
-                      <Input type="number" value={formData.weightKg || ''} onChange={e => handleNumeric('weightKg', e.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Volumen (m³)</Label>
-                      <Input type="number" step="0.1" value={formData.volumeM3 || ''} onChange={e => handleNumeric('volumeM3', e.target.value)} />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                   <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl space-y-4">
-                      <div className="flex items-center gap-2 text-amber-700 font-bold text-xs uppercase">
-                        <Info size={14} /> Requisitos del Servicio
-                      </div>
-                      {formData.serviceType === 'reefer' && (
-                        <div className="animate-in fade-in slide-in-from-top-1">
-                          <Label className="text-[10px]">Temperatura Requerida (°C)</Label>
-                          <Input type="number" className="bg-white h-8" value={formData.reefer?.temp || ''} onChange={e => handleNumeric('reefer', e.target.value, 'temp')} />
-                        </div>
-                      )}
-                      {formData.serviceType === 'dangerous' && (
-                        <div className="space-y-2 animate-in fade-in slide-in-from-top-1">
-                           <Label className="text-[10px]">Clase ONU / Número UN</Label>
-                           <Input placeholder="UN 1203" className="bg-white h-8" value={formData.dangerousGoods?.unNumber || ''} onChange={e => setFormData({...formData, dangerousGoods: {...formData.dangerousGoods!, unNumber: e.target.value}})} />
-                        </div>
-                      )}
-                      <p className="text-[10px] text-amber-600 leading-tight">
-                        Nota: Al seleccionar servicios especiais, o sistema filtrará automaticamente a frota apta.
-                      </p>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="space-y-4">
+                   <Label>Descripción</Label>
+                   <Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
+                   <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1"><Label>Peso (Kg)</Label><Input type="number" value={formData.weightKg} onChange={e => setFormData({...formData, weightKg: parseFloat(e.target.value)})} /></div>
+                      <div className="space-y-1"><Label>Volumen (m³)</Label><Input type="number" value={formData.volumeM3} onChange={e => setFormData({...formData, volumeM3: parseFloat(e.target.value)})} /></div>
                    </div>
-                </div>
-              </div>
+                 </div>
+               </div>
             </CardContent>
           </Card>
         )}
 
         {step === 3 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Documentação e Trâmites</CardTitle></CardHeader>
-            <CardContent className="space-y-6">
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="space-y-4">
-                    <Label>Documentos Requeridos</Label>
-                    <div className="space-y-2">
-                       {['Remito / Guia de Despacho', 'Fatura de Mercadoria', 'Carta de Porte / Manifesto'].map(doc => (
-                         <div key={doc} className="flex items-center justify-between p-3 bg-slate-50 border rounded-lg">
-                           <span className="text-sm font-medium">{doc}</span>
-                           <Button variant="outline" size="sm" className="h-7 text-[10px]">Anexar PDF</Button>
-                         </div>
-                       ))}
-                    </div>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Anchor className="text-blue-600" /> Trámites de Aduana</CardTitle>
+              <CardDescription>Obligatorio para fletes internacionales (RG 5756/2025).</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-8">
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                 <div className="space-y-1">
+                   <Label className="text-[10px] uppercase font-bold">Tipo Operación</Label>
+                   <Select value={formData.international?.operationType} onValueChange={v => setFormData({...formData, international: {...formData.international!, operationType: v as any}})}>
+                     <SelectTrigger><SelectValue /></SelectTrigger>
+                     <SelectContent>
+                       <SelectItem value="export">Exportación</SelectItem>
+                       <SelectItem value="import">Importación</SelectItem>
+                       <SelectItem value="transit">Trânsito</SelectItem>
+                     </SelectContent>
+                   </Select>
+                 </div>
+                 <div className="space-y-1">
+                   <Label className="text-[10px] uppercase font-bold">Aduana Salida</Label>
+                   <Select value={formData.international?.exitCustoms} onValueChange={v => setFormData({...formData, international: {...formData.international!, exitCustoms: v}})}>
+                     <SelectTrigger><SelectValue /></SelectTrigger>
+                     <SelectContent>{ADUANAS.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}</SelectContent>
+                   </Select>
+                 </div>
+                 <div className="space-y-1">
+                   <Label className="text-[10px] uppercase font-bold">N° Declaración (SIM)</Label>
+                   <Input value={formData.international?.declarationNumber} onChange={e => setFormData({...formData, international: {...formData.international!, declarationNumber: e.target.value}})} />
+                 </div>
+               </div>
+
+               <div className="p-4 bg-slate-50 border border-dashed rounded-xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-blue-700 font-bold flex items-center gap-2"><FileText size={14} /> Manifiesto MIC/DTA</Label>
+                    <Badge variant="outline" className="bg-green-50 text-green-700">Protocolo ATIT</Badge>
                   </div>
-                  <div className="space-y-4">
-                    <Label>Impostos e Taxas Associados (ARS)</Label>
-                    <div className="grid grid-cols-2 gap-3">
-                       <div className="space-y-1">
-                         <Label className="text-[10px] text-slate-400">IVA (Frete)</Label>
-                         <Input type="number" value={formData.totalTaxes || ''} onChange={e => handleNumeric('totalTaxes', e.target.value)} />
-                       </div>
-                    </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input placeholder="Número MIC/DTA" value={formData.international?.micDtaNumber} onChange={e => setFormData({...formData, international: {...formData.international!, micDtaNumber: e.target.value}})} />
+                    <Input type="date" value={formData.international?.micDtaExpiry} onChange={e => setFormData({...formData, international: {...formData.international!, micDtaExpiry: e.target.value}})} />
                   </div>
+                  <div className="flex items-center gap-3 p-2 bg-white rounded border">
+                    <Switch checked={formData.international?.isMalvinaPresented} onCheckedChange={v => setFormData({...formData, international: {...formData.international!, isMalvinaPresented: v}})} />
+                    <span className="text-xs font-medium">Presentado en Sistema MALVINA</span>
+                  </div>
+               </div>
+
+               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t">
+                  <div className="space-y-1"><Label className="text-[10px] uppercase">Contenedor</Label><Input value={formData.international?.containerNumber} onChange={e => setFormData({...formData, international: {...formData.international!, containerNumber: e.target.value}})} /></div>
+                  <div className="space-y-1"><Label className="text-[10px] uppercase">Precinto/Sello</Label><Input value={formData.international?.sealNumber} onChange={e => setFormData({...formData, international: {...formData.international!, sealNumber: e.target.value}})} /></div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase">Doc Transp.</Label>
+                    <Select value={formData.international?.transportDocType} onValueChange={v => setFormData({...formData, international: {...formData.international!, transportDocType: v as any}})}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="BL">Bill of Lading</SelectItem>
+                        <SelectItem value="CP">Carta Porte</SelectItem>
+                        <SelectItem value="AWB">Air Waybill</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1"><Label className="text-[10px] uppercase">N° Doc</Label><Input value={formData.international?.transportDocNumber} onChange={e => setFormData({...formData, international: {...formData.international!, transportDocNumber: e.target.value}})} /></div>
                </div>
             </CardContent>
           </Card>
@@ -369,104 +299,81 @@ export default function LoadFormWizard() {
 
         {step === 4 && (
           <Card className="border-none shadow-sm overflow-hidden">
-            <CardHeader className="bg-slate-900 text-white pb-6">
+            <CardHeader className="bg-slate-900 text-white">
               <div className="flex justify-between items-center">
-                <div>
-                  <CardTitle>Aspecto Financeiro</CardTitle>
-                  <CardDescription className="text-white/60">Controle de faturamento e custos logísticos.</CardDescription>
-                </div>
+                <CardTitle>Aspecto Financeiro</CardTitle>
                 <div className="text-right">
-                  <p className="text-[10px] uppercase font-bold text-white/50">Total do Frete (ARS)</p>
-                  <p className="text-3xl font-bold text-green-400">
-                    {formData.totalAmount?.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}
-                  </p>
+                  <p className="text-[10px] uppercase text-white/50">Total Aduanero (USD)</p>
+                  <p className="text-2xl font-bold text-green-400">${formData.international?.totalCustomsCostsUsd?.toFixed(2)}</p>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="pt-8 grid grid-cols-1 md:grid-cols-3 gap-8">
-               <div className="space-y-4">
-                 <Label className="font-bold flex items-center gap-2 text-blue-600"><DollarSign size={14} /> Valor Base do Frete</Label>
-                 <Input type="number" className="text-lg font-bold" value={formData.basePrice || ''} onChange={e => handleNumeric('basePrice', e.target.value)} />
-               </div>
-               <div className="md:col-span-2 grid grid-cols-2 gap-4">
-                 <div className="space-y-2">
-                   <Label className="text-xs uppercase text-slate-400">Pedágios / Eixos</Label>
-                   <Input type="number" value={formData.additionalCosts?.peajes || ''} onChange={e => handleNumeric('additionalCosts', e.target.value, 'peajes')} />
+            <CardContent className="pt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-4">
+                 <Label className="text-blue-600 font-bold flex items-center gap-2"><DollarSign size={14} /> Valor FOB (USD)</Label>
+                 <Input type="number" value={formData.international?.fobValueUsd} onChange={e => setFormData({...formData, international: {...formData.international!, fobValueUsd: parseFloat(e.target.value)}})} />
+              </div>
+              <div className="space-y-4">
+                 <Label className="text-slate-500 font-bold">Flete (USD)</Label>
+                 <Input type="number" value={formData.international?.freightValueUsd} onChange={e => setFormData({...formData, international: {...formData.international!, freightValueUsd: parseFloat(e.target.value)}})} />
+              </div>
+              <div className="space-y-4">
+                 <Label className="text-slate-500 font-bold">Seguro (USD)</Label>
+                 <Input type="number" value={formData.international?.insuranceValueUsd} onChange={e => setFormData({...formData, international: {...formData.international!, insuranceValueUsd: parseFloat(e.target.value)}})} />
+              </div>
+              
+              <div className="md:col-span-3 grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-xl border">
+                 <div className="space-y-1">
+                   <p className="text-[9px] uppercase font-bold text-slate-400">Valor CIF</p>
+                   <p className="font-bold">${formData.international?.cifValueUsd?.toFixed(2)}</p>
                  </div>
-                 <div className="space-y-2">
-                   <Label className="text-xs uppercase text-slate-400">Hospedagem / Viáticos</Label>
-                   <Input type="number" value={formData.additionalCosts?.viaticos || ''} onChange={e => handleNumeric('additionalCosts', e.target.value, 'viaticos')} />
+                 <div className="space-y-1">
+                   <p className="text-[9px] uppercase font-bold text-slate-400">Direitos (15%)</p>
+                   <p className="font-bold text-red-500">${formData.international?.importDutiesUsd?.toFixed(2)}</p>
                  </div>
-               </div>
+                 <div className="space-y-1">
+                   <p className="text-[9px] uppercase font-bold text-slate-400">IVA (21%)</p>
+                   <p className="font-bold text-red-500">${formData.international?.customsIvaUsd?.toFixed(2)}</p>
+                 </div>
+                 <div className="space-y-1">
+                   <p className="text-[9px] uppercase font-bold text-slate-400">Custo Total USD</p>
+                   <p className="font-bold text-green-600">${formData.international?.totalCustomsCostsUsd?.toFixed(2)}</p>
+                 </div>
+              </div>
             </CardContent>
-            <CardFooter className="bg-slate-50 border-t flex justify-between items-center p-6">
-               <div className="flex gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase">Forma de Pagamento</Label>
-                    <Select value={formData.paymentMethod} onValueChange={v => setFormData({...formData, paymentMethod: v})}>
-                      <SelectTrigger className="w-[150px] bg-white"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {['Contado', 'Transferência', '30 dias', '60 dias'].map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-               </div>
-            </CardFooter>
           </Card>
         )}
 
         {step === 5 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Atribuição de Unidade e Estado</CardTitle></CardHeader>
-            <CardContent className="space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-4">
-                   <Label className="flex items-center gap-2"><Truck size={14} /> Caminhão Atribuído</Label>
-                   <Select value={formData.assignedTruckId} onValueChange={v => setFormData({...formData, assignedTruckId: v})}>
-                     <SelectTrigger><SelectValue placeholder="Selecionar da frota disponível" /></SelectTrigger>
-                     <SelectContent>
-                       {availableTrucks?.map(t => <SelectItem key={t.id} value={t.id}>{t.plate} - {t.brand} {t.model} ({t.capacityKg/1000}TN)</SelectItem>)}
-                     </SelectContent>
-                   </Select>
-                </div>
-                <div className="space-y-4">
-                   <Label className="flex items-center gap-2"><Users size={14} /> Motorista Atribuído</Label>
-                   <Select value={formData.assignedDriverId} onValueChange={v => setFormData({...formData, assignedDriverId: v})}>
-                     <SelectTrigger><SelectValue placeholder="Selecionar motorista ativo" /></SelectTrigger>
-                     <SelectContent>
-                       {availableDrivers?.map(d => <SelectItem key={d.id} value={d.id}>{d.lastName}, {d.firstName} ({d.licenseClasses.join('/')})</SelectItem>)}
-                     </SelectContent>
-                   </Select>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <Label>Instruções Especiais para o Motorista</Label>
-                <Textarea placeholder="Ex: Chamar 30 min antes de chegar, o cliente solo recibe pela manhã..." value={formData.specialInstructions} onChange={e => setFormData({...formData, specialInstructions: e.target.value})} />
-              </div>
+            <CardHeader><CardTitle>Asignación de Unidad</CardTitle></CardHeader>
+            <CardContent className="space-y-6">
+               <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-3">
+                  <Zap className="text-blue-600 mt-1" size={18} />
+                  <div>
+                    <p className="text-xs font-bold text-blue-900">Verificación de Cumplimiento Internacional</p>
+                    <p className="text-[10px] text-blue-700">El sistema solo mostrará camiones con RUTA vigente y motoristas con LINTI habilitada para cruce de frontera.</p>
+                  </div>
+               </div>
             </CardContent>
+            <CardFooter className="flex justify-end">
+               <Button onClick={handleSubmit} className="bg-green-600" disabled={isSubmitting}>
+                 {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />}
+                 Confirmar y Registrar Carga
+               </Button>
+            </CardFooter>
           </Card>
         )}
       </div>
 
-      {/* Footer Navigation */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center z-50">
         <div className="max-w-5xl w-full flex justify-between items-center px-4">
-          <Button variant="ghost" onClick={handleBack} disabled={step === 1 || isSubmitting}>
-            <ChevronLeft className="mr-2" size={16} /> Voltar
+          <Button variant="ghost" onClick={() => step > 1 ? setStep(step - 1) : router.back()}>
+            <ChevronLeft size={16} className="mr-1" /> Voltar
           </Button>
-          <div className="flex gap-2">
-            {step < 5 ? (
-              <Button onClick={handleNext} className="bg-blue-600 min-w-[120px]">
-                Siguiente <ChevronRight className="ml-2" size={16} />
-              </Button>
-            ) : (
-              <Button onClick={handleSubmit} className="bg-green-600 min-w-[150px]" disabled={isSubmitting}>
-                {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" size={16} />}
-                Confirmar e Registrar
-              </Button>
-            )}
-          </div>
+          <Button onClick={() => step < 5 ? setStep(step + 1) : handleSubmit()} className="bg-blue-600 min-w-[120px]">
+            {step === 5 ? 'Finalizar' : 'Próximo'} <ChevronRight size={16} className="ml-1" />
+          </Button>
         </div>
       </div>
     </div>
