@@ -50,7 +50,8 @@ export default function CargasPage() {
       const matchesSearch = (l.description || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
         (l.clientName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
         (l.origin?.address || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (l.destination?.address || "").toLowerCase().includes(searchTerm.toLowerCase());
+        (l.destination?.address || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (l.orderNumber || "").toLowerCase().includes(searchTerm.toLowerCase());
       
       const matchesStatus = statusFilter === "all" || l.status === statusFilter;
       
@@ -69,7 +70,12 @@ export default function CargasPage() {
     }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = (id: string | undefined) => {
+    if (!id) {
+      toast({ variant: "destructive", title: "Error", description: "ID de carga no válido." });
+      return;
+    }
+    
     if (!db || !confirm("¿Está seguro de eliminar esta operación? Esta acción no se puede deshacer.")) return;
     
     const docRef = doc(db, "loads", id);
@@ -86,8 +92,8 @@ export default function CargasPage() {
     toast({ title: "Pedido eliminado correctamente" });
   };
 
-  const handleUpdateStatus = (id: string, newStatus: LoadStatus) => {
-    if (!db) return;
+  const handleUpdateStatus = (id: string | undefined, newStatus: LoadStatus) => {
+    if (!id || !db) return;
     
     const docRef = doc(db, "loads", id);
     
@@ -125,7 +131,7 @@ export default function CargasPage() {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
             <input 
               type="search" 
-              placeholder="Buscar por mercadería, cliente o ciudad..." 
+              placeholder="Buscar por N° Orden, cliente o ciudad..." 
               className="flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 pl-8"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
@@ -184,8 +190,8 @@ export default function CargasPage() {
                             <div className="w-1.5 h-1.5 rounded-full bg-blue-600"></div>
                           </div>
                           <div className="flex flex-col gap-0.5">
-                            <span className="text-slate-500 truncate max-w-[150px]">{load.origin?.address || "Origen"}</span>
-                            <span className="font-bold truncate max-w-[150px]">{load.destination?.address || "Destino"}</span>
+                            <span className="text-slate-500 truncate max-w-[200px]">{load.origin?.address || "Origen"}</span>
+                            <span className="font-bold truncate max-w-[200px]">{load.destination?.address || "Destino"}</span>
                           </div>
                         </div>
                       </TableCell>
@@ -207,21 +213,21 @@ export default function CargasPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Gestión de Flete</DropdownMenuLabel>
-                            <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/orden`)}>
+                            <DropdownMenuItem onSelect={() => router.push(`/cargas/${load.id}/orden`)}>
                               <Printer className="w-4 h-4 mr-2" /> Generar Orden (PDF)
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/billetera`)}>
+                            <DropdownMenuItem onSelect={() => router.push(`/cargas/${load.id}/billetera`)}>
                               <Wallet className="w-4 h-4 mr-2" /> Ver Billetera / Gastos
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => handleUpdateStatus(load.id, 'on_route')}>
+                            <DropdownMenuItem onSelect={() => handleUpdateStatus(load.id, 'on_route')}>
                               <Truck className="w-4 h-4 mr-2" /> Iniciar Tránsito
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleUpdateStatus(load.id, 'delivered')}>
+                            <DropdownMenuItem onSelect={() => handleUpdateStatus(load.id, 'delivered')}>
                               <CheckCircle2 className="w-4 h-4 mr-2" /> Confirmar Entrega
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-red-600" onClick={() => handleDelete(load.id)}>
+                            <DropdownMenuItem className="text-red-600" onSelect={() => handleDelete(load.id)}>
                               <Trash2 className="w-4 h-4 mr-2" /> Eliminar Orden
                             </DropdownMenuItem>
                           </DropdownMenuContent>
