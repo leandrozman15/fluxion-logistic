@@ -42,11 +42,12 @@ export interface Expense {
 export interface VehicleDocument {
   id: string;
   name: string;
-  category: 'standard' | 'specific' | 'trip';
+  category: 'unit' | 'semi' | 'authorization';
   status: DocStatus;
   expiryDate?: string;
   fileUrl?: string;
   description?: string;
+  isRequired: boolean;
 }
 
 export interface Truck {
@@ -76,17 +77,22 @@ export interface Driver {
   id: string;
   docType: 'DNI' | 'LC' | 'LE' | 'Pasaporte' | 'CI' | 'RUT' | 'RUC' | 'CPF';
   dni: string;
+  dniFileUrl?: string;
   firstName: string;
   lastName: string;
   birthDate: string;
   gender?: string;
   nationality: string;
   licenseNumber: string;
-  licenseClasses: string[];
+  licenseClasses: string[]; // Ej: C, E
   licenseExpiry: string;
+  licenseFileUrl?: string;
   hasLinti: boolean;
   lintiNumber?: string;
   lintiExpiry?: string;
+  lintiFileUrl?: string;
+  hasCnrt: boolean;
+  cnrtNumber?: string;
   medicalCertificateExpiry: string;
   experienceYears: number;
   phone: string;

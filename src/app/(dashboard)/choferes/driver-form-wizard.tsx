@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useDoc } from "@/firebase";
-import { collection, addDoc, serverTimestamp, doc, updateDoc, setDoc } from "firebase/firestore";
+import { collection, serverTimestamp, doc, updateDoc, setDoc } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Users, ArrowLeft, ArrowRight, Save, Loader2, 
   ShieldCheck, CheckCircle2, User, FileText, 
-  Phone, HeartPulse, InfoIcon, X, Briefcase
+  Phone, HeartPulse, InfoIcon, X, Briefcase, Upload, AlertTriangle
 } from "lucide-react";
 import { Driver } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -28,7 +28,7 @@ interface DriverFormWizardProps {
 
 const LICENSE_CLASSES = ["C", "D", "E", "F", "G"];
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "0+", "0-"];
-const CONTRACT_TYPES = ["Tiempo completo", "Tiempo parcial", "Eventual / Temporario", "Contratista independiente", "Pasantía"];
+const CONTRACT_TYPES = ["Tiempo completo", "Tiempo parcial", "Eventual / Temporario", "Contratista independiente"];
 
 export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   const db = useFirestore();
@@ -51,6 +51,8 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
     hasLinti: false,
     lintiNumber: "",
     lintiExpiry: "",
+    hasCnrt: false,
+    cnrtNumber: "",
     medicalCertificateExpiry: "",
     experienceYears: 0,
     phone: "",
@@ -128,22 +130,18 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
           </Button>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">{driverId ? 'Editar Chofer' : 'Nuevo Chofer Professional'}</h1>
-            <p className="text-sm text-slate-500">Registro integral de personal y cumplimiento normativo.</p>
+            <p className="text-sm text-slate-500">Registro integral de personal y cumplimiento de normativa argentina.</p>
           </div>
-        </div>
-        <div className="flex gap-2">
-           <Button variant="ghost" onClick={() => router.back()} className="text-slate-500">Cancelar</Button>
         </div>
       </div>
 
-      {/* Progress Indicator */}
       <div className="bg-white p-6 rounded-xl border shadow-sm">
         <div className="flex items-center justify-between mb-4">
           {[
             { id: 1, label: "Datos Personales", icon: User },
             { id: 2, label: "Habilitaciones", icon: FileText },
             { id: 3, label: "Contacto", icon: Phone },
-            { id: 4, label: "Contrato", icon: Briefcase }
+            { id: 4, label: "Documentación", icon: Briefcase }
           ].map((s) => (
             <div key={s.id} className="flex flex-col items-center gap-2 flex-1 relative">
               <div className={cn(
@@ -164,23 +162,12 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
       <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
         {step === 1 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Información Legal y Personal</CardTitle></CardHeader>
+            <CardHeader><CardTitle>DNI y Datos Personales</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="space-y-2">
-                    <Label>Tipo Doc</Label>
-                    <Select value={formData.docType} onValueChange={(v: any) => setFormData({...formData, docType: v})}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {['DNI', 'LC', 'LE', 'Pasaporte', 'CI'].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="col-span-2 space-y-2">
-                    <Label>Número de Documento</Label>
-                    <Input placeholder="Sin puntos" value={formData.dni} onChange={e => setFormData({...formData, dni: e.target.value.replace(/\D/g, '')})} />
-                  </div>
+                <div className="space-y-2">
+                  <Label>Número de DNI</Label>
+                  <Input placeholder="Sin puntos" value={formData.dni} onChange={e => setFormData({...formData, dni: e.target.value.replace(/\D/g, '')})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Nombres</Label>
@@ -197,17 +184,6 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                   <Input type="date" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Género</Label>
-                  <Select value={formData.gender} onValueChange={(v) => setFormData({...formData, gender: v})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Masculino">Masculino</SelectItem>
-                      <SelectItem value="Femenino">Femenino</SelectItem>
-                      <SelectItem value="Otro">Otro / Prefiero no decir</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
                   <Label>Nacionalidad</Label>
                   <Input value={formData.nationality} onChange={e => setFormData({...formData, nationality: e.target.value})} />
                 </div>
@@ -218,24 +194,28 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
 
         {step === 2 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Habilitaciones y Licencias</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle>Licencias y Habilitaciones</CardTitle>
+              <CardDescription className="text-orange-600 flex items-center gap-1 font-bold">
+                <AlertTriangle size={14} /> El RUTA ha sido eliminado (Decreto 1109/2024). Ya no se exige.
+              </CardDescription>
+            </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label>Número de Licencia de Conducir</Label>
-                  <Input placeholder="Nacional / Provincial" value={formData.licenseNumber} onChange={e => setFormData({...formData, licenseNumber: e.target.value})} />
+                  <Label>Licencia Nacional de Conducir</Label>
+                  <Input placeholder="Número de Licencia" value={formData.licenseNumber} onChange={e => setFormData({...formData, licenseNumber: e.target.value})} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Clase / Categoría</Label>
+                  <Label>Clase (Mínimo C o E para Semis)</Label>
                   <div className="flex flex-wrap gap-4 p-3 bg-slate-50 rounded-lg border">
                     {LICENSE_CLASSES.map(cls => (
                       <div key={cls} className="flex items-center space-x-2">
                         <Checkbox id={`cls-${cls}`} checked={formData.licenseClasses?.includes(cls)} onCheckedChange={() => toggleLicenseClass(cls)} />
-                        <label htmlFor={`cls-${cls}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">{cls}</label>
+                        <label htmlFor={`cls-${cls}`} className="text-sm font-medium leading-none">{cls}</label>
                       </div>
                     ))}
                   </div>
-                  <p className="text-[10px] text-slate-400">Nota: Clase E requerida para semirremolques.</p>
                 </div>
                 <div className="space-y-2">
                   <Label>Vencimiento de Licencia</Label>
@@ -246,8 +226,8 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                 <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl space-y-4">
                    <div className="flex items-center justify-between">
                      <div className="space-y-0.5">
-                       <Label>Habilitación LINTI</Label>
-                       <p className="text-[10px] text-blue-600">Requerida para cargas peligrosas.</p>
+                       <Label>Licencia LINTI</Label>
+                       <p className="text-[10px] text-blue-600 font-bold uppercase">Obligatoria para Interjurisdiccional</p>
                      </div>
                      <Switch checked={formData.hasLinti} onCheckedChange={(v) => setFormData({...formData, hasLinti: v})} />
                    </div>
@@ -264,13 +244,12 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                      </div>
                    )}
                 </div>
-                <div className="space-y-2">
-                  <Label>Vencimiento Psicofísico</Label>
-                  <Input type="date" value={formData.medicalCertificateExpiry} onChange={e => setFormData({...formData, medicalCertificateExpiry: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Años de Experiencia Profesional</Label>
-                  <Input type="number" value={formData.experienceYears} onChange={e => setFormData({...formData, experienceYears: parseInt(e.target.value) || 0})} />
+                <div className="flex items-center justify-between p-4 border rounded-xl">
+                   <div className="space-y-0.5">
+                      <Label>Habilitación CNRT</Label>
+                      <p className="text-[10px] text-slate-400">Sólo si transporta para terceros.</p>
+                   </div>
+                   <Switch checked={formData.hasCnrt} onCheckedChange={v => setFormData({...formData, hasCnrt: v})} />
                 </div>
               </div>
             </CardContent>
@@ -279,20 +258,16 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
 
         {step === 3 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Contacto y Emergencias Médicas</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Contacto y Salud</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label>Teléfono Móvil</Label>
+                  <Label>Teléfono Celular</Label>
                   <Input placeholder="Ej: 11 5555-1234" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Correo Electrónico</Label>
                   <Input type="email" placeholder="juan.perez@email.com" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Domicilio Particular</Label>
-                  <Input value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
                 </div>
               </div>
               <div className="space-y-4">
@@ -315,14 +290,6 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                       <Input className="bg-white h-8" value={formData.healthInsurance} onChange={e => setFormData({...formData, healthInsurance: e.target.value})} />
                     </div>
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase font-bold text-red-400">Contacto de Emergencia</Label>
-                    <Input placeholder="Nombre y Relación" className="bg-white h-8" value={formData.emergencyContact} onChange={e => setFormData({...formData, emergencyContact: e.target.value})} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase font-bold text-red-400">Teléfono Emergencia</Label>
-                    <Input className="bg-white h-8" value={formData.emergencyPhone} onChange={e => setFormData({...formData, emergencyPhone: e.target.value})} />
-                  </div>
                 </div>
               </div>
             </CardContent>
@@ -331,51 +298,29 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
 
         {step === 4 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Datos Laborales y Documentación</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Adjuntos de Documentación</CardTitle></CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Fecha de Ingreso</Label>
-                    <Input type="date" value={formData.hireDate} onChange={e => setFormData({...formData, hireDate: e.target.value})} />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {[
+                  { label: "DNI (Frente/Dorso)", key: "dniFileUrl" },
+                  { label: "Licencia de Conducir", key: "licenseFileUrl" },
+                  { label: "Licencia LINTI", key: "lintiFileUrl" }
+                ].map((doc) => (
+                  <div key={doc.key} className="p-4 bg-slate-50 border-2 border-dashed rounded-xl text-center space-y-3">
+                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center mx-auto border text-slate-400">
+                      <Upload size={18} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase text-slate-500">{doc.label}</p>
+                      <p className="text-[8px] text-slate-400 mt-0.5">PDF o JPG (Máx 5MB)</p>
+                    </div>
+                    <Button variant="outline" size="sm" className="h-7 text-[10px] w-full bg-white">Seleccionar</Button>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Tipo de Contrato</Label>
-                    <Select value={formData.contractType} onValueChange={(v) => setFormData({...formData, contractType: v})}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {CONTRACT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Estado Inicial</Label>
-                    <Select value={formData.status} onValueChange={(v: any) => setFormData({...formData, status: v})}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="active">🟢 Activo</SelectItem>
-                        <SelectItem value="resting">🟠 Descanso</SelectItem>
-                        <SelectItem value="suspended">🔴 Suspendido</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                ))}
               </div>
-              <div className="space-y-2">
-                <Label>Observaciones / Notas Internas</Label>
+              <div className="space-y-2 pt-4 border-t">
+                <Label>Observaciones Laborales</Label>
                 <Textarea className="min-h-[100px]" value={formData.observations} onChange={e => setFormData({...formData, observations: e.target.value})} />
-              </div>
-              <div className="p-4 bg-slate-50 border border-dashed rounded-xl flex items-center justify-center text-center py-10">
-                <div className="space-y-2">
-                  <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto border shadow-sm text-slate-400">
-                    <FileText />
-                  </div>
-                  <p className="text-xs font-bold text-slate-500 uppercase">Carga de Documentación</p>
-                  <p className="text-[10px] text-slate-400">Arrastre aquí DNI, Licencia y LINTI (PDF/JPG)</p>
-                  <Button variant="outline" size="sm" className="mt-2 text-[10px]">Seleccionar Archivos</Button>
-                </div>
               </div>
             </CardContent>
           </Card>
@@ -399,17 +344,6 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
               </Button>
             )}
           </div>
-        </div>
-      </div>
-
-      <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-3 mt-4">
-        <InfoIcon className="text-blue-500 mt-0.5" size={18} />
-        <div className="space-y-1">
-          <p className="text-xs font-bold text-blue-700">Verificación de Cumplimiento</p>
-          <p className="text-[10px] text-blue-600 leading-relaxed">
-            Al guardar, el sistema verificará automáticamente la vigência de las licencias. 
-            Si la LINTI no está habilitada, el conductor no podrá ser asignado a camiones de la categoría "Dangerous Goods".
-          </p>
         </div>
       </div>
     </div>
