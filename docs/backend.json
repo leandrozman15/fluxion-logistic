@@ -1,3 +1,4 @@
+
 {
   "firestore": {
     "collections": {
@@ -23,7 +24,7 @@
         }
       },
       "drivers": {
-        "description": "Conductores de la flota",
+        "description": "Choferes habilitados",
         "schema": {
           "type": "object",
           "properties": {
@@ -47,21 +48,6 @@
             "clientName": { "type": "string" },
             "status": { "type": "string", "enum": ["pending", "assigned", "on_route", "delivered"] },
             "priceArs": { "type": "number" }
-          }
-        }
-      },
-      "trips": {
-        "description": "Viajes activos e históricos",
-        "schema": {
-          "type": "object",
-          "properties": {
-            "truckId": { "type": "string" },
-            "driverId": { "type": "string" },
-            "loadId": { "type": "string" },
-            "startDate": { "type": "string", "format": "date-time" },
-            "estimatedEndDate": { "type": "string", "format": "date-time" },
-            "actualEndDate": { "type": "string", "format": "date-time" },
-            "currentProvince": { "type": "string" }
           }
         }
       }

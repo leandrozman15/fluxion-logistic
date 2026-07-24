@@ -1,3 +1,4 @@
+
 export type TruckStatus = 'available' | 'in_trip' | 'maintenance';
 export type DriverStatus = 'active' | 'resting' | 'suspended';
 export type LoadStatus = 'pending' | 'assigned' | 'on_route' | 'delivered';
@@ -35,15 +36,4 @@ export interface Load {
   status: LoadStatus;
   priceArs: number;
   createdAt: any;
-}
-
-export interface Trip {
-  id: string;
-  truckId: string;
-  driverId: string;
-  loadId: string;
-  startDate: any;
-  estimatedEndDate: any;
-  actualEndDate?: any;
-  currentProvince: string;
 }
