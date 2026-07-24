@@ -152,6 +152,21 @@ export default function FlotaPage() {
   const isStep1Valid = !!(formData.plate && formData.chassis && formData.brand && formData.model);
   const isStep2Valid = (formData.capacityKg || 0) > 0;
 
+  // Helper function to handle numeric input changes safely
+  const handleNumericChange = (field: string, value: string, subField?: string) => {
+    const numValue = field === 'capacityKg' || field === 'tankLiters' || field === 'grossWeight' ? parseInt(value) : parseFloat(value);
+    const finalValue = isNaN(numValue) ? 0 : numValue;
+    
+    if (subField) {
+      setFormData(prev => ({
+        ...prev,
+        [field]: { ...((prev as any)[field] || {}), [subField]: finalValue }
+      }));
+    } else {
+      setFormData(prev => ({ ...prev, [field]: finalValue }));
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -171,7 +186,7 @@ export default function FlotaPage() {
               <DialogTitle className="text-xl flex items-center gap-2">
                 <Truck className="text-blue-600" /> Registro de Nueva Unidad
               </DialogTitle>
-              <DialogDescription>Complete los datos técnicos para habilitar el vehículo en la red logística.</DialogDescription>
+              <DialogDescription>Complete los datos técnicos para habilitar el veículo en la red logística.</DialogDescription>
             </DialogHeader>
             
             {/* PROGRESS INDICATOR */}
@@ -263,20 +278,37 @@ export default function FlotaPage() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>Capacidad de Carga Máxima (Kg)</Label>
-                    <Input type="number" placeholder="Ej: 28000" value={formData.capacityKg} onChange={e => setFormData({...formData, capacityKg: parseInt(e.target.value)})} />
+                    <Input 
+                      type="number" 
+                      placeholder="Ej: 28000" 
+                      value={isNaN(formData.capacityKg!) ? '' : formData.capacityKg} 
+                      onChange={e => handleNumericChange('capacityKg', e.target.value)} 
+                    />
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <div className="space-y-1">
                       <Label className="text-[10px] uppercase font-bold">Largo (m)</Label>
-                      <Input type="number" value={formData.dimensions?.length} onChange={e => setFormData({...formData, dimensions: {...formData.dimensions!, length: parseFloat(e.target.value)}})} />
+                      <Input 
+                        type="number" 
+                        value={isNaN(formData.dimensions?.length!) ? '' : formData.dimensions?.length} 
+                        onChange={e => handleNumericChange('dimensions', e.target.value, 'length')} 
+                      />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-[10px] uppercase font-bold">Ancho (m)</Label>
-                      <Input type="number" value={formData.dimensions?.width} onChange={e => setFormData({...formData, dimensions: {...formData.dimensions!, width: parseFloat(e.target.value)}})} />
+                      <Input 
+                        type="number" 
+                        value={isNaN(formData.dimensions?.width!) ? '' : formData.dimensions?.width} 
+                        onChange={e => handleNumericChange('dimensions', e.target.value, 'width')} 
+                      />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-[10px] uppercase font-bold">Alto (m)</Label>
-                      <Input type="number" value={formData.dimensions?.height} onChange={e => setFormData({...formData, dimensions: {...formData.dimensions!, height: parseFloat(e.target.value)}})} />
+                      <Input 
+                        type="number" 
+                        value={isNaN(formData.dimensions?.height!) ? '' : formData.dimensions?.height} 
+                        onChange={e => handleNumericChange('dimensions', e.target.value, 'height')} 
+                      />
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -311,14 +343,18 @@ export default function FlotaPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>Capacidad Tanque (L)</Label>
-                    <Input type="number" value={formData.tankLiters} onChange={e => setFormData({...formData, tankLiters: parseInt(e.target.value)})} />
+                    <Input 
+                      type="number" 
+                      value={isNaN(formData.tankLiters!) ? '' : formData.tankLiters} 
+                      onChange={e => handleNumericChange('tankLiters', e.target.value)} 
+                    />
                   </div>
                   <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
                     <div className="flex gap-2 text-blue-700 mb-1">
                       <Scale size={16} />
                       <span className="text-xs font-bold uppercase">PBV Sugerido</span>
                     </div>
-                    <p className="text-[10px] text-blue-600">Basado en {formData.axles} ejes, el Peso Bruto sugerido es {formData.axles! * 10000} Kg.</p>
+                    <p className="text-[10px] text-blue-600">Basado en {formData.axles} ejes, el Peso Bruto sugerido es {(formData.axles || 2) * 10000} Kg.</p>
                   </div>
                 </div>
               </div>
@@ -345,7 +381,7 @@ export default function FlotaPage() {
                         <Input placeholder="Ej: Rosario" value={formData.location?.city} onChange={e => setFormData({...formData, location: {...formData.location!, city: e.target.value}})} />
                       </div>
                       <Button variant="outline" className="w-full text-xs" size="sm" onClick={handleGetLocation}>
-                        <Crosshair size={14} className="mr-2" /> Obtener GPS actual
+                        <Crosshair size={14} className="mr-2" /> Obtener GPS atual
                       </Button>
                     </CardContent>
                   </Card>
@@ -472,7 +508,7 @@ export default function FlotaPage() {
                     <TableCell>
                       <div className="flex items-center gap-1.5 text-slate-600">
                         <Gauge className="w-3.5 h-3.5" />
-                        <span className="text-sm">{(truck.capacityKg / 1000).toFixed(1)} TN</span>
+                        <span className="text-sm">{((truck.capacityKg || 0) / 1000).toFixed(1)} TN</span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -502,7 +538,7 @@ export default function FlotaPage() {
                             onClick={() => deleteDoc(doc(db!, "trucks", truck.id))}
                           >
                             <Trash2 className="w-4 h-4 mr-2" /> Eliminar
-                          </DropdownMenuItem>
+                          </MenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -516,4 +552,3 @@ export default function FlotaPage() {
     </div>
   );
 }
-
