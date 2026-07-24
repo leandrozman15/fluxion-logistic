@@ -3,13 +3,13 @@
   "firestore": {
     "collections": {
       "trucks": {
-        "description": "Flota de camiones registrados",
+        "description": "Flota de vehículos pesados con documentación y especificaciones técnicas.",
         "schema": {
           "type": "object",
           "properties": {
-            "plate": { "type": "string", "description": "Patente del vehículo (Argentina format)" },
-            "model": { "type": "string" },
+            "plate": { "type": "string" },
             "brand": { "type": "string" },
+            "model": { "type": "string" },
             "year": { "type": "number" },
             "capacityKg": { "type": "number" },
             "status": { "type": "string", "enum": ["available", "in_trip", "maintenance"] },
@@ -19,35 +19,48 @@
                 "city": { "type": "string" },
                 "province": { "type": "string" }
               }
+            },
+            "documentation": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "status": { "type": "string" },
+                  "expiryDate": { "type": "string" }
+                }
+              }
             }
           }
         }
       },
       "drivers": {
-        "description": "Choferes habilitados",
+        "description": "Choferes profesionales con licencias nacionales y habilitación LINTI.",
         "schema": {
           "type": "object",
           "properties": {
-            "name": { "type": "string" },
+            "firstName": { "type": "string" },
+            "lastName": { "type": "string" },
             "dni": { "type": "string" },
-            "licenseNumber": { "type": "string" },
-            "phone": { "type": "string" },
-            "status": { "type": "string", "enum": ["active", "resting", "suspended"] }
+            "status": { "type": "string", "enum": ["active", "in_trip", "resting", "suspended"] },
+            "licenseExpiry": { "type": "string" },
+            "hasLinti": { "type": "boolean" },
+            "lintiExpiry": { "type": "string" }
           }
         }
       },
       "loads": {
-        "description": "Cargas y pedidos de transporte",
+        "description": "Órdenes de flete y transporte nacional.",
         "schema": {
           "type": "object",
           "properties": {
-            "description": { "type": "string" },
-            "weightKg": { "type": "number" },
-            "origin": { "type": "string" },
-            "destination": { "type": "string" },
+            "orderNumber": { "type": "string" },
             "clientName": { "type": "string" },
-            "status": { "type": "string", "enum": ["pending", "assigned", "on_route", "delivered"] },
-            "priceArs": { "type": "number" }
+            "totalAmount": { "type": "number" },
+            "status": { "type": "string", "enum": ["pending", "assigned", "on_route", "delivered", "incident", "cancelled"] },
+            "origin": { "type": "object" },
+            "destination": { "type": "object" }
           }
         }
       }
