@@ -36,7 +36,8 @@ import {
   Zap,
   Gauge,
   History,
-  Phone
+  Phone,
+  Radio
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -238,10 +239,20 @@ export default function MonitorOperativoPage() {
                          <div className="space-y-1 min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                               <p className="text-base font-black text-slate-900 dark:text-slate-100 tracking-tighter">{load.orderNumber}</p>
+                              
                               {load.status === 'on_route' ? (
-                                <Badge className="text-[8px] bg-blue-600 text-white border-none animate-pulse px-2 h-4 uppercase font-bold">LIVE GPS</Badge>
+                                <div className="flex items-center gap-1.5">
+                                   <span className="relative flex h-2 w-2">
+                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                     <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                                   </span>
+                                   <Badge className="text-[8px] bg-green-600 text-white border-none px-2 h-4 uppercase font-bold">LIVE GPS</Badge>
+                                </div>
                               ) : load.status === 'on_pause' ? (
-                                <Badge className="text-[8px] bg-orange-500 text-white border-none px-2 h-4 uppercase font-bold">PAUSA: {tracking?.lastPauseType || 'Descanso'}</Badge>
+                                <div className="flex items-center gap-1.5">
+                                   <div className="h-2 w-2 rounded-full bg-orange-500"></div>
+                                   <Badge className="text-[8px] bg-orange-500 text-white border-none px-2 h-4 uppercase font-bold">PAUSA: {tracking?.lastPauseType || 'Descanso'}</Badge>
+                                </div>
                               ) : (
                                 <Badge variant="outline" className="text-[8px] uppercase font-black text-slate-400 h-4 border-slate-300">{load.status.replace('_', ' ')}</Badge>
                               )}
