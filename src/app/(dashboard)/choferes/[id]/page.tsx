@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState } from "react";
@@ -13,15 +12,17 @@ import {
   User, FileText, Calendar, ShieldCheck, 
   Phone, ArrowLeft, Edit2, Loader2, 
   Truck as TruckIcon, Package, CheckCircle2, 
-  AlertTriangle, History, Mail, MapPin, Eye
+  AlertTriangle, History, Mail, MapPin, Eye,
+  ChevronRight
 } from "lucide-react";
 import { Driver, Load, Truck, DriverStatus } from "@/app/lib/types";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { format, parseISO, differenceInDays, isBefore } from "date-fns";
+import { format, parseISO, differenceInDays } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import Link from "next/link";
 
 export default function DriverProfilePage() {
   const { id } = useParams();
@@ -277,7 +278,11 @@ export default function DriverProfilePage() {
                                     <Badge variant="outline" className="text-[8px] uppercase">{trip.status}</Badge>
                                  </TableCell>
                                  <TableCell className="text-right">
-                                    <Button variant="ghost" size="icon" className="h-8 w-8" asChild><Link href={`/cargas/${trip.id}/orden`}><Eye size={14}/></Link></Button>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                                      <Link href={`/cargas/${trip.id}/orden`}>
+                                        <Eye size={14}/>
+                                      </Link>
+                                    </Button>
                                  </TableCell>
                               </TableRow>
                            ))
@@ -348,5 +353,3 @@ export default function DriverProfilePage() {
     </div>
   );
 }
-
-import { ChevronRight } from "lucide-react";
