@@ -68,13 +68,15 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     avatarUrl: ""
   });
 
-  const { data: existingTruck, loading: loadingExisting } = useDoc<TruckType>(
-    truckId && db ? doc(db, "trucks", truckId) : null
-  );
+  const truckRef = truckId && db ? doc(db, "trucks", truckId) : null;
+  const { data: existingTruck, loading: loadingExisting } = useDoc<TruckType>(truckRef);
 
   useEffect(() => {
     if (existingTruck) {
-      setFormData(existingTruck);
+      setFormData({
+        ...existingTruck,
+        location: existingTruck.location || { city: "", province: "Buenos Aires", country: "Argentina", lat: 0, lng: 0 }
+      });
     }
   }, [existingTruck]);
 
@@ -140,7 +142,10 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
   if (loadingExisting && truckId) {
     return (
       <div className="h-[60vh] flex items-center justify-center">
-        <Loader2 className="animate-spin text-blue-600 w-10 h-10" />
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="animate-spin text-blue-600 w-10 h-10" />
+          <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Cargando ficha técnica...</p>
+        </div>
       </div>
     );
   }
@@ -202,7 +207,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                   <p className="text-[10px] text-slate-400">Ayuda a identificar el camión en el panel</p>
                 </div>
                 <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
-                <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="bg-white">
+                <Button variant="outline" type="button" size="sm" onClick={() => fileInputRef.current?.click()} className="bg-white">
                   <Camera size={14} className="mr-2" /> {formData.avatarUrl ? 'Cambiar Foto' : 'Subir Foto'}
                 </Button>
               </div>
@@ -276,10 +281,11 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
 
                 <div className="space-y-4">
                   <Label>Tipo de Carrocería</Label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-2 gap-2">
                     {BODY_TYPES.map(type => (
                       <button 
                         key={type.id} 
+                        type="button"
                         className={cn(
                           "flex flex-col items-center justify-center gap-2 p-4 rounded-xl border transition-all text-center",
                           formData.bodyType === type.id ? "bg-blue-600 text-white border-blue-600 shadow-lg" : "bg-white text-slate-500 border-slate-200 hover:border-blue-300"
@@ -306,7 +312,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                   <div className="space-y-2">
                     <Label>Provincia Base</Label>
                     <Select value={formData.location?.province} onValueChange={v => setFormData({...formData, location: {...formData.location!, province: v, country: "Argentina"}})}>
-                      <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="bg-white"><SelectValue placeholder="Seleccionar provincia" /></SelectTrigger>
                       <SelectContent>
                         {PROVINCIAS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                       </SelectContent>
@@ -316,7 +322,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                     <Label>Localidad</Label>
                     <Input className="bg-white" value={formData.location?.city || ''} onChange={e => setFormData({...formData, location: {...formData.location!, city: e.target.value}})} />
                   </div>
-                  <Button variant="outline" className="w-full text-xs" onClick={handleGetLocation}>
+                  <Button variant="outline" type="button" className="w-full text-xs" onClick={handleGetLocation}>
                     <Crosshair size={14} className="mr-2" /> Capturar GPS de la Base
                   </Button>
                 </div>
@@ -337,12 +343,12 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center z-50">
         <div className="max-w-4xl w-full flex justify-between items-center px-4">
           <Button variant="ghost" onClick={handleBack} disabled={step === 1 || isSubmitting}>
-            <ChevronLeft size={16} /> Volver
+            <ChevronLeft size={16} className="mr-1" /> Volver
           </Button>
           <div className="flex gap-2">
             {step < 3 ? (
               <Button onClick={handleNext} className="bg-blue-600 min-w-[120px]">
-                Siguiente <ChevronRight size={16} />
+                Siguiente <ChevronRight size={16} className="ml-1" />
               </Button>
             ) : (
               <Button onClick={handleSubmit} className="bg-green-600 min-w-[150px]" disabled={isSubmitting}>
