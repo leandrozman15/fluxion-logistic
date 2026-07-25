@@ -4,6 +4,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { collection, serverTimestamp, doc, setDoc, query, orderBy, updateDoc, limit, getDocs } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,10 +19,11 @@ import {
   MapPin, Calendar, Clock, DollarSign, Truck, 
   Info, AlertTriangle, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, LayoutGrid, UserCheck, Edit
 } from "lucide-react";
-import { Load, Client, Hub, LoadLegStop, LoadDocument, LoadDocType, Truck as TruckType, Driver } from "@/app/lib/types";
+import { Load, Client, Hub, LoadLegStop, LoadDocument, LoadDocType, Truck as TruckType, Driver, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { format, addHours, parse } from "date-fns";
+import { format, addMinutes, parse } from "date-fns";
+import { calculateRouteDetails } from "@/services/google-maps";
 
 const SERVICE_TYPES = [
   { id: 'standard', label: 'Carga General', icon: Package },
@@ -36,11 +38,13 @@ interface LoadFormWizardProps {
 
 export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
   const db = useFirestore();
+  const { tenantId } = useTenant();
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingNumber, setIsLoadingNumber] = useState(false);
+  const [isCalculating, setIsCalculating] = useState(false);
 
   // Stop Modal State
   const [isStopModalOpen, setIsStopModalOpen] = useState(false);
@@ -74,6 +78,9 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
 
   const loadRef = useMemo(() => loadId && db ? doc(db, "loads", loadId) : null, [db, loadId]);
   const { data: existingLoad, loading: loadingExisting } = useDoc<Load>(loadRef);
+
+  const tenantRef = useMemo(() => (db && tenantId) ? doc(db, "tenants", tenantId) : null, [db, tenantId]);
+  const { data: tenant } = useDoc<Tenant>(tenantRef);
 
   // LOGICA PARA NÚMERO CONSECUTIVO
   useEffect(() => {
@@ -159,32 +166,52 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     }
   };
 
-  const handleCalculateArrival = (isOutbound: boolean) => {
+  const handleCalculateArrival = async (isOutbound: boolean) => {
     const dateStr = isOutbound ? formData.pickupDate : formData.returnPickupDate;
     const timeStr = isOutbound ? formData.pickupTime : formData.returnPickupTime;
-    
-    if (!dateStr || !timeStr) return;
+    const stops = isOutbound ? formData.outboundStops : formData.returnStops;
+    const origin = isOutbound ? formData.origin : (formData.outboundStops?.[formData.outboundStops?.length - 1] || formData.origin);
+    const destination = isOutbound ? (formData.outboundStops?.[formData.outboundStops?.length - 1] || formData.origin) : (formData.returnDestination);
 
-    try {
+    if (!dateStr || !timeStr || !origin?.address || !destination?.address) {
+      toast({ variant: "destructive", title: "Datos incompletos", description: "Asegúrese de cargar salida, origen y destino." });
+      return;
+    }
+
+    const apiKey = tenant?.settings?.mapApiKey;
+    if (!apiKey || tenant?.settings?.mapProvider !== 'google') {
+      // Fallback manual si no hay API
       const startDateTime = parse(`${dateStr} ${timeStr}`, "yyyy-MM-dd HH:mm", new Date());
-      const endDateTime = addHours(startDateTime, 8);
-      
+      const endDateTime = addMinutes(startDateTime, 480); // 8 horas default
       if (isOutbound) {
-        setFormData(prev => ({
-          ...prev,
-          estimatedArrivalDate: format(endDateTime, "yyyy-MM-dd"),
-          estimatedArrivalTime: format(endDateTime, "HH:mm")
-        }));
+        setFormData(prev => ({ ...prev, estimatedArrivalDate: format(endDateTime, "yyyy-MM-dd"), estimatedArrivalTime: format(endDateTime, "HH:mm") }));
       } else {
-        setFormData(prev => ({
-          ...prev,
-          returnEstimatedArrivalDate: format(endDateTime, "yyyy-MM-dd"),
-          returnEstimatedArrivalTime: format(endDateTime, "HH:mm")
-        }));
+        setFormData(prev => ({ ...prev, returnEstimatedArrivalDate: format(endDateTime, "yyyy-MM-dd"), returnEstimatedArrivalTime: format(endDateTime, "HH:mm") }));
       }
-      toast({ title: "ETA Calculado", description: "Se estimó una llegada de 8 horas de tránsito." });
+      toast({ title: "ETA Estimado (Manual)", description: "Se aplicó un tiempo de tránsito de 8 horas." });
+      return;
+    }
+
+    setIsCalculating(true);
+    try {
+      const points = [origin.address, ...(stops?.map(s => s.address) || []), destination.address];
+      const result = await calculateRouteDetails(points, apiKey);
+
+      if (result) {
+        const startDateTime = parse(`${dateStr} ${timeStr}`, "yyyy-MM-dd HH:mm", new Date());
+        const endDateTime = addMinutes(startDateTime, result.durationMinutes + (stops?.length || 0) * 30); // Agregamos 30 min por parada
+        
+        if (isOutbound) {
+          setFormData(prev => ({ ...prev, estimatedArrivalDate: format(endDateTime, "yyyy-MM-dd"), estimatedArrivalTime: format(endDateTime, "HH:mm") }));
+        } else {
+          setFormData(prev => ({ ...prev, returnEstimatedArrivalDate: format(endDateTime, "yyyy-MM-dd"), returnEstimatedArrivalTime: format(endDateTime, "HH:mm") }));
+        }
+        toast({ title: "Google Maps: ETA Calculado", description: `Ruta de ${result.distanceKm} km calculada con éxito.` });
+      }
     } catch (e) {
-      console.error(e);
+      toast({ variant: "destructive", title: "Error en cálculo" });
+    } finally {
+      setIsCalculating(false);
     }
   };
 
@@ -466,8 +493,9 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                         <Input type="time" value={formData.pickupTime ?? ''} onChange={e => setFormData({...formData, pickupTime: e.target.value})} />
                       </div>
                     </div>
-                    <Button variant="outline" size="sm" className="w-full text-[10px] font-bold" onClick={() => handleCalculateArrival(true)}>
-                      Calcular ETA Ida (Estimado)
+                    <Button variant="outline" size="sm" className="w-full text-[10px] font-bold" onClick={() => handleCalculateArrival(true)} disabled={isCalculating}>
+                      {isCalculating ? <Loader2 size={12} className="animate-spin mr-1" /> : null}
+                      Calcular ETA Ida (Google Maps)
                     </Button>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
@@ -500,8 +528,9 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                             <Input type="time" value={formData.returnPickupTime ?? ''} onChange={e => setFormData({...formData, returnPickupTime: e.target.value})} />
                           </div>
                         </div>
-                        <Button variant="outline" size="sm" className="w-full text-[10px] font-bold" onClick={() => handleCalculateArrival(false)}>
-                          Calcular ETA Retorno
+                        <Button variant="outline" size="sm" className="w-full text-[10px] font-bold" onClick={() => handleCalculateArrival(false)} disabled={isCalculating}>
+                          {isCalculating ? <Loader2 size={12} className="animate-spin mr-1" /> : null}
+                          Calcular ETA Retorno (Google Maps)
                         </Button>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1">

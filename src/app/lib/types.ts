@@ -11,6 +11,31 @@ export type LoadDocType = 'remito' | 'factura' | 'cot' | 'otro' | 'despacho';
 
 export type OwnershipType = 'company' | 'third_party';
 
+export interface TenantSettings {
+  mapProvider?: MapProvider;
+  mapApiKey?: string;
+  fleetEngineEnabled?: boolean;
+  scoringWeights?: { effective: number; ai: number };
+  dailyTopLimit?: number;
+  onboardingCompleted?: boolean;
+  finalScoreMode?: 'weighted' | 'max';
+  requireContactMethod?: string;
+  cooldownDays?: number;
+  hourlyEmailLimit?: number;
+  dailyEmailLimit?: number;
+  defaultTemplateId?: string | null;
+  smtpConfig?: any;
+}
+
+export interface Tenant {
+  id: string;
+  name: string;
+  settings?: TenantSettings;
+  plan?: 'free' | 'pro';
+  createdAt?: any;
+  updatedAt?: any;
+}
+
 export interface LoadDocument {
   id: string;
   type: LoadDocType;
