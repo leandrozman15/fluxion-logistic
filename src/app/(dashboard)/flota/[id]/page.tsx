@@ -4,7 +4,7 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection } from "@/firebase";
-import { doc, updateDoc, serverTimestamp, collection, query, where, getDoc } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp, collection, query, where, getDoc, orderBy } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,12 +16,13 @@ import {
   Truck as TruckIcon, FileText, Calendar, AlertTriangle, 
   CheckCircle2, Clock, Upload, ArrowLeft, ShieldCheck, 
   MapPin, Gauge, Box, Info, Download, Trash2, MoreVertical, LayoutGrid, Fuel, DollarSign, Activity, TrendingUp, User, Building2, Briefcase, Edit2,
-  Loader2, Eye
+  Loader2, Eye, Wrench, History
 } from "lucide-react";
-import { Truck, VehicleDocument, DocStatus, Expense, Driver } from "@/app/lib/types";
+import { Truck, VehicleDocument, DocStatus, Expense, Driver, Maintenance } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { format, isBefore, addDays, parseISO } from "date-fns";
+import { es } from "date-fns/locale";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const DEFAULT_DOCS: Omit<VehicleDocument, 'status'>[] = [
@@ -54,12 +55,28 @@ export default function TruckDetailPage() {
 
   const { data: truck, loading } = useDoc<Truck>(truckRef);
 
+  // Consultas de Historial
   const fuelExpensesQuery = useMemo(() => {
-    if (!db) return null;
-    return query(collection(db, "global_expenses"), where("truckId", "==", id as string), where("category", "==", "fuel"));
+    if (!db || !id) return null;
+    return query(
+      collection(db, "global_expenses"), 
+      where("truckId", "==", id as string), 
+      where("category", "==", "fuel"),
+      orderBy("createdAt", "desc")
+    );
+  }, [db, id]);
+
+  const maintenanceHistoryQuery = useMemo(() => {
+    if (!db || !id) return null;
+    return query(
+      collection(db, "maintenance"), 
+      where("truckId", "==", id as string),
+      orderBy("scheduledDate", "desc")
+    );
   }, [db, id]);
 
   const { data: fuelExpenses } = useCollection<Expense>(fuelExpensesQuery);
+  const { data: maintenanceHistory } = useCollection<Maintenance>(maintenanceHistoryQuery);
 
   useEffect(() => {
     if (truck && !truck.documentation && truckRef) {
@@ -275,19 +292,6 @@ export default function TruckDetailPage() {
               <p className="text-[10px] text-white/50 mt-1 uppercase font-bold tracking-widest">Total Acumulado 2025</p>
             </CardContent>
           </Card>
-
-          <Card className="bg-amber-50 border-amber-200 shadow-none">
-            <CardHeader className="pb-2">
-               <CardTitle className="text-xs uppercase font-bold text-amber-800 flex items-center gap-2">
-                 <AlertTriangle size={14} /> Nota Legislativa 2024
-               </CardTitle>
-            </CardHeader>
-            <CardContent>
-               <p className="text-[11px] text-amber-700 leading-tight">
-                 El <b>Decreto 1109/2024</b> eliminó el RUTA. El sistema ya no lo marca como obligatorio para transporte de carga propia.
-               </p>
-            </CardContent>
-          </Card>
         </div>
 
         <div className="lg:col-span-2">
@@ -299,8 +303,8 @@ export default function TruckDetailPage() {
               <TabsTrigger value="semi" className="flex items-center gap-2">
                 <LayoutGrid size={16} /> Semirremolque
               </TabsTrigger>
-              <TabsTrigger value="fuel" className="flex items-center gap-2">
-                <Fuel size={16} /> Consumo y Cargas
+              <TabsTrigger value="history" className="flex items-center gap-2">
+                <History size={16} /> Historial Técnico
               </TabsTrigger>
             </TabsList>
 
@@ -413,82 +417,93 @@ export default function TruckDetailPage() {
               ))}
             </TabsContent>
 
-            <TabsContent value="fuel" className="space-y-6 animate-in fade-in">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <Card className="border-none shadow-sm bg-slate-50">
-                    <CardHeader><CardTitle className="text-sm">Rendimiento Histórico</CardTitle></CardHeader>
-                    <CardContent className="space-y-4">
-                       <div className="flex justify-between items-center text-xs">
-                          <span className="text-slate-500">Últimos 30 días</span>
-                          <span className="font-bold text-green-600">-4.2% Eficiencia</span>
-                       </div>
-                       <div className="h-24 flex items-end gap-1 px-2">
-                          {[40, 60, 45, 80, 55, 70, 50].map((h, i) => (
-                            <div key={i} className="flex-1 bg-blue-100 rounded-t-sm hover:bg-blue-600 transition-colors" style={{ height: `${h}%` }}></div>
-                          ))}
-                       </div>
-                    </CardContent>
-                 </Card>
-                 <Card className="border-none shadow-sm bg-slate-50">
-                    <CardHeader><CardTitle className="text-sm">Resumen de Cargas</CardTitle></CardHeader>
-                    <CardContent className="space-y-2">
-                       <div className="flex justify-between text-xs py-2 border-b">
-                          <span className="text-slate-500">Total Litros</span>
-                          <span className="font-bold">4.250 L</span>
-                       </div>
-                       <div className="flex justify-between text-xs py-2 border-b">
-                          <span className="text-slate-500">Precio Promedio/L</span>
-                          <span className="font-bold">$1.150,00</span>
-                       </div>
-                       <div className="flex justify-between text-xs py-2">
-                          <span className="text-slate-500">Frecuencia</span>
-                          <span className="font-bold">3.2 días</span>
-                       </div>
-                    </CardContent>
-                 </Card>
-              </div>
-
-              <Card className="border-none shadow-sm overflow-hidden">
-                <CardHeader className="bg-slate-50 border-b">
-                   <CardTitle className="text-sm flex items-center gap-2">
-                     <DollarSign size={16} className="text-blue-600" /> Registro Detallado de Gastos
-                   </CardTitle>
-                </CardHeader>
-                <Table>
-                   <TableHeader>
+            <TabsContent value="history" className="space-y-8 animate-in fade-in">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between px-1">
+                   <h3 className="text-sm font-bold flex items-center gap-2"><Fuel className="text-blue-600" /> Histórico de Cargas de Combustible</h3>
+                   <Badge variant="outline" className="text-[10px]">{fuelExpenses?.length || 0} Registros</Badge>
+                </div>
+                <Card className="border-none shadow-sm overflow-hidden">
+                  <Table>
+                    <TableHeader className="bg-slate-50">
                       <TableRow>
-                         <TableHead>Fecha / Lugar</TableHead>
-                         <TableHead>Litros / KM</TableHead>
-                         <TableHead>Monto</TableHead>
-                         <TableHead className="text-right">Ticket</TableHead>
+                        <TableHead className="text-[10px] uppercase">Fecha / Lugar</TableHead>
+                        <TableHead className="text-[10px] uppercase">Carga (Litros)</TableHead>
+                        <TableHead className="text-[10px] uppercase">Odómetro</TableHead>
+                        <TableHead className="text-[10px] uppercase">Costo Total</TableHead>
+                        <TableHead className="text-right text-[10px] uppercase">Ref.</TableHead>
                       </TableRow>
-                   </TableHeader>
-                   <TableBody>
+                    </TableHeader>
+                    <TableBody>
                       {(!fuelExpenses || fuelExpenses.length === 0) ? (
-                        <TableRow>
-                          <TableCell colSpan={4} className="text-center py-10 text-slate-400 italic">No hay registros de combustible recientes.</TableCell>
-                        </TableRow>
+                        <TableRow><TableCell colSpan={5} className="text-center py-10 text-slate-400 italic text-xs">Sin registros de combustible.</TableCell></TableRow>
                       ) : (
                         fuelExpenses.map(exp => (
                           <TableRow key={exp.id}>
                             <TableCell>
-                               <div className="font-bold text-xs">{exp.createdAt?.toDate ? format(exp.createdAt.toDate(), "dd/MM/yyyy") : "Reciente"}</div>
-                               <div className="text-[10px] text-slate-400 uppercase">{exp.location}</div>
+                              <div className="font-bold text-xs">{exp.createdAt?.toDate ? format(exp.createdAt.toDate(), "dd/MM/yyyy HH:mm") : "Reciente"}</div>
+                              <div className="text-[9px] text-slate-500 uppercase">{exp.fuelBrand || 'S/D'} - {exp.location}</div>
                             </TableCell>
                             <TableCell>
-                               <div className="text-xs font-bold">120 L</div>
-                               <div className="text-[9px] text-blue-600 font-bold uppercase">Odóm: 145.200</div>
+                              <div className="text-xs font-bold text-blue-600">{exp.liters || 0} L</div>
+                              <div className="text-[9px] text-slate-400">${exp.pricePerLiter || 0} / L</div>
                             </TableCell>
+                            <TableCell className="font-mono text-xs font-bold">{(exp.odometerKm || 0).toLocaleString()} km</TableCell>
                             <TableCell className="font-bold text-slate-700">${exp.amount?.toLocaleString()}</TableCell>
-                            <TableCell className="text-right">
-                               <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400"><FileText size={14}/></Button>
+                            <TableCell className="text-right"><Button variant="ghost" size="icon" className="h-6 w-6"><FileText size={12}/></Button></TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </Card>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between px-1">
+                   <h3 className="text-sm font-bold flex items-center gap-2"><Wrench className="text-orange-600" /> Historial de Reparaciones y Taller</h3>
+                   <Badge variant="outline" className="text-[10px]">{maintenanceHistory?.length || 0} Intervenciones</Badge>
+                </div>
+                <Card className="border-none shadow-sm overflow-hidden">
+                  <Table>
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="text-[10px] uppercase">OT N° / Fecha</TableHead>
+                        <TableHead className="text-[10px] uppercase">Tipo de Trabajo</TableHead>
+                        <TableHead className="text-[10px] uppercase">Taller</TableHead>
+                        <TableHead className="text-[10px] uppercase">Costo Real</TableHead>
+                        <TableHead className="text-[10px] uppercase">Estado</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(!maintenanceHistory || maintenanceHistory.length === 0) ? (
+                        <TableRow><TableCell colSpan={5} className="text-center py-10 text-slate-400 italic text-xs">Sin registros de mantenimiento.</TableCell></TableRow>
+                      ) : (
+                        maintenanceHistory.map(record => (
+                          <TableRow key={record.id}>
+                            <TableCell>
+                              <div className="font-bold text-xs text-blue-600">{record.orderNumber || 'S/OT'}</div>
+                              <div className="text-[9px] text-slate-400">{format(parseISO(record.scheduledDate), "dd/MM/yyyy")}</div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="text-xs font-bold capitalize">{record.type}</div>
+                              <p className="text-[9px] text-slate-500 line-clamp-1">{record.description}</p>
+                            </TableCell>
+                            <TableCell className="text-xs">{record.workshopName || '-'}</TableCell>
+                            <TableCell className="font-bold text-slate-700">${(record.actualCost || record.estimatedCost || 0).toLocaleString()}</TableCell>
+                            <TableCell>
+                               <Badge variant="outline" className={cn(
+                                 "text-[8px] uppercase font-bold",
+                                 record.status === 'completed' ? "bg-green-50 text-green-700" : "bg-orange-50 text-orange-700"
+                               )}>{record.status}</Badge>
                             </TableCell>
                           </TableRow>
                         ))
                       )}
-                   </TableBody>
-                </Table>
-              </Card>
+                    </TableBody>
+                  </Table>
+                </Card>
+              </div>
             </TabsContent>
           </Tabs>
         </div>
@@ -518,4 +533,3 @@ export default function TruckDetailPage() {
     </div>
   );
 }
-

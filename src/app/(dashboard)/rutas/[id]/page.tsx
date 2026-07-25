@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -75,19 +76,20 @@ export default function RouteDetailPage() {
   const [gpsActive, setGpsActive] = useState(false);
   const [L, setL] = useState<any>(null);
   
-  // Throttling State
+  // Throttling State (1 minuto)
   const lastUpdateRef = useRef<number>(0);
   const lastPosRef = useRef<{lat: number, lng: number, timestamp: number} | null>(null);
   const podPhotoInputRef = useRef<HTMLInputElement>(null);
 
-  const [expenseData, setExpenseData] = useState<Partial<Expense>>({
+  const [expenseData, setExpenseData] = useState<any>({
     category: 'fuel',
     amount: 0,
     description: "",
     location: "",
     liters: 0,
     odometerKm: 0,
-    pricePerLiter: 0
+    pricePerLiter: 0,
+    fuelBrand: ""
   });
 
   const [incidentForm, setIncidentForm] = useState({
@@ -146,7 +148,7 @@ export default function RouteDetailPage() {
     return { name: 'S/D', address: '-', lat: -34.6, lng: -58.3 };
   }, [load]);
 
-  // GPS Tracking Logic - Optimizado a 1 actualización por minuto para ahorro de costos
+  // GPS Tracking Logic - 1 actualización por minuto
   useEffect(() => {
     if (!gpsActive || !loadRef || typeof window === 'undefined' || !navigator.geolocation) return;
 
@@ -155,7 +157,7 @@ export default function RouteDetailPage() {
         const { latitude, longitude, speed } = pos.coords;
         const now = Date.now();
         
-        // REGLA DE COSTOS: Solo actualizamos una vez por minuto (60000ms)
+        // REGLA DE COSTOS: 1 minuto
         const UPDATE_INTERVAL = 60000; 
         if (now - lastUpdateRef.current < UPDATE_INTERVAL) return;
 
@@ -170,7 +172,6 @@ export default function RouteDetailPage() {
           }
         }
 
-        // Si no hubo movimiento significativo (>5 metros), no gastamos una escritura
         if (distanceInc < 0.005 && lastUpdateRef.current !== 0) return;
 
         const newPoint: TrackingPoint = {
@@ -222,7 +223,7 @@ export default function RouteDetailPage() {
         updatedAt: serverTimestamp() 
       });
       setGpsActive(true);
-      toast({ title: "Viaje Iniciado", description: "Rastreo GPS activado (cada 1 min)." });
+      toast({ title: "Viaje Iniciado" });
       openNativeNavigator();
     } catch (e) {
       toast({ variant: "destructive", title: "Error" });
@@ -243,7 +244,7 @@ export default function RouteDetailPage() {
       });
       toast({ title: `Pausa iniciada: ${type}` });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al iniciar pausa" });
+      toast({ variant: "destructive", title: "Error" });
     } finally {
       setIsUpdating(false);
     }
@@ -260,7 +261,7 @@ export default function RouteDetailPage() {
       toast({ title: "Viaje reanudado" });
       openNativeNavigator();
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al reanudar" });
+      toast({ variant: "destructive", title: "Error" });
     } finally {
       setIsUpdating(false);
     }
@@ -279,7 +280,7 @@ export default function RouteDetailPage() {
         updatedAt: serverTimestamp()
       });
       setGpsActive(false);
-      toast({ title: "Entrega Confirmada", description: "Misión cumplida." });
+      toast({ title: "Entrega Confirmada" });
       setIsPODOpen(false);
       router.push('/rutas');
     } catch (e) {
@@ -290,19 +291,29 @@ export default function RouteDetailPage() {
   };
 
   const handleAddExpense = async () => {
-    if (!db || !id || !user) return;
+    if (!db || !id || !user || !load) return;
     setIsUpdating(true);
     try {
-      await addDoc(collection(db, "loads", id as string, "expenses"), {
+      const expenseObj = {
         ...expenseData,
         loadId: id,
         driverId: user.uid,
+        truckId: load.assignedTruckId || null,
         status: 'registered',
         createdAt: serverTimestamp()
-      });
+      };
+
+      // 1. Guardar en subcolección del flete
+      await addDoc(collection(db, "loads", id as string, "expenses"), expenseObj);
+      
+      // 2. Guardar en colección global para el historial del camión si tiene truckId
+      if (load.assignedTruckId) {
+        await addDoc(collection(db, "global_expenses"), expenseObj);
+      }
+
       toast({ title: "Gasto Registrado" });
       setIsExpenseOpen(false);
-      setExpenseData({ category: 'fuel', amount: 0, description: "", location: "", liters: 0, odometerKm: 0, pricePerLiter: 0 });
+      setExpenseData({ category: 'fuel', amount: 0, description: "", location: "", liters: 0, odometerKm: 0, pricePerLiter: 0, fuelBrand: "" });
     } catch (e) {
       toast({ variant: "destructive", title: "Error" });
     } finally {
@@ -338,7 +349,6 @@ export default function RouteDetailPage() {
       const reader = new FileReader();
       reader.onload = (event) => {
         setPodData({ ...podData, photoUrl: event.target?.result as string });
-        toast({ title: "Foto cargada" });
       };
       reader.readAsDataURL(file);
     }
@@ -378,13 +388,6 @@ export default function RouteDetailPage() {
 
         <TabsContent value="mission" className="space-y-6 animate-in fade-in">
           <Card className="bg-slate-900 text-white border-none overflow-hidden relative">
-            <div className="absolute top-2 right-2">
-              {gpsActive ? (
-                 <Badge className="bg-green-500 border-none text-[8px] animate-pulse">📡 GPS ACTIVO</Badge>
-              ) : (
-                 <Badge variant="outline" className="text-white/30 border-white/20 text-[8px]">📡 STANDBY</Badge>
-              )}
-            </div>
             <CardContent className="p-6 text-center space-y-4">
               <div className="space-y-1">
                 <p className="text-[10px] uppercase font-bold text-white/50 tracking-widest">Estado Operativo</p>
@@ -428,46 +431,26 @@ export default function RouteDetailPage() {
                         <div className="space-y-4 py-4">
                           <div className="space-y-2">
                             <Label>Nombre de quien recibe</Label>
-                            <Input 
-                              placeholder="Ej: Marcelo Gomez (Seguridad)" 
-                              value={podData.receiverName}
-                              onChange={e => setPodData({...podData, receiverName: e.target.value})}
-                            />
+                            <Input placeholder="Ej: Marcelo Gomez" value={podData.receiverName} onChange={e => setPodData({...podData, receiverName: e.target.value})} />
                           </div>
-                          
                           <div className="grid grid-cols-2 gap-3">
-                            <Button 
-                              variant="outline" 
-                              className={cn("h-24 flex flex-col gap-2 border-dashed border-2", podData.photoUrl ? "border-green-500 bg-green-50" : "")}
-                              onClick={() => podPhotoInputRef.current?.click()}
-                            >
+                            <Button variant="outline" className={cn("h-24 flex flex-col gap-2 border-dashed border-2", podData.photoUrl ? "border-green-500 bg-green-50" : "")} onClick={() => podPhotoInputRef.current?.click()}>
                               <Camera className={cn("w-6 h-6", podData.photoUrl ? "text-green-600" : "text-slate-400")} />
                               <span className="text-[10px] font-bold uppercase">{podData.photoUrl ? "Foto Lista" : "Foto Remito"}</span>
                             </Button>
                             <input type="file" accept="image/*" capture="environment" className="hidden" ref={podPhotoInputRef} onChange={onPhotoChange} />
-                            
                             <Button variant="outline" className="h-24 flex flex-col gap-2 border-dashed border-2">
                                <Edit3 className="w-6 h-6 text-slate-400" />
                                <span className="text-[10px] font-bold uppercase">Firma Digital</span>
                             </Button>
                           </div>
-
                           <div className="space-y-2">
                             <Label>Observaciones de Entrega</Label>
-                            <Textarea 
-                              placeholder="Novedades, faltantes o daños..." 
-                              value={podData.notes}
-                              onChange={e => setPodData({...podData, notes: e.target.value})}
-                            />
+                            <Textarea placeholder="Novedades..." value={podData.notes} onChange={e => setPodData({...podData, notes: e.target.value})} />
                           </div>
                         </div>
                         <DialogFooter>
-                          <Button 
-                            className="w-full h-14 bg-green-600 text-lg font-bold shadow-xl" 
-                            disabled={!podData.receiverName || isUpdating}
-                            onClick={handleConfirmDelivery}
-                          >
-                            {isUpdating ? <Loader2 className="animate-spin mr-2" /> : <UserCheck className="mr-2" />}
+                          <Button className="w-full h-14 bg-green-600 text-lg font-bold" disabled={!podData.receiverName || isUpdating} onClick={handleConfirmDelivery}>
                             FINALIZAR MISIÓN
                           </Button>
                         </DialogFooter>
@@ -501,12 +484,11 @@ export default function RouteDetailPage() {
                 <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2", load.status !== 'pending' && load.status !== 'assigned' ? 'bg-green-50 border-green-500 text-white' : 'bg-white border-slate-200 text-slate-400')}>
                   {load.status !== 'pending' && load.status !== 'assigned' ? <CheckCircle2 size={16}/> : <Package size={16}/>}
                 </div>
-                <div className="w-0.5 h-full bg-slate-100 dark:bg-slate-800 min-h-[40px]"></div>
+                <div className="w-0.5 h-full bg-slate-100 min-h-[40px]"></div>
               </div>
               <div className="flex-1 space-y-1">
-                <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">Punto de Carga (Origen)</h3>
-                <p className="text-[11px] text-slate-500 leading-tight">{load.origin.name}</p>
-                <p className="text-[10px] text-slate-400 italic">{load.origin.address}</p>
+                <h3 className="font-bold text-sm">Punto de Carga (Origen)</h3>
+                <p className="text-[11px] text-slate-500">{load.origin.name}</p>
               </div>
             </div>
 
@@ -517,12 +499,9 @@ export default function RouteDetailPage() {
                 </div>
               </div>
               <div className="flex-1 space-y-1">
-                <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">Destino Final</h3>
-                <p className="text-[11px] text-slate-500 leading-tight">{displayDestination.name}</p>
-                <p className="text-[10px] text-slate-400 italic">{displayDestination.address}</p>
-                <div className="flex gap-2 pt-2">
-                  <Button variant="outline" size="sm" className="h-8 flex-1 text-[10px] font-bold" onClick={openNativeNavigator}><Compass size={12} className="mr-1" /> Navegar (GPS)</Button>
-                </div>
+                <h3 className="font-bold text-sm">Destino Final</h3>
+                <p className="text-[11px] text-slate-500">{displayDestination.name}</p>
+                <Button variant="outline" size="sm" className="h-8 w-full text-[10px] font-bold mt-2" onClick={openNativeNavigator}><Compass size={12} className="mr-1" /> Navegar (GPS)</Button>
               </div>
             </div>
           </div>
@@ -530,47 +509,31 @@ export default function RouteDetailPage() {
 
         <TabsContent value="time" className="space-y-6 animate-in fade-in">
           <Card className="border-none shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm uppercase text-slate-400 font-bold">Tiempo de Conducción</CardTitle>
-            </CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="text-sm uppercase text-slate-400 font-bold">Tiempo de Conducción</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <p className="text-[9px] uppercase font-bold text-slate-500">Conduciendo Hoy</p>
+                  <p className="text-[9px] uppercase font-bold text-slate-500">Hoy</p>
                   <p className="text-xl font-bold text-blue-600">{load.tracking?.timeOnRouteMinutes || 0} <span className="text-xs font-normal text-slate-400">min</span></p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-[9px] uppercase font-bold text-slate-500">Detenido</p>
+                  <p className="text-[9px] uppercase font-bold text-slate-500">Parado</p>
                   <p className="text-xl font-bold text-orange-600">{load.tracking?.timeStoppedMinutes || 0} <span className="text-xs font-normal text-slate-400">min</span></p>
                 </div>
               </div>
-              <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl flex items-center gap-3">
-                 <Zap className="text-amber-600 shrink-0" size={16} />
-                 <p className="text-[10px] text-amber-800 font-bold">⚠️ Límite: 8h conducción diaria (Ley 24.449)</p>
-              </div>
             </CardContent>
           </Card>
-
           <div className="px-2 space-y-4">
-             <Label className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">Registrar Pausa / Descanso</Label>
-             
              {load.status === 'on_pause' ? (
                 <div className="p-6 bg-orange-50 border-2 border-orange-200 rounded-2xl text-center space-y-4">
-                   <div className="flex flex-col items-center gap-2">
-                      <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center text-orange-600 animate-pulse">
-                         <History size={28} />
-                      </div>
-                      <p className="text-sm font-black text-orange-800 uppercase italic">PAUSA ACTIVA: {load.tracking?.lastPauseType}</p>
-                   </div>
-                   <Button className="w-full bg-orange-600 h-14 text-lg font-bold" onClick={handleResumeTrip} disabled={isUpdating}>
-                      REANUDAR CONDUCCIÓN
-                   </Button>
+                   <p className="text-sm font-black text-orange-800 uppercase italic">PAUSA ACTIVA: {load.tracking?.lastPauseType}</p>
+                   <Button className="w-full bg-orange-600 h-14 text-lg font-bold" onClick={handleResumeTrip}>REANUDAR</Button>
                 </div>
              ) : (
                <div className="grid grid-cols-2 gap-3">
                   <Button variant="outline" className="flex flex-col h-16 gap-1" onClick={() => handleStartPause('COMIDA')}><Utensils size={18} /> <span className="text-[10px] font-bold">COMIDA</span></Button>
                   <Button variant="outline" className="flex flex-col h-16 gap-1" onClick={() => handleStartPause('DESCANSO')}><Coffee size={18} /> <span className="text-[10px] font-bold">DESCANSO</span></Button>
-                  <Button variant="outline" className="flex flex-col h-16 gap-1 col-span-2 bg-slate-900 text-white" onClick={() => handleStartPause('PERNOCTE')}><Moon size={18} /> <span className="text-[10px] font-bold">PERNOCTAR (DORMIR)</span></Button>
+                  <Button variant="outline" className="flex flex-col h-16 gap-1 col-span-2 bg-slate-900 text-white" onClick={() => handleStartPause('PERNOCTE')}><Moon size={18} /> <span className="text-[10px] font-bold">DORMIR (PERNOCTE)</span></Button>
                </div>
              )}
           </div>
@@ -578,70 +541,23 @@ export default function RouteDetailPage() {
 
         <TabsContent value="incidents" className="space-y-6 animate-in fade-in">
            <div className="px-2 space-y-4">
-             <div className="p-4 bg-red-50 border border-red-100 rounded-xl">
-                <p className="text-xs font-bold text-red-800 flex items-center gap-2 uppercase">
-                  <Siren size={16} /> ¡Emergencia Crítica!
-                </p>
-                <p className="text-[10px] text-red-600 mt-1">Si hubo un accidente con heridos, llame primero al 911.</p>
-                <Button variant="destructive" className="w-full mt-3 h-12 font-bold text-lg" onClick={() => window.open('tel:911')}>LLAMAR 911</Button>
-             </div>
-
-             <Label className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">Tipo de Incidente</Label>
+             <Button variant="destructive" className="w-full h-12 font-bold" onClick={() => window.open('tel:911')}><Siren size={18} className="mr-2" /> LLAMAR 911 (EMERGENCIA)</Button>
              <div className="grid grid-cols-2 gap-2">
                 {INCIDENT_TYPES.map(type => (
                   <Dialog key={type.id}>
                     <DialogTrigger asChild>
-                      <button 
-                        className="flex flex-col items-center justify-center p-3 rounded-xl border bg-white dark:bg-slate-900 hover:bg-slate-50 transition-all gap-2"
-                        onClick={() => setSelectedIncidentType(type.id)}
-                      >
-                        <div className={cn("w-10 h-10 rounded-full flex items-center justify-center text-white", type.color)}>
-                          <type.icon size={20} />
-                        </div>
-                        <span className="text-[9px] uppercase font-bold text-slate-600 dark:text-slate-400 text-center leading-tight">{type.label}</span>
+                      <button className="flex flex-col items-center justify-center p-3 rounded-xl border bg-white gap-2" onClick={() => setSelectedIncidentType(type.id)}>
+                        <div className={cn("w-10 h-10 rounded-full flex items-center justify-center text-white", type.color)}><type.icon size={20} /></div>
+                        <span className="text-[9px] uppercase font-bold text-slate-600 text-center">{type.label}</span>
                       </button>
                     </DialogTrigger>
                     <DialogContent className="max-w-[90vw] rounded-xl">
-                      <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
-                           <AlertTriangle className="text-red-500" /> Reportar {type.label}
-                        </DialogTitle>
-                        <DialogDescription>Detalle lo ocurrido para que la central pueda asistirlo.</DialogDescription>
-                      </DialogHeader>
+                      <DialogHeader><DialogTitle>Reportar {type.label}</DialogTitle></DialogHeader>
                       <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                          <Label>Gravedad</Label>
-                          <div className="grid grid-cols-3 gap-2">
-                             <Button variant={incidentForm.severity === 'low' ? 'default' : 'outline'} className="text-[9px]" onClick={() => setIncidentForm({...incidentForm, severity: 'low'})}>LEVE</Button>
-                             <Button variant={incidentForm.severity === 'medium' ? 'default' : 'outline'} className="text-[9px]" onClick={() => setIncidentForm({...incidentForm, severity: 'medium'})}>MODERADA</Button>
-                             <Button variant={incidentForm.severity === 'high' ? 'default' : 'outline'} className="text-[9px] bg-red-600 text-white" onClick={() => setIncidentForm({...incidentForm, severity: 'high'})}>GRAVE</Button>
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Descripción del Suceso</Label>
-                          <Textarea 
-                            placeholder="Ej: Falla en frenos, pinchazo rueda trasera..." 
-                            value={incidentForm.description}
-                            onChange={e => setIncidentForm({...incidentForm, description: e.target.value})}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Ubicación de Referencia</Label>
-                          <Input 
-                            placeholder="Km de ruta, estación de servicio..." 
-                            value={incidentForm.locationDesc}
-                            onChange={e => setIncidentForm({...incidentForm, locationDesc: e.target.value})}
-                          />
-                        </div>
-                        <Button variant="outline" className="w-full h-16 border-dashed border-2 text-slate-400">
-                          <Camera className="mr-2" /> Adjuntar Evidencia (Foto/Video)
-                        </Button>
+                        <Textarea placeholder="Describa lo ocurrido..." value={incidentForm.description} onChange={e => setIncidentForm({...incidentForm, description: e.target.value})} />
+                        <Input placeholder="Lugar de referencia..." value={incidentForm.locationDesc} onChange={e => setIncidentForm({...incidentForm, locationDesc: e.target.value})} />
                       </div>
-                      <DialogFooter>
-                        <Button className="w-full bg-red-600 h-12 text-lg font-bold" onClick={handleReportIncident} disabled={isUpdating || !incidentForm.description}>
-                          ENVIAR REPORTE
-                        </Button>
-                      </DialogFooter>
+                      <DialogFooter><Button className="w-full bg-red-600 h-12 font-bold" onClick={handleReportIncident}>ENVIAR REPORTE</Button></DialogFooter>
                     </DialogContent>
                   </Dialog>
                 ))}
@@ -650,172 +566,70 @@ export default function RouteDetailPage() {
         </TabsContent>
 
         <TabsContent value="wallet" className="space-y-6 animate-in fade-in">
-          <Card className="border-none shadow-sm bg-gradient-to-br from-slate-800 to-slate-900 text-white overflow-hidden">
-            <CardContent className="p-6 space-y-6">
-              <div className="flex justify-between items-start">
-                <div className="space-y-1">
-                  <p className="text-[10px] uppercase font-bold text-white/50 tracking-wider">Saldo Disponible</p>
-                  <h2 className="text-3xl font-black italic">
-                    {((load.budget?.initialAdvance || 0) - totalSpent).toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}
-                  </h2>
-                </div>
-                <div className="bg-white/10 p-2 rounded-lg"><Wallet className="text-blue-400" /></div>
+          <Card className="bg-slate-900 text-white border-none shadow-sm">
+            <CardContent className="p-6 flex justify-between items-start">
+              <div className="space-y-1">
+                <p className="text-[10px] uppercase font-bold text-white/50">Saldo Anticipo</p>
+                <h2 className="text-3xl font-black italic">{((load.budget?.initialAdvance || 0) - totalSpent).toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</h2>
               </div>
+              <Wallet className="text-blue-400" />
             </CardContent>
           </Card>
 
           <div className="px-2 space-y-4">
             <div className="flex justify-between items-center">
-              <h4 className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">Gastos Registrados</h4>
+              <h4 className="text-[10px] uppercase font-bold text-slate-400">Gastos Registrados</h4>
               <Dialog open={isExpenseOpen} onOpenChange={setIsExpenseOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm" className="h-8 bg-blue-600 font-bold text-xs"><Plus size={14} className="mr-1" /> Nuevo Ticket</Button>
-                </DialogTrigger>
+                <DialogTrigger asChild><Button size="sm" className="bg-blue-600 font-bold text-xs"><Plus size={14} className="mr-1" /> Nuevo Ticket</Button></DialogTrigger>
                 <DialogContent className="max-w-[90vw] rounded-xl overflow-y-auto max-h-[90vh]">
                   <DialogHeader><DialogTitle>Registrar Gasto</DialogTitle></DialogHeader>
                   <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                      <Label>Categoría</Label>
-                      <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                         {EXPENSE_CATEGORIES.map(cat => (
-                          <Button 
-                            key={cat.id} 
-                            variant={expenseData.category === cat.id ? 'default' : 'outline'}
-                            className="flex flex-col h-16 gap-1 p-1 text-[9px]"
-                            onClick={() => setExpenseData({...expenseData, category: cat.id})}
-                          >
-                            <cat.icon size={16} />
-                            {cat.label}
+                          <Button key={cat.id} variant={expenseData.category === cat.id ? 'default' : 'outline'} className="flex flex-col h-16 gap-1 p-1 text-[9px]" onClick={() => setExpenseData({...expenseData, category: cat.id})}>
+                            <cat.icon size={16} />{cat.label}
                           </Button>
                         ))}
-                      </div>
                     </div>
-
                     {expenseData.category === 'fuel' && (
-                      <div className="grid grid-cols-2 gap-4 p-4 bg-blue-50 border border-blue-100 rounded-xl animate-in fade-in zoom-in-95">
-                         <div className="space-y-1">
-                            <Label className="text-[10px] uppercase font-bold text-blue-600">Odómetro Actual</Label>
-                            <Input 
-                              type="number" 
-                              className="h-9 bg-white" 
-                              placeholder="KM" 
-                              value={expenseData.odometerKm || ''} 
-                              onChange={e => setExpenseData({...expenseData, odometerKm: parseFloat(e.target.value) || 0})} 
-                            />
-                         </div>
-                         <div className="space-y-1">
-                            <Label className="text-[10px] uppercase font-bold text-blue-600">Cant. Litros</Label>
-                            <Input 
-                              type="number" 
-                              className="h-9 bg-white" 
-                              placeholder="L" 
-                              value={expenseData.liters || ''} 
-                              onChange={e => {
-                                const lits = parseFloat(e.target.value) || 0;
-                                setExpenseData({
-                                  ...expenseData, 
-                                  liters: lits,
-                                  amount: lits * (expenseData.pricePerLiter || 0)
-                                });
-                              }} 
-                            />
-                         </div>
-                         <div className="space-y-1">
-                            <Label className="text-[10px] uppercase font-bold text-blue-600">Precio x Litro</Label>
-                            <Input 
-                              type="number" 
-                              className="h-9 bg-white" 
-                              placeholder="$" 
-                              value={expenseData.pricePerLiter || ''} 
-                              onChange={e => {
-                                const price = parseFloat(e.target.value) || 0;
-                                setExpenseData({
-                                  ...expenseData, 
-                                  pricePerLiter: price,
-                                  amount: (expenseData.liters || 0) * price
-                                });
-                              }} 
-                            />
-                         </div>
-                         <div className="space-y-1">
-                            <Label className="text-[10px] uppercase font-bold text-blue-600">Marca / Bandera</Label>
-                            <Input 
-                              className="h-9 bg-white" 
-                              placeholder="Shell, YPF..." 
-                              value={expenseData.fuelBrand || ''} 
-                              onChange={e => setExpenseData({...expenseData, fuelBrand: e.target.value})} 
-                            />
-                         </div>
+                      <div className="grid grid-cols-2 gap-4 p-4 bg-blue-50 border rounded-xl">
+                         <div className="space-y-1"><Label className="text-[9px] font-bold uppercase">Odómetro KM</Label><Input type="number" className="h-8 bg-white" value={expenseData.odometerKm || ''} onChange={e => setExpenseData({...expenseData, odometerKm: parseFloat(e.target.value)})} /></div>
+                         <div className="space-y-1"><Label className="text-[9px] font-bold uppercase">Cant. Litros</Label><Input type="number" className="h-8 bg-white" value={expenseData.liters || ''} onChange={e => setExpenseData({...expenseData, liters: parseFloat(e.target.value), amount: (parseFloat(e.target.value) || 0) * (expenseData.pricePerLiter || 0)})} /></div>
+                         <div className="space-y-1"><Label className="text-[9px] font-bold uppercase">Precio/Litro</Label><Input type="number" className="h-8 bg-white" value={expenseData.pricePerLiter || ''} onChange={e => setExpenseData({...expenseData, pricePerLiter: parseFloat(e.target.value), amount: (expenseData.liters || 0) * (parseFloat(e.target.value) || 0)})} /></div>
+                         <div className="space-y-1"><Label className="text-[9px] font-bold uppercase">Bandera (Ref)</Label><Input className="h-8 bg-white" placeholder="Shell, YPF..." value={expenseData.fuelBrand || ''} onChange={e => setExpenseData({...expenseData, fuelBrand: e.target.value})} /></div>
                       </div>
                     )}
-
-                    <div className="space-y-2">
-                      <Label>Monto Total (ARS)</Label>
-                      <div className="relative">
-                        <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                        <Input 
-                          type="number" 
-                          className="pl-9" 
-                          value={expenseData.amount ?? 0} 
-                          onChange={e => setExpenseData({...expenseData, amount: parseFloat(e.target.value) || 0})} 
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Lugar / Punto de Ruta</Label>
-                      <Input 
-                        placeholder="Ej: Estación Shell km 245" 
-                        value={expenseData.location ?? ''} 
-                        onChange={e => setExpenseData({...expenseData, location: e.target.value})} 
-                      />
-                    </div>
+                    <div className="space-y-2"><Label>Monto Total ($)</Label><Input type="number" value={expenseData.amount} onChange={e => setExpenseData({...expenseData, amount: parseFloat(e.target.value)})} /></div>
+                    <div className="space-y-2"><Label>Lugar / Punto Ruta</Label><Input placeholder="Ej: Shell km 245" value={expenseData.location} onChange={e => setExpenseData({...expenseData, location: e.target.value})} /></div>
                   </div>
-                  <DialogFooter>
-                    <Button className="w-full h-12 bg-blue-600 text-lg font-bold shadow-xl" onClick={handleAddExpense} disabled={isUpdating || !expenseData.amount}>
-                      GUARDAR GASTO
-                    </Button>
-                  </DialogFooter>
+                  <DialogFooter><Button className="w-full h-12 bg-blue-600 font-bold" onClick={handleAddExpense}>GUARDAR GASTO</Button></DialogFooter>
                 </DialogContent>
               </Dialog>
             </div>
 
             <div className="space-y-3">
-              {expenses?.map(exp => {
-                const CategoryIcon = EXPENSE_CATEGORIES.find(c => c.id === exp.category)?.icon || Receipt;
-                return (
-                  <Card key={exp.id} className="border-none shadow-sm bg-white dark:bg-slate-900">
-                    <CardContent className="p-3 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400 border"><CategoryIcon size={18} /></div>
-                        <div>
-                          <div className="font-bold text-sm text-slate-800 dark:text-slate-200">${exp.amount?.toLocaleString()}</div>
-                          <div className="text-[10px] text-slate-400 uppercase font-bold">
-                            {exp.category === 'fuel' ? `${exp.fuelBrand || ''} - ${exp.location}` : exp.location}
-                          </div>
-                          {exp.category === 'fuel' && exp.liters && (
-                            <div className="text-[9px] text-blue-600 font-bold uppercase mt-0.5">
-                              {exp.liters} L • ${exp.pricePerLiter}/L • Odóm: {exp.odometerKm}
-                            </div>
-                          )}
-                        </div>
+              {expenses?.map(exp => (
+                <Card key={exp.id} className="border-none shadow-sm">
+                  <CardContent className="p-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-slate-50 flex items-center justify-center border"><Receipt size={18} /></div>
+                      <div>
+                        <div className="font-bold text-sm">${exp.amount?.toLocaleString()}</div>
+                        <div className="text-[9px] text-slate-400 uppercase font-bold">{exp.category === 'fuel' ? `${exp.fuelBrand || ''} - ${exp.location}` : exp.location}</div>
                       </div>
-                      <Badge variant="outline" className="text-[8px] uppercase h-5 font-bold">{exp.status}</Badge>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+                    </div>
+                    <Badge variant="outline" className="text-[8px] uppercase">{exp.status}</Badge>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           </div>
         </TabsContent>
       </Tabs>
 
       <div className="fixed bottom-6 left-6 right-6 flex gap-3 z-40">
-         <Button variant="outline" className="flex-1 h-14 font-bold shadow-lg bg-white dark:bg-slate-900 border-slate-200" onClick={() => window.open(`tel:0800-LOGISTICA`)}>
-           <LifeBuoy className="mr-2 text-blue-600" /> CENTRAL
-         </Button>
-         <Button className="bg-red-600 flex-1 h-14 font-bold shadow-lg text-white" onClick={() => setActiveTab('incidents')}>
-           <Siren className="mr-2" /> SOS
-         </Button>
+         <Button variant="outline" className="flex-1 h-14 font-bold shadow-lg bg-white" onClick={() => window.open(`tel:0800-LOGISTICA`)}><LifeBuoy className="mr-2 text-blue-600" /> CENTRAL</Button>
+         <Button className="bg-red-600 flex-1 h-14 font-bold shadow-lg text-white" onClick={() => setActiveTab('incidents')}><Siren className="mr-2" /> SOS</Button>
       </div>
     </div>
   );
