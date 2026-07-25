@@ -16,11 +16,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { 
   Package, ArrowLeft, ArrowRight, Save, Loader2, 
   MapPin, Calendar, Clock, DollarSign, Truck, 
-  Info, AlertTriangle, Globe, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, Map, Upload
+  Info, AlertTriangle, Globe, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, Map, Upload, User, UserCheck
 } from "lucide-react";
-import { Load, Client, Hub, LoadLegStop, LoadDocument, LoadDocType } from "@/app/lib/types";
+import { Load, Client, Hub, LoadLegStop, LoadDocument, LoadDocType, Truck as TruckType, Driver } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { format, addHours, parse } from "date-fns";
 
 const SERVICE_TYPES = [
   { id: 'standard', label: 'Carga General', icon: Package },
@@ -53,6 +54,10 @@ export default function LoadFormWizard() {
     serviceType: 'standard',
     clientName: "",
     isRoundTrip: false,
+    pickupDate: format(new Date(), "yyyy-MM-dd"),
+    pickupTime: "08:00",
+    estimatedArrivalDate: format(new Date(), "yyyy-MM-dd"),
+    estimatedArrivalTime: "18:00",
     origin: { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", country: "Argentina", zip: "", instructions: "" },
     outboundStops: [],
     returnStops: [],
@@ -77,8 +82,13 @@ export default function LoadFormWizard() {
 
   const clientsQuery = useMemo(() => db ? query(collection(db, "clients"), orderBy("name")) : null, [db]);
   const hubsQuery = useMemo(() => db ? query(collection(db, "hubs"), orderBy("name")) : null, [db]);
+  const trucksQuery = useMemo(() => db ? query(collection(db, "trucks"), orderBy("plate")) : null, [db]);
+  const driversQuery = useMemo(() => db ? query(collection(db, "drivers"), orderBy("lastName")) : null, [db]);
+
   const { data: clients } = useCollection<Client>(clientsQuery);
   const { data: hubs } = useCollection<Hub>(hubsQuery);
+  const { data: trucks } = useCollection<TruckType>(trucksQuery);
+  const { data: drivers } = useCollection<Driver>(driversQuery);
 
   const locationsList = useMemo(() => {
     const list: any[] = [];
@@ -87,29 +97,63 @@ export default function LoadFormWizard() {
     return list;
   }, [hubs, clients]);
 
+  const selectedTruck = useMemo(() => trucks?.find(t => t.id === formData.assignedTruckId), [trucks, formData.assignedTruckId]);
+
+  const handleTruckSelect = (id: string) => {
+    const truck = trucks?.find(t => t.id === id);
+    if (!truck) return;
+    setFormData(prev => ({
+      ...prev,
+      assignedTruckId: id,
+      assignedDriverId: truck.assignedDriverId && truck.assignedDriverId !== 'none' ? truck.assignedDriverId : prev.assignedDriverId
+    }));
+    if (truck.assignedDriverId && truck.assignedDriverId !== 'none') {
+      toast({ title: "Chofer Vinculado", description: "Se ha asignado automáticamente el chofer de esta unidad." });
+    }
+  };
+
+  const handleCalculateArrival = (isOutbound: boolean) => {
+    const dateStr = isOutbound ? formData.pickupDate : formData.returnPickupDate;
+    const timeStr = isOutbound ? formData.pickupTime : formData.returnPickupTime;
+    
+    if (!dateStr || !timeStr) return;
+
+    try {
+      const startDateTime = parse(`${dateStr} ${timeStr}`, "yyyy-MM-dd HH:mm", new Date());
+      // Estimación básica: 8 horas de viaje
+      const endDateTime = addHours(startDateTime, 8);
+      
+      if (isOutbound) {
+        setFormData(prev => ({
+          ...prev,
+          estimatedArrivalDate: format(endDateTime, "yyyy-MM-dd"),
+          estimatedArrivalTime: format(endDateTime, "HH:mm")
+        }));
+      } else {
+        setFormData(prev => ({
+          ...prev,
+          returnEstimatedArrivalDate: format(endDateTime, "yyyy-MM-dd"),
+          returnEstimatedArrivalTime: format(endDateTime, "HH:mm")
+        }));
+      }
+      toast({ title: "ETA Calculado", description: "Se estimó una llegada de 8 horas de tránsito." });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const buildFullAddress = (data: any) => {
     if (!data) return "";
-    
-    // Si es una Sede (Hub)
     if (typeof data.address === 'string') {
       const parts = [data.address, data.city, data.province].filter(Boolean);
       return parts.join(", ");
     }
-    
-    // Si es un Cliente (Dirección estructurada)
     if (data.address && typeof data.address === 'object') {
       const { street, number, floor, barrio, city, province } = data.address;
       const streetPart = `${street || ""} ${number || ""}`.trim();
-      const parts = [
-        streetPart, 
-        floor ? `Piso ${floor}` : null, 
-        barrio ? `Zona: ${barrio}` : null, 
-        city, 
-        province
-      ].filter(Boolean);
+      const parts = [streetPart, floor ? `Piso ${floor}` : null, barrio ? `Zona: ${barrio}` : null, city, province].filter(Boolean);
       return parts.join(", ");
     }
-    
     return "";
   };
 
@@ -177,12 +221,10 @@ export default function LoadFormWizard() {
     }
     const stop = { ...editingStop, id: editingStop.id || Math.random().toString(36).substring(7) } as LoadLegStop;
     const field = activeLeg === 'outbound' ? 'outboundStops' : 'returnStops';
-    
     setFormData(prev => ({
       ...prev,
       [field]: [...(prev[field] || []).filter(s => s.id !== stop.id), stop]
     }));
-    
     setIsStopModalOpen(false);
     setEditingStop({ id: "", name: "", address: "", province: "Buenos Aires", country: "Argentina", contact: "", phone: "", description: "", weightKg: 0, volumeM3: 0, units: 0, unitType: "Pallet", documents: [] });
   };
@@ -261,39 +303,145 @@ export default function LoadFormWizard() {
 
       <div className="animate-in fade-in duration-300 mx-4">
         {step === 1 && (
-          <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Configuración Inicial</CardTitle></CardHeader>
-            <CardContent className="space-y-8">
-              <div className="space-y-4">
-                <Label>Tipo de Servicio</Label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
-                  {SERVICE_TYPES.map(type => (
-                    <button 
-                      key={type.id} 
-                      className={cn(
-                        "flex flex-col items-center justify-center min-h-[80px] gap-2 p-3 rounded-xl border transition-all text-center",
-                        formData.serviceType === type.id ? "bg-blue-600 text-white border-blue-600 shadow-md" : "bg-white text-slate-500 border-slate-200 hover:border-blue-300"
-                      )}
-                      onClick={() => setFormData({...formData, serviceType: type.id as any})}
-                    >
-                      <type.icon size={20} />
-                      <span className="text-[10px] uppercase font-black">{type.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="pt-6 border-t flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Repeat className={cn("transition-colors", formData.isRoundTrip ? "text-blue-600" : "text-slate-300")} />
-                  <div className="space-y-0.5">
-                    <Label>Habilitar Viaje de Retorno</Label>
-                    <p className="text-[10px] text-slate-400 uppercase font-bold">Permite cargar mercadería para la vuelta</p>
+          <div className="space-y-6">
+            <Card className="border-none shadow-sm">
+              <CardHeader><CardTitle>Configuración Inicial y Recursos</CardTitle></CardHeader>
+              <CardContent className="space-y-8">
+                <div className="space-y-4">
+                  <Label>Tipo de Servicio</Label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                    {SERVICE_TYPES.map(type => (
+                      <button 
+                        key={type.id} 
+                        className={cn(
+                          "flex flex-col items-center justify-center min-h-[80px] gap-2 p-3 rounded-xl border transition-all text-center",
+                          formData.serviceType === type.id ? "bg-blue-600 text-white border-blue-600 shadow-md" : "bg-white text-slate-500 border-slate-200 hover:border-blue-300"
+                        )}
+                        onClick={() => setFormData({...formData, serviceType: type.id as any})}
+                      >
+                        <type.icon size={20} />
+                        <span className="text-[10px] uppercase font-black">{type.label}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
-                <Switch checked={formData.isRoundTrip} onCheckedChange={v => setFormData({...formData, isRoundTrip: v})} />
-              </div>
-            </CardContent>
-          </Card>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-blue-600 font-bold text-xs uppercase">
+                      <Truck size={16} /> Vehículo y Equipo
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Unidad Tractora (Camión)</Label>
+                      <Select value={formData.assignedTruckId} onValueChange={handleTruckSelect}>
+                        <SelectTrigger className="bg-white"><SelectValue placeholder="Seleccionar camión" /></SelectTrigger>
+                        <SelectContent>
+                          {trucks?.map(t => (
+                            <SelectItem key={t.id} value={t.id}>{t.plate} - {t.brand} {t.model}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {selectedTruck?.semiTrailer && (
+                      <div className="p-3 bg-slate-50 rounded-lg border flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase">Semirremolque Vinculado</p>
+                          <p className="text-xs font-bold text-slate-700">{selectedTruck.semiTrailer.plate} - {selectedTruck.semiTrailer.brand}</p>
+                        </div>
+                        <Badge className="bg-blue-100 text-blue-600 border-none text-[8px] uppercase">{selectedTruck.semiTrailer.type}</Badge>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-blue-600 font-bold text-xs uppercase">
+                      <UserCheck size={16} /> Personal Asignado
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Chofer Responsable</Label>
+                      <Select value={formData.assignedDriverId} onValueChange={v => setFormData({...formData, assignedDriverId: v})}>
+                        <SelectTrigger className="bg-white"><SelectValue placeholder="Seleccionar chofer" /></SelectTrigger>
+                        <SelectContent>
+                          {drivers?.map(d => (
+                            <SelectItem key={d.id} value={d.id}>{d.lastName}, {d.firstName}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-blue-600 font-bold text-xs uppercase">
+                      <Clock size={16} /> Programación de Salida (Ida)
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase">Fecha Salida</Label>
+                        <Input type="date" value={formData.pickupDate} onChange={e => setFormData({...formData, pickupDate: e.target.value})} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase">Hora Salida</Label>
+                        <Input type="time" value={formData.pickupTime} onChange={e => setFormData({...formData, pickupTime: e.target.value})} />
+                      </div>
+                    </div>
+                    <Button variant="outline" size="sm" className="w-full text-[10px] font-bold" onClick={() => handleCalculateArrival(true)}>
+                      Calcular ETA Ida (Estimado)
+                    </Button>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase text-green-600 font-bold">ETA Fecha Llegada</Label>
+                        <Input type="date" value={formData.estimatedArrivalDate} onChange={e => setFormData({...formData, estimatedArrivalDate: e.target.value})} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase text-green-600 font-bold">ETA Hora Llegada</Label>
+                        <Input type="time" value={formData.estimatedArrivalTime} onChange={e => setFormData({...formData, estimatedArrivalTime: e.target.value})} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-blue-600 font-bold text-xs uppercase">
+                        <Repeat size={16} /> Viaje de Retorno
+                      </div>
+                      <Switch checked={formData.isRoundTrip} onCheckedChange={v => setFormData({...formData, isRoundTrip: v})} />
+                    </div>
+                    {formData.isRoundTrip ? (
+                      <div className="space-y-4 animate-in fade-in">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <Label className="text-[10px] uppercase">Fecha Inicio Retorno</Label>
+                            <Input type="date" value={formData.returnPickupDate} onChange={e => setFormData({...formData, returnPickupDate: e.target.value})} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] uppercase">Hora Inicio Retorno</Label>
+                            <Input type="time" value={formData.returnPickupTime} onChange={e => setFormData({...formData, returnPickupTime: e.target.value})} />
+                          </div>
+                        </div>
+                        <Button variant="outline" size="sm" className="w-full text-[10px] font-bold" onClick={() => handleCalculateArrival(false)}>
+                          Calcular ETA Retorno
+                        </Button>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <Label className="text-[10px] uppercase text-green-600 font-bold">ETA Llegada Final</Label>
+                            <Input type="date" value={formData.returnEstimatedArrivalDate} onChange={e => setFormData({...formData, returnEstimatedArrivalDate: e.target.value})} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] uppercase text-green-600 font-bold">ETA Hora Final</Label>
+                            <Input type="time" value={formData.returnEstimatedArrivalTime} onChange={e => setFormData({...formData, returnEstimatedArrivalTime: e.target.value})} />
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-slate-400 italic">Habilite el retorno si el camión cargará mercadería de vuelta.</p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {step === 2 && (

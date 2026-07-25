@@ -47,38 +47,21 @@ export interface LoadLegStop {
   documents: LoadDocument[];
 }
 
-export type ExpenseCategory = 
-  | 'fuel' 
-  | 'toll' 
-  | 'meal' 
-  | 'lodging' 
-  | 'maintenance' 
-  | 'parking' 
-  | 'documentation' 
-  | 'loading_unloading' 
-  | 'emergency' 
-  | 'other';
-
-export type ExpenseStatus = 'registered' | 'pending_approval' | 'approved' | 'rejected';
-
 export interface Expense {
   id: string;
   loadId: string;
   driverId: string;
   truckId?: string;
   category: ExpenseCategory;
-  subCategory?: string;
   amount: number;
-  currency: string;
   description: string;
   location: string;
-  receiptUrl?: string;
-  status: ExpenseStatus;
+  status: 'registered' | 'approved' | 'rejected';
   createdAt: any;
-  approvedAt?: any;
-  approvedBy?: string;
-  observations?: string;
 }
+
+export type ExpenseCategory = 'fuel' | 'toll' | 'meal' | 'lodging' | 'maintenance' | 'other';
+export type ExpenseStatus = 'registered' | 'approved' | 'rejected';
 
 export interface VehicleDocument {
   id: string;
@@ -133,7 +116,7 @@ export interface Truck {
 
 export interface Driver {
   id: string;
-  docType: 'DNI' | 'LC' | 'LE' | 'Pasaporte' | 'CI' | 'RUT' | 'RUC' | 'CPF';
+  docType: string;
   dni: string;
   dniFileUrl?: string;
   firstName: string;
@@ -185,50 +168,14 @@ export interface Hub {
   createdAt: any;
 }
 
-export type ClientType = 'company' | 'monotax' | 'government' | 'cooperative' | 'international';
-export type ClientCategory = 'premium' | 'regular' | 'occasional' | 'potential' | 'inactive';
-
-export interface ClientContact {
-  name: string;
-  role: string;
-  email: string;
-  emailAlt?: string;
-  phone: string;
-  phoneAlt?: string;
-  whatsapp?: string;
-}
-
 export interface Client {
   id: string;
   internalCode: string;
-  type: ClientType;
   name: string;
   cuit: string; 
-  ivaCondition: string;
-  industry: string;
-  fiscalObservations?: string;
-  facadePhotoUrl?: string;
-  
-  comex?: {
-    countryOfOrigin: Country;
-    impExpCode: string;
-    operatorType: 'importer' | 'exporter' | 'agent' | 'carrier';
-    registrations: {
-      sicnea: boolean;
-      sita: boolean;
-      malvina: boolean;
-      vucea: boolean;
-    }
-  };
-
-  mainContact: ClientContact;
-  secondaryContacts?: Partial<ClientContact>[];
-  
   address: {
     street: string;
     number: string;
-    floor?: string;
-    barrio?: string;
     city: string;
     province: string;
     country: Country;
@@ -236,16 +183,15 @@ export interface Client {
     lat?: number;
     lng?: number;
   };
-  
-  category: ClientCategory;
-  preferredPaymentMethod: string;
-  creditLimit: number;
-  standardLeadTimeHours: number;
-  internalNotes?: string;
-  
+  mainContact: {
+    name: string;
+    email: string;
+    phone: string;
+  };
+  industry: string;
+  facadePhotoUrl?: string;
   status: 'active' | 'inactive';
   createdAt: any;
-  updatedAt: any;
 }
 
 export interface TrackingPoint {
@@ -272,6 +218,17 @@ export interface Load {
   
   isRoundTrip: boolean;
 
+  // Planificación Temporal
+  pickupDate: string;
+  pickupTime: string;
+  estimatedArrivalDate: string;
+  estimatedArrivalTime: string;
+  
+  returnPickupDate?: string;
+  returnPickupTime?: string;
+  returnEstimatedArrivalDate?: string;
+  returnEstimatedArrivalTime?: string;
+
   origin: {
     id?: string;
     name: string;
@@ -296,7 +253,6 @@ export interface Load {
     entryCustoms: string;
     declarationNumber: string;
     micDtaNumber: string;
-    micDtaExpiry?: string;
     containerNumber: string;
     sealNumber: string;
     transportDocType: 'BL' | 'CP' | 'AWB';
@@ -318,7 +274,6 @@ export interface Load {
   };
 
   basePrice: number;
-  currency: 'ARS' | 'USD' | 'CLP' | 'BRL' | 'PYG' | 'BOB';
   totalAmount: number;
   status: LoadStatus;
   createdAt: any;
