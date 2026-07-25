@@ -229,19 +229,19 @@ export default function LoadFormWizard() {
                 </div>
                 <div className="space-y-4">
                   <Label>Tipo de Servicio</Label>
-                  <div className="grid grid-cols-5 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
                     {SERVICE_TYPES.map(type => (
                       <button 
                         key={type.id} 
                         type="button" 
                         className={cn(
-                          "flex flex-col items-center justify-center h-16 gap-1 p-2 rounded-lg border transition-all",
-                          formData.serviceType === type.id ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-500 border-slate-200 hover:border-blue-300"
+                          "flex flex-col items-center justify-center min-h-[80px] gap-2 p-2 rounded-xl border transition-all text-center",
+                          formData.serviceType === type.id ? "bg-blue-600 text-white border-blue-600 shadow-md" : "bg-white text-slate-500 border-slate-200 hover:border-blue-300"
                         )}
                         onClick={() => setFormData({...formData, serviceType: type.id as any})}
                       >
-                        <type.icon size={16} />
-                        <span className="text-[7px] uppercase font-bold leading-tight">{type.label}</span>
+                        <type.icon size={18} />
+                        <span className="text-[10px] sm:text-[11px] uppercase font-black leading-tight break-words px-1">{type.label}</span>
                       </button>
                     ))}
                   </div>

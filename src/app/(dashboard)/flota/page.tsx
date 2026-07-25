@@ -307,17 +307,17 @@ export default function FlotaPage() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>Tipo Carrocería</Label>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {BODY_TYPES.map(type => (
                         <Button 
                           key={type.id} 
                           type="button" 
                           variant={formData.bodyType === type.id ? "default" : "outline"}
-                          className="flex flex-col h-16 gap-1"
+                          className="flex flex-col h-auto min-h-[70px] gap-2 p-2 text-center"
                           onClick={() => setFormData({...formData, bodyType: type.id})}
                         >
-                          <type.icon size={16} />
-                          <span className="text-[9px] uppercase font-bold">{type.label}</span>
+                          <type.icon size={18} />
+                          <span className="text-[10px] uppercase font-black leading-tight px-1">{type.label}</span>
                         </Button>
                       ))}
                     </div>
@@ -347,7 +347,7 @@ export default function FlotaPage() {
                   </Button>
                 </div>
                 <div className="space-y-4">
-                   <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
+                   <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl space-y-2">
                       <p className="text-xs font-bold text-blue-700 flex items-center gap-2"><InfoIcon size={14} /> Nota Operativa</p>
                       <p className="text-[10px] text-blue-600 leading-relaxed">
                         Al completar el registro, el sistema inicializará el Checklist Digital de Documentación (VTV, Seguro, Cédula). 
