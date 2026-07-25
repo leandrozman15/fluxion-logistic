@@ -161,6 +161,7 @@ export interface Driver {
   contractType: string;
   status: DriverStatus;
   observations?: string;
+  avatarUrl?: string;
   createdAt: any;
   updatedAt: any;
 }

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from "react";
@@ -15,11 +16,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Users, ArrowLeft, ArrowRight, Save, Loader2, 
   ShieldCheck, CheckCircle2, User, FileText, 
-  Phone, HeartPulse, Info, X, Briefcase, Upload, AlertTriangle, FileCheck
+  Phone, HeartPulse, Info, X, Briefcase, Upload, AlertTriangle, FileCheck, Camera
 } from "lucide-react";
 import { Driver } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface DriverFormWizardProps {
   driverId?: string;
@@ -36,6 +38,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Refs para inputs de archivo
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const dniInputRef = useRef<HTMLInputElement>(null);
   const licenseInputRef = useRef<HTMLInputElement>(null);
   const lintiInputRef = useRef<HTMLInputElement>(null);
@@ -70,6 +73,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
     contractType: "Tiempo completo",
     status: "active",
     observations: "",
+    avatarUrl: "",
     dniFileUrl: "",
     licenseFileUrl: "",
     lintiFileUrl: ""
@@ -99,6 +103,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   const handleBack = () => setStep(s => s - 1);
 
   const handleFileClick = (key: string) => {
+    if (key === 'avatarUrl') avatarInputRef.current?.click();
     if (key === 'dniFileUrl') dniInputRef.current?.click();
     if (key === 'licenseFileUrl') licenseInputRef.current?.click();
     if (key === 'lintiFileUrl') lintiInputRef.current?.click();
@@ -107,12 +112,11 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   const onFileChange = (key: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Simulación de carga: en producción se subiría a Firebase Storage
       const fileUrl = URL.createObjectURL(file);
       setFormData(prev => ({ ...prev, [key]: fileUrl }));
       toast({ 
-        title: "Documento adjuntado", 
-        description: `El archivo ${file.name} ha sido vinculado correctamente.` 
+        title: key === 'avatarUrl' ? "Foto cargada" : "Documento adjuntado", 
+        description: `Archivo vinculado correctamente.` 
       });
     }
   };
@@ -196,8 +200,25 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
       <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 mx-4">
         {step === 1 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>DNI y Datos Personales</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <CardHeader><CardTitle>Identificación y Datos Personales</CardTitle></CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="flex flex-col items-center justify-center space-y-4 p-6 bg-slate-50 rounded-2xl border-2 border-dashed">
+                <Avatar className="w-32 h-32 border-4 border-white shadow-xl">
+                  <AvatarImage src={formData.avatarUrl} className="object-cover" />
+                  <AvatarFallback className="bg-blue-100 text-blue-600">
+                    <User size={48} />
+                  </AvatarFallback>
+                </Avatar>
+                <div className="text-center space-y-1">
+                  <p className="text-xs font-bold uppercase text-slate-600">Foto del Chofer</p>
+                  <p className="text-[10px] text-slate-400">Identificación visual para el panel</p>
+                </div>
+                <input type="file" ref={avatarInputRef} className="hidden" accept="image/*" onChange={(e) => onFileChange('avatarUrl', e)} />
+                <Button variant="outline" type="button" size="sm" onClick={() => handleFileClick('avatarUrl')} className="bg-white">
+                  <Camera size={14} className="mr-2" /> {formData.avatarUrl ? 'Cambiar Foto' : 'Subir Foto'}
+                </Button>
+              </div>
+
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Número de DNI</Label>
@@ -211,15 +232,15 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                   <Label>Apellidos</Label>
                   <Input placeholder="Pérez González" value={formData.lastName || ''} onChange={e => setFormData({...formData, lastName: e.target.value})} />
                 </div>
-              </div>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Fecha de Nacimiento</Label>
-                  <Input type="date" value={formData.birthDate || ''} onChange={e => setFormData({...formData, birthDate: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Nacionalidad</Label>
-                  <Input value={formData.nationality || ''} onChange={e => setFormData({...formData, nationality: e.target.value})} />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Fecha de Nacimiento</Label>
+                    <Input type="date" value={formData.birthDate || ''} onChange={e => setFormData({...formData, birthDate: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Nacionalidad</Label>
+                    <Input value={formData.nationality || ''} onChange={e => setFormData({...formData, nationality: e.target.value})} />
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -245,7 +266,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                   <div className="flex flex-wrap gap-4 p-3 bg-slate-50 rounded-lg border">
                     {LICENSE_CLASSES.map(cls => (
                       <div key={cls} className="flex items-center space-x-2">
-                        <Checkbox id={`cls-${cls}`} checked={formData.licenseClasses?.includes(cls)} onValueChange={() => toggleLicenseClass(cls)} />
+                        <Checkbox id={`cls-${cls}`} checked={formData.licenseClasses?.includes(cls)} onCheckedChange={() => toggleLicenseClass(cls)} />
                         <label htmlFor={`cls-${cls}`} className="text-sm font-medium leading-none">{cls}</label>
                       </div>
                     ))}

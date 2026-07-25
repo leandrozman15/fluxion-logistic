@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Users, UserPlus, Search, Phone, Mail, MoreHorizontal, 
   Trash2, Edit2, Loader2, ShieldCheck, AlertTriangle, 
-  CheckCircle2, MessageCircle, MoreVertical
+  CheckCircle2, MessageCircle, MoreVertical, User
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -27,6 +27,7 @@ import { Driver, DriverStatus } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { format, isBefore, addDays, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export default function ChoferesPage() {
   const db = useFirestore();
@@ -186,9 +187,12 @@ export default function ChoferesPage() {
                     <TableRow key={driver.id} className="hover:bg-slate-50 transition-colors">
                       <TableCell>
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600 text-xs">
-                            {driver.firstName.charAt(0)}{driver.lastName.charAt(0)}
-                          </div>
+                          <Avatar className="w-9 h-9 rounded-full border shadow-sm">
+                            <AvatarImage src={driver.avatarUrl} className="object-cover" />
+                            <AvatarFallback className="bg-slate-100 text-slate-600 text-xs font-bold">
+                              {driver.firstName.charAt(0)}{driver.lastName.charAt(0)}
+                            </AvatarFallback>
+                          </Avatar>
                           <div>
                             <div className="font-bold text-slate-900">{driver.lastName}, {driver.firstName}</div>
                             <div className="text-[10px] text-slate-500 flex items-center gap-1">
