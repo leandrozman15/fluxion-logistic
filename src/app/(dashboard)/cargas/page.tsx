@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Package, Plus, Search, MapPin, Scale, DollarSign, 
   Loader2, MoreVertical, Trash2, Truck, CheckCircle2, 
-  Clock, AlertTriangle, FileText, ExternalLink, Printer, Wallet, FilePlus, Upload, Trash, Repeat, Navigation
+  Clock, AlertTriangle, FileText, ExternalLink, Printer, Wallet, FilePlus, Upload, Trash, Repeat, Navigation, Edit
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -131,7 +131,7 @@ export default function CargasPage() {
                   filteredLoads.map((load) => {
                     const totalStops = (load.outboundStops?.length || 0) + (load.returnStops?.length || 0);
                     const totalWeight = (load.outboundStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0) + (load.returnStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0);
-                    const totalDocs = (load.outboundStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0) + (load.returnStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0);
+                    const totalDocs = (load.outboundStops?.reduce((acc, s) => acc + (load.documents?.length || 0), 0) || 0) + (load.returnStops?.reduce((acc, s) => acc + (load.documents?.length || 0), 0) || 0);
                     const firstDest = load.outboundStops?.[0]?.name || "Sin destinos";
 
                     return (
@@ -167,6 +167,7 @@ export default function CargasPage() {
                             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical size={16} /></Button></DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuLabel>Gestión de Flete</DropdownMenuLabel>
+                              <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/editar`)}><Edit className="w-4 h-4 mr-2" /> Editar Flete / Itinerario</DropdownMenuItem>
                               <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/orden`)}><Printer className="w-4 h-4 mr-2" /> Ver Orden (PDF)</DropdownMenuItem>
                               <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/billetera`)}><Wallet className="w-4 h-4 mr-2" /> Billetera de Viaje</DropdownMenuItem>
                               <DropdownMenuSeparator />

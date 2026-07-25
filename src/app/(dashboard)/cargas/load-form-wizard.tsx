@@ -3,8 +3,8 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useCollection } from "@/firebase";
-import { collection, serverTimestamp, doc, setDoc, query, orderBy } from "firebase/firestore";
+import { useFirestore, useCollection, useDoc } from "@/firebase";
+import { collection, serverTimestamp, doc, setDoc, query, orderBy, updateDoc } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { 
   Package, ArrowLeft, ArrowRight, Save, Loader2, 
   MapPin, Calendar, Clock, DollarSign, Truck, 
-  Info, AlertTriangle, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, LayoutGrid, UserCheck
+  Info, AlertTriangle, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, LayoutGrid, UserCheck, Edit
 } from "lucide-react";
 import { Load, Client, Hub, LoadLegStop, LoadDocument, LoadDocType, Truck as TruckType, Driver } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -30,7 +30,11 @@ const SERVICE_TYPES = [
   { id: 'dangerous', label: 'Carga Peligrosa', icon: AlertTriangle },
 ];
 
-export default function LoadFormWizard() {
+interface LoadFormWizardProps {
+  loadId?: string;
+}
+
+export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
   const db = useFirestore();
   const router = useRouter();
   const { toast } = useToast();
@@ -66,12 +70,25 @@ export default function LoadFormWizard() {
     budget: { initialAdvance: 0, totalBudget: 0, categories: {} }
   });
 
+  const loadRef = useMemo(() => loadId && db ? doc(db, "loads", loadId) : null, [db, loadId]);
+  const { data: existingLoad, loading: loadingExisting } = useDoc<Load>(loadRef);
+
   useEffect(() => {
-    setFormData(prev => ({
-      ...prev,
-      orderNumber: `FL-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
-    }));
-  }, []);
+    if (existingLoad) {
+      setFormData({
+        ...existingLoad,
+        pickupDate: existingLoad.pickupDate || format(new Date(), "yyyy-MM-dd"),
+        pickupTime: existingLoad.pickupTime || "08:00",
+        outboundStops: existingLoad.outboundStops || [],
+        returnStops: existingLoad.returnStops || [],
+      });
+    } else if (!loadId) {
+      setFormData(prev => ({
+        ...prev,
+        orderNumber: `FL-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
+      }));
+    }
+  }, [existingLoad, loadId]);
 
   const clientsQuery = useMemo(() => db ? query(collection(db, "clients"), orderBy("name")) : null, [db]);
   const hubsQuery = useMemo(() => db ? query(collection(db, "hubs"), orderBy("name")) : null, [db]);
@@ -230,14 +247,22 @@ export default function LoadFormWizard() {
     if (!db) return;
     setIsSubmitting(true);
     try {
-      const newRef = doc(collection(db, "loads"));
-      await setDoc(newRef, {
-        ...formData,
-        id: newRef.id,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-      toast({ title: "Carga Registrada", description: `Orden ${formData.orderNumber} creada.` });
+      if (loadId) {
+        await updateDoc(doc(db, "loads", loadId), {
+          ...formData,
+          updatedAt: serverTimestamp()
+        });
+        toast({ title: "Operación Actualizada", description: `Flete ${formData.orderNumber} guardado.` });
+      } else {
+        const newRef = doc(collection(db, "loads"));
+        await setDoc(newRef, {
+          ...formData,
+          id: newRef.id,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+        toast({ title: "Carga Registrada", description: `Orden ${formData.orderNumber} creada.` });
+      }
       router.push('/cargas');
     } catch (e) {
       toast({ variant: "destructive", title: "Error al guardar" });
@@ -252,13 +277,15 @@ export default function LoadFormWizard() {
     return outbound + retour;
   }, [formData]);
 
+  if (loadId && loadingExisting) return <div className="h-[60vh] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
+
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-24">
       <div className="flex items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => router.back()}><ArrowLeft /></Button>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Nueva Operación Logística</h1>
+            <h1 className="text-2xl font-bold text-slate-900">{loadId ? 'Editar Operación' : 'Nueva Operación Logística'}</h1>
             <p className="text-sm text-slate-500">Gestión de fletes multi-destino nacional.</p>
           </div>
         </div>
@@ -442,14 +469,14 @@ export default function LoadFormWizard() {
                 <CardTitle>Logística de Ida</CardTitle>
                 <CardDescription>Establezca el punto de carga inicial y todos los puntos de descarga.</CardDescription>
               </div>
-              <Button size="sm" className="bg-blue-600 w-full sm:w-auto" onClick={() => { setActiveLeg('outbound'); setIsStopModalOpen(true); }}><Plus size={14} className="mr-1" /> Agregar Destino</Button>
+              <Button size="sm" className="bg-blue-600 w-full sm:w-auto" onClick={() => { setActiveLeg('outbound'); setEditingStop({ id: "", name: "", address: "", province: "Buenos Aires", country: "Argentina", contact: "", phone: "", description: "", weightKg: 0, volumeM3: 0, units: 0, unitType: "Pallet", documents: [] }); setIsStopModalOpen(true); }}><Plus size={14} className="mr-1" /> Agregar Destino</Button>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="p-4 bg-slate-50 rounded-xl border border-dashed space-y-4">
                 <div className="flex items-center gap-2 text-blue-600 font-bold text-xs uppercase tracking-widest">
                   <div className="w-2 h-2 rounded-full bg-blue-600" /> Punto de Carga Inicial (Origen)
                 </div>
-                <Select onValueChange={handleOriginSelect}>
+                <Select onValueChange={handleOriginSelect} value={formData.origin?.id}>
                   <SelectTrigger className="bg-white"><SelectValue placeholder="Seleccionar origen (Sede/Cliente)" /></SelectTrigger>
                   <SelectContent>{locationsList.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent>
                 </Select>
@@ -483,7 +510,10 @@ export default function LoadFormWizard() {
                             </div>
                           </div>
                        </div>
-                       <Button variant="ghost" size="icon" className="text-red-500" onClick={() => removeStop('outbound', stop.id)}><Trash2 size={16}/></Button>
+                       <div className="flex gap-2">
+                        <Button variant="ghost" size="icon" onClick={() => { setActiveLeg('outbound'); setEditingStop(stop); setIsStopModalOpen(true); }}><Edit size={16}/></Button>
+                        <Button variant="ghost" size="icon" className="text-red-500" onClick={() => removeStop('outbound', stop.id)}><Trash2 size={16}/></Button>
+                       </div>
                     </div>
                   ))
                 )}
@@ -507,7 +537,7 @@ export default function LoadFormWizard() {
                     <CardTitle>Logística de Vuelta (Retorno)</CardTitle>
                     <CardDescription>Cargue los puntos de recolección y entrega para el tramo de regreso.</CardDescription>
                   </div>
-                  <Button size="sm" className="bg-orange-600 w-full sm:w-auto" onClick={() => { setActiveLeg('return'); setIsStopModalOpen(true); }}><Plus size={14} className="mr-1" /> Agregar Parada Retorno</Button>
+                  <Button size="sm" className="bg-orange-600 w-full sm:w-auto" onClick={() => { setActiveLeg('return'); setEditingStop({ id: "", name: "", address: "", province: "Buenos Aires", country: "Argentina", contact: "", phone: "", description: "", weightKg: 0, volumeM3: 0, units: 0, unitType: "Pallet", documents: [] }); setIsStopModalOpen(true); }}><Plus size={14} className="mr-1" /> Agregar Parada Retorno</Button>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   {formData.returnStops?.length === 0 ? (
@@ -526,7 +556,10 @@ export default function LoadFormWizard() {
                               </div>
                             </div>
                          </div>
-                         <Button variant="ghost" size="icon" className="text-red-500" onClick={() => removeStop('return', stop.id)}><Trash2 size={16}/></Button>
+                         <div className="flex gap-2">
+                           <Button variant="ghost" size="icon" onClick={() => { setActiveLeg('return'); setEditingStop(stop); setIsStopModalOpen(true); }}><Edit size={16}/></Button>
+                           <Button variant="ghost" size="icon" className="text-red-500" onClick={() => removeStop('return', stop.id)}><Trash2 size={16}/></Button>
+                         </div>
                       </div>
                     ))
                   )}
@@ -567,7 +600,7 @@ export default function LoadFormWizard() {
                   <p className="text-xs text-blue-700 leading-relaxed">Al confirmar, se generará la hoja de ruta digital para el conductor. Asegúrese de que todos los remitos estén cargados correctamente para evitar demoras en la fiscalización de ruta.</p>
                </div>
             </CardContent>
-            <CardFooter className="flex justify-end"><Button onClick={handleSubmit} className="bg-green-600 w-full sm:w-auto" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} Registrar Operación Completa</Button></CardFooter>
+            <CardFooter className="flex justify-end"><Button onClick={handleSubmit} className="bg-green-600 w-full sm:w-auto" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} {loadId ? 'Guardar Cambios' : 'Registrar Operación Completa'}</Button></CardFooter>
           </Card>
         )}
       </div>
@@ -586,7 +619,7 @@ export default function LoadFormWizard() {
             <div className="grid grid-cols-1 gap-4 p-4 bg-slate-50 rounded-xl border border-dashed">
               <div className="space-y-2">
                 <Label>Seleccionar Ubicación</Label>
-                <Select onValueChange={handleStopLocationSelect}>
+                <Select onValueChange={handleStopLocationSelect} value={editingStop.locationId}>
                   <SelectTrigger className="bg-white"><SelectValue placeholder="Sede o Cliente" /></SelectTrigger>
                   <SelectContent>{locationsList.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent>
                 </Select>
