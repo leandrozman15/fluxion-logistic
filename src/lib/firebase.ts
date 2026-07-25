@@ -1,22 +1,10 @@
+import { initializeFirebase } from "@/firebase";
+import { getStorage } from "firebase/storage";
 
-import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
-import { getAuth, Auth } from "firebase/auth";
-import { getFirestore, Firestore } from "firebase/firestore";
-import { getStorage, FirebaseStorage } from "firebase/storage";
-import { firebaseConfig } from "@/firebase/config";
+// Use the unified initialization logic to ensure persistence and singleton instances
+const { firebaseApp, firestore, auth } = initializeFirebase();
 
-let app: FirebaseApp | undefined;
-let auth: Auth | undefined;
-let db: Firestore | undefined;
-let storage: FirebaseStorage | undefined;
+// Storage helper (optional, handled separately as it doesn't affect Firestore persistence)
+const storage = firebaseApp ? getStorage(firebaseApp) : undefined;
 
-try {
-  app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-  auth = getAuth(app);
-  db = getFirestore(app);
-  storage = getStorage(app);
-} catch (error) {
-  console.error("Error al inicializar los servicios de Firebase:", error);
-}
-
-export { app, auth, db, storage };
+export { firebaseApp as app, auth, firestore as db, storage };

@@ -5,11 +5,22 @@ import { getFirestore, Firestore, enableIndexedDbPersistence } from 'firebase/fi
 import { getAuth, Auth } from 'firebase/auth';
 import { firebaseConfig, isFirebaseConfigValid } from './config';
 
+// Global instances to ensure singleton behavior across the client
+let appInstance: FirebaseApp | undefined;
+let firestoreInstance: Firestore | undefined;
+let authInstance: Auth | undefined;
+let persistenceAttempted = false;
+
+/**
+ * Initializes Firebase services with a singleton pattern.
+ * Ensures that persistence is enabled exactly once and before any other operations.
+ */
 export function initializeFirebase(): {
   firebaseApp: FirebaseApp | null;
   firestore: Firestore | null;
   auth: Auth | null;
 } {
+  // SSR Guard: Firebase client SDKs require a window object
   if (typeof window === 'undefined') {
     return { firebaseApp: null, firestore: null, auth: null };
   }
@@ -19,24 +30,32 @@ export function initializeFirebase(): {
   }
 
   try {
-    const firebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-    const firestore = getFirestore(firebaseApp);
-    const auth = getAuth(firebaseApp);
+    if (!appInstance) {
+      appInstance = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+      firestoreInstance = getFirestore(appInstance);
+      authInstance = getAuth(appInstance);
 
-    // Habilitar Persistencia Offline para soporte en ruta
-    if (typeof window !== 'undefined') {
-      enableIndexedDbPersistence(firestore).catch((err) => {
-        if (err.code === 'failed-precondition') {
-          // Probablemente múltiples pestañas abiertas
-          console.warn('Persistencia fallida: Múltiples pestañas abiertas.');
-        } else if (err.code === 'unimplemented') {
-          // El navegador no soporta IndexedDB
-          console.warn('Persistencia fallida: Navegador no compatible.');
-        }
-      });
+      // Persistence must be enabled BEFORE any other Firestore methods are called.
+      // We initiate it immediately after the Firestore instance is created.
+      if (!persistenceAttempted) {
+        persistenceAttempted = true;
+        enableIndexedDbPersistence(firestoreInstance).catch((err) => {
+          if (err.code === 'failed-precondition') {
+            // Probably multiple tabs open at once.
+            console.warn('Persistencia fallida: Múltiples pestañas abiertas.');
+          } else if (err.code === 'unimplemented') {
+            // The current browser does not support all of the features required to enable persistence.
+            console.warn('Persistencia fallida: Navegador no compatible.');
+          }
+        });
+      }
     }
 
-    return { firebaseApp, firestore, auth };
+    return { 
+      firebaseApp: appInstance, 
+      firestore: firestoreInstance, 
+      auth: authInstance 
+    };
   } catch (error) {
     console.error("Error al inicializar Firebase:", error);
     return { firebaseApp: null, firestore: null, auth: null };
