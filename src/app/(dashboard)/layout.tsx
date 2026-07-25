@@ -1,3 +1,4 @@
+
 'use client';
 
 import { 
@@ -12,7 +13,8 @@ import {
   SidebarGroup, 
   SidebarGroupLabel, 
   SidebarGroupContent,
-  SidebarTrigger
+  SidebarTrigger,
+  useSidebar
 } from "@/components/ui/sidebar";
 import { 
   Truck, 
@@ -36,7 +38,11 @@ import { signOut } from "firebase/auth";
 import { useRouter, usePathname } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+/**
+ * Componente interno que maneja la lógica de cierre automático en móviles.
+ */
+function DashboardSidebar() {
+  const { setOpenMobile, isMobile } = useSidebar();
   const auth = useAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -53,7 +59,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { title: "Análisis de Datos", icon: BarChart3, href: "/analytics" },
   ];
 
+  const handleLinkClick = () => {
+    if (isMobile) setOpenMobile(false);
+  };
+
   const handleLogout = async () => {
+    if (isMobile) setOpenMobile(false);
     if (!auth) return;
     try {
       await signOut(auth);
@@ -65,62 +76,77 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   };
 
   return (
+    <Sidebar variant="sidebar" collapsible="icon">
+      <SidebarHeader className="h-16 flex items-center px-4 border-b">
+        <Link href="/dashboard" className="flex items-center gap-2 font-bold text-blue-600" onClick={handleLinkClick}>
+          <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white">
+            <Truck size={18} />
+          </div>
+          <span className="group-data-[collapsible=icon]:hidden tracking-tight text-xl">Logística<span className="text-slate-900">Ar</span></span>
+        </Link>
+      </SidebarHeader>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Centro de Mando</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {menuItems.map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton 
+                    asChild 
+                    tooltip={item.title} 
+                    isActive={pathname === item.href}
+                    onClick={handleLinkClick}
+                  >
+                    <Link href={item.href}>
+                      <item.icon />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Configuración</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton 
+                  asChild 
+                  isActive={pathname === "/settings/tenant"}
+                  onClick={handleLinkClick}
+                >
+                  <Link href="/settings/tenant">
+                    <Settings />
+                    <span>Ajustes del Sistema</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+      <div className="mt-auto p-4 border-t">
+        <SidebarMenuButton 
+          className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+          onClick={handleLogout}
+        >
+          <LogOut />
+          <span className="group-data-[collapsible=icon]:hidden">Salir del Sistema</span>
+        </SidebarMenuButton>
+      </div>
+    </Sidebar>
+  );
+}
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full">
-        <Sidebar variant="sidebar" collapsible="icon">
-          <SidebarHeader className="h-16 flex items-center px-4 border-b">
-            <Link href="/dashboard" className="flex items-center gap-2 font-bold text-blue-600">
-              <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white">
-                <Truck size={18} />
-              </div>
-              <span className="group-data-[collapsible=icon]:hidden tracking-tight text-xl">Logística<span className="text-slate-900">Ar</span></span>
-            </Link>
-          </SidebarHeader>
-          <SidebarContent>
-            <SidebarGroup>
-              <SidebarGroupLabel>Centro de Mando</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {menuItems.map((item) => (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton asChild tooltip={item.title} isActive={pathname === item.href}>
-                        <Link href={item.href}>
-                          <item.icon />
-                          <span>{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-
-            <SidebarGroup>
-              <SidebarGroupLabel>Configuración</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathname === "/settings/tenant"}>
-                      <Link href="/settings/tenant">
-                        <Settings />
-                        <span>Ajustes del Sistema</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </SidebarContent>
-          <div className="mt-auto p-4 border-t">
-            <SidebarMenuButton 
-              className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
-              onClick={handleLogout}
-            >
-              <LogOut />
-              <span className="group-data-[collapsible=icon]:hidden">Salir del Sistema</span>
-            </SidebarMenuButton>
-          </div>
-        </Sidebar>
+        <DashboardSidebar />
         <SidebarInset className="bg-slate-50/50">
           <header className="h-16 flex items-center justify-between px-4 border-b bg-white sticky top-0 z-10 shadow-sm">
             <div className="flex items-center gap-2">
