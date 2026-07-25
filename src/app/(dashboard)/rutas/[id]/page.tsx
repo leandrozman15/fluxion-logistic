@@ -19,8 +19,8 @@ import {
   Truck, Package, FileText, ShieldAlert, Clock, 
   Navigation, Info, ChevronRight, AlertTriangle,
   Wallet, Plus, DollarSign, Camera, Fuel, Utensils, Bed, Wrench, Receipt,
-  Zap, GpsFixed, Satellite, SignalHigh, Loader2, Compass, Gauge, History, 
-  Coffee, Moon, Car, Battery, Flame, CloudRain, Barrier, FileWarning, HelpCircle,
+  Zap, Satellite, SignalHigh, Loader2, Compass, Gauge, History, 
+  Coffee, Moon, Car, Battery, Flame, CloudRain, Construction, FileWarning, HelpCircle,
   Siren, LifeBuoy
 } from "lucide-react";
 import { Load, Expense, ExpenseCategory } from "@/app/lib/types";
@@ -52,7 +52,7 @@ const INCIDENT_TYPES = [
   { id: 'battery', label: 'Batería', icon: Battery, color: 'bg-blue-500' },
   { id: 'fire', label: 'Incendio', icon: Flame, color: 'bg-red-700' },
   { id: 'weather', label: 'Clima/Inundación', icon: CloudRain, color: 'bg-slate-500' },
-  { id: 'traffic', label: 'Cierre de Ruta', icon: Barrier, color: 'bg-amber-600' },
+  { id: 'traffic', label: 'Cierre de Ruta', icon: Construction, color: 'bg-amber-600' },
   { id: 'doc', label: 'Documentación', icon: FileWarning, color: 'bg-purple-500' },
   { id: 'health', label: 'Salud/Dolor', icon: Siren, color: 'bg-red-400' },
   { id: 'other', label: 'Otro', icon: HelpCircle, color: 'bg-slate-400' },
@@ -170,7 +170,6 @@ export default function RouteDetailPage() {
   const openNativeNavigator = () => {
     const lat = displayDestination.lat;
     const lng = displayDestination.lng;
-    const addr = encodeURIComponent(displayDestination.address);
     
     // Detectar OS y abrir el mapa correspondiente
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
@@ -322,7 +321,7 @@ export default function RouteDetailPage() {
                        </div>
                        <div className="p-3 bg-white/5 border border-white/10 rounded-xl">
                           <p className="text-[9px] uppercase font-bold text-white/40">Recorrido</p>
-                          <p className="text-xl font-black">{load.tracking?.distanceTraveledKm?.toFixed(1) || 0} <span className="text-[10px] font-normal opacity-50">km</span></p>
+                          <p className="text-xl font-black">{load.tracking?.distanceTraveledKm?.toFixed(1) || 0} <span className="text-[10px] font-normal text-slate-400">km</span></p>
                        </div>
                     </div>
                     <Button className="w-full bg-green-600 h-14 text-lg font-bold shadow-lg" onClick={() => handleUpdateStatus('delivered')} disabled={isUpdating}>
