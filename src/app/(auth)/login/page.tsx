@@ -1,88 +1,46 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth, useFirestore, useUser } from "@/firebase";
-import { 
-  signInWithEmailAndPassword, 
-  signInWithPopup, 
-  GoogleAuthProvider,
-  User
-} from "firebase/auth";
+import { useFirestore } from "@/firebase";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Truck, Loader2, ShieldCheck, Play, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
-  const auth = useAuth();
   const db = useFirestore();
-  const { user: currentUser, loading: userLoading } = useUser();
 
-  // Se já estiver logado, redireciona direto
-  useEffect(() => {
-    if (!userLoading && currentUser && currentUser.email !== "admin@fluxionradar.com") {
-      router.push("/dashboard");
-    }
-  }, [currentUser, userLoading, router]);
-
-  const bootstrapUser = async (user: User) => {
-    if (!db) return;
-    try {
-      const tenantId = "default_tenant";
-      await setDoc(doc(db, "tenants", tenantId), {
-        name: "LogísticaAr Casa Central",
-        plan: "pro",
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-
-      await setDoc(doc(db, "users", user.uid), {
-        uid: user.uid,
-        email: user.email,
-        tenantId: tenantId,
-        role: "admin",
-        createdAt: new Date().toISOString()
-      }, { merge: true });
-    } catch (e) {
-      console.error("Bootstrap failed", e);
-    }
-  };
-
-  const handleEmailLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!auth) return;
+  const handleFastAccess = async () => {
     setIsLoading(true);
     try {
-      const cred = await signInWithEmailAndPassword(auth, email, password);
-      await bootstrapUser(cred.user);
-      router.push("/dashboard");
-    } catch (error: any) {
-      toast({ variant: "destructive", title: "Error en el login", description: "Verifique sus credenciales." });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      if (db) {
+        const tenantId = "default_tenant";
+        // Aseguramos que la organización exista para el modo demo
+        await setDoc(doc(db, "tenants", tenantId), {
+          name: "LogísticaAr Demo",
+          plan: "pro",
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      }
 
-  const handleGoogleLogin = async () => {
-    if (!auth) return;
-    setIsLoading(true);
-    try {
-      const provider = new GoogleAuthProvider();
-      const cred = await signInWithPopup(auth, provider);
-      await bootstrapUser(cred.user);
+      toast({ 
+        title: "Acceso Concedido", 
+        description: "Ingresando al sistema en modo demostración." 
+      });
+      
+      // Redirigir al dashboard directamente
       router.push("/dashboard");
-    } catch (error: any) {
-      toast({ variant: "destructive", title: "Error con Google" });
+    } catch (error) {
+      console.error("Error en acceso rápido:", error);
+      // Aún si falla Firestore, redirigimos para no bloquear la demo
+      router.push("/dashboard");
     } finally {
       setIsLoading(false);
     }
@@ -106,34 +64,32 @@ export default function LoginPage() {
 
         <Card className="border shadow-2xl bg-white/80 backdrop-blur">
           <CardHeader>
-            <CardTitle>Iniciar Sesión</CardTitle>
-            <CardDescription>Ingrese al panel de control nacional de flota.</CardDescription>
+            <CardTitle>Bienvenido</CardTitle>
+            <CardDescription>Haga clic abajo para ingresar al panel de control nacional.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleEmailLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Correo Electrónico</Label>
-                <Input id="email" type="email" placeholder="nombre@empresa.com.ar" value={email} onChange={e => setEmail(e.target.value)} required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Contraseña</Label>
-                <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
-              </div>
-              <Button type="submit" className="w-full bg-blue-600 h-12 text-lg font-bold" disabled={isLoading}>
-                {isLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Play className="w-4 h-4 mr-2" />}
-                Acceder al Sistema
-              </Button>
-            </form>
-          </CardContent>
-          <CardFooter className="flex flex-col gap-4">
-            <div className="relative w-full">
-              <div className="absolute inset-0 flex items-center"><span className="w-full border-t"></span></div>
-              <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-2 text-slate-400">O continuar con</span></div>
-            </div>
-            <Button variant="outline" className="w-full h-11" onClick={handleGoogleLogin} disabled={isLoading}>
-              Google Workspace
+          <CardContent className="space-y-4">
+            <Button 
+              onClick={handleFastAccess} 
+              className="w-full bg-blue-600 h-16 text-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200" 
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <Loader2 className="w-6 h-6 animate-spin mr-2" />
+              ) : (
+                <Play className="w-6 h-6 mr-2 fill-current" />
+              )}
+              Entrar al Sistema
             </Button>
-          </CardFooter>
+            
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
+              <p className="text-[10px] text-blue-700 font-bold uppercase mb-1 flex items-center gap-1">
+                <ShieldCheck size={10} /> Modo Acceso Libre Activo
+              </p>
+              <p className="text-xs text-blue-600 leading-relaxed">
+                Usted está ingresando con un perfil de Administrador Temporal para evaluar las funcionalidades de la plataforma.
+              </p>
+            </div>
+          </CardContent>
         </Card>
       </div>
     </div>

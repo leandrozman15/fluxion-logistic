@@ -3,8 +3,7 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Truck, ShieldCheck, Globe, TrendingUp, MapPin, CheckCircle2, ArrowRight, Package, Clock, Ship, Zap } from "lucide-react";
-import Image from "next/image";
+import { Truck, ShieldCheck, Globe, ArrowRight, Ship, Zap } from "lucide-react";
 
 export default function LandingPage() {
   return (
@@ -24,7 +23,7 @@ export default function LandingPage() {
             <a href="#comex" className="hover:text-blue-600 transition-colors">Red Mercosur</a>
           </div>
           <Button asChild className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100">
-            <Link href="/login">Acceso Operadores</Link>
+            <Link href="/dashboard">Ir al Dashboard</Link>
           </Button>
         </div>
       </nav>
@@ -44,10 +43,10 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Button size="lg" className="bg-blue-600 h-14 px-8 text-lg font-bold shadow-xl shadow-blue-200" asChild>
-                <Link href="/login">Iniciar Demo Regional <ArrowRight className="ml-2" /></Link>
+                <Link href="/dashboard">Comenzar Ahora <ArrowRight className="ml-2" /></Link>
               </Button>
-              <Button size="lg" variant="outline" className="h-14 px-8 text-lg font-bold border-slate-200">
-                Alianzas Mercosur
+              <Button size="lg" variant="outline" className="h-14 px-8 text-lg font-bold border-slate-200" asChild>
+                <Link href="/login">Ver Panel de Operador</Link>
               </Button>
             </div>
             <div className="flex items-center gap-6 pt-4">
@@ -119,7 +118,7 @@ export default function LandingPage() {
           <h2 className="text-4xl font-bold">¿Busca expandir su flota regionalmente?</h2>
           <p className="text-xl text-blue-100">LogísticaAr le brinda la visibilidad necesaria para dominar el mercado del Cono Sur.</p>
           <Button size="lg" className="bg-white text-blue-600 hover:bg-blue-50 h-16 px-12 text-xl font-bold shadow-2xl" asChild>
-            <Link href="/login">Acceder al Sistema</Link>
+            <Link href="/dashboard">Acceder al Sistema</Link>
           </Button>
         </div>
       </section>
