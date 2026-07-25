@@ -51,9 +51,9 @@ const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
   { ssr: false, loading: () => <div className="h-full w-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center"><Loader2 className="animate-spin" /></div> }
 );
-const TileLayer = dynamic(() => import("react-leaflet").then((mod) => import("react-leaflet").then(m => m.TileLayer)), { ssr: false });
-const Marker = dynamic(() => import("react-leaflet").then((mod) => import("react-leaflet").then(m => m.Marker)), { ssr: false });
-const Popup = dynamic(() => import("react-leaflet").then((mod) => import("react-leaflet").then(m => m.Popup)), { ssr: false });
+const TileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false });
+const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), { ssr: false });
+const Popup = dynamic(() => import("react-leaflet").then((mod) => mod.Popup), { ssr: false });
 
 export default function MonitorOperativoPage() {
   const db = useFirestore();
@@ -158,6 +158,13 @@ export default function MonitorOperativoPage() {
     html: `<div class="${isMain ? 'bg-amber-500' : 'bg-slate-900 dark:bg-slate-800'} text-white p-2 rounded-lg shadow-xl border-2 border-white flex items-center justify-center">${isMain ? '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' : '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/><path d="M3 9h18"/><path d="M3 15h18"/></svg>'}</div>`,
     iconSize: [36, 36],
     iconAnchor: [18, 18]
+  }) : null;
+
+  const clientIcon = L ? L.divIcon({
+    className: 'custom-client-icon',
+    html: `<div class="bg-green-600 text-white p-1.5 rounded-full shadow-lg border-2 border-white"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z"/><path d="m3 9 2.45-4.9A2 2 0 0 1 7.24 3h10a2 2 0 0 1 1.79 1.1L21 9"/></svg></div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14]
   }) : null;
 
   return (
@@ -499,4 +506,3 @@ export default function MonitorOperativoPage() {
     </div>
   );
 }
-
