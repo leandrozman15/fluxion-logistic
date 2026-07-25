@@ -50,6 +50,9 @@ export default function LoadFormWizard() {
   // Local state for remitos entry
   const [remitoNumber, setRemitoNumber] = useState("");
   const [remitoDetail, setRemitoDetail] = useState("");
+  const [remitoHasCot, setRemitoHasCot] = useState(false);
+  const [remitoCotNumber, setRemitoCotNumber] = useState("");
+  const [remitoDespacho, setRemitoDespacho] = useState("");
 
   const [formData, setFormData] = useState<Partial<Load>>({
     orderNumber: "",
@@ -124,6 +127,9 @@ export default function LoadFormWizard() {
       type: 'remito',
       number: remitoNumber,
       notes: remitoDetail,
+      hasCot: remitoHasCot,
+      cotNumber: remitoHasCot ? remitoCotNumber : "",
+      despachoNumber: remitoDespacho,
       uploadedAt: new Date().toISOString()
     };
     setFormData({
@@ -132,7 +138,10 @@ export default function LoadFormWizard() {
     });
     setRemitoNumber("");
     setRemitoDetail("");
-    toast({ title: "Remito agregado" });
+    setRemitoHasCot(false);
+    setRemitoCotNumber("");
+    setRemitoDespacho("");
+    toast({ title: "Documento agregado" });
   };
 
   const removeRemito = (id: string) => {
@@ -263,40 +272,72 @@ export default function LoadFormWizard() {
 
                    <div className="space-y-4">
                      <div className="flex items-center justify-between">
-                       <Label className="text-blue-600 font-bold flex items-center gap-2"><FileText size={14} /> Remitos Relacionados</Label>
+                       <Label className="text-blue-600 font-bold flex items-center gap-2"><FileText size={14} /> Documentación Legal</Label>
                        <Badge variant="outline" className="text-[10px] uppercase">{formData.documents?.length || 0} Cargados</Badge>
                      </div>
                      
-                     <div className="p-4 bg-slate-50 rounded-xl border border-dashed space-y-3">
-                       <div className="grid grid-cols-1 gap-2">
+                     <div className="p-4 bg-slate-50 rounded-xl border border-dashed space-y-4">
+                       <div className="grid grid-cols-1 gap-3">
+                         <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                               <Label className="text-[10px] uppercase font-bold">N° Remito</Label>
+                               <Input 
+                                placeholder="0001-000456" 
+                                className="bg-white h-8 text-sm" 
+                                value={remitoNumber}
+                                onChange={e => setRemitoNumber(e.target.value)}
+                               />
+                            </div>
+                            <div className="space-y-1">
+                               <Label className="text-[10px] uppercase font-bold">N° Despacho</Label>
+                               <Input 
+                                placeholder="SIM / Otros" 
+                                className="bg-white h-8 text-sm" 
+                                value={remitoDespacho}
+                                onChange={e => setRemitoDespacho(e.target.value)}
+                               />
+                            </div>
+                         </div>
                          <Input 
-                          placeholder="Número de Remito" 
-                          className="bg-white h-8 text-sm" 
-                          value={remitoNumber}
-                          onChange={e => setRemitoNumber(e.target.value)}
-                         />
-                         <Input 
-                          placeholder="Detalle del remito (ej: 2 pallets, 500kg)" 
+                          placeholder="Detalle de carga (ej: 2 pallets)" 
                           className="bg-white h-8 text-sm"
                           value={remitoDetail}
                           onChange={e => setRemitoDetail(e.target.value)}
                          />
+                         <div className="flex items-center justify-between p-2 bg-white rounded border">
+                            <div className="flex items-center gap-2">
+                               <Switch checked={remitoHasCot} onCheckedChange={setRemitoHasCot} />
+                               <Label className="text-[10px] uppercase font-bold">¿Lleva COT?</Label>
+                            </div>
+                            {remitoHasCot && (
+                               <Input 
+                                placeholder="N° COT" 
+                                className="h-7 w-32 text-[10px]" 
+                                value={remitoCotNumber}
+                                onChange={e => setRemitoCotNumber(e.target.value)}
+                               />
+                            )}
+                         </div>
                          <Button type="button" size="sm" className="h-8 bg-blue-600" onClick={addRemito} disabled={!remitoNumber}>
-                           <Plus size={14} className="mr-1" /> Agregar Remito
+                           <Plus size={14} className="mr-1" /> Agregar Documento
                          </Button>
                        </div>
                      </div>
 
-                     <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2">
-                        {formData.documents?.filter(d => d.type === 'remito').map((doc) => (
+                     <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                        {formData.documents?.map((doc) => (
                           <div key={doc.id} className="flex items-center justify-between p-2 bg-white border rounded-lg group hover:border-blue-200 transition-colors">
-                            <div className="flex items-center gap-2">
-                              <div className="w-7 h-7 rounded bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
-                                <FileText size={14} />
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              <div className="w-8 h-8 rounded bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+                                <FileText size={16} />
                               </div>
                               <div className="min-w-0">
-                                <p className="text-[10px] font-bold text-slate-900 truncate">N° {doc.number}</p>
+                                <div className="flex items-center gap-1.5">
+                                    <p className="text-[10px] font-bold text-slate-900 truncate">N° {doc.number}</p>
+                                    {doc.hasCot && <Badge className="h-3 text-[7px] bg-green-500 border-none">COT: {doc.cotNumber}</Badge>}
+                                </div>
                                 <p className="text-[9px] text-slate-500 truncate">{doc.notes || 'Sin detalle'}</p>
+                                {doc.despachoNumber && <p className="text-[8px] text-blue-500 font-bold uppercase truncate">Despacho: {doc.despachoNumber}</p>}
                               </div>
                             </div>
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => removeRemito(doc.id)}>
@@ -305,7 +346,7 @@ export default function LoadFormWizard() {
                           </div>
                         ))}
                         {(!formData.documents || formData.documents.length === 0) && (
-                          <p className="text-center py-6 text-xs text-slate-400 italic">No hay remitos agregados todavía.</p>
+                          <p className="text-center py-6 text-xs text-slate-400 italic">No hay documentos agregados todavía.</p>
                         )}
                      </div>
                    </div>
@@ -456,9 +497,17 @@ export default function LoadFormWizard() {
           <Button variant="ghost" onClick={() => step > 1 ? setStep(step - 1) : router.back()}>
             <ChevronLeft size={16} className="mr-1" /> Voltar
           </Button>
-          <Button onClick={() => step < 5 ? setStep(step + 1) : handleSubmit()} className="bg-blue-600 min-w-[120px]">
-            {step === 5 ? 'Finalizar' : 'Próximo'} <ChevronRight size={16} className="ml-1" />
-          </Button>
+          <div className="flex gap-2">
+            {step < 5 ? (
+              <Button onClick={() => setStep(step + 1)} className="bg-blue-600 min-w-[120px]">
+                Próximo <ChevronRight size={16} className="ml-1" />
+              </Button>
+            ) : (
+              <Button onClick={handleSubmit} className="bg-blue-600 min-w-[120px]" disabled={isSubmitting}>
+                Finalizar <ChevronRight size={16} className="ml-1" />
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { 
   Package, Plus, Search, MapPin, Scale, DollarSign, 
   Loader2, MoreVertical, Trash2, Truck, CheckCircle2, 
@@ -46,6 +47,9 @@ export default function CargasPage() {
   const [selectedLoadForDocs, setSelectedLoadForDocs] = useState<Load | null>(null);
   const [newDocType, setNewDocType] = useState<LoadDocType>("remito");
   const [newDocNumber, setNewDocNumber] = useState("");
+  const [docHasCot, setDocHasCot] = useState(false);
+  const [docCotNumber, setDocCotNumber] = useState("");
+  const [docDespacho, setDocDespacho] = useState("");
   const [isSavingDoc, setIsSavingDoc] = useState(false);
 
   const loadsQuery = useMemo(() => {
@@ -130,6 +134,9 @@ export default function CargasPage() {
       id: Math.random().toString(36).substring(7),
       type: newDocType,
       number: newDocNumber,
+      hasCot: docHasCot,
+      cotNumber: docHasCot ? docCotNumber : "",
+      despachoNumber: docDespacho,
       uploadedAt: new Date().toISOString(),
       notes: ""
     };
@@ -144,6 +151,9 @@ export default function CargasPage() {
       });
       setSelectedLoadForDocs({...selectedLoadForDocs, documents: updatedDocs});
       setNewDocNumber("");
+      setDocHasCot(false);
+      setDocCotNumber("");
+      setDocDespacho("");
       toast({ title: "Documento adjuntado" });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al guardar documento" });
@@ -319,40 +329,70 @@ export default function CargasPage() {
               <FilePlus className="text-blue-600" /> Documentación del Flete
             </DialogTitle>
             <DialogDescription>
-              Adjunte los comprobantes legales (Remitos, COT, Facturas) de la orden {selectedLoadForDocs?.orderNumber}.
+              Adjunte los comprobantes legales (Remitos, COT, Facturas, Despachos) de la orden {selectedLoadForDocs?.orderNumber}.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-6 py-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end bg-slate-50 p-4 rounded-xl border border-dashed">
-              <div className="space-y-2">
-                <Label className="text-[10px] uppercase font-bold text-slate-400">Tipo de Documento</Label>
-                <Select value={newDocType} onValueChange={(v: LoadDocType) => setNewDocType(v)}>
-                  <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="remito">📄 Remito</SelectItem>
-                    <SelectItem value="factura">💰 Factura</SelectItem>
-                    <SelectItem value="cot">🚛 COT / Tránsito</SelectItem>
-                    <SelectItem value="otro">📎 Otro</SelectItem>
-                  </SelectContent>
-                </Select>
+            <div className="bg-slate-50 p-4 rounded-xl border border-dashed space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-bold text-slate-400">Tipo de Documento</Label>
+                  <Select value={newDocType} onValueChange={(v: LoadDocType) => setNewDocType(v)}>
+                    <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="remito">📄 Remito</SelectItem>
+                      <SelectItem value="factura">💰 Factura</SelectItem>
+                      <SelectItem value="despacho">🌍 Despacho / Aduana</SelectItem>
+                      <SelectItem value="cot">🚛 COT</SelectItem>
+                      <SelectItem value="otro">📎 Otro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-bold text-slate-400">Número de Documento</Label>
+                  <Input 
+                    className="bg-white"
+                    placeholder="Ej: 0001-000456" 
+                    value={newDocNumber} 
+                    onChange={e => setNewDocNumber(e.target.value)} 
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label className="text-[10px] uppercase font-bold text-slate-400">Número de Documento</Label>
-                <Input 
-                  className="bg-white"
-                  placeholder="Ej: 0001-000456" 
-                  value={newDocNumber} 
-                  onChange={e => setNewDocNumber(e.target.value)} 
-                />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <div className="flex items-center justify-between p-2 bg-white rounded border">
+                    <div className="flex items-center gap-2">
+                       <Switch checked={docHasCot} onCheckedChange={setDocHasCot} />
+                       <Label className="text-[10px] uppercase font-bold">Lleva COT</Label>
+                    </div>
+                    {docHasCot && (
+                       <Input 
+                        placeholder="N° COT" 
+                        className="h-7 w-32 text-[10px]" 
+                        value={docCotNumber}
+                        onChange={e => setDocCotNumber(e.target.value)}
+                       />
+                    )}
+                 </div>
+                 <div className="space-y-1">
+                    <Label className="text-[10px] uppercase font-bold text-slate-400">N° Despacho Relacionado</Label>
+                    <Input 
+                      className="bg-white h-8 text-[10px]"
+                      placeholder="SIM / Referencia" 
+                      value={docDespacho} 
+                      onChange={e => setDocDespacho(e.target.value)} 
+                    />
+                 </div>
               </div>
+
               <Button 
                 onClick={handleAddDocument} 
                 disabled={!newDocNumber || isSavingDoc}
                 className="bg-blue-600 w-full"
               >
                 {isSavingDoc ? <Loader2 className="animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                Adjuntar
+                Adjuntar Documento
               </Button>
             </div>
 
@@ -367,8 +407,12 @@ export default function CargasPage() {
                            <FileText size={16} />
                         </div>
                         <div>
-                          <p className="text-xs font-bold uppercase text-slate-700">{doc.type}</p>
-                          <p className="text-sm font-mono">{doc.number}</p>
+                          <div className="flex items-center gap-2">
+                             <p className="text-xs font-bold uppercase text-slate-700">{doc.type}</p>
+                             <p className="text-sm font-mono">{doc.number}</p>
+                             {doc.hasCot && <Badge className="bg-green-50 text-green-700 border-green-200 text-[8px] h-3">COT: {doc.cotNumber}</Badge>}
+                          </div>
+                          {doc.despachoNumber && <p className="text-[9px] text-blue-500 font-bold uppercase">Despacho: {doc.despachoNumber}</p>}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">

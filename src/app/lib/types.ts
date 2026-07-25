@@ -7,7 +7,7 @@ export type HubType = 'hub' | 'warehouse' | 'office';
 export type MapProvider = 'google' | 'mapbox';
 export type Country = 'Argentina' | 'Chile' | 'Paraguay' | 'Uruguay' | 'Bolivia' | 'Brasil';
 
-export type LoadDocType = 'remito' | 'factura' | 'cot' | 'otro';
+export type LoadDocType = 'remito' | 'factura' | 'cot' | 'otro' | 'despacho';
 
 export interface LoadDocument {
   id: string;
@@ -16,6 +16,9 @@ export interface LoadDocument {
   fileUrl?: string;
   uploadedAt: any;
   notes?: string;
+  hasCot?: boolean;
+  cotNumber?: string;
+  despachoNumber?: string;
 }
 
 export type ExpenseCategory = 
