@@ -77,7 +77,7 @@ export default function RouteDetailPage() {
   
   // Throttling State
   const lastUpdateRef = useRef<number>(0);
-  const lastPosRef = useRef<{lat: number, lng: number} | null>(null);
+  const lastPosRef = useRef<{lat: number, lng: number, timestamp: number} | null>(null);
   const podPhotoInputRef = useRef<HTMLInputElement>(null);
 
   const [expenseData, setExpenseData] = useState<Partial<Expense>>({
@@ -146,7 +146,7 @@ export default function RouteDetailPage() {
     return { name: 'S/D', address: '-', lat: -34.6, lng: -58.3 };
   }, [load]);
 
-  // GPS Tracking Logic
+  // GPS Tracking Logic - Optimized for responsiveness during tests
   useEffect(() => {
     if (!gpsActive || !loadRef || typeof window === 'undefined' || !navigator.geolocation) return;
 
@@ -154,22 +154,32 @@ export default function RouteDetailPage() {
       (pos) => {
         const { latitude, longitude, speed } = pos.coords;
         const now = Date.now();
-        const currentSpeedKmH = (speed || 0) * 3.6;
         
-        const interval = currentSpeedKmH > 5 ? 20000 : 60000;
-        if (now - lastUpdateRef.current < interval) return;
+        // Frecuencia de actualización: cada 5 segundos para que sea sensible a pie
+        const UPDATE_INTERVAL = 5000;
+        if (now - lastUpdateRef.current < UPDATE_INTERVAL) return;
 
         let distanceInc = 0;
+        let calculatedSpeed = (speed || 0) * 3.6; // Convertir m/s a km/h
+
         if (lastPosRef.current) {
           distanceInc = calculateDistance(lastPosRef.current.lat, lastPosRef.current.lng, latitude, longitude);
+          
+          // Si el sensor no da velocidad (común en navegadores), la estimamos
+          if (speed === null || speed === 0) {
+            const timeDiffHours = (now - lastPosRef.current.timestamp) / (1000 * 3600);
+            calculatedSpeed = distanceInc / timeDiffHours;
+          }
         }
 
-        if (distanceInc < 0.1 && lastUpdateRef.current !== 0) return;
+        // Umbral de movimiento: 5 metros (0.005 km)
+        // Esto permite que el sistema detecte caminatas cortas
+        if (distanceInc < 0.005 && lastUpdateRef.current !== 0) return;
 
         updateDoc(loadRef, {
           "tracking.currentLat": latitude,
           "tracking.currentLng": longitude,
-          "tracking.currentSpeed": Math.round(currentSpeedKmH),
+          "tracking.currentSpeed": Math.round(calculatedSpeed),
           "tracking.distanceTraveledKm": increment(distanceInc),
           "tracking.distanceRemainingKm": increment(-distanceInc),
           "tracking.lastUpdateAt": serverTimestamp(),
@@ -177,10 +187,14 @@ export default function RouteDetailPage() {
         });
 
         lastUpdateRef.current = now;
-        lastPosRef.current = { lat: latitude, lng: longitude };
+        lastPosRef.current = { lat: latitude, lng: longitude, timestamp: now };
       },
       (err) => {
-        console.warn("GPS tracking status notification");
+        let msg = "Error GPS: ";
+        if (err.code === 1) msg += "Permiso denegado.";
+        else if (err.code === 2) msg += "Ubicación no disponible.";
+        else if (err.code === 3) msg += "Tiempo de espera agotado.";
+        console.warn(msg, err);
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
@@ -400,7 +414,7 @@ export default function RouteDetailPage() {
                        </div>
                        <div className="p-3 bg-white/5 border border-white/10 rounded-xl">
                           <p className="text-[9px] uppercase font-bold text-white/40">Recorrido</p>
-                          <p className="text-xl font-black">{load.tracking?.distanceTraveledKm?.toFixed(1) || 0} <span className="text-[10px] font-normal text-slate-400">km</span></p>
+                          <p className="text-xl font-black">{load.tracking?.distanceTraveledKm?.toFixed(2) || 0} <span className="text-[10px] font-normal text-slate-400">km</span></p>
                        </div>
                     </div>
                     
