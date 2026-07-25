@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -243,34 +242,22 @@ export default function LoadFormWizard() {
           <Card className="border-none shadow-sm">
             <CardHeader><CardTitle>Configuración Inicial</CardTitle></CardHeader>
             <CardContent className="space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <Label>Cliente Principal (Dador)</Label>
-                  <Select value={formData.clientId} onValueChange={v => {
-                    const c = clients?.find(cl => cl.id === v);
-                    setFormData({...formData, clientId: v, clientName: c?.name || ""});
-                  }}>
-                    <SelectTrigger><SelectValue placeholder="Seleccionar dador" /></SelectTrigger>
-                    <SelectContent>{clients?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-4">
-                  <Label>Tipo de Servicio</Label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
-                    {SERVICE_TYPES.map(type => (
-                      <button 
-                        key={type.id} 
-                        className={cn(
-                          "flex flex-col items-center justify-center min-h-[80px] gap-2 p-2 rounded-xl border transition-all text-center",
-                          formData.serviceType === type.id ? "bg-blue-600 text-white border-blue-600 shadow-md" : "bg-white text-slate-500 border-slate-200 hover:border-blue-300"
-                        )}
-                        onClick={() => setFormData({...formData, serviceType: type.id as any})}
-                      >
-                        <type.icon size={18} />
-                        <span className="text-[10px] uppercase font-black">{type.label}</span>
-                      </button>
-                    ))}
-                  </div>
+              <div className="space-y-4">
+                <Label>Tipo de Servicio</Label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                  {SERVICE_TYPES.map(type => (
+                    <button 
+                      key={type.id} 
+                      className={cn(
+                        "flex flex-col items-center justify-center min-h-[80px] gap-2 p-2 rounded-xl border transition-all text-center",
+                        formData.serviceType === type.id ? "bg-blue-600 text-white border-blue-600 shadow-md" : "bg-white text-slate-500 border-slate-200 hover:border-blue-300"
+                      )}
+                      onClick={() => setFormData({...formData, serviceType: type.id as any})}
+                    >
+                      <type.icon size={18} />
+                      <span className="text-[10px] uppercase font-black">{type.label}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
               <div className="pt-6 border-t flex items-center justify-between">

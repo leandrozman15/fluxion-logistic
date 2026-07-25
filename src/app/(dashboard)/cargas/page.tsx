@@ -5,18 +5,12 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, orderBy, deleteDoc, doc, updateDoc, serverTimestamp } from "firebase/firestore";
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { 
   Package, Plus, Search, MapPin, Scale, DollarSign, 
   Loader2, MoreVertical, Trash2, Truck, CheckCircle2, 
@@ -54,8 +48,8 @@ export default function CargasPage() {
     return loads.filter(l => {
       const search = searchTerm.toLowerCase();
       const matchesSearch = 
-        (l.clientName || "").toLowerCase().includes(search) ||
-        (l.orderNumber || "").toLowerCase().includes(search);
+        (l.orderNumber || "").toLowerCase().includes(search) ||
+        (l.outboundStops?.[0]?.name || "").toLowerCase().includes(search);
       const matchesStatus = statusFilter === "all" || l.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
@@ -72,13 +66,10 @@ export default function CargasPage() {
     }
   };
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleDelete = async (id: string) => {
     if (!db || !id || !confirm("¿Eliminar esta operación definitivamente?")) return;
-    const docRef = doc(db, "loads", id);
     try {
-      await deleteDoc(docRef);
+      await deleteDoc(doc(db, "loads", id));
       toast({ title: "Operación eliminada" });
     } catch (e) {
       toast({ variant: "destructive", title: "Error" });
@@ -103,7 +94,7 @@ export default function CargasPage() {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
             <input 
               type="search" 
-              placeholder="Buscar por N° Orden o cliente..." 
+              placeholder="Buscar por N° Orden o destino..." 
               className="flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm pl-8 outline-none focus:ring-2 focus:ring-blue-500"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
@@ -141,6 +132,7 @@ export default function CargasPage() {
                     const totalStops = (load.outboundStops?.length || 0) + (load.returnStops?.length || 0);
                     const totalWeight = (load.outboundStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0) + (load.returnStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0);
                     const totalDocs = (load.outboundStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0) + (load.returnStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0);
+                    const firstDest = load.outboundStops?.[0]?.name || "Sin destinos";
 
                     return (
                       <TableRow key={load.id} className="hover:bg-slate-50/50 cursor-pointer" onClick={() => router.push(`/cargas/${load.id}/orden`)}>
@@ -149,15 +141,15 @@ export default function CargasPage() {
                             <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600"><Package size={20} /></div>
                             <div>
                               <div className="font-bold text-slate-900">{load.orderNumber}</div>
-                              <div className="text-[10px] text-slate-500 uppercase font-bold truncate max-w-[120px]">{load.clientName}</div>
+                              <div className="text-[10px] text-slate-500 uppercase font-bold truncate max-w-[120px]">{firstDest}</div>
                             </div>
                           </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2 text-xs">
                              <Navigation size={12} className="text-blue-500" />
-                             <span className="font-bold">{totalStops} Destinos</span>
-                             {load.isRoundTrip && <Badge className="bg-orange-100 text-orange-700 border-none text-[8px] h-4">ID + VTA</Badge>}
+                             <span className="font-bold">{totalStops} Puntos</span>
+                             {load.isRoundTrip && <Badge className="bg-orange-100 text-orange-700 border-none text-[8px] h-4">IDA + VTA</Badge>}
                           </div>
                           <div className="text-[9px] text-slate-400 font-bold uppercase truncate max-w-[200px]">
                             {load.origin?.province} → {load.outboundStops?.[0]?.province} ...
@@ -166,7 +158,7 @@ export default function CargasPage() {
                         <TableCell>
                           <div className="space-y-1">
                             <div className="flex items-center gap-1 text-[10px] font-black text-slate-600"><Scale size={10} /> {totalWeight.toLocaleString()} Kg</div>
-                            <Badge variant="secondary" className="text-[9px] h-4 bg-slate-100"><FileText size={10} className="mr-1" /> {totalDocs} Remitos</Badge>
+                            <Badge variant="secondary" className="text-[9px] h-4 bg-slate-100"><FileText size={10} className="mr-1" /> {totalDocs} Documentos</Badge>
                           </div>
                         </TableCell>
                         <TableCell>{getStatusBadge(load.status)}</TableCell>
@@ -178,7 +170,7 @@ export default function CargasPage() {
                               <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/orden`)}><Printer className="w-4 h-4 mr-2" /> Ver Orden (PDF)</DropdownMenuItem>
                               <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/billetera`)}><Wallet className="w-4 h-4 mr-2" /> Billetera de Viaje</DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem className="text-red-600" onClick={(e) => handleDelete(e, load.id)}><Trash2 className="w-4 h-4 mr-2" /> Eliminar Flete</DropdownMenuItem>
+                              <DropdownMenuItem className="text-red-600" onSelect={(e) => { e.preventDefault(); handleDelete(load.id); }}><Trash2 className="w-4 h-4 mr-2" /> Eliminar Flete</DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>

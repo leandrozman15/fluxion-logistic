@@ -6,9 +6,10 @@ import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc } from "@/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { 
   Printer, ArrowLeft, Truck, User, MapPin, 
-  Package, Calendar, Globe, Anchor, Loader2, Navigation, FileText, CheckCircle2
+  Package, Calendar, Globe, Anchor, Loader2, Navigation, FileText, CheckCircle2, Repeat
 } from "lucide-react";
 import { Load, Driver, Truck as TruckType } from "@/app/lib/types";
 import { QRCodeSVG } from "qrcode.react";
@@ -38,7 +39,6 @@ export default function LoadOrderDocumentPage() {
           const dSnap = await getDoc(doc(db, "drivers", load.assignedDriverId));
           if (dSnap.exists()) setDriver(dSnap.data() as Driver);
         }
-        // Simulando camión para el documento del MVP
         if (load.assignedTruckId) {
           const tSnap = await getDoc(doc(db, "trucks", load.assignedTruckId));
           if (tSnap.exists()) setTruck(tSnap.data() as TruckType);
@@ -82,15 +82,9 @@ export default function LoadOrderDocumentPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-10 mb-8">
-            <div className="space-y-4">
-              <h2 className="text-xs font-black uppercase bg-slate-900 text-white px-2 py-1 inline-block">Dador de Carga</h2>
-              <p className="text-xl font-bold text-slate-900">{load.clientName}</p>
-            </div>
-            <div className="space-y-4">
-              <h2 className="text-xs font-black uppercase bg-slate-900 text-white px-2 py-1 inline-block">Tipo de Operación</h2>
-              <p className="text-lg font-bold capitalize">{load.serviceType} {load.isRoundTrip ? '(IDA Y VUELTA)' : '(SOLO IDA)'}</p>
-            </div>
+          <div className="mb-8">
+            <h2 className="text-xs font-black uppercase bg-slate-900 text-white px-2 py-1 inline-block mb-2">Tipo de Operación</h2>
+            <p className="text-lg font-bold capitalize">{load.serviceType} {load.isRoundTrip ? '(IDA Y VUELTA)' : '(SOLO IDA)'}</p>
           </div>
 
           {/* Trayecto de Ida */}
@@ -124,7 +118,7 @@ export default function LoadOrderDocumentPage() {
                       <div className="flex flex-wrap gap-2 pt-2 border-t border-dashed">
                         {stop.documents?.map(doc => (
                           <Badge key={doc.id} variant="outline" className="text-[7px] border-slate-300 font-mono">
-                            {doc.type.toUpperCase()}: {doc.number} {doc.hasCot ? '(COT OK)' : ''}
+                            {doc.type.toUpperCase()}: {doc.number} {doc.hasCot ? `(COT: ${doc.cotNumber})` : ''}
                           </Badge>
                         ))}
                       </div>
