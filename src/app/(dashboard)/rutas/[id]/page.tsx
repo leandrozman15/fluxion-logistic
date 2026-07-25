@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
@@ -87,6 +86,17 @@ export default function RouteDetailPage() {
     return expenses?.reduce((acc, exp) => acc + (exp.amount || 0), 0) || 0;
   }, [expenses]);
 
+  // Derivar destino final para evitar errores de undefined
+  const displayDestination = useMemo(() => {
+    if (!load) return { name: 'Cargando...', address: '', lat: 0, lng: 0 };
+    if (load.destination?.name) return load.destination;
+    if (load.outboundStops && load.outboundStops.length > 0) {
+      const last = load.outboundStops[load.outboundStops.length - 1];
+      return { name: last.name, address: last.address, lat: last.lat || 0, lng: last.lng || 0 };
+    }
+    return { name: 'No definido', address: 'Dirección no disponible', lat: 0, lng: 0 };
+  }, [load]);
+
   // GPS Tracking Logic
   const toggleGPS = () => {
     if (gpsActive) {
@@ -112,7 +122,6 @@ export default function RouteDetailPage() {
             "tracking.currentLng": longitude,
             "tracking.currentSpeed": Math.round(currentSpeed),
             "tracking.lastUpdateAt": serverTimestamp(),
-            // Simulação de acúmulo de distância no MVP
             "tracking.distanceTraveledKm": increment(0.01)
           });
         },
@@ -293,10 +302,10 @@ export default function RouteDetailPage() {
               <div className="flex-1 space-y-2">
                 <div>
                   <h3 className="font-bold text-slate-900 text-sm">Destino Final</h3>
-                  <p className="text-xs text-slate-500">{load.destination.name}</p>
+                  <p className="text-xs text-slate-500">{displayDestination.name}</p>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="h-8 flex-1 text-[10px] font-bold" onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${load.destination.lat},${load.destination.lng}`)}><Navigation size={12} className="mr-1" /> Navegar</Button>
+                  <Button variant="outline" size="sm" className="h-8 flex-1 text-[10px] font-bold" onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${displayDestination.lat},${displayDestination.lng}`)}><Navigation size={12} className="mr-1" /> Navegar</Button>
                 </div>
               </div>
             </div>
@@ -374,7 +383,7 @@ export default function RouteDetailPage() {
                     </div>
                     <div className="space-y-2">
                       <Label>Lugar / Estación</Label>
-                      <Input placeholder="Ej: YPF Ruta 9 km 45" value={expenseData.location || ''} onChange={e => setAxisData({...expenseData, location: e.target.value})} />
+                      <Input placeholder="Ej: YPF Ruta 9 km 45" value={expenseData.location || ''} onChange={e => setExpenseData({...expenseData, location: e.target.value})} />
                     </div>
                     <Button variant="outline" className="w-full border-dashed border-2 h-16 text-slate-500">
                       <Camera className="mr-2" /> Adjuntar Foto Ticket
