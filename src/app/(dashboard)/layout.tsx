@@ -1,4 +1,3 @@
-
 'use client';
 
 import { 
@@ -80,8 +79,8 @@ function DashboardSidebar() {
   };
 
   return (
-    <Sidebar variant="sidebar" collapsible="icon" className="transition-all duration-300 ease-in-out">
-      <SidebarHeader className="h-16 flex items-center px-4 border-b">
+    <Sidebar variant="sidebar" collapsible="icon" className="transition-all duration-200">
+      <SidebarHeader className="h-16 flex items-center px-4 border-b overflow-hidden">
         <Link href="/dashboard" className="flex items-center gap-2 font-bold text-blue-600" onClick={handleLinkClick}>
           <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white shrink-0">
             <Truck size={18} />
@@ -134,7 +133,7 @@ function DashboardSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <div className="mt-auto p-4 border-t">
+      <div className="mt-auto p-2 border-t">
         <SidebarMenuButton 
           className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
           onClick={handleLogout}

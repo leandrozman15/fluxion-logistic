@@ -1,4 +1,3 @@
-
 @import "leaflet/dist/leaflet.css";
 
 @tailwind base;
@@ -79,25 +78,27 @@
   }
 }
 
-/* Sidebar Smart Expand Effect */
-[data-state="collapsed"][data-collapsible="icon"] {
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+/* Sidebar Stable Expand Effect */
+[data-sidebar="sidebar"] {
+  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1), left 0.2s ease;
 }
 
-[data-state="collapsed"][data-collapsible="icon"]:hover {
+[data-state="collapsed"][data-collapsible="icon"] [data-sidebar="sidebar"]:hover {
   width: var(--sidebar-width) !important;
-  box-shadow: 10px 0 30px -10px rgba(0,0,0,0.15);
+  box-shadow: 4px 0 15px -5px rgba(0,0,0,0.1);
   z-index: 50;
 }
 
-[data-state="collapsed"][data-collapsible="icon"]:hover .group-data-\[collapsible\=icon\]\:hidden {
+/* Ensure content visibility on hover expand */
+[data-state="collapsed"][data-collapsible="icon"] [data-sidebar="sidebar"]:hover .group-data-\[collapsible\=icon\]\:hidden {
   display: flex !important;
   opacity: 1;
   transition: opacity 0.2s ease-in-out;
 }
 
-[data-state="collapsed"][data-collapsible="icon"]:hover .group-data-\[collapsible\=icon\]\:-mt-8 {
-  margin-top: 0 !important;
+/* Avoid content push during hover */
+[data-state="collapsed"][data-collapsible="icon"] {
+  overflow: visible !important;
 }
 
 /* Custom styles for Leaflet markers */
