@@ -63,6 +63,7 @@ export interface Expense {
   id: string;
   loadId: string;
   driverId: string;
+  truckId?: string;
   category: ExpenseCategory;
   subCategory?: string;
   amount: number;
@@ -86,6 +87,15 @@ export interface VehicleDocument {
   fileUrl?: string;
   description?: string;
   isRequired: boolean;
+}
+
+export interface SemiTrailer {
+  plate: string;
+  brand: string;
+  model: string;
+  year: number;
+  type: string;
+  axles: number;
 }
 
 export interface Truck {
@@ -112,6 +122,9 @@ export interface Truck {
   avatarUrl?: string;
   createdAt: any;
   updatedAt: any;
+  
+  // Datos del acoplado
+  semiTrailer?: SemiTrailer;
 }
 
 export interface Driver {

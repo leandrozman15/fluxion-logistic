@@ -210,6 +210,24 @@ export default function TruckDetailPage() {
             </TabsList>
 
             <TabsContent value="tractor" className="space-y-4 animate-in fade-in">
+              <div className="p-4 bg-slate-50 border rounded-xl mb-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+                 <div className="space-y-0.5">
+                    <p className="text-[10px] uppercase font-bold text-slate-400">Marca/Modelo</p>
+                    <p className="text-sm font-bold text-slate-700">{truck.brand} {truck.model}</p>
+                 </div>
+                 <div className="space-y-0.5">
+                    <p className="text-[10px] uppercase font-bold text-slate-400">Patente</p>
+                    <p className="text-sm font-mono font-bold text-blue-600">{truck.plate}</p>
+                 </div>
+                 <div className="space-y-0.5">
+                    <p className="text-[10px] uppercase font-bold text-slate-400">Carrocería</p>
+                    <p className="text-sm font-bold text-slate-700 capitalize">{truck.bodyType}</p>
+                 </div>
+                 <div className="space-y-0.5">
+                    <p className="text-[10px] uppercase font-bold text-slate-400">Ejes</p>
+                    <p className="text-sm font-bold text-slate-700">{truck.axles}</p>
+                 </div>
+              </div>
               {truck.documentation?.filter(d => d.category === 'unit').map((doc) => (
                 <Card key={doc.id} className={cn("border shadow-none", doc.status === 'expired' ? "border-red-200 bg-red-50/20" : "")}>
                   <CardContent className="p-4 flex items-center justify-between gap-4">
@@ -235,6 +253,29 @@ export default function TruckDetailPage() {
             </TabsContent>
 
             <TabsContent value="semi" className="space-y-4 animate-in fade-in">
+              <Card className="bg-blue-50/30 border-blue-100 shadow-none mb-6">
+                <CardHeader className="py-4">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <LayoutGrid size={16} className="text-blue-600" /> Especificaciones del Acoplado
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                  <div className="space-y-1">
+                    <p className="text-[10px] uppercase font-bold text-slate-400">Patente Semi</p>
+                    <p className="text-lg font-mono font-bold text-blue-700">{truck.semiTrailer?.plate || 'SIN ASIGNAR'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] uppercase font-bold text-slate-400">Marca / Modelo</p>
+                    <p className="text-sm font-bold text-slate-700">{truck.semiTrailer?.brand || '-'} {truck.semiTrailer?.model || '-'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] uppercase font-bold text-slate-400">Tipo de Batea</p>
+                    <Badge variant="secondary" className="uppercase text-[9px]">{truck.semiTrailer?.type || 'No def.'}</Badge>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <h4 className="text-[10px] uppercase font-bold text-slate-400 tracking-widest px-1">Documentación del Semirremolque</h4>
               {truck.documentation?.filter(d => d.category === 'semi').map((doc) => (
                 <Card key={doc.id} className="border shadow-none">
                   <CardContent className="p-4 flex items-center justify-between gap-4">

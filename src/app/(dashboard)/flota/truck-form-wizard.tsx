@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Truck, ArrowLeft, ArrowRight, Save, Loader2, 
   Gauge, Box, Thermometer, Droplets, Anchor, Layers, 
-  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon
+  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon, LayoutGrid
 } from "lucide-react";
 import { Truck as TruckType } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -34,6 +34,8 @@ const BRANDS = {
   "Ford": ["Cargo 1723", "Cargo 1933"],
   "Otro": ["Personalizado"]
 };
+
+const SEMI_BRANDS = ["Helvética", "Lambert", "Montenegro", "Salto", "Sola y Brusa", "Random", "Otro"];
 
 const PROVINCIAS = [
   "Buenos Aires", "CABA", "Catamarca", "Chaco", "Chubut", "Córdoba", "Corrientes", 
@@ -65,7 +67,15 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     grossWeight: 0, fuelType: "Diesel", tankLiters: 0, odometerKm: 0,
     avgConsumption: 32, status: "available",
     location: { city: "", province: "Buenos Aires", country: "Argentina", lat: 0, lng: 0 },
-    avatarUrl: ""
+    avatarUrl: "",
+    semiTrailer: {
+      plate: "",
+      brand: "",
+      model: "",
+      year: new Date().getFullYear(),
+      type: "plataforma",
+      axles: 3
+    }
   });
 
   const truckRef = useMemo(() => 
@@ -80,7 +90,8 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
         ...existingTruck,
         location: existingTruck.location || { city: "", province: "Buenos Aires", country: "Argentina", lat: 0, lng: 0 },
         odometerKm: existingTruck.odometerKm || 0,
-        avatarUrl: existingTruck.avatarUrl || ""
+        avatarUrl: existingTruck.avatarUrl || "",
+        semiTrailer: existingTruck.semiTrailer || { plate: "", brand: "", model: "", year: new Date().getFullYear(), type: "plataforma", axles: 3 }
       });
     }
   }, [existingTruck]);
@@ -111,7 +122,6 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     const file = e.target.files?.[0];
     if (file) {
       toast({ title: "Imagen lista", description: "La foto se ha cargado temporalmente." });
-      // In a real app, you would upload to Firebase Storage and get a URL
       setFormData(prev => ({ ...prev, avatarUrl: URL.createObjectURL(file) }));
     }
   };
@@ -257,56 +267,125 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
         )}
 
         {step === 2 && (
-          <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Especificaciones Técnicas</CardTitle></CardHeader>
-            <CardContent className="space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="p-6 bg-slate-900 text-white rounded-2xl space-y-6">
-                  <div className="flex items-center gap-2 text-blue-400 font-bold uppercase text-[10px] tracking-widest">
-                    <Gauge size={16}/> Estado del Odómetro
+          <div className="space-y-6">
+            <Card className="border-none shadow-sm">
+              <CardHeader><CardTitle>Unidad Tractora</CardTitle></CardHeader>
+              <CardContent className="space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="p-6 bg-slate-900 text-white rounded-2xl space-y-6">
+                    <div className="flex items-center gap-2 text-blue-400 font-bold uppercase text-[10px] tracking-widest">
+                      <Gauge size={16}/> Estado del Odómetro
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-white/50 text-[10px] uppercase">Kilometraje Actual (KM)</Label>
+                      <Input 
+                        type="number" 
+                        className="bg-white/5 border-white/10 text-white font-mono text-2xl h-14"
+                        value={formData.odometerKm ?? 0} 
+                        onChange={e => handleNumericChange('odometerKm', e.target.value)} 
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-white/50 text-[10px] uppercase">Consumo Objetivo (L/100km)</Label>
+                      <Input 
+                        type="number" 
+                        className="bg-white/5 border-white/10 text-white"
+                        value={formData.avgConsumption ?? 32} 
+                        onChange={e => handleNumericChange('avgConsumption', e.target.value)} 
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-white/50 text-[10px] uppercase">Kilometraje Actual (KM)</Label>
-                    <Input 
-                      type="number" 
-                      className="bg-white/5 border-white/10 text-white font-mono text-2xl h-14"
-                      value={formData.odometerKm ?? 0} 
-                      onChange={e => handleNumericChange('odometerKm', e.target.value)} 
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-white/50 text-[10px] uppercase">Consumo Objetivo (L/100km)</Label>
-                    <Input 
-                      type="number" 
-                      className="bg-white/5 border-white/10 text-white"
-                      value={formData.avgConsumption ?? 32} 
-                      onChange={e => handleNumericChange('avgConsumption', e.target.value)} 
-                    />
-                  </div>
-                </div>
 
-                <div className="space-y-4">
-                  <Label>Tipo de Carrocería</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {BODY_TYPES.map(type => (
-                      <button 
-                        key={type.id} 
-                        type="button"
-                        className={cn(
-                          "flex flex-col items-center justify-center gap-2 p-4 rounded-xl border transition-all text-center",
-                          formData.bodyType === type.id ? "bg-blue-600 text-white border-blue-600 shadow-lg" : "bg-white text-slate-500 border-slate-200 hover:border-blue-300"
-                        )}
-                        onClick={() => setFormData({...formData, bodyType: type.id})}
-                      >
-                        <type.icon size={20} />
-                        <span className="text-[10px] uppercase font-black">{type.label}</span>
-                      </button>
-                    ))}
+                  <div className="space-y-4">
+                    <Label>Tipo de Carrocería (Camión)</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {BODY_TYPES.map(type => (
+                        <button 
+                          key={type.id} 
+                          type="button"
+                          className={cn(
+                            "flex flex-col items-center justify-center gap-2 p-4 rounded-xl border transition-all text-center",
+                            formData.bodyType === type.id ? "bg-blue-600 text-white border-blue-600 shadow-lg" : "bg-white text-slate-500 border-slate-200 hover:border-blue-300"
+                          )}
+                          onClick={() => setFormData({...formData, bodyType: type.id})}
+                        >
+                          <type.icon size={20} />
+                          <span className="text-[10px] uppercase font-black">{type.label}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-sm border-l-4 border-l-blue-600">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <LayoutGrid size={20} className="text-blue-600" /> Semirremolque / Acoplado
+                </CardTitle>
+                <CardDescription>Registre los datos del equipo de arrastre asignado.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Patente Semirremolque</Label>
+                    <Input 
+                      placeholder="N° de Patente" 
+                      value={formData.semiTrailer?.plate || ''} 
+                      onChange={e => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, plate: e.target.value.toUpperCase()}})} 
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Marca Acoplado</Label>
+                      <Select 
+                        value={formData.semiTrailer?.brand} 
+                        onValueChange={v => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, brand: v}})}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Marca" /></SelectTrigger>
+                        <SelectContent>
+                          {SEMI_BRANDS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Año</Label>
+                      <Input 
+                        type="number" 
+                        value={formData.semiTrailer?.year || ''} 
+                        onChange={e => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, year: parseInt(e.target.value) || 0}})} 
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Tipo de Batea / Equipo</Label>
+                    <Select 
+                      value={formData.semiTrailer?.type} 
+                      onValueChange={v => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, type: v}})}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Seleccionar tipo" /></SelectTrigger>
+                      <SelectContent>
+                        {BODY_TYPES.map(bt => <SelectItem key={bt.id} value={bt.id}>{bt.label}</SelectItem>)}
+                        <SelectItem value="sider">Sider / Cortina</SelectItem>
+                        <SelectItem value="jaula">Ganadero / Jaula</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Cantidad de Ejes</Label>
+                    <Input 
+                      type="number" 
+                      value={formData.semiTrailer?.axles || 3} 
+                      onChange={e => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, axles: parseInt(e.target.value) || 0}})} 
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {step === 3 && (
