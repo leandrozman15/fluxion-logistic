@@ -17,9 +17,9 @@ import {
   Package, ArrowLeft, ArrowRight, Save, Loader2, 
   MapPin, Calendar, Clock, DollarSign, Truck, 
   Users, Info, AlertTriangle, ShieldCheck, 
-  Thermometer, Anchor, CheckCircle2, ChevronRight, ChevronLeft, Building2, Globe, FileText, Zap
+  Thermometer, Anchor, CheckCircle2, ChevronRight, ChevronLeft, Building2, Globe, FileText, Zap, Plus, Trash2
 } from "lucide-react";
-import { Load, Truck as TruckType, Driver, Client } from "@/app/lib/types";
+import { Load, Truck as TruckType, Driver, Client, LoadDocument } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -47,19 +47,23 @@ export default function LoadFormWizard() {
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Local state for remitos entry
+  const [remitoNumber, setRemitoNumber] = useState("");
+  const [remitoDetail, setRemitoDetail] = useState("");
+
   const [formData, setFormData] = useState<Partial<Load>>({
     orderNumber: "",
     serviceType: 'standard',
     clientName: "",
-    origin: { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", zip: "", instructions: "" },
-    destination: { name: "", phone: "", contact: "", address: "", province: "CABA", zip: "", instructions: "" },
+    origin: { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", country: "Argentina", zip: "", instructions: "" },
+    destination: { name: "", phone: "", contact: "", address: "", province: "CABA", country: "Argentina", zip: "", instructions: "" },
     pickupDate: "", pickupTimeFrom: "08:00", pickupTimeTo: "17:00",
     deliveryLimitDate: "", deliveryTimeFrom: "08:00", deliveryTimeTo: "17:00",
     description: "", classification: "Mercancías Generales", weightKg: 0, volumeM3: 0, units: 0, unitType: "Pallet",
     basePrice: 0, 
-    additionalCosts: { peajes: 0, parking: 0, handling: 0, viaticos: 0, others: 0 },
-    totalTaxes: 0, totalAmount: 0, paymentMethod: "Contado", billingStatus: "pending",
+    totalTaxes: 0, totalAmount: 0,
     priority: "medium", status: "pending",
+    documents: [],
     international: {
       operationType: 'export',
       exitCustoms: "Ezeiza",
@@ -88,14 +92,13 @@ export default function LoadFormWizard() {
     }));
   }, []);
 
-  // Auto-calculo Comex CIF
   useEffect(() => {
     if (formData.serviceType === 'customs' && formData.international) {
       const fob = formData.international.fobValueUsd || 0;
       const flete = formData.international.freightValueUsd || 0;
       const seguro = formData.international.insuranceValueUsd || 0;
       const cif = fob + flete + seguro;
-      const duties = cif * 0.15; // Simulação de taxa
+      const duties = cif * 0.15;
       const iva = (cif + duties) * 0.21;
       
       setFormData(prev => ({
@@ -113,6 +116,31 @@ export default function LoadFormWizard() {
 
   const clientsQuery = useMemo(() => db ? query(collection(db, "clients"), orderBy("name")) : null, [db]);
   const { data: clients } = useCollection<Client>(clientsQuery);
+
+  const addRemito = () => {
+    if (!remitoNumber) return;
+    const newDoc: LoadDocument = {
+      id: Math.random().toString(36).substring(7),
+      type: 'remito',
+      number: remitoNumber,
+      notes: remitoDetail,
+      uploadedAt: new Date().toISOString()
+    };
+    setFormData({
+      ...formData,
+      documents: [...(formData.documents || []), newDoc]
+    });
+    setRemitoNumber("");
+    setRemitoDetail("");
+    toast({ title: "Remito agregado" });
+  };
+
+  const removeRemito = (id: string) => {
+    setFormData({
+      ...formData,
+      documents: (formData.documents || []).filter(d => d.id !== id)
+    });
+  };
 
   const handleSubmit = async () => {
     if (!db) return;
@@ -153,7 +181,7 @@ export default function LoadFormWizard() {
         <div className="flex items-center justify-between">
           {[
             { id: 1, label: "Gerais", icon: Info },
-            { id: 2, label: "Carga", icon: Package },
+            { id: 2, label: "Carga / Remitos", icon: Package },
             { id: 3, label: "Aduana", icon: Globe },
             { id: 4, label: "Financeiro", icon: DollarSign },
             { id: 5, label: "Asignación", icon: Truck }
@@ -194,16 +222,18 @@ export default function LoadFormWizard() {
                   <Label>Tipo de Servicio</Label>
                   <div className="grid grid-cols-5 gap-2">
                     {SERVICE_TYPES.map(type => (
-                      <Button 
+                      <button 
                         key={type.id} 
                         type="button" 
-                        variant={formData.serviceType === type.id ? "default" : "outline"}
-                        className="flex flex-col h-16 gap-1 p-2"
+                        className={cn(
+                          "flex flex-col items-center justify-center h-16 gap-1 p-2 rounded-lg border transition-all",
+                          formData.serviceType === type.id ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-500 border-slate-200 hover:border-blue-300"
+                        )}
                         onClick={() => setFormData({...formData, serviceType: type.id as any})}
                       >
                         <type.icon size={16} />
                         <span className="text-[7px] uppercase font-bold leading-tight">{type.label}</span>
-                      </Button>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -213,21 +243,76 @@ export default function LoadFormWizard() {
         )}
 
         {step === 2 && (
-          <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Detalle de la Mercadería</CardTitle></CardHeader>
-            <CardContent className="space-y-6">
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                 <div className="space-y-4">
-                   <Label>Descripción</Label>
-                   <Textarea value={formData.description || ''} onChange={e => setFormData({...formData, description: e.target.value})} />
-                   <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1"><Label>Peso (Kg)</Label><Input type="number" value={formData.weightKg || 0} onChange={e => setFormData({...formData, weightKg: parseFloat(e.target.value)})} /></div>
-                      <div className="space-y-1"><Label>Volumen (m³)</Label><Input type="number" value={formData.volumeM3 || 0} onChange={e => setFormData({...formData, volumeM3: parseFloat(e.target.value)})} /></div>
+          <div className="space-y-6">
+            <Card className="border-none shadow-sm">
+              <CardHeader><CardTitle>Detalle de la Mercadería</CardTitle></CardHeader>
+              <CardContent className="space-y-6">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                   <div className="space-y-4">
+                     <Label>Descripción General</Label>
+                     <Textarea 
+                      placeholder="Ej: Pallets de productos alimenticios con cadena de frío..."
+                      value={formData.description || ''} 
+                      onChange={e => setFormData({...formData, description: e.target.value})} 
+                     />
+                     <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1"><Label>Peso Total (Kg)</Label><Input type="number" value={formData.weightKg || ''} onChange={e => setFormData({...formData, weightKg: parseFloat(e.target.value) || 0})} /></div>
+                        <div className="space-y-1"><Label>Volumen Total (m³)</Label><Input type="number" value={formData.volumeM3 || ''} onChange={e => setFormData({...formData, volumeM3: parseFloat(e.target.value) || 0})} /></div>
+                     </div>
+                   </div>
+
+                   <div className="space-y-4">
+                     <div className="flex items-center justify-between">
+                       <Label className="text-blue-600 font-bold flex items-center gap-2"><FileText size={14} /> Remitos Relacionados</Label>
+                       <Badge variant="outline" className="text-[10px] uppercase">{formData.documents?.length || 0} Cargados</Badge>
+                     </div>
+                     
+                     <div className="p-4 bg-slate-50 rounded-xl border border-dashed space-y-3">
+                       <div className="grid grid-cols-1 gap-2">
+                         <Input 
+                          placeholder="Número de Remito" 
+                          className="bg-white h-8 text-sm" 
+                          value={remitoNumber}
+                          onChange={e => setRemitoNumber(e.target.value)}
+                         />
+                         <Input 
+                          placeholder="Detalle del remito (ej: 2 pallets, 500kg)" 
+                          className="bg-white h-8 text-sm"
+                          value={remitoDetail}
+                          onChange={e => setRemitoDetail(e.target.value)}
+                         />
+                         <Button type="button" size="sm" className="h-8 bg-blue-600" onClick={addRemito} disabled={!remitoNumber}>
+                           <Plus size={14} className="mr-1" /> Agregar Remito
+                         </Button>
+                       </div>
+                     </div>
+
+                     <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2">
+                        {formData.documents?.filter(d => d.type === 'remito').map((doc) => (
+                          <div key={doc.id} className="flex items-center justify-between p-2 bg-white border rounded-lg group hover:border-blue-200 transition-colors">
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+                                <FileText size={14} />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[10px] font-bold text-slate-900 truncate">N° {doc.number}</p>
+                                <p className="text-[9px] text-slate-500 truncate">{doc.notes || 'Sin detalle'}</p>
+                              </div>
+                            </div>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => removeRemito(doc.id)}>
+                              <Trash2 size={12} />
+                            </Button>
+                          </div>
+                        ))}
+                        {(!formData.documents || formData.documents.length === 0) && (
+                          <p className="text-center py-6 text-xs text-slate-400 italic">No hay remitos agregados todavía.</p>
+                        )}
+                     </div>
                    </div>
                  </div>
-               </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {step === 3 && (
@@ -311,15 +396,15 @@ export default function LoadFormWizard() {
             <CardContent className="pt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-4">
                  <Label className="text-blue-600 font-bold flex items-center gap-2"><DollarSign size={14} /> Valor FOB (USD)</Label>
-                 <Input type="number" value={formData.international?.fobValueUsd || 0} onChange={e => setFormData({...formData, international: {...formData.international!, fobValueUsd: parseFloat(e.target.value)}})} />
+                 <Input type="number" value={formData.international?.fobValueUsd || ''} onChange={e => setFormData({...formData, international: {...formData.international!, fobValueUsd: parseFloat(e.target.value) || 0}})} />
               </div>
               <div className="space-y-4">
                  <Label className="text-slate-500 font-bold">Flete (USD)</Label>
-                 <Input type="number" value={formData.international?.freightValueUsd || 0} onChange={e => setFormData({...formData, international: {...formData.international!, freightValueUsd: parseFloat(e.target.value)}})} />
+                 <Input type="number" value={formData.international?.freightValueUsd || ''} onChange={e => setFormData({...formData, international: {...formData.international!, freightValueUsd: parseFloat(e.target.value) || 0}})} />
               </div>
               <div className="space-y-4">
                  <Label className="text-slate-500 font-bold">Seguro (USD)</Label>
-                 <Input type="number" value={formData.international?.insuranceValueUsd || 0} onChange={e => setFormData({...formData, international: {...formData.international!, insuranceValueUsd: parseFloat(e.target.value)}})} />
+                 <Input type="number" value={formData.international?.insuranceValueUsd || ''} onChange={e => setFormData({...formData, international: {...formData.international!, insuranceValueUsd: parseFloat(e.target.value) || 0}})} />
               </div>
               
               <div className="md:col-span-3 grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-xl border">
@@ -352,7 +437,7 @@ export default function LoadFormWizard() {
                   <Zap className="text-blue-600 mt-1" size={18} />
                   <div>
                     <p className="text-xs font-bold text-blue-900">Verificación de Cumplimiento Internacional</p>
-                    <p className="text-[10px] text-blue-700">El sistema solo mostrará camiones con RUTA vigente y motoristas con LINTI habilitada para cruce de frontera.</p>
+                    <p className="text-[10px] text-blue-700">El sistema solo mostrará camiones con documentación vigente y motoristas habilitados para cruce de frontera.</p>
                   </div>
                </div>
             </CardContent>
