@@ -14,7 +14,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Package, Plus, Search, Scale, 
   Loader2, MoreVertical, Trash2, CheckCircle2, 
-  Clock, AlertTriangle, FileText, Printer, Wallet, Navigation, Edit
+  Clock, AlertTriangle, FileText, Printer, Wallet, Navigation, Edit, Calendar, Truck, User, History
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -24,8 +24,10 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Load, LoadStatus } from "@/app/lib/types";
+import { Load, LoadStatus, Truck as TruckType, Driver } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
+import { format, parseISO } from "date-fns";
+import { es } from "date-fns/locale";
 
 export default function CargasPage() {
   const db = useFirestore();
@@ -39,7 +41,19 @@ export default function CargasPage() {
     return query(collection(db, "loads"), orderBy("createdAt", "desc"));
   }, [db]);
 
-  const { data: loads, loading } = useCollection<Load>(loadsQuery);
+  const trucksQuery = useMemo(() => {
+    if (!db) return null;
+    return collection(db, "trucks");
+  }, [db]);
+
+  const driversQuery = useMemo(() => {
+    if (!db) return null;
+    return collection(db, "drivers");
+  }, [db]);
+
+  const { data: loads, loading: loadsLoading } = useCollection<Load>(loadsQuery);
+  const { data: trucks } = useCollection<TruckType>(trucksQuery);
+  const { data: drivers } = useCollection<Driver>(driversQuery);
 
   const filteredLoads = useMemo(() => {
     if (!loads) return [];
@@ -78,6 +92,8 @@ export default function CargasPage() {
       toast({ variant: "destructive", title: "Error al intentar eliminar el flete" });
     }
   };
+
+  const loading = loadsLoading;
 
   return (
     <div className="space-y-6">
@@ -121,7 +137,7 @@ export default function CargasPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>N° Orden / Carga</TableHead>
-                  <TableHead>Itinerario (Puntos)</TableHead>
+                  <TableHead>Itinerario y Recursos</TableHead>
                   <TableHead>Carga / Docs</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
@@ -136,26 +152,39 @@ export default function CargasPage() {
                     const totalWeight = (load.outboundStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0) + (load.returnStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0);
                     const totalDocs = (load.outboundStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0) + (load.returnStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0);
                     const firstDest = load.outboundStops?.[0]?.name || "Sin destinos";
+                    
+                    const truckObj = trucks?.find(t => t.id === load.assignedTruckId);
+                    const driverObj = drivers?.find(d => d.id === load.assignedDriverId);
 
                     return (
                       <TableRow key={load.id} className="hover:bg-slate-50/50 cursor-pointer" onClick={() => router.push(`/cargas/${load.id}/orden`)}>
                         <TableCell>
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600"><Package size={20} /></div>
-                            <div>
+                            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 shrink-0"><Package size={20} /></div>
+                            <div className="min-w-0">
                               <div className="font-bold text-slate-900">{load.orderNumber}</div>
-                              <div className="text-[10px] text-slate-500 uppercase font-bold truncate max-w-[120px]">{firstDest}</div>
+                              <div className="text-[10px] text-slate-500 uppercase font-bold truncate max-w-[150px]">{firstDest}</div>
+                              <div className="flex items-center gap-1 text-[10px] text-blue-600 font-bold mt-0.5">
+                                <Calendar size={10} /> {load.pickupDate ? format(parseISO(load.pickupDate), "dd/MM") : '-'} <Clock size={10} className="ml-1" /> {load.pickupTime}hs
+                              </div>
                             </div>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2 text-xs">
-                             <Navigation size={12} className="text-blue-500" />
-                             <span className="font-bold">{totalStops} Puntos</span>
-                             {load.isRoundTrip && <Badge className="bg-orange-100 text-orange-700 border-none text-[8px] h-4">IDA + VTA</Badge>}
-                          </div>
-                          <div className="text-[9px] text-slate-400 font-bold uppercase truncate max-w-[200px]">
-                            {load.origin?.province} → {load.outboundStops?.[0]?.province} ...
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-2 text-xs">
+                               <Navigation size={12} className="text-blue-500" />
+                               <span className="font-bold">{totalStops} Puntos</span>
+                               {load.isRoundTrip && <Badge className="bg-orange-100 text-orange-700 border-none text-[8px] h-4">IDA + VTA</Badge>}
+                            </div>
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-700">
+                                <Truck size={10} className="text-slate-400" /> {truckObj?.plate || 'Sin Camión'}
+                              </div>
+                              <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-700">
+                                <User size={10} className="text-slate-400" /> {driverObj ? `${driverObj.lastName}, ${driverObj.firstName}` : 'Sin Chofer'}
+                              </div>
+                            </div>
                           </div>
                         </TableCell>
                         <TableCell>
@@ -173,7 +202,10 @@ export default function CargasPage() {
                             <DropdownMenuContent align="end" className="w-56">
                               <DropdownMenuLabel>Gestión de Flete</DropdownMenuLabel>
                               <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/editar`)}>
-                                <Edit className="w-4 h-4 mr-2" /> Editar Flete / Itinerario
+                                <Edit className="w-4 h-4 mr-2" /> Ver Detalle / Editar
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/editar`)}>
+                                <History className="w-4 h-4 mr-2" /> Reprogramar Viaje
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/orden`)}>
                                 <Printer className="w-4 h-4 mr-2" /> Ver Orden (PDF)
