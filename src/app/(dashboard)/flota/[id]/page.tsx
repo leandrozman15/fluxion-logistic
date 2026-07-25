@@ -13,7 +13,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { 
   Truck as TruckIcon, FileText, Calendar, AlertTriangle, 
   CheckCircle2, Clock, Upload, ArrowLeft, ShieldCheck, 
-  MapPin, Gauge, Box, Info, Download, Trash2, MoreVertical, LayoutGrid, Fuel, DollarSign, Activity, TrendingUp, User, Building2, Briefcase, Edit2
+  MapPin, Gauge, Box, Info, Download, Trash2, MoreVertical, LayoutGrid, Fuel, DollarSign, Activity, TrendingUp, User, Building2, Briefcase, Edit2,
+  Loader2
 } from "lucide-react";
 import { Truck, VehicleDocument, DocStatus, Expense, Driver } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -418,7 +419,7 @@ export default function TruckDetailPage() {
                           </TableRow>
                         ))
                       )}
-                   </TableBody>
+                   </tbody>
                 </Table>
               </Card>
             </TabsContent>
