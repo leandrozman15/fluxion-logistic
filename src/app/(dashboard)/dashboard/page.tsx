@@ -32,12 +32,16 @@ import {
   FileText,
   ShieldCheck,
   Repeat,
-  AlertTriangle
+  AlertTriangle,
+  Zap,
+  Gauge,
+  History
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Truck, Driver, Load, Hub, Client } from "@/app/lib/types";
-import { isToday, startOfMonth, format } from "date-fns";
+import { isToday, startOfMonth, format, formatDistanceToNow } from "date-fns";
+import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -197,7 +201,7 @@ export default function MonitorOperativoPage() {
              <CardTitle className="text-lg flex items-center gap-2">
                <Activity className="w-5 h-5 text-blue-600" /> Agenda Operativa del Día
              </CardTitle>
-             <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Control de trayectos, paradas y documentación</CardDescription>
+             <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Telemetría en vivo, itinerario y control de carga</CardDescription>
            </div>
            <Badge variant="outline" className="h-6 font-mono font-bold border-blue-200 text-blue-600">{dailyOperations.length} OPERACIONES</Badge>
         </CardHeader>
@@ -207,8 +211,8 @@ export default function MonitorOperativoPage() {
                const driver = drivers?.find(d => d.id === load.assignedDriverId);
                const truck = trucks?.find(t => t.id === load.assignedTruckId);
                const totalWeight = (load.outboundStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0) + (load.returnStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0);
-               const lastStop = load.outboundStops?.[load.outboundStops.length - 1];
                const isExpanded = expandedLoadId === load.id;
+               const tracking = load.tracking;
 
                return (
                  <Collapsible 
@@ -234,9 +238,12 @@ export default function MonitorOperativoPage() {
                             <div className="flex items-center gap-2">
                               <p className="text-base font-black text-slate-900 dark:text-slate-100 tracking-tighter">{load.orderNumber}</p>
                               {load.status === 'on_route' ? (
-                                <Badge className="text-[8px] bg-blue-600 text-white border-none animate-pulse px-2 h-4 uppercase font-bold">LIVE tracking</Badge>
+                                <Badge className="text-[8px] bg-blue-600 text-white border-none animate-pulse px-2 h-4 uppercase font-bold">LIVE GPS</Badge>
                               ) : (
-                                <Badge variant="outline" className="text-[8px] uppercase font-bold text-slate-400 h-4">{load.status.replace('_', ' ')}</Badge>
+                                <Badge variant="outline" className="text-[8px] uppercase font-black text-slate-400 h-4 border-slate-300">{load.status.replace('_', ' ')}</Badge>
+                              )}
+                              {tracking?.alerts && tracking.alerts.length > 0 && (
+                                <Badge variant="destructive" className="text-[8px] h-4 animate-bounce"><AlertTriangle size={10} className="mr-1" /> ALERTA</Badge>
                               )}
                             </div>
                             <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500 uppercase">
@@ -248,16 +255,15 @@ export default function MonitorOperativoPage() {
                       {/* Technical Info Grid */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-3 flex-[2] w-full lg:w-auto mt-4 lg:mt-0 border-t lg:border-t-0 pt-4 lg:pt-0">
                          <div className="space-y-1">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Conductor</p>
-                            <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 truncate">
-                               <User size={10} className="text-blue-500" /> {driver ? `${driver.lastName}, ${driver.firstName[0]}.` : 'No asignado'}
-                            </p>
-                         </div>
-                         <div className="space-y-1">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Patente Unidad</p>
-                            <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                               <TruckIcon size={10} className="text-blue-500" /> {truck?.plate || 'S/D'}
-                            </p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Chofer y Unidad</p>
+                            <div className="space-y-0.5">
+                              <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 truncate">
+                                <User size={10} className="text-blue-500" /> {driver ? `${driver.lastName}, ${driver.firstName[0]}.` : 'S/D'}
+                              </p>
+                              <p className="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400">
+                                <TruckIcon size={10} className="inline mr-1" /> {truck?.plate || 'S/D'}
+                              </p>
+                            </div>
                          </div>
                          <div className="space-y-1">
                             <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Carga Útil</p>
@@ -265,15 +271,37 @@ export default function MonitorOperativoPage() {
                                <Scale size={10} className="text-slate-400" /> {totalWeight.toLocaleString()} <span className="text-[8px] font-normal opacity-50 uppercase">Kg</span>
                             </p>
                          </div>
+                         
+                         {/* DINAMIC LOGISTICS BLOCK */}
                          <div className="space-y-1">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Logística</p>
-                            <div className="flex items-center gap-3">
-                               <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                                  <RouteIcon size={10} className="text-slate-400" /> ~700 <span className="text-[8px] opacity-50">km</span>
-                               </p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Logística Telemetría</p>
+                            {load.status === 'on_route' && tracking ? (
+                              <div className="space-y-0.5">
+                                <div className="flex items-center gap-2 text-[10px] font-bold text-blue-600">
+                                  <Navigation size={10} /> {tracking.distanceTraveledKm?.toFixed(1)} <span className="opacity-50">recorrido</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-[10px] font-bold text-orange-600">
+                                  <ArrowRight size={10} /> {tracking.distanceRemainingKm?.toFixed(1)} <span className="opacity-50">faltan</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                                <RouteIcon size={10} className="text-slate-400" /> ~700 <span className="text-[8px] opacity-50">KM EST.</span>
+                              </p>
+                            )}
+                         </div>
+
+                         <div className="space-y-1">
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Tiempo / ETA</p>
+                            <div className="space-y-0.5">
                                <p className="text-xs font-bold text-blue-600 flex items-center gap-1">
                                   <Timer size={10} /> {load.estimatedArrivalTime}hs
                                </p>
+                               {load.status === 'on_route' && (
+                                 <p className="text-[9px] font-bold text-slate-500 flex items-center gap-1">
+                                   <History size={10} /> {tracking?.timeOnRouteMinutes || 0} min conduciendo
+                                 </p>
+                               )}
                             </div>
                          </div>
                       </div>
@@ -286,7 +314,7 @@ export default function MonitorOperativoPage() {
                           asChild
                         >
                           <Link href={load.status === 'on_route' ? `/tracking/${load.id}` : `/cargas/${load.id}/orden`}>
-                            {load.status === 'on_route' ? 'MONITOR' : 'HOJA RUTA'} <ArrowRight size={12} className="ml-1" />
+                            {load.status === 'on_route' ? 'CENTRAL TRACKING' : 'HOJA RUTA'} <ArrowRight size={12} className="ml-1" />
                           </Link>
                         </Button>
                         <CollapsibleTrigger asChild>
@@ -297,16 +325,47 @@ export default function MonitorOperativoPage() {
                       </div>
                    </div>
 
-                   {/* Expandable Content: Stops and Docs */}
+                   {/* Expandable Content: Detailed GPS & Itinerary */}
                    <CollapsibleContent className="bg-slate-50 dark:bg-slate-900/80 border-t border-slate-200 dark:border-slate-800 p-6 animate-in slide-in-from-top-2">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                         {/* Telemetría Avanzada (On Route Only) */}
+                         {load.status === 'on_route' && (
+                           <div className="space-y-4 lg:border-r pr-6">
+                              <h4 className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-2 tracking-widest">
+                                 <Zap size={14} /> Telemetría GPS Nativa
+                              </h4>
+                              <div className="grid grid-cols-2 gap-4">
+                                <Card className="bg-white dark:bg-slate-800 shadow-none border-slate-200">
+                                  <CardContent className="p-3 text-center">
+                                    <p className="text-[8px] font-black text-slate-400 uppercase">Velocidad Actual</p>
+                                    <p className="text-xl font-black text-blue-600">{tracking?.currentSpeed || 0} <span className="text-[10px] font-normal opacity-50">km/h</span></p>
+                                  </CardContent>
+                                </Card>
+                                <Card className="bg-white dark:bg-slate-800 shadow-none border-slate-200">
+                                  <CardContent className="p-3 text-center">
+                                    <p className="text-[8px] font-black text-slate-400 uppercase">Combustible Est.</p>
+                                    <p className="text-xl font-black text-green-600">{tracking?.estimatedFuelLiters?.toFixed(1) || 0} <span className="text-[10px] font-normal opacity-50">L</span></p>
+                                  </CardContent>
+                                </Card>
+                              </div>
+                              <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 space-y-2">
+                                <p className="text-[9px] font-black text-slate-400 uppercase flex justify-between">
+                                  Último Reporte GPS 
+                                  <span>{tracking?.lastUpdateAt ? formatDistanceToNow(tracking.lastUpdateAt.toDate ? tracking.lastUpdateAt.toDate() : new Date(tracking.lastUpdateAt), { addSuffix: true, locale: es }) : 'S/D'}</span>
+                                </p>
+                                <div className="h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                  <div className="h-full bg-blue-500" style={{ width: `${(tracking?.distanceTraveledKm || 0) / ((tracking?.distanceTraveledKm || 0) + (tracking?.distanceRemainingKm || 1)) * 100}%` }}></div>
+                                </div>
+                              </div>
+                           </div>
+                         )}
+
                          {/* Tramo Ida */}
-                         <div className="space-y-4">
+                         <div className={cn("space-y-4", load.status !== 'on_route' && "lg:col-span-2")}>
                             <h4 className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-2 tracking-widest">
                                <Navigation size={14} /> Tramo 1: Hoja de Ruta (Ida)
                             </h4>
                             <div className="space-y-3 relative pl-4 border-l-2 border-dashed border-blue-200 dark:border-blue-800">
-                               {/* Origen */}
                                <div className="relative">
                                   <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-blue-600 border-2 border-white dark:border-slate-900 shadow-sm"></div>
                                   <div className="space-y-0.5">
@@ -314,7 +373,6 @@ export default function MonitorOperativoPage() {
                                     <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{load.origin.name}</p>
                                   </div>
                                </div>
-                               {/* Paradas */}
                                {load.outboundStops?.map((stop, idx) => (
                                  <div key={stop.id} className="relative pt-2">
                                     <div className="absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full bg-white dark:bg-slate-800 border-2 border-blue-400 shadow-sm"></div>
@@ -326,7 +384,6 @@ export default function MonitorOperativoPage() {
                                           </div>
                                           <Badge className="bg-blue-50 text-blue-600 text-[8px] border-blue-100">{stop.weightKg} Kg</Badge>
                                        </div>
-                                       {/* Docs stop */}
                                        <div className="flex flex-wrap gap-1.5 pt-1">
                                           {stop.documents?.map(doc => (
                                             <div key={doc.id} className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 rounded border border-slate-200 dark:border-slate-600 text-[9px] font-bold">
@@ -458,4 +515,3 @@ export default function MonitorOperativoPage() {
     </div>
   );
 }
-
