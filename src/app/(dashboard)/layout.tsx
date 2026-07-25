@@ -1,4 +1,3 @@
-
 'use client';
 
 import { 
@@ -34,7 +33,7 @@ import {
   Moon,
   Sun,
   Smartphone
-} from "lucide-round";
+} from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/firebase";
 import { signOut } from "firebase/auth";
@@ -47,7 +46,7 @@ import { Button } from "@/components/ui/button";
  * Componente interno que maneja la lógica de cierre automático en móviles.
  */
 function DashboardSidebar() {
-  const { setOpenMobile, isMobile, state } = useSidebar();
+  const { setOpenMobile, isMobile } = useSidebar();
   const auth = useAuth();
   const router = useRouter();
   const pathname = usePathname();
