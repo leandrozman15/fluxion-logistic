@@ -22,6 +22,7 @@ import { Driver } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { compressImage } from "@/lib/utils/image-compression";
 
 interface DriverFormWizardProps {
   driverId?: string;
@@ -36,6 +37,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isProcessingFile, setIsProcessingFile] = useState<string | null>(null);
 
   // Refs para inputs de archivo
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -113,23 +115,22 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validación de tamaño para el prototipo (Máx 800KB para evitar límites de Firestore)
-    if (file.size > 850000) {
-      toast({ 
-        variant: "destructive", 
-        title: "Archivo muy pesado", 
-        description: "En este prototipo el límite es 800KB. Reduzca la calidad de la imagen o use un archivo más pequeño." 
-      });
-      return;
-    }
-
+    setIsProcessingFile(key);
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const base64 = event.target?.result as string;
-      setFormData(prev => ({ ...prev, [key]: base64 }));
+      
+      // Comprimir si es una imagen
+      let finalData = base64;
+      if (file.type.startsWith('image/')) {
+        finalData = await compressImage(base64);
+      }
+
+      setFormData(prev => ({ ...prev, [key]: finalData }));
+      setIsProcessingFile(null);
       toast({ 
         title: key === 'avatarUrl' ? "Foto cargada" : "Documento adjuntado", 
-        description: "El archivo se ha procesado para persistencia." 
+        description: "El archivo se ha procesado y optimizado correctamente." 
       });
     };
     reader.readAsDataURL(file);
@@ -228,8 +229,9 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                   <p className="text-[10px] text-slate-400">Identificación visual para el panel</p>
                 </div>
                 <input type="file" ref={avatarInputRef} className="hidden" accept="image/*" onChange={(e) => onFileChange('avatarUrl', e)} />
-                <Button variant="outline" type="button" size="sm" onClick={() => handleFileClick('avatarUrl')} className="bg-white">
-                  <Camera size={14} className="mr-2" /> {formData.avatarUrl ? 'Cambiar Foto' : 'Subir Foto'}
+                <Button variant="outline" type="button" size="sm" onClick={() => handleFileClick('avatarUrl')} className="bg-white" disabled={isProcessingFile === 'avatarUrl'}>
+                  {isProcessingFile === 'avatarUrl' ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <Camera size={14} className="mr-2" />} 
+                  {formData.avatarUrl ? 'Cambiar Foto' : 'Subir Foto'}
                 </Button>
               </div>
 
@@ -378,6 +380,8 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                   { label: "Licencia LINTI", key: "lintiFileUrl" }
                 ].map((doc) => {
                   const hasFile = !!formData[doc.key as keyof typeof formData];
+                  const isProcessing = isProcessingFile === doc.key;
+
                   return (
                     <div key={doc.key} className={cn(
                       "p-4 bg-slate-50 border-2 border-dashed rounded-xl text-center space-y-3 transition-colors",
@@ -387,13 +391,13 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                         "w-10 h-10 rounded-full flex items-center justify-center mx-auto border shadow-sm",
                         hasFile ? "bg-green-500 text-white border-green-600" : "bg-white text-slate-400 border-slate-100"
                       )}>
-                        {hasFile ? <FileCheck size={20} /> : <Upload size={18} />}
+                        {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : (hasFile ? <FileCheck size={20} /> : <Upload size={18} />)}
                       </div>
                       <div>
                         <p className={cn("text-[10px] font-bold uppercase", hasFile ? "text-green-700" : "text-slate-500")}>
-                          {hasFile ? "Archivo Cargado" : doc.label}
+                          {isProcessing ? "Procesando..." : (hasFile ? "Archivo Cargado" : doc.label)}
                         </p>
-                        <p className="text-[8px] text-slate-400 mt-0.5">PDF o JPG (Máx 800KB)</p>
+                        <p className="text-[8px] text-slate-400 mt-0.5">PDF o Imagen (Autocompresión)</p>
                       </div>
                       <Button 
                         variant={hasFile ? "secondary" : "outline"} 
@@ -401,6 +405,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                         size="sm" 
                         className={cn("h-7 text-[10px] w-full", hasFile ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-white")}
                         onClick={() => handleFileClick(doc.key)}
+                        disabled={isProcessing}
                       >
                         {hasFile ? "Cambiar Archivo" : "Seleccionar"}
                       </Button>
@@ -428,7 +433,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                 Siguiente <ArrowRight className="ml-2" size={16} />
               </Button>
             ) : (
-              <Button onClick={handleSubmit} className="bg-blue-600" disabled={isSubmitting}>
+              <Button onClick={handleSubmit} className="bg-blue-600" disabled={isSubmitting || isProcessingFile !== null}>
                 {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" size={16} />}
                 {driverId ? 'Guardar Cambios' : 'Habilitar Chofer'}
               </Button>

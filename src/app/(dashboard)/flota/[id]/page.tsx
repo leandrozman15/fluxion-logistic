@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -23,6 +24,8 @@ import { cn } from "@/lib/utils";
 import { format, isBefore, addDays, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { toSafeDate } from "@/lib/utils/date-utils";
+import { compressImage } from "@/lib/utils/image-compression";
 
 const DEFAULT_DOCS: Omit<VehicleDocument, 'status'>[] = [
   { id: 'cedula_verde', name: 'Cédula de Identificación (Verde)', category: 'unit', description: 'Acredita la titularidad del camión.', isRequired: true },
@@ -45,6 +48,7 @@ export default function TruckDetailPage() {
   const [loadingDriver, setLoadingDriver] = useState(false);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [activeUploadId, setActiveUploadId] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const truckRef = useMemo(() => {
@@ -163,23 +167,27 @@ export default function TruckDetailPage() {
     const file = e.target.files?.[0];
     if (!file || !activeUploadId || !truck || !truckRef) return;
 
-    if (file.size > 850000) {
-      toast({ variant: "destructive", title: "Archivo muy pesado", description: "Límite: 800KB" });
-      return;
-    }
-
+    setIsProcessing(true);
     const reader = new FileReader();
     reader.onload = async (event) => {
       const base64 = event.target?.result as string;
+      
+      let finalData = base64;
+      if (file.type.startsWith('image/')) {
+        finalData = await compressImage(base64);
+      }
+
       const updatedDocs = truck.documentation.map(d => 
-        d.id === activeUploadId ? { ...d, fileUrl: base64 } : d
+        d.id === activeUploadId ? { ...d, fileUrl: finalData } : d
       );
       
       try {
         await updateDoc(truckRef, { documentation: updatedDocs });
-        toast({ title: "Documento adjuntado" });
+        toast({ title: "Documento adjuntado y optimizado" });
       } catch (err) {
         toast({ variant: "destructive", title: "Error al subir" });
+      } finally {
+        setIsProcessing(false);
       }
     };
     reader.readAsDataURL(file);
@@ -364,8 +372,8 @@ export default function TruckDetailPage() {
                             <Eye size={14} />
                           </Button>
                         )}
-                        <Button variant="outline" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleUploadClick(doc.id)}>
-                          <Upload size={14}/>
+                        <Button variant="outline" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleUploadClick(doc.id)} disabled={isProcessing}>
+                          {isProcessing && activeUploadId === doc.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload size={14}/>}
                         </Button>
                        </div>
                     </div>
@@ -421,8 +429,8 @@ export default function TruckDetailPage() {
                             <Eye size={14} />
                           </Button>
                         )}
-                        <Button variant="outline" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleUploadClick(doc.id)}>
-                          <Upload size={14}/>
+                        <Button variant="outline" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleUploadClick(doc.id)} disabled={isProcessing}>
+                          {isProcessing && activeUploadId === doc.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload size={14}/>}
                         </Button>
                        </div>
                     </div>

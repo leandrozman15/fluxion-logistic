@@ -20,6 +20,7 @@ import { Truck as TruckType, Driver, OwnershipType } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { compressImage } from "@/lib/utils/image-compression";
 
 interface TruckFormWizardProps {
   truckId?: string;
@@ -58,6 +59,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isProcessingAvatar, setIsProcessingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<Partial<TruckType>>({
@@ -130,11 +132,14 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setIsProcessingAvatar(true);
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
         const base64 = event.target?.result as string;
-        setFormData(prev => ({ ...prev, avatarUrl: base64 }));
-        toast({ title: "Imagen lista" });
+        const compressed = await compressImage(base64);
+        setFormData(prev => ({ ...prev, avatarUrl: compressed }));
+        setIsProcessingAvatar(false);
+        toast({ title: "Imagen de unidad optimizada" });
       };
       reader.readAsDataURL(file);
     }
@@ -238,8 +243,9 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                     <p className="text-[10px] text-slate-400">Identificación visual para el panel</p>
                   </div>
                   <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
-                  <Button variant="outline" type="button" size="sm" onClick={() => fileInputRef.current?.click()} className="bg-white">
-                    <Camera size={14} className="mr-2" /> {formData.avatarUrl ? 'Cambiar Foto' : 'Subir Foto'}
+                  <Button variant="outline" type="button" size="sm" onClick={() => fileInputRef.current?.click()} className="bg-white" disabled={isProcessingAvatar}>
+                    {isProcessingAvatar ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Camera size={14} className="mr-2" />} 
+                    {formData.avatarUrl ? 'Cambiar Foto' : 'Subir Foto'}
                   </Button>
                 </div>
 
@@ -473,7 +479,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                 Siguiente <ChevronRight size={16} className="ml-1" />
               </Button>
             ) : (
-              <Button onClick={handleSubmit} className="bg-green-600 min-w-[150px]" disabled={isSubmitting}>
+              <Button onClick={handleSubmit} className="bg-green-600 min-w-[150px]" disabled={isSubmitting || isProcessingAvatar}>
                 {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save size={16} className="mr-2" />}
                 {truckId ? 'Guardar Cambios' : 'Habilitar Unidad'}
               </Button>
