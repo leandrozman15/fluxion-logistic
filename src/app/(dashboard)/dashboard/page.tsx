@@ -173,7 +173,8 @@ export default function MonitorOperativoPage() {
   }) : null;
 
   const calculateETA = (distanceRemaining: number, currentSpeed: number) => {
-    if (!distanceRemaining || !currentSpeed || currentSpeed < 5) return "CALCULANDO...";
+    // Reducimos el umbral a 1 km/h para que sea sensible a caminatas de prueba
+    if (!distanceRemaining || !currentSpeed || currentSpeed < 1) return "CALCULANDO...";
     const hours = distanceRemaining / currentSpeed;
     const etaDate = addMinutes(new Date(), Math.round(hours * 60));
     return format(etaDate, "HH:mm") + " hs";

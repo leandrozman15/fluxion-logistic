@@ -150,7 +150,12 @@ export default function RouteDetailPage() {
 
   // GPS Tracking Logic - 1 actualización por minuto
   useEffect(() => {
-    if (!gpsActive || !loadRef || typeof window === 'undefined' || !navigator.geolocation) return;
+    if (!gpsActive || !loadRef || typeof window === 'undefined' || !navigator.geolocation) {
+      if (gpsActive && !navigator.geolocation) {
+        toast({ variant: "destructive", title: "Error GPS", description: "Tu navegador no soporta geolocalización." });
+      }
+      return;
+    }
 
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
@@ -172,6 +177,7 @@ export default function RouteDetailPage() {
           }
         }
 
+        // Mayor sensibilidad para pruebas (5 metros)
         if (distanceInc < 0.005 && lastUpdateRef.current !== 0) return;
 
         const newPoint: TrackingPoint = {
@@ -197,6 +203,11 @@ export default function RouteDetailPage() {
       },
       (err) => {
         console.warn("GPS Native Error:", err.message);
+        toast({ 
+          variant: "destructive", 
+          title: "Error de Sensor GPS", 
+          description: "Asegúrate de tener el GPS encendido y haber dado permisos a la aplicación." 
+        });
       },
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     );
@@ -215,11 +226,21 @@ export default function RouteDetailPage() {
   };
 
   const handleStartTrip = async () => {
-    if (!loadRef) return;
+    if (!loadRef || !load) return;
     setIsUpdating(true);
     try {
+      // Garantizar que el objeto tracking exista para evitar errores de "Calculando" en Dashboard
+      const initialTracking = load.tracking || {
+        distanceTraveledKm: 0,
+        distanceRemainingKm: 0,
+        currentSpeed: 0,
+        history: [],
+        alerts: []
+      };
+
       await updateDoc(loadRef, { 
         status: 'on_route',
+        tracking: initialTracking,
         updatedAt: serverTimestamp() 
       });
       setGpsActive(true);

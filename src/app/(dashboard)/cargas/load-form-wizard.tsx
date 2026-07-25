@@ -73,7 +73,21 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     basePrice: 0, 
     totalAmount: 0,
     status: "pending",
-    budget: { initialAdvance: 0, totalBudget: 0, categories: {} }
+    budget: { initialAdvance: 0, totalBudget: 0, categories: {} },
+    tracking: {
+      currentLat: 0,
+      currentLng: 0,
+      currentSpeed: 0,
+      avgSpeed: 0,
+      maxSpeed: 0,
+      distanceTraveledKm: 0,
+      distanceRemainingKm: 0,
+      timeOnRouteMinutes: 0,
+      timeStoppedMinutes: 0,
+      lastUpdateAt: null,
+      history: [],
+      alerts: []
+    }
   });
 
   const loadRef = useMemo(() => loadId && db ? doc(db, "loads", loadId) : null, [db, loadId]);
@@ -208,7 +222,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     setIsCalculating(true);
     try {
       // Construcción del itinerario para la API
-      // Origen + Waypoints (paradas menos la última) + Destino
       const itineraryAddresses = isOutbound 
         ? [origin.address, ...(stops?.map(s => s.address) || [])]
         : [origin.address, ...(stops?.map(s => s.address) || []), destination.address];
@@ -217,12 +230,20 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
 
       if (result) {
         const startDateTime = parse(`${dateStr} ${timeStr}`, "yyyy-MM-dd HH:mm", new Date());
-        // Tiempo de viaje + 30 min por cada parada cargada
         const totalMinutes = result.durationMinutes + (stops?.length || 0) * 30;
         const endDateTime = addMinutes(startDateTime, totalMinutes); 
         
         if (isOutbound) {
-          setFormData(prev => ({ ...prev, estimatedArrivalDate: format(endDateTime, "yyyy-MM-dd"), estimatedArrivalTime: format(endDateTime, "HH:mm") }));
+          setFormData(prev => ({ 
+            ...prev, 
+            estimatedArrivalDate: format(endDateTime, "yyyy-MM-dd"), 
+            estimatedArrivalTime: format(endDateTime, "HH:mm"),
+            tracking: {
+              ...(prev.tracking || {} as any),
+              distanceRemainingKm: result.distanceKm,
+              distanceTraveledKm: 0
+            }
+          }));
         } else {
           setFormData(prev => ({ ...prev, returnEstimatedArrivalDate: format(endDateTime, "yyyy-MM-dd"), returnEstimatedArrivalTime: format(endDateTime, "HH:mm") }));
         }
