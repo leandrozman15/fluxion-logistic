@@ -63,6 +63,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     estimatedArrivalDate: format(new Date(), "yyyy-MM-dd"),
     estimatedArrivalTime: "18:00",
     origin: { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", country: "Argentina", zip: "", instructions: "" },
+    returnDestination: { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", country: "Argentina", zip: "", instructions: "" },
     outboundStops: [],
     returnStops: [],
     basePrice: 0, 
@@ -89,7 +90,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
 
         if (!querySnapshot.empty) {
           const lastLoad = querySnapshot.docs[0].data() as Load;
-          // FL-2025-0001 -> extrae 0001
           const parts = lastLoad.orderNumber.split("-");
           if (parts.length === 3) {
             const lastSeq = parseInt(parts[2]);
@@ -122,6 +122,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
         pickupTime: existingLoad.pickupTime || "08:00",
         outboundStops: existingLoad.outboundStops || [],
         returnStops: existingLoad.returnStops || [],
+        returnDestination: existingLoad.returnDestination || { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", country: "Argentina", zip: "", instructions: "" },
       });
     }
   }, [existingLoad]);
@@ -210,6 +211,28 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
       ...prev,
       origin: {
         ...prev.origin!,
+        id: selection.id,
+        name: locData.name,
+        address: buildFullAddress(locData),
+        province: locData.province || locData.address?.province || "",
+        city: locData.city || locData.address?.city || "",
+        country: locData.country || locData.address?.country || "Argentina",
+        phone: locData.phone || locData.mainContact?.phone || "",
+        contact: locData.mainContact?.name || "",
+        lat: locData.lat || locData.address?.lat,
+        lng: locData.lng || locData.address?.lng,
+      }
+    }));
+  };
+
+  const handleReturnDestSelect = (id: string) => {
+    const selection = locationsList.find(l => l.id === id);
+    if (!selection) return;
+    const locData = selection.data;
+    setFormData(prev => ({
+      ...prev,
+      returnDestination: {
+        ...prev.returnDestination!,
         id: selection.id,
         name: locData.name,
         address: buildFullAddress(locData),
@@ -574,34 +597,57 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                 <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div>
                     <CardTitle>Logística de Vuelta (Retorno)</CardTitle>
-                    <CardDescription>Cargue los puntos de recolección y entrega para el tramo de regreso.</CardDescription>
+                    <CardDescription>Cargue los puntos de recolección y el destino final de la mercadería de retorno.</CardDescription>
                   </div>
                   <Button size="sm" className="bg-orange-600 w-full sm:w-auto" onClick={() => { setActiveLeg('return'); setEditingStop({ id: "", name: "", address: "", province: "Buenos Aires", country: "Argentina", contact: "", phone: "", description: "", weightKg: 0, volumeM3: 0, units: 0, unitType: "Pallet", documents: [] }); setIsStopModalOpen(true); }}><Plus size={14} className="mr-1" /> Agregar Parada Retorno</Button>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {formData.returnStops?.length === 0 ? (
-                    <div className="text-center py-20 bg-slate-50 rounded-xl border border-dashed text-slate-400 italic">Sin paradas de retorno registradas.</div>
-                  ) : (
-                    formData.returnStops?.map((stop, idx) => (
-                      <div key={stop.id} className="flex items-center justify-between p-4 bg-white border rounded-xl shadow-sm group border-l-4 border-l-orange-500">
-                         <div className="flex items-center gap-4">
-                            <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-600 font-bold text-xs shrink-0">{idx + 1}</div>
-                            <div>
-                              <p className="font-bold text-sm text-slate-800">{stop.name ?? ''}</p>
-                              <p className="text-[10px] text-slate-500 uppercase font-medium leading-tight max-w-[200px] sm:max-w-none">{stop.address ?? ''}</p>
-                              <div className="flex gap-2 mt-1.5">
-                                 <Badge variant="outline" className="text-[8px] h-4 bg-orange-50 border-orange-100">{stop.weightKg ?? 0} Kg</Badge>
-                                 <Badge variant="secondary" className="text-[8px] h-4">{stop.documents?.length || 0} Remitos</Badge>
+                  <div className="space-y-4">
+                    <Label className="text-xs uppercase font-bold text-slate-400">Puntos de Recolección en Ruta (Vuelta)</Label>
+                    {formData.returnStops?.length === 0 ? (
+                      <div className="text-center py-10 bg-slate-50 rounded-xl border border-dashed text-slate-400 italic text-xs">Sin paradas de retorno registradas.</div>
+                    ) : (
+                      formData.returnStops?.map((stop, idx) => (
+                        <div key={stop.id} className="flex items-center justify-between p-4 bg-white border rounded-xl shadow-sm group border-l-4 border-l-orange-500">
+                           <div className="flex items-center gap-4">
+                              <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-600 font-bold text-xs shrink-0">{idx + 1}</div>
+                              <div>
+                                <p className="font-bold text-sm text-slate-800">{stop.name ?? ''}</p>
+                                <p className="text-[10px] text-slate-500 uppercase font-medium leading-tight max-w-[200px] sm:max-w-none">{stop.address ?? ''}</p>
+                                <div className="flex gap-2 mt-1.5">
+                                   <Badge variant="outline" className="text-[8px] h-4 bg-orange-50 border-orange-100">{stop.weightKg ?? 0} Kg</Badge>
+                                   <Badge variant="secondary" className="text-[8px] h-4">{stop.documents?.length || 0} Remitos</Badge>
+                                </div>
                               </div>
-                            </div>
-                         </div>
-                         <div className="flex gap-2">
-                           <Button variant="ghost" size="icon" onClick={() => { setActiveLeg('return'); setEditingStop(stop); setIsStopModalOpen(true); }}><Edit size={16}/></Button>
-                           <Button variant="ghost" size="icon" className="text-red-500" onClick={() => removeStop('return', stop.id)}><Trash2 size={16}/></Button>
-                         </div>
+                           </div>
+                           <div className="flex gap-2">
+                             <Button variant="ghost" size="icon" onClick={() => { setActiveLeg('return'); setEditingStop(stop); setIsStopModalOpen(true); }}><Edit size={16}/></Button>
+                             <Button variant="ghost" size="icon" className="text-red-500" onClick={() => removeStop('return', stop.id)}><Trash2 size={16}/></Button>
+                           </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="p-4 bg-orange-50/50 rounded-xl border border-orange-100 border-dashed space-y-4 mt-8">
+                    <div className="flex items-center gap-2 text-orange-600 font-bold text-xs uppercase tracking-widest">
+                      <div className="w-2 h-2 rounded-full bg-orange-600" /> Punto de Descarga Final (Retorno)
+                    </div>
+                    <Select onValueChange={handleReturnDestSelect} value={formData.returnDestination?.id ?? ''}>
+                      <SelectTrigger className="bg-white border-orange-200"><SelectValue placeholder="Seleccionar destino final (Sede/Cliente)" /></SelectTrigger>
+                      <SelectContent>{locationsList.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                    {formData.returnDestination?.name && (
+                      <div className="p-3 bg-white border border-orange-100 rounded-lg space-y-1">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase">Dirección de Finalización Retorno</div>
+                        <div className="text-xs font-bold text-slate-600">{formData.returnDestination.address ?? ''}</div>
+                        <div className="text-[9px] text-slate-400 flex items-center gap-3 mt-1">
+                           <span className="flex items-center gap-1"><Info size={10} /> {formData.returnDestination.contact ?? ''}</span>
+                           <span className="flex items-center gap-1"><Clock size={10} /> {formData.returnDestination.phone ?? ''}</span>
+                        </div>
                       </div>
-                    ))
-                  )}
+                    )}
+                  </div>
                 </CardContent>
               </>
             )}

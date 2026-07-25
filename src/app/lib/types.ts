@@ -243,9 +243,39 @@ export interface Load {
     lat?: number;
     lng?: number;
   };
+
+  destination?: {
+    id?: string;
+    name: string;
+    phone: string;
+    contact: string;
+    address: string;
+    province: string;
+    city?: string;
+    country: Country;
+    zip: string;
+    instructions: string;
+    lat?: number;
+    lng?: number;
+  };
   
   outboundStops: LoadLegStop[];
+
   returnStops: LoadLegStop[];
+  returnDestination?: {
+    id?: string;
+    name: string;
+    phone: string;
+    contact: string;
+    address: string;
+    province: string;
+    city?: string;
+    country: Country;
+    zip: string;
+    instructions: string;
+    lat?: number;
+    lng?: number;
+  };
 
   international?: {
     operationType: 'import' | 'export' | 'transit';

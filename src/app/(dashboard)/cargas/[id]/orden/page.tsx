@@ -73,7 +73,7 @@ export default function LoadOrderDocumentPage() {
                 <Truck size={36} />
                 <span>Logística<span className="text-slate-900">Ar</span></span>
               </div>
-              <p className="text-[10px] text-slate-500 uppercase font-bold tracking-tight">Orden de Transporte Multidestino Nacional/Internacional</p>
+              <p className="text-[10px] text-slate-500 uppercase font-bold tracking-tight">Orden de Transporte Multidestino Nacional</p>
             </div>
             <div className="text-right">
               <h1 className="text-2xl font-black uppercase tracking-tighter">Hoja de Ruta</h1>
@@ -135,16 +135,13 @@ export default function LoadOrderDocumentPage() {
                 <Repeat size={18} /> TRAMO 2: LOGÍSTICA DE VUELTA (RETORNO)
               </h3>
               <div className="p-4 bg-orange-50/30 border border-orange-100 rounded-xl space-y-4">
-                <div className="grid gap-4">
-                   {load.returnStops?.length === 0 ? (
-                     <p className="text-xs text-slate-400 italic">Retorno vacío (Solo transporte).</p>
-                   ) : (
-                     load.returnStops?.map((stop, i) => (
+                <div className="grid gap-4 pl-6">
+                   {load.returnStops?.map((stop, i) => (
                       <div key={i} className="p-3 bg-white border border-orange-100 rounded-lg space-y-2 relative">
-                          <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-orange-100 rounded-full flex items-center justify-center text-[8px] font-bold text-orange-600">R{i+1}</div>
+                          <div className="absolute -left-5 top-1/2 -translate-y-1/2 w-4 h-4 bg-orange-100 rounded-full flex items-center justify-center text-[8px] font-bold text-orange-600">R{i+1}</div>
                           <div className="flex justify-between items-start">
                             <div className="space-y-1">
-                              <p className="text-[10px] font-bold uppercase text-orange-600">Punto Retorno: {stop.name}</p>
+                              <p className="text-[10px] font-bold uppercase text-orange-600">Recolección: {stop.name}</p>
                               <p className="text-[9px] text-slate-500">{stop.address}, {stop.province}</p>
                             </div>
                             <div className="text-right">
@@ -159,14 +156,28 @@ export default function LoadOrderDocumentPage() {
                             ))}
                           </div>
                       </div>
-                     ))
+                   ))}
+                   
+                   {load.returnDestination?.name && (
+                     <div className="flex gap-4 mt-4 border-t border-orange-200 pt-4">
+                        <div className="w-1.5 bg-orange-600 rounded-full"></div>
+                        <div className="space-y-1">
+                          <p className="text-[9px] uppercase font-bold text-orange-400">Punto de Descarga Final (Retorno)</p>
+                          <p className="font-bold text-slate-900">{load.returnDestination.name}</p>
+                          <p className="text-xs text-slate-600">{load.returnDestination.address}, {load.returnDestination.province}</p>
+                        </div>
+                     </div>
+                   )}
+                   
+                   {(!load.returnStops || load.returnStops.length === 0) && !load.returnDestination?.name && (
+                     <p className="text-xs text-slate-400 italic">Retorno vacío (Solo transporte de regreso).</p>
                    )}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Recursos y Aduana */}
+          {/* Recursos y Unidad */}
           <div className="grid grid-cols-2 gap-10 border-t pt-8 mb-10">
             <div className="space-y-4">
               <h2 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Personal y Unidad</h2>
@@ -176,15 +187,6 @@ export default function LoadOrderDocumentPage() {
                 <p className="text-sm font-bold text-blue-600">PATENTE: {truck?.plate || 'SIN UNIDAD'}</p>
               </div>
             </div>
-            {load.international && (
-              <div className="space-y-4">
-                <h2 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Información Aduanera</h2>
-                <div className="grid grid-cols-2 gap-2 text-[10px] font-bold">
-                  <div><p className="opacity-50">Declaración SIM</p><p>{load.international.declarationNumber || '-'}</p></div>
-                  <div><p className="opacity-50">Aduana Salida</p><p>{load.international.exitCustoms || '-'}</p></div>
-                </div>
-              </div>
-            )}
           </div>
 
           <div className="mt-auto border-t pt-10 flex justify-between items-end">
