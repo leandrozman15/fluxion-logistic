@@ -10,12 +10,12 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { 
   Truck as TruckIcon, FileText, Calendar, AlertTriangle, 
   CheckCircle2, Clock, Upload, ArrowLeft, ShieldCheck, 
   MapPin, Gauge, Box, Info, Download, Trash2, MoreVertical, LayoutGrid, Fuel, DollarSign, Activity, TrendingUp, User, Building2, Briefcase, Edit2,
-  Loader2, Eye, Wrench, History
+  Loader2, Eye, Wrench, History, ExternalLink
 } from "lucide-react";
 import { Truck, VehicleDocument, DocStatus, Expense, Driver, Maintenance } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -54,14 +54,12 @@ export default function TruckDetailPage() {
 
   const { data: truck, loading } = useDoc<Truck>(truckRef);
 
-  // Consultas de Historial
   const fuelExpensesQuery = useMemo(() => {
     if (!db || !id) return null;
     return query(
       collection(db, "global_expenses"), 
       where("truckId", "==", id as string), 
-      where("category", "==", "fuel"),
-      orderBy("createdAt", "desc")
+      where("category", "==", "fuel")
     );
   }, [db, id]);
 
@@ -69,13 +67,30 @@ export default function TruckDetailPage() {
     if (!db || !id) return null;
     return query(
       collection(db, "maintenance"), 
-      where("truckId", "==", id as string),
-      orderBy("scheduledDate", "desc")
+      where("truckId", "==", id as string)
     );
   }, [db, id]);
 
-  const { data: fuelExpenses } = useCollection<Expense>(fuelExpensesQuery);
-  const { data: maintenanceHistory } = useCollection<Maintenance>(maintenanceHistoryQuery);
+  const { data: fuelExpensesRaw } = useCollection<Expense>(fuelExpensesQuery);
+  const { data: maintenanceHistoryRaw } = useCollection<Maintenance>(maintenanceHistoryQuery);
+
+  const fuelExpenses = useMemo(() => {
+    if (!fuelExpensesRaw) return [];
+    return [...fuelExpensesRaw].sort((a, b) => {
+      const dateA = toSafeDate(a.createdAt)?.getTime() || 0;
+      const dateB = toSafeDate(b.createdAt)?.getTime() || 0;
+      return dateB - dateA;
+    });
+  }, [fuelExpensesRaw]);
+
+  const maintenanceHistory = useMemo(() => {
+    if (!maintenanceHistoryRaw) return [];
+    return [...maintenanceHistoryRaw].sort((a, b) => {
+      const dateA = parseISO(a.scheduledDate).getTime();
+      const dateB = parseISO(b.scheduledDate).getTime();
+      return dateB - dateA;
+    });
+  }, [maintenanceHistoryRaw]);
 
   useEffect(() => {
     if (truck && !truck.documentation && truckRef) {
@@ -187,7 +202,7 @@ export default function TruckDetailPage() {
           </Button>
           <div className="flex items-center gap-4">
             <Avatar className="w-16 h-16 border-2 border-white shadow-md rounded-xl">
-              <AvatarImage src={truck.avatarUrl} className="object-cover" />
+              <AvatarImage src={truck.avatarUrl || undefined} className="object-cover" />
               <AvatarFallback className="bg-blue-50 text-blue-600 rounded-xl">
                 <TruckIcon size={32} />
               </AvatarFallback>
@@ -203,7 +218,7 @@ export default function TruckDetailPage() {
                 </Badge>
               </div>
               <p className="text-sm text-slate-500 flex items-center gap-1">
-                <MapPin size={14} /> Base: {truck.location.city}, {truck.location.province}
+                <MapPin size={14} /> Base: {truck.location?.city || 'S/D'}, {truck.location?.province || 'S/D'}
               </p>
             </div>
           </div>
@@ -263,9 +278,9 @@ export default function TruckDetailPage() {
               ) : assignedDriver ? (
                 <div className="flex items-center gap-3">
                   <Avatar className="h-10 w-10 border shadow-sm">
-                    <AvatarImage src={assignedDriver.avatarUrl} className="object-cover" />
+                    <AvatarImage src={assignedDriver.avatarUrl || undefined} className="object-cover" />
                     <AvatarFallback className="text-[10px] font-bold">
-                      {assignedDriver.firstName[0]}{assignedDriver.lastName[0]}
+                      {assignedDriver.firstName?.[0]}{assignedDriver.lastName?.[0]}
                     </AvatarFallback>
                   </Avatar>
                   <div>
@@ -513,20 +528,62 @@ export default function TruckDetailPage() {
 
       {/* Document Viewer Modal */}
       <Dialog open={!!viewerUrl} onOpenChange={(o) => !o && setViewerUrl(null)}>
-        <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Visualizador de Documentos</DialogTitle>
+        <DialogContent className="max-w-4xl h-[80vh] flex flex-col rounded-xl overflow-hidden p-0 gap-0">
+          <DialogHeader className="p-4 border-b bg-slate-50">
+            <DialogTitle className="text-sm flex items-center gap-2">
+              <FileText size={18} className="text-blue-600" /> Expediente de Unidad Pesada
+            </DialogTitle>
           </DialogHeader>
-          <div className="flex-1 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center border mt-4">
-            {viewerUrl?.startsWith('data:application/pdf') ? (
-              <iframe src={viewerUrl} className="w-full h-full" />
+          
+          <div className="flex-1 bg-slate-100 flex items-center justify-center overflow-hidden relative">
+            {viewerUrl ? (
+              <>
+                {viewerUrl.startsWith('data:application/pdf') ? (
+                  <iframe 
+                    src={viewerUrl} 
+                    className="w-full h-full border-none" 
+                    title="Visor PDF"
+                  />
+                ) : (
+                  <div className="w-full h-full p-4 flex items-center justify-center">
+                    <img 
+                      src={viewerUrl} 
+                      className="max-w-full max-h-full object-contain shadow-2xl rounded-sm border bg-white" 
+                      alt="Documentación Técnica" 
+                    />
+                  </div>
+                )}
+              </>
             ) : (
-              <img src={viewerUrl || undefined} className="max-w-full max-h-full object-contain" alt="Documento" />
+              <div className="flex flex-col items-center gap-2 text-slate-400">
+                <Loader2 className="animate-spin" />
+                <p className="text-xs font-bold uppercase">Cargando archivo...</p>
+              </div>
             )}
           </div>
-          <div className="mt-4 flex justify-end">
-             <Button onClick={() => window.open(viewerUrl || "", "_blank")}>Abrir en pantalla completa</Button>
-          </div>
+
+          <DialogFooter className="p-4 border-t bg-slate-50 flex flex-row justify-between items-center">
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Seguridad y Cumplimiento Logístico</p>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="h-8 text-[10px] font-bold" 
+                onClick={() => setViewerUrl(null)}
+              >
+                CERRAR
+              </Button>
+              {viewerUrl && (
+                <Button 
+                  size="sm" 
+                  className="h-8 text-[10px] font-bold bg-blue-600" 
+                  onClick={() => window.open(viewerUrl, "_blank")}
+                >
+                  <ExternalLink size={12} className="mr-1" /> ABRIR EN PANTALLA COMPLETA
+                </Button>
+              )}
+            </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

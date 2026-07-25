@@ -13,7 +13,7 @@ import {
   Phone, ArrowLeft, Edit2, Loader2, 
   Truck as TruckIcon, Package, CheckCircle2, 
   AlertTriangle, History, Mail, MapPin, Eye,
-  ChevronRight
+  ChevronRight, ExternalLink
 } from "lucide-react";
 import { Driver, Load, Truck, DriverStatus } from "@/app/lib/types";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -21,7 +21,7 @@ import { format, parseISO, differenceInDays } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import Link from "next/link";
 import { toSafeDate } from "@/lib/utils/date-utils";
 
@@ -38,7 +38,6 @@ export default function DriverProfilePage() {
 
   const { data: driver, loading: driverLoading } = useDoc<Driver>(driverRef);
 
-  // Consulta simplificada para evitar requerimiento de índice compuesto (orderBy + where)
   const tripsQuery = useMemo(() => {
     if (!db || !id) return null;
     return query(
@@ -49,7 +48,6 @@ export default function DriverProfilePage() {
 
   const { data: trips, loading: tripsLoading } = useCollection<Load>(tripsQuery);
 
-  // Ordenamiento manual en memoria para evitar errores de índice
   const sortedTrips = useMemo(() => {
     if (!trips) return [];
     return [...trips].sort((a, b) => {
@@ -97,8 +95,8 @@ export default function DriverProfilePage() {
           <Button variant="ghost" size="icon" onClick={() => router.back()}><ArrowLeft /></Button>
           <div className="flex items-center gap-4">
             <Avatar className="w-16 h-16 border-2 border-white shadow-md">
-              <AvatarImage src={driver.avatarUrl} className="object-cover" />
-              <AvatarFallback className="bg-blue-50 text-blue-600 text-xl font-bold">{driver.firstName[0]}{driver.lastName[0]}</AvatarFallback>
+              <AvatarImage src={driver.avatarUrl || undefined} className="object-cover" />
+              <AvatarFallback className="bg-blue-50 text-blue-600 text-xl font-bold">{driver.firstName?.[0]}{driver.lastName?.[0]}</AvatarFallback>
             </Avatar>
             <div>
               <div className="flex items-center gap-2">
@@ -196,7 +194,6 @@ export default function DriverProfilePage() {
 
             <TabsContent value="docs" className="space-y-4 animate-in fade-in">
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* LICENCIA NACIONAL */}
                   <Card className="border-none shadow-sm hover:shadow-md transition-shadow">
                     <CardContent className="p-5 flex flex-col gap-4">
                       <div className="flex justify-between items-start">
@@ -217,7 +214,6 @@ export default function DriverProfilePage() {
                     </CardContent>
                   </Card>
 
-                  {/* LINTI */}
                   <Card className="border-none shadow-sm hover:shadow-md transition-shadow">
                     <CardContent className="p-5 flex flex-col gap-4">
                       <div className="flex justify-between items-start">
@@ -282,7 +278,7 @@ export default function DriverProfilePage() {
                                  <TableCell>
                                     <div className="text-xs font-bold text-slate-700">{trip.clientName}</div>
                                     <div className="text-[9px] text-slate-500 uppercase flex items-center gap-1">
-                                       {trip.origin.city} <ChevronRight size={8}/> {trip.outboundStops?.[trip.outboundStops.length-1]?.name || 'Destino'}
+                                       {trip.origin?.city || 'S/D'} <ChevronRight size={8}/> {trip.outboundStops?.[trip.outboundStops.length-1]?.name || 'Destino'}
                                     </div>
                                  </TableCell>
                                  <TableCell>
@@ -348,17 +344,62 @@ export default function DriverProfilePage() {
 
       {/* Document Viewer Modal */}
       <Dialog open={!!viewerUrl} onOpenChange={(o) => !o && setViewerUrl(null)}>
-        <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Visualizador de Documentos</DialogTitle>
+        <DialogContent className="max-w-4xl h-[80vh] flex flex-col rounded-xl overflow-hidden p-0 gap-0">
+          <DialogHeader className="p-4 border-b bg-slate-50">
+            <DialogTitle className="text-sm flex items-center gap-2">
+              <FileText size={18} className="text-blue-600" /> Visualizador de Documentos Digitales
+            </DialogTitle>
           </DialogHeader>
-          <div className="flex-1 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center border mt-4">
-            {viewerUrl?.startsWith('data:application/pdf') ? (
-              <iframe src={viewerUrl} className="w-full h-full" />
+          
+          <div className="flex-1 bg-slate-100 flex items-center justify-center overflow-hidden relative">
+            {viewerUrl ? (
+              <>
+                {viewerUrl.startsWith('data:application/pdf') ? (
+                  <iframe 
+                    src={viewerUrl} 
+                    className="w-full h-full border-none" 
+                    title="Visor PDF"
+                  />
+                ) : (
+                  <div className="w-full h-full p-4 flex items-center justify-center">
+                    <img 
+                      src={viewerUrl} 
+                      className="max-w-full max-h-full object-contain shadow-2xl rounded-sm border bg-white" 
+                      alt="Documento del Chofer" 
+                    />
+                  </div>
+                )}
+              </>
             ) : (
-              <img src={viewerUrl || undefined} className="max-w-full max-h-full object-contain" alt="Documento" />
+              <div className="flex flex-col items-center gap-2 text-slate-400">
+                <Loader2 className="animate-spin" />
+                <p className="text-xs font-bold uppercase">Cargando archivo...</p>
+              </div>
             )}
           </div>
+
+          <DialogFooter className="p-4 border-t bg-slate-50 flex flex-row justify-between items-center">
+            <p className="text-[10px] text-slate-400 font-bold uppercase">Protocolo de Auditoría Digital v1.0</p>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="h-8 text-[10px] font-bold" 
+                onClick={() => setViewerUrl(null)}
+              >
+                CERRAR
+              </Button>
+              {viewerUrl && (
+                <Button 
+                  size="sm" 
+                  className="h-8 text-[10px] font-bold bg-blue-600" 
+                  onClick={() => window.open(viewerUrl, "_blank")}
+                >
+                  <ExternalLink size={12} className="mr-1" /> ABRIR EN PANTALLA COMPLETA
+                </Button>
+              )}
+            </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
