@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
@@ -14,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { 
   Truck as TruckIcon, FileText, Calendar, AlertTriangle, 
   CheckCircle2, Clock, Upload, ArrowLeft, ShieldCheck, 
-  MapPin, Gauge, Box, Info, Download, Trash2, MoreVertical, LayoutGrid, Fuel, DollarSign, Activity, TrendingUp, User, Building2, Briefcase
+  MapPin, Gauge, Box, Info, Download, Trash2, MoreVertical, LayoutGrid, Fuel, DollarSign, Activity, TrendingUp, User, Building2, Briefcase, Edit2
 } from "lucide-react";
 import { Truck, VehicleDocument, DocStatus, Expense, Driver } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
