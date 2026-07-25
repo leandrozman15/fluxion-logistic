@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useDoc } from "@/firebase";
 import { collection, serverTimestamp, doc, updateDoc, setDoc } from "firebase/firestore";
@@ -68,14 +68,19 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     avatarUrl: ""
   });
 
-  const truckRef = truckId && db ? doc(db, "trucks", truckId) : null;
+  const truckRef = useMemo(() => 
+    truckId && db ? doc(db, "trucks", truckId) : null
+  , [db, truckId]);
+
   const { data: existingTruck, loading: loadingExisting } = useDoc<TruckType>(truckRef);
 
   useEffect(() => {
     if (existingTruck) {
       setFormData({
         ...existingTruck,
-        location: existingTruck.location || { city: "", province: "Buenos Aires", country: "Argentina", lat: 0, lng: 0 }
+        location: existingTruck.location || { city: "", province: "Buenos Aires", country: "Argentina", lat: 0, lng: 0 },
+        odometerKm: existingTruck.odometerKm || 0,
+        avatarUrl: existingTruck.avatarUrl || ""
       });
     }
   }, [existingTruck]);
@@ -106,6 +111,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     const file = e.target.files?.[0];
     if (file) {
       toast({ title: "Imagen lista", description: "La foto se ha cargado temporalmente." });
+      // In a real app, you would upload to Firebase Storage and get a URL
       setFormData(prev => ({ ...prev, avatarUrl: URL.createObjectURL(file) }));
     }
   };
@@ -281,7 +287,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
 
                 <div className="space-y-4">
                   <Label>Tipo de Carrocería</Label>
-                  <div className="grid grid-cols-2 sm:grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     {BODY_TYPES.map(type => (
                       <button 
                         key={type.id} 
