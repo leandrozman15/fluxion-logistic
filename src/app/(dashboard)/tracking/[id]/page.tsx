@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
@@ -60,6 +59,7 @@ export default function LiveTrackingPage() {
   useEffect(() => {
     if (!isSimulating || !load || !loadRef) return;
 
+    // Simulación ajustada a 1 minuto (60000ms) para ahorro de costos
     const interval = setInterval(async () => {
       const currentTracking = load.tracking || {
         currentLat: load.origin.lat || -34.6037,
@@ -88,20 +88,20 @@ export default function LiveTrackingPage() {
       };
 
       const updatedHistory = [...(currentTracking.history || []), newPoint].slice(-100);
-      const newFuel = (currentTracking.estimatedFuelLiters || 0) + (estimateFuelFactor(newSpeed) * 0.001);
+      const newFuel = (currentTracking.estimatedFuelLiters || 0) + (estimateFuelFactor(newSpeed) * 0.016); // 1 min aprox
 
       await updateDoc(loadRef, {
         "tracking.currentLat": newLat,
         "tracking.currentLng": newLng,
         "tracking.currentSpeed": newSpeed,
         "tracking.maxSpeed": Math.max(currentTracking.maxSpeed || 0, newSpeed),
-        "tracking.distanceTraveledKm": (currentTracking.distanceTraveledKm || 0) + 0.1,
-        "tracking.distanceRemainingKm": Math.max(0, (currentTracking.distanceRemainingKm || 0) - 0.1),
+        "tracking.distanceTraveledKm": (currentTracking.distanceTraveledKm || 0) + 1.2, // ~70km/h
+        "tracking.distanceRemainingKm": Math.max(0, (currentTracking.distanceRemainingKm || 0) - 1.2),
         "tracking.estimatedFuelLiters": newFuel,
         "tracking.history": updatedHistory,
         "tracking.lastUpdateAt": serverTimestamp()
       });
-    }, 5000);
+    }, 60000);
 
     return () => clearInterval(interval);
   }, [isSimulating, load, loadRef]);
@@ -119,7 +119,7 @@ export default function LiveTrackingPage() {
   }, [load?.tracking?.history]);
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Activity className="animate-spin text-blue-600" /></div>;
-  if (!load) return <div className="p-10 text-center">Operación não encontrada.</div>;
+  if (!load) return <div className="p-10 text-center">Operación no encontrada.</div>;
 
   const tracking = load.tracking;
   const chartData = tracking?.history?.map(p => ({

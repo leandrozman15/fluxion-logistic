@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -147,7 +146,7 @@ export default function RouteDetailPage() {
     return { name: 'S/D', address: '-', lat: -34.6, lng: -58.3 };
   }, [load]);
 
-  // GPS Tracking Logic
+  // GPS Tracking Logic - Optimizado a 1 actualización por minuto para ahorro de costos
   useEffect(() => {
     if (!gpsActive || !loadRef || typeof window === 'undefined' || !navigator.geolocation) return;
 
@@ -156,7 +155,8 @@ export default function RouteDetailPage() {
         const { latitude, longitude, speed } = pos.coords;
         const now = Date.now();
         
-        const UPDATE_INTERVAL = 5000;
+        // REGLA DE COSTOS: Solo actualizamos una vez por minuto (60000ms)
+        const UPDATE_INTERVAL = 60000; 
         if (now - lastUpdateRef.current < UPDATE_INTERVAL) return;
 
         let distanceInc = 0;
@@ -170,6 +170,7 @@ export default function RouteDetailPage() {
           }
         }
 
+        // Si no hubo movimiento significativo (>5 metros), no gastamos una escritura
         if (distanceInc < 0.005 && lastUpdateRef.current !== 0) return;
 
         const newPoint: TrackingPoint = {
@@ -194,9 +195,9 @@ export default function RouteDetailPage() {
         lastPosRef.current = { lat: latitude, lng: longitude, timestamp: now };
       },
       (err) => {
-        console.warn("GPS Native Error:", err);
+        console.warn("GPS Native Error:", err.message);
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
@@ -221,7 +222,7 @@ export default function RouteDetailPage() {
         updatedAt: serverTimestamp() 
       });
       setGpsActive(true);
-      toast({ title: "Viaje Iniciado", description: "Rastreo GPS activado." });
+      toast({ title: "Viaje Iniciado", description: "Rastreo GPS activado (cada 1 min)." });
       openNativeNavigator();
     } catch (e) {
       toast({ variant: "destructive", title: "Error" });
@@ -375,7 +376,6 @@ export default function RouteDetailPage() {
           <TabsTrigger value="wallet" className="text-[10px] uppercase font-bold">Gastos</TabsTrigger>
         </TabsList>
 
-        {/* TAB: MISION */}
         <TabsContent value="mission" className="space-y-6 animate-in fade-in">
           <Card className="bg-slate-900 text-white border-none overflow-hidden relative">
             <div className="absolute top-2 right-2">
@@ -528,7 +528,6 @@ export default function RouteDetailPage() {
           </div>
         </TabsContent>
 
-        {/* TAB: GESTION DE TIEMPO */}
         <TabsContent value="time" className="space-y-6 animate-in fade-in">
           <Card className="border-none shadow-sm">
             <CardHeader className="pb-2">
@@ -577,7 +576,6 @@ export default function RouteDetailPage() {
           </div>
         </TabsContent>
 
-        {/* TAB: REPORTAR INCIDENTES */}
         <TabsContent value="incidents" className="space-y-6 animate-in fade-in">
            <div className="px-2 space-y-4">
              <div className="p-4 bg-red-50 border border-red-100 rounded-xl">
@@ -651,7 +649,6 @@ export default function RouteDetailPage() {
            </div>
         </TabsContent>
 
-        {/* TAB: GESTION DE GASTOS */}
         <TabsContent value="wallet" className="space-y-6 animate-in fade-in">
           <Card className="border-none shadow-sm bg-gradient-to-br from-slate-800 to-slate-900 text-white overflow-hidden">
             <CardContent className="p-6 space-y-6">
@@ -694,7 +691,6 @@ export default function RouteDetailPage() {
                       </div>
                     </div>
 
-                    {/* Campos específicos para Combustible */}
                     {expenseData.category === 'fuel' && (
                       <div className="grid grid-cols-2 gap-4 p-4 bg-blue-50 border border-blue-100 rounded-xl animate-in fade-in zoom-in-95">
                          <div className="space-y-1">
