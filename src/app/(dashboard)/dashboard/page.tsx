@@ -39,17 +39,19 @@ import {
   Phone,
   Radio,
   TrendingUp,
-  ArrowRightLeft
+  ArrowRightLeft,
+  CalendarDays
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Truck, Driver, Load, Hub, Client } from "@/app/lib/types";
-import { isToday, startOfMonth, format, formatDistanceToNow, addMinutes } from "date-fns";
+import { isToday, startOfMonth, format, formatDistanceToNow, addMinutes, addDays, isAfter, isBefore, startOfDay, endOfDay } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
@@ -67,6 +69,7 @@ export default function MonitorOperativoPage() {
   const [mounted, setMounted] = useState(false);
   const [L, setL] = useState<any>(null);
   const [expandedLoadId, setExpandedLoadId] = useState<string | null>(null);
+  const [agendaTab, setAgendaTab] = useState<string>("today");
 
   useEffect(() => {
     setMounted(true);
@@ -106,10 +109,12 @@ export default function MonitorOperativoPage() {
   const { data: clients } = useCollection<Client>(clientsQuery);
   const { data: drivers } = useCollection<Driver>(driversQuery);
 
-  const todayStr = format(new Date(), "yyyy-MM-dd");
+  const today = new Date();
+  const todayStr = format(today, "yyyy-MM-dd");
+  const tomorrowStr = format(addDays(today, 1), "yyyy-MM-dd");
+  const nextWeekStr = format(addDays(today, 7), "yyyy-MM-dd");
 
   const stats = useMemo(() => {
-    const today = new Date();
     const monthStart = startOfMonth(today);
 
     const deliveredToday = loads?.filter(l => 
@@ -136,20 +141,35 @@ export default function MonitorOperativoPage() {
       billingMonth, 
       incidents
     };
-  }, [trucks, loads, todayStr]);
+  }, [trucks, loads, todayStr, today]);
 
-  const dailyOperations = useMemo(() => {
+  const filteredAgenda = useMemo(() => {
     if (!loads) return [];
-    return loads.filter(l => 
-      l.status === 'on_route' || 
-      l.status === 'on_pause' ||
-      (l.pickupDate === todayStr && l.status !== 'delivered' && l.status !== 'cancelled')
-    ).sort((a, b) => {
+    
+    return loads.filter(l => {
+      // Siempre mostrar los que están en ruta o pausa en cualquier vista operativa
+      if (l.status === 'on_route' || l.status === 'on_pause') return true;
+      
+      // Filtros por pestaña
+      if (agendaTab === 'active') return l.status === 'on_route' || l.status === 'on_pause';
+      if (agendaTab === 'today') return l.pickupDate === todayStr && l.status !== 'delivered' && l.status !== 'cancelled';
+      if (agendaTab === 'tomorrow') return l.pickupDate === tomorrowStr && l.status !== 'cancelled';
+      if (agendaTab === 'week') {
+        return l.pickupDate >= todayStr && l.pickupDate <= nextWeekStr && l.status !== 'delivered' && l.status !== 'cancelled';
+      }
+      
+      return false;
+    }).sort((a, b) => {
+      // Prioridad 1: Activos arriba
       if (a.status === 'on_route' && b.status !== 'on_route') return -1;
       if (a.status !== 'on_route' && b.status === 'on_route') return 1;
-      return (a.pickupTime || '').localeCompare(b.pickupTime || '');
+      
+      // Prioridad 2: Por fecha y hora
+      const dateA = `${a.pickupDate} ${a.pickupTime}`;
+      const dateB = `${b.pickupDate} ${b.pickupTime}`;
+      return dateA.localeCompare(dateB);
     });
-  }, [loads, todayStr]);
+  }, [loads, agendaTab, todayStr, tomorrowStr, nextWeekStr]);
 
   const truckIcon = L ? L.divIcon({
     className: 'custom-truck-icon',
@@ -173,11 +193,8 @@ export default function MonitorOperativoPage() {
   }) : null;
 
   const calculateETA = (distanceRemaining: number | undefined, currentSpeed: number | undefined) => {
-    // Si no hay velocidad pero hay distancia, está detenido.
     if (distanceRemaining && (currentSpeed === undefined || currentSpeed < 1)) return "DETENIDO";
-    // Si no hay distancia (ej: no se calculó con Maps), pero se mueve.
     if (!distanceRemaining && currentSpeed && currentSpeed >= 1) return "EN MOVIMIENTO";
-    // Si faltan ambos.
     if (!distanceRemaining || !currentSpeed || currentSpeed < 1) return "CALCULANDO...";
 
     const hours = distanceRemaining / currentSpeed;
@@ -186,7 +203,7 @@ export default function MonitorOperativoPage() {
   };
 
   const calculateEfficiency = (load: Load) => {
-    if (load.status !== 'on_route' && load.status !== 'on_pause') return 0;
+    if (load.status !== 'on_route' && load.status !== 'on_pause') return 100;
     const alerts = load.tracking?.alerts?.length || 0;
     const base = 100;
     const speedPenalty = (load.tracking?.maxSpeed || 0) > 90 ? 15 : 0;
@@ -221,21 +238,30 @@ export default function MonitorOperativoPage() {
       </div>
 
       <Card className="border-none shadow-md overflow-hidden">
-        <CardHeader className="pb-3 border-b bg-slate-50 dark:bg-slate-900/50 flex flex-row items-center justify-between">
-           <div>
-             <CardTitle className="text-lg flex items-center gap-2">
-               <Activity className="w-5 h-5 text-blue-600" /> Agenda Operativa del Día
-             </CardTitle>
-             <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Torre de control: Telemetría y Hoja de Ruta</CardDescription>
+        <CardHeader className="pb-3 border-b bg-slate-50 dark:bg-slate-900/50">
+           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+             <div>
+               <CardTitle className="text-lg flex items-center gap-2">
+                 <CalendarDays className="w-5 h-5 text-blue-600" /> Agenda Operativa
+               </CardTitle>
+               <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Control de despacho y planificación semanal</CardDescription>
+             </div>
+             
+             <Tabs value={agendaTab} onValueChange={setAgendaTab} className="w-full md:w-auto">
+               <TabsList className="bg-white dark:bg-slate-800 border h-9">
+                 <TabsTrigger value="active" className="text-[10px] font-bold uppercase">En Curso</TabsTrigger>
+                 <TabsTrigger value="today" className="text-[10px] font-bold uppercase">Hoy</TabsTrigger>
+                 <TabsTrigger value="tomorrow" className="text-[10px] font-bold uppercase">Mañana</TabsTrigger>
+                 <TabsTrigger value="week" className="text-[10px] font-bold uppercase">Semana</TabsTrigger>
+               </TabsList>
+             </Tabs>
            </div>
-           <Badge variant="outline" className="h-6 font-mono font-bold border-blue-200 text-blue-600">{dailyOperations.length} MOVIMIENTOS</Badge>
         </CardHeader>
         <CardContent className="p-0">
            <div className="divide-y divide-slate-100 dark:divide-slate-800">
-             {dailyOperations.map(load => {
+             {filteredAgenda.map(load => {
                const driver = drivers?.find(d => d.id === load.assignedDriverId);
                const truck = trucks?.find(t => t.id === load.assignedTruckId);
-               const totalWeight = (load.outboundStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0) + (load.returnStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0);
                const isExpanded = expandedLoadId === load.id;
                const tracking = load.tracking;
                const destination = load.outboundStops?.[load.outboundStops.length - 1]?.name || 'S/D';
@@ -284,6 +310,12 @@ export default function MonitorOperativoPage() {
                               ) : (
                                 <Badge variant="outline" className="text-[8px] uppercase font-black text-slate-400 h-4 border-slate-300">{load.status.replace('_', ' ')}</Badge>
                               )}
+                              
+                              {load.pickupDate !== todayStr && (
+                                <Badge variant="secondary" className="text-[8px] uppercase font-bold h-4">
+                                  {format(parseISO(load.pickupDate), "dd MMM", { locale: es })}
+                                </Badge>
+                              )}
                             </div>
                             <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-tight truncate">
                                <Building2 size={12} className="text-blue-500" /> {load.origin.name} <ArrowRight size={10} className="text-slate-300" /> {destination}
@@ -311,14 +343,14 @@ export default function MonitorOperativoPage() {
                                     <Clock size={10} /> {calculateETA(tracking.distanceRemainingKm, tracking.currentSpeed)}
                                   </p>
                                ) : (
-                                  <p className="text-xs font-bold text-slate-400 italic">Pendiente Inicio</p>
+                                  <p className="text-xs font-bold text-slate-400 italic">Programado</p>
                                )}
                                <p className="text-[9px] font-bold text-slate-400 uppercase">Salida: {load.pickupTime}hs</p>
                             </div>
                          </div>
                          
                          <div className="space-y-1">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Eficiencia de Ruta</p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Eficiencia / Avance</p>
                             <div className="space-y-1">
                                <div className="flex items-center gap-1.5">
                                   <TrendingUp size={10} className={cn(efficiency > 80 ? "text-green-500" : "text-orange-500")} />
@@ -479,14 +511,14 @@ export default function MonitorOperativoPage() {
                  </Collapsible>
                );
              })}
-             {dailyOperations.length === 0 && (
+             {filteredAgenda.length === 0 && (
                 <div className="py-24 text-center flex flex-col items-center gap-4">
                   <div className="w-16 h-16 bg-slate-50 dark:bg-slate-900 rounded-full flex items-center justify-center text-slate-200 dark:text-slate-800">
                     <Package size={32} />
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm font-bold text-slate-400 uppercase tracking-widest italic">Parrilla Operativa Vacía</p>
-                    <p className="text-xs text-slate-300">No hay fletes programados para el inicio o en tránsito hoy.</p>
+                    <p className="text-sm font-bold text-slate-400 uppercase tracking-widest italic">Sin movimientos para esta vista</p>
+                    <p className="text-xs text-slate-300">No hay fletes programados para el periodo seleccionado.</p>
                   </div>
                 </div>
              )}
@@ -529,7 +561,7 @@ export default function MonitorOperativoPage() {
               </Marker>
             ))}
 
-            {truckIcon && dailyOperations.filter(l => (l.status === 'on_route' || l.status === 'on_pause') && l.tracking?.currentLat).map((load) => (
+            {truckIcon && filteredAgenda.filter(l => (l.status === 'on_route' || l.status === 'on_pause') && l.tracking?.currentLat).map((load) => (
               <Marker key={load.id} position={[load.tracking!.currentLat, load.tracking!.currentLng]} icon={truckIcon}>
                 <Popup>
                   <div className="p-1 font-bold text-sm">
