@@ -77,7 +77,7 @@ export default function RouteDetailPage() {
   const [gpsActive, setGpsActive] = useState(false);
   const [L, setL] = useState<any>(null);
   
-  // Throttling State (1 minuto)
+  // Throttling State para Pruebas (10 segundos)
   const lastUpdateRef = useRef<number>(0);
   const lastPosRef = useRef<{lat: number, lng: number, timestamp: number} | null>(null);
   const podPhotoInputRef = useRef<HTMLInputElement>(null);
@@ -149,12 +149,9 @@ export default function RouteDetailPage() {
     return { name: 'S/D', address: '-', lat: -34.6, lng: -58.3 };
   }, [load]);
 
-  // GPS Tracking Logic - 1 actualización por minuto
+  // GPS Tracking Logic - 1 actualización cada 10 segundos para pruebas ágiles
   useEffect(() => {
     if (!gpsActive || !loadRef || typeof window === 'undefined' || !navigator.geolocation) {
-      if (gpsActive && !navigator.geolocation) {
-        toast({ variant: "destructive", title: "Error GPS", description: "Tu navegador no soporta geolocalización." });
-      }
       return;
     }
 
@@ -163,8 +160,8 @@ export default function RouteDetailPage() {
         const { latitude, longitude, speed } = pos.coords;
         const now = Date.now();
         
-        // REGLA DE COSTOS: 1 minuto
-        const UPDATE_INTERVAL = 60000; 
+        // INTERVALO DE PRUEBA: 10 segundos
+        const UPDATE_INTERVAL = 10000; 
         if (now - lastUpdateRef.current < UPDATE_INTERVAL) return;
 
         let distanceInc = 0;
@@ -178,20 +175,23 @@ export default function RouteDetailPage() {
           }
         }
 
-        // Mayor sensibilidad para pruebas (5 metros)
-        if (distanceInc < 0.005 && lastUpdateRef.current !== 0) return;
+        // Sensibilidad máxima para pruebas de caminata (2 metros)
+        if (distanceInc < 0.002 && lastUpdateRef.current !== 0) return;
+
+        // Ajustar velocidad mínima detectable para evitar "Calculando" eterno en caminatas
+        const finalSpeed = Math.max(calculatedSpeed, 0.5);
 
         const newPoint: TrackingPoint = {
           lat: latitude,
           lng: longitude,
-          speed: Math.round(calculatedSpeed),
+          speed: Math.round(finalSpeed),
           timestamp: new Date().toISOString()
         };
 
         updateDoc(loadRef, {
           "tracking.currentLat": latitude,
           "tracking.currentLng": longitude,
-          "tracking.currentSpeed": Math.round(calculatedSpeed),
+          "tracking.currentSpeed": Math.round(finalSpeed),
           "tracking.distanceTraveledKm": increment(distanceInc),
           "tracking.distanceRemainingKm": increment(-distanceInc),
           "tracking.lastUpdateAt": serverTimestamp(),
@@ -230,7 +230,6 @@ export default function RouteDetailPage() {
     if (!loadRef || !load) return;
     setIsUpdating(true);
     try {
-      // Garantizar que el objeto tracking exista para evitar errores de "Calculando" en Dashboard
       const initialTracking = load.tracking || {
         distanceTraveledKm: 0,
         distanceRemainingKm: 0,
@@ -325,10 +324,8 @@ export default function RouteDetailPage() {
         createdAt: serverTimestamp()
       };
 
-      // 1. Guardar en subcolección del flete
       await addDoc(collection(db, "loads", id as string, "expenses"), expenseObj);
       
-      // 2. Guardar en colección global para el historial del camión si tiene truckId
       if (load.assignedTruckId) {
         await addDoc(collection(db, "global_expenses"), expenseObj);
       }
@@ -440,7 +437,6 @@ export default function RouteDetailPage() {
                     </div>
                     
                     <div className="flex gap-2">
-                      {/* DIALOGO DE PARADA */}
                       <Dialog open={isPauseDialogOpen} onOpenChange={setIsPauseDialogOpen}>
                         <DialogTrigger asChild>
                           <Button variant="outline" className="flex-1 h-14 border-orange-500 text-orange-600 font-bold shadow-sm">
@@ -478,7 +474,6 @@ export default function RouteDetailPage() {
                         </DialogContent>
                       </Dialog>
 
-                      {/* DIALOGO DE ENTREGA */}
                       <Dialog open={isPODOpen} onOpenChange={setIsPODOpen}>
                         <DialogTrigger asChild>
                           <Button className="flex-1 bg-green-600 h-14 font-bold shadow-lg">

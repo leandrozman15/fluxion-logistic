@@ -172,9 +172,14 @@ export default function MonitorOperativoPage() {
     iconAnchor: [14, 14]
   }) : null;
 
-  const calculateETA = (distanceRemaining: number, currentSpeed: number) => {
-    // Reducimos el umbral a 1 km/h para que sea sensible a caminatas de prueba
+  const calculateETA = (distanceRemaining: number | undefined, currentSpeed: number | undefined) => {
+    // Si no hay velocidad pero hay distancia, está detenido.
+    if (distanceRemaining && (currentSpeed === undefined || currentSpeed < 1)) return "DETENIDO";
+    // Si no hay distancia (ej: no se calculó con Maps), pero se mueve.
+    if (!distanceRemaining && currentSpeed && currentSpeed >= 1) return "EN MOVIMIENTO";
+    // Si faltan ambos.
     if (!distanceRemaining || !currentSpeed || currentSpeed < 1) return "CALCULANDO...";
+
     const hours = distanceRemaining / currentSpeed;
     const etaDate = addMinutes(new Date(), Math.round(hours * 60));
     return format(etaDate, "HH:mm") + " hs";
@@ -184,7 +189,6 @@ export default function MonitorOperativoPage() {
     if (load.status !== 'on_route' && load.status !== 'on_pause') return 0;
     const alerts = load.tracking?.alerts?.length || 0;
     const base = 100;
-    // Penalización por alertas o excesos de velocidad
     const speedPenalty = (load.tracking?.maxSpeed || 0) > 90 ? 15 : 0;
     return Math.max(0, base - (alerts * 10) - speedPenalty);
   };
@@ -236,7 +240,7 @@ export default function MonitorOperativoPage() {
                const tracking = load.tracking;
                const destination = load.outboundStops?.[load.outboundStops.length - 1]?.name || 'S/D';
                const efficiency = calculateEfficiency(load);
-               const progress = tracking ? (tracking.distanceTraveledKm / (tracking.distanceTraveledKm + tracking.distanceRemainingKm)) * 100 : 0;
+               const progress = tracking ? (tracking.distanceTraveledKm / (tracking.distanceTraveledKm + (tracking.distanceRemainingKm || 1))) * 100 : 0;
 
                return (
                  <Collapsible 
