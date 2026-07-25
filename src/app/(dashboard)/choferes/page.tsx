@@ -5,15 +5,14 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, orderBy, deleteDoc, doc } from "firebase/firestore";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { 
-  Users, UserPlus, Search, Phone, Mail, MoreHorizontal, 
-  Trash2, Edit2, Loader2, ShieldCheck, AlertTriangle, 
-  CheckCircle2, MessageCircle, MoreVertical, User, Download, FileText, Calendar, Clock, Truck as TruckIcon, Package, Eye
+  Users, UserPlus, Search, Loader2, ShieldCheck, AlertTriangle, 
+  CheckCircle2, MoreVertical, Eye, FileText, Calendar, Truck as TruckIcon, Package
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -25,9 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Driver, DriverStatus, Truck, Load } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
-import { format, isBefore, addDays, parseISO, differenceInDays } from "date-fns";
-import { es } from "date-fns/locale";
-import { cn } from "@/lib/utils";
+import { format, parseISO, differenceInDays } from "date-fns";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export default function ChoferesPage() {
@@ -69,7 +66,10 @@ export default function ChoferesPage() {
   }, [drivers, searchTerm, statusFilter]);
 
   const handleDeleteDriver = async (id: string, name: string) => {
-    if (!db || !confirm(`¿Está seguro de eliminar a ${name}?`)) return;
+    if (!db || !id) return;
+    const ok = window.confirm(`¿Está seguro de eliminar a ${name}? Esta acción no se puede deshacer.`);
+    if (!ok) return;
+
     try {
       await deleteDoc(doc(db, "drivers", id));
       toast({ title: "Chofer eliminado", description: "El registro ha sido removido del sistema." });
@@ -107,27 +107,6 @@ export default function ChoferesPage() {
     }
   };
 
-  const handleDownload = (dataUrl: string | undefined, filename: string) => {
-    if (!dataUrl) {
-      toast({ variant: "destructive", title: "Archivo no disponible", description: "No se encontró el documento adjunto." });
-      return;
-    }
-
-    try {
-      const link = document.createElement('a');
-      link.href = dataUrl;
-      link.download = filename;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      toast({ title: "Archivo procesado", description: filename });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Error de apertura", description: "El archivo podría ser demasiado grande para el navegador." });
-    }
-  };
-
   const handleView = (dataUrl: string | undefined) => {
     if (!dataUrl) return;
     const win = window.open();
@@ -143,7 +122,7 @@ export default function ChoferesPage() {
           <h1 className="text-2xl font-bold text-slate-900">Gestión de Choferes</h1>
           <p className="text-slate-500 text-sm">Control de personal habilitado y cumplimiento de licencias profesionales.</p>
         </div>
-        <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => router.push('/choferes/nuevo')}>
+        <Button className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100" onClick={() => router.push('/choferes/nuevo')}>
           <UserPlus className="w-4 h-4 mr-2" /> Alta de Chofer
         </Button>
       </div>
@@ -151,9 +130,7 @@ export default function ChoferesPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="bg-blue-50 border-blue-100 shadow-none">
           <CardContent className="pt-4 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
-              <Users size={20} />
-            </div>
+            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600"><Users size={20} /></div>
             <div>
               <p className="text-[10px] uppercase font-bold text-blue-400">Total Choferes</p>
               <p className="text-xl font-bold text-blue-700">{drivers?.length || 0}</p>
@@ -162,22 +139,16 @@ export default function ChoferesPage() {
         </Card>
         <Card className="bg-green-50 border-green-100 shadow-none">
           <CardContent className="pt-4 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600">
-              <CheckCircle2 size={20} />
-            </div>
+            <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600"><CheckCircle2 size={20} /></div>
             <div>
               <p className="text-[10px] uppercase font-bold text-green-400">Disponibles</p>
-              <p className="text-xl font-bold text-green-700">
-                {drivers?.filter(d => d.status === 'active').length || 0}
-              </p>
+              <p className="text-xl font-bold text-green-700">{drivers?.filter(d => d.status === 'active').length || 0}</p>
             </div>
           </CardContent>
         </Card>
         <Card className="bg-orange-50 border-orange-100 shadow-none">
           <CardContent className="pt-4 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600">
-              <AlertTriangle size={20} />
-            </div>
+            <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600"><AlertTriangle size={20} /></div>
             <div>
               <p className="text-[10px] uppercase font-bold text-orange-400">Vencimientos Próximos</p>
               <p className="text-xl font-bold text-orange-700">
@@ -199,7 +170,7 @@ export default function ChoferesPage() {
             <Input 
               type="search" 
               placeholder="Buscar por nombre, DNI o licencia..." 
-              className="pl-8 bg-white"
+              className="bg-white pl-8"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
@@ -227,11 +198,7 @@ export default function ChoferesPage() {
               </TableHeader>
               <TableBody>
                 {filteredDrivers.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-10 text-slate-400 italic">
-                      No se encontraron choferes registrados.
-                    </TableCell>
-                  </TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center py-10 text-slate-400 italic">No se encontraron choferes.</TableCell></TableRow>
                 ) : (
                   filteredDrivers.map((driver) => {
                     const assignedTruck = trucks?.find(t => t.assignedDriverId === driver.id);
@@ -243,15 +210,11 @@ export default function ChoferesPage() {
                           <div className="flex items-center gap-3">
                             <Avatar className="w-10 h-10 rounded-full border shadow-sm">
                               <AvatarImage src={driver.avatarUrl} className="object-cover" />
-                              <AvatarFallback className="bg-blue-50 text-blue-600 text-xs font-bold">
-                                {driver.firstName.charAt(0)}{driver.lastName.charAt(0)}
-                              </AvatarFallback>
+                              <AvatarFallback className="bg-blue-50 text-blue-600 text-xs font-bold">{driver.firstName[0]}{driver.lastName[0]}</AvatarFallback>
                             </Avatar>
                             <div>
                               <div className="font-bold text-slate-900">{driver.lastName}, {driver.firstName}</div>
-                              <div className="text-[10px] text-slate-500 flex items-center gap-1 font-mono">
-                                DNI: {driver.dni}
-                              </div>
+                              <div className="text-[10px] text-slate-500 font-mono">DNI: {driver.dni}</div>
                             </div>
                           </div>
                         </TableCell>
@@ -262,23 +225,17 @@ export default function ChoferesPage() {
                               <Calendar size={10} className="text-slate-400" />
                               {driver.licenseExpiry ? format(parseISO(driver.licenseExpiry), "dd/MM/yyyy") : '-'}
                             </div>
-                            <div className="text-[9px] uppercase font-bold tracking-tighter">
-                              {getExpiryLabel(driver.licenseExpiry)}
-                            </div>
+                            <div className="text-[9px] uppercase font-bold tracking-tighter">{getExpiryLabel(driver.licenseExpiry)}</div>
                           </div>
                         </TableCell>
                         <TableCell>
                           <div className="space-y-1">
                             {assignedTruck ? (
-                              <div className="flex items-center gap-1.5 text-xs font-bold text-blue-600">
-                                <TruckIcon size={12} /> {assignedTruck.plate}
-                              </div>
+                              <div className="flex items-center gap-1.5 text-xs font-bold text-blue-600"><TruckIcon size={12} /> {assignedTruck.plate}</div>
                             ) : (
                               <div className="text-[10px] text-slate-400 italic">Sin unidad fija</div>
                             )}
-                            <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-bold uppercase">
-                              <Package size={12} className="text-slate-400" /> {tripCount} Viajes realizados
-                            </div>
+                            <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-bold uppercase"><Package size={12} className="text-slate-400" /> {tripCount} Viajes realizados</div>
                           </div>
                         </TableCell>
                         <TableCell>
@@ -287,59 +244,24 @@ export default function ChoferesPage() {
                           ) : (
                             <div className="space-y-1">
                               <div className="text-[11px] font-bold text-blue-700">N° {driver.lintiNumber}</div>
-                              <div className="text-[10px] flex items-center gap-1">
-                                <ShieldCheck size={10} className="text-blue-400" />
-                                {driver.lintiExpiry ? format(parseISO(driver.lintiExpiry), "dd/MM/yyyy") : '-'}
-                              </div>
-                              <div className="text-[9px] uppercase font-bold tracking-tighter">
-                                {getExpiryLabel(driver.lintiExpiry)}
-                              </div>
+                              <div className="text-[10px] flex items-center gap-1"><ShieldCheck size={10} className="text-blue-400" /> {driver.lintiExpiry ? format(parseISO(driver.lintiExpiry), "dd/MM/yyyy") : '-'}</div>
+                              <div className="text-[9px] uppercase font-bold tracking-tighter">{getExpiryLabel(driver.lintiExpiry)}</div>
                             </div>
                           )}
                         </TableCell>
                         <TableCell>{getStatusBadge(driver.status)}</TableCell>
                         <TableCell className="text-right">
                           <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical size={16} /></Button>
-                            </DropdownMenuTrigger>
+                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical size={16} /></Button></DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-56">
                               <DropdownMenuLabel>Gestión de Chofer</DropdownMenuLabel>
-                              <DropdownMenuItem onClick={() => router.push(`/choferes/${driver.id}/editar`)}>
-                                <Edit2 className="w-4 h-4 mr-2" /> Editar Perfil
-                              </DropdownMenuItem>
-                              
+                              <DropdownMenuItem onClick={() => router.push(`/choferes/${driver.id}/editar`)}>Editar Perfil</DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              <DropdownMenuLabel className="text-[10px] uppercase text-slate-400">Documentación</DropdownMenuLabel>
-                              
-                              <DropdownMenuItem 
-                                disabled={!driver.dniFileUrl} 
-                                onClick={() => handleView(driver.dniFileUrl)}
-                              >
-                                <Eye className="w-4 h-4 mr-2" /> Ver DNI
-                              </DropdownMenuItem>
-                              
-                              <DropdownMenuItem 
-                                disabled={!driver.licenseFileUrl} 
-                                onClick={() => handleView(driver.licenseFileUrl)}
-                              >
-                                <Eye className="w-4 h-4 mr-2" /> Ver Licencia
-                              </DropdownMenuItem>
-                              
-                              <DropdownMenuItem 
-                                disabled={!driver.lintiFileUrl} 
-                                onClick={() => handleView(driver.lintiFileUrl)}
-                              >
-                                <Eye className="w-4 h-4 mr-2" /> Ver LINTI
-                              </DropdownMenuItem>
-
+                              <DropdownMenuItem disabled={!driver.dniFileUrl} onClick={() => handleView(driver.dniFileUrl)}>Ver DNI</DropdownMenuItem>
+                              <DropdownMenuItem disabled={!driver.licenseFileUrl} onClick={() => handleView(driver.licenseFileUrl)}>Ver Licencia</DropdownMenuItem>
+                              <DropdownMenuItem disabled={!driver.lintiFileUrl} onClick={() => handleView(driver.lintiFileUrl)}>Ver LINTI</DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem 
-                                className="text-red-600 focus:bg-red-50 focus:text-red-600" 
-                                onClick={() => handleDeleteDriver(driver.id, `${driver.firstName} ${driver.lastName}`)}
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" /> Eliminar Registro
-                              </DropdownMenuItem>
+                              <DropdownMenuItem className="text-red-600 focus:bg-red-50 focus:text-red-600" onSelect={() => handleDeleteDriver(driver.id, `${driver.firstName} ${driver.lastName}`)}>Eliminar Registro</DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>

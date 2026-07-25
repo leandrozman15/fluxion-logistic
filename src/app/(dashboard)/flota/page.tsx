@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { 
   Truck, Plus, Search, MoreHorizontal, Trash2, Edit2, 
-  Gauge, Loader2, FileText, Building2, User
+  Gauge, Loader2, FileText, User
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -42,9 +42,7 @@ export default function FlotaPage() {
 
   const { data: trucks, loading } = useCollection<TruckType>(trucksQuery);
 
-  const driversQuery = useMemo(() => 
-    db ? query(collection(db, "drivers")) : null
-  , [db]);
+  const driversQuery = useMemo(() => db ? query(collection(db, "drivers")) : null, [db]);
   const { data: drivers } = useCollection<Driver>(driversQuery);
 
   const filteredTrucks = useMemo(() => {
@@ -59,7 +57,10 @@ export default function FlotaPage() {
   }, [trucks, searchTerm, statusFilter]);
 
   const handleDelete = async (id: string, plate: string) => {
-    if (!db || !confirm(`¿Desea eliminar definitivamente la unidad ${plate}?`)) return;
+    if (!db || !id) return;
+    const ok = window.confirm(`¿Desea eliminar definitivamente la unidad ${plate}? Esta acción no se puede deshacer.`);
+    if (!ok) return;
+
     try {
       await deleteDoc(doc(db, "trucks", id));
       toast({ title: "Unidad eliminada", description: "El registro ha sido removido del sistema." });
@@ -90,8 +91,7 @@ export default function FlotaPage() {
           <h1 className="text-2xl font-bold text-slate-900">Flota de Camiones</h1>
           <p className="text-slate-500 text-sm">Gestión integral de unidades pesadas y cumplimiento normativo.</p>
         </div>
-        
-        <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => router.push('/flota/nuevo')}>
+        <Button className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100" onClick={() => router.push('/flota/nuevo')}>
           <Plus className="w-4 h-4 mr-2" /> Alta de Vehículo Pesado
         </Button>
       </div>
@@ -103,7 +103,7 @@ export default function FlotaPage() {
             <Input 
               type="search" 
               placeholder="Patente, marca o modelo..." 
-              className="pl-8 bg-white"
+              className="bg-white pl-8"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
@@ -131,9 +131,7 @@ export default function FlotaPage() {
               </TableHeader>
               <TableBody>
                 {filteredTrucks.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-20 text-slate-400 italic">No hay vehículos registrados.</TableCell>
-                  </TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center py-20 text-slate-400 italic">No hay vehículos registrados.</TableCell></TableRow>
                 ) : (
                   filteredTrucks.map((truck) => {
                     const docCount = truck.documentation?.length || 0;
@@ -141,18 +139,12 @@ export default function FlotaPage() {
                     const isCritical = truck.documentation?.some(d => d.status === 'expired');
 
                     return (
-                      <TableRow 
-                        key={truck.id} 
-                        className="cursor-pointer hover:bg-slate-50 transition-colors"
-                        onClick={() => router.push(`/flota/${truck.id}`)}
-                      >
+                      <TableRow key={truck.id} className="cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => router.push(`/flota/${truck.id}`)}>
                         <TableCell>
                           <div className="flex items-center gap-3">
                              <Avatar className="w-10 h-10 rounded-lg shadow-sm border border-white">
                                <AvatarImage src={truck.avatarUrl} className="object-cover" />
-                               <AvatarFallback className="bg-blue-50 text-blue-600 rounded-lg">
-                                 <Truck size={20} />
-                               </AvatarFallback>
+                               <AvatarFallback className="bg-blue-50 text-blue-600 rounded-lg"><Truck size={20} /></AvatarFallback>
                              </Avatar>
                              <div>
                                <div className="font-bold text-slate-900">{truck.plate || ''}</div>
@@ -162,56 +154,26 @@ export default function FlotaPage() {
                         </TableCell>
                         <TableCell>
                           <div className="space-y-1">
-                            <div className="flex items-center gap-1.5">
-                              {truck.ownershipType === 'company' ? (
-                                <Badge variant="outline" className="text-[8px] bg-blue-50 text-blue-700 border-blue-100 uppercase h-4">Propio</Badge>
-                              ) : (
-                                <Badge variant="outline" className="text-[8px] bg-orange-50 text-orange-700 border-orange-100 uppercase h-4">Tercero</Badge>
-                              )}
-                            </div>
-                            <div className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                              <User size={12} className="text-slate-400" />
-                              {getDriverName(truck.assignedDriverId)}
-                            </div>
+                            {truck.ownershipType === 'company' ? (
+                              <Badge variant="outline" className="h-4 bg-blue-50 text-[8px] text-blue-700 border-blue-100 uppercase">Propio</Badge>
+                            ) : (
+                              <Badge variant="outline" className="h-4 bg-orange-50 text-[8px] text-orange-700 border-orange-100 uppercase">Tercero</Badge>
+                            )}
+                            <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700"><User size={12} className="text-slate-400" />{getDriverName(truck.assignedDriverId)}</div>
                           </div>
                         </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Gauge size={14} className="text-slate-400" />
-                            <span className="font-mono font-bold text-slate-700">{(truck.odometerKm || 0).toLocaleString()} km</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Progress value={docCount > 0 ? (validDocs / docCount) * 100 : 0} className="h-1.5 w-16" />
-                            <span className={cn("text-[10px] font-bold", isCritical ? "text-red-600" : "text-slate-500")}>
-                              {validDocs}/{docCount}
-                            </span>
-                          </div>
-                        </TableCell>
+                        <TableCell><div className="flex items-center gap-2"><Gauge size={14} className="text-slate-400" /><span className="font-mono font-bold text-slate-700">{(truck.odometerKm || 0).toLocaleString()} km</span></div></TableCell>
+                        <TableCell><div className="flex items-center gap-2"><Progress value={docCount > 0 ? (validDocs / docCount) * 100 : 0} className="h-1.5 w-16" /><span className={cn("text-[10px] font-bold", isCritical ? "text-red-600" : "text-slate-500")}>{validDocs}/{docCount}</span></div></TableCell>
                         <TableCell>{getStatusBadge(truck.status)}</TableCell>
                         <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                           <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-100">
-                                <MoreHorizontal size={16} />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
+                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-100"><MoreHorizontal size={16} /></Button></DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-52">
                               <DropdownMenuLabel>Gestión de Unidad</DropdownMenuLabel>
-                              <DropdownMenuItem onClick={() => router.push(`/flota/${truck.id}`)}>
-                                <FileText className="w-4 h-4 mr-2" /> Ver Detalle / Docs
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => router.push(`/flota/${truck.id}/editar`)}>
-                                <Edit2 className="w-4 h-4 mr-2" /> Editar Ficha Técnica
-                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => router.push(`/flota/${truck.id}`)}><FileText className="w-4 h-4 mr-2" /> Ver Detalle / Docs</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => router.push(`/flota/${truck.id}/editar`)}><Edit2 className="w-4 h-4 mr-2" /> Editar Ficha Técnica</DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem 
-                                className="text-red-600 focus:bg-red-50 focus:text-red-600"
-                                onSelect={(e) => { e.preventDefault(); handleDelete(truck.id, truck.plate); }}
-                              >
-                                <Trash2 className="w-4 h-4 mr-2" /> Eliminar Unidad
-                              </DropdownMenuItem>
+                              <DropdownMenuItem className="text-red-600 focus:bg-red-50 focus:text-red-600" onSelect={() => handleDelete(truck.id, truck.plate)}><Trash2 className="w-4 h-4 mr-2" /> Eliminar Unidad</DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>

@@ -4,17 +4,17 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, orderBy, deleteDoc, doc, updateDoc, serverTimestamp } from "firebase/firestore";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { collection, query, orderBy, deleteDoc, doc } from "firebase/firestore";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
-  Package, Plus, Search, MapPin, Scale, DollarSign, 
-  Loader2, MoreVertical, Trash2, Truck, CheckCircle2, 
-  Clock, AlertTriangle, FileText, ExternalLink, Printer, Wallet, FilePlus, Upload, Trash, Repeat, Navigation, Edit
+  Package, Plus, Search, Scale, 
+  Loader2, MoreVertical, Trash2, CheckCircle2, 
+  Clock, AlertTriangle, FileText, Printer, Wallet, Navigation, Edit
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -24,10 +24,8 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Load, LoadStatus, LoadDocType, LoadDocument } from "@/app/lib/types";
+import { Load, LoadStatus } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
-import Link from "next/link";
-import { cn } from "@/lib/utils";
 
 export default function CargasPage() {
   const db = useFirestore();
@@ -67,12 +65,17 @@ export default function CargasPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!db || !id || !confirm("¿Eliminar esta operación definitivamente?")) return;
+    if (!db || !id) return;
+    
+    const ok = window.confirm("¿Está seguro de eliminar esta operación definitivamente? Esta acción no se puede deshacer.");
+    if (!ok) return;
+
     try {
       await deleteDoc(doc(db, "loads", id));
-      toast({ title: "Operación eliminada" });
+      toast({ title: "Operación eliminada con éxito" });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error" });
+      console.error("Delete error:", e);
+      toast({ variant: "destructive", title: "Error al intentar eliminar el flete" });
     }
   };
 
@@ -83,7 +86,7 @@ export default function CargasPage() {
           <h1 className="text-2xl font-bold text-slate-900">Cargas y Fletes</h1>
           <p className="text-slate-500 text-sm">Gestión de pedidos multi-destino y seguimiento.</p>
         </div>
-        <Button className="bg-blue-600" onClick={() => router.push('/cargas/nuevo')}>
+        <Button className="bg-blue-600 shadow-lg shadow-blue-100" onClick={() => router.push('/cargas/nuevo')}>
           <Plus className="w-4 h-4 mr-2" /> Nueva Operación / Flete
         </Button>
       </div>
@@ -92,10 +95,10 @@ export default function CargasPage() {
         <div className="p-4 bg-slate-50 border-b flex flex-col md:flex-row gap-4 items-center justify-between">
           <div className="relative w-full max-w-sm">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-            <input 
+            <Input 
               type="search" 
               placeholder="Buscar por N° Orden o destino..." 
-              className="flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm pl-8 outline-none focus:ring-2 focus:ring-blue-500"
+              className="bg-white pl-8"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
@@ -131,7 +134,7 @@ export default function CargasPage() {
                   filteredLoads.map((load) => {
                     const totalStops = (load.outboundStops?.length || 0) + (load.returnStops?.length || 0);
                     const totalWeight = (load.outboundStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0) + (load.returnStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0);
-                    const totalDocs = (load.outboundStops?.reduce((acc, s) => acc + (load.documents?.length || 0), 0) || 0) + (load.returnStops?.reduce((acc, s) => acc + (load.documents?.length || 0), 0) || 0);
+                    const totalDocs = (load.outboundStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0) + (load.returnStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0);
                     const firstDest = load.outboundStops?.[0]?.name || "Sin destinos";
 
                     return (
@@ -164,14 +167,27 @@ export default function CargasPage() {
                         <TableCell>{getStatusBadge(load.status)}</TableCell>
                         <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                           <DropdownMenu>
-                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical size={16} /></Button></DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical size={16} /></Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56">
                               <DropdownMenuLabel>Gestión de Flete</DropdownMenuLabel>
-                              <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/editar`)}><Edit className="w-4 h-4 mr-2" /> Editar Flete / Itinerario</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/orden`)}><Printer className="w-4 h-4 mr-2" /> Ver Orden (PDF)</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/billetera`)}><Wallet className="w-4 h-4 mr-2" /> Billetera de Viaje</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/editar`)}>
+                                <Edit className="w-4 h-4 mr-2" /> Editar Flete / Itinerario
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/orden`)}>
+                                <Printer className="w-4 h-4 mr-2" /> Ver Orden (PDF)
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/billetera`)}>
+                                <Wallet className="w-4 h-4 mr-2" /> Billetera de Viaje
+                              </DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem className="text-red-600" onSelect={(e) => { e.preventDefault(); handleDelete(load.id); }}><Trash2 className="w-4 h-4 mr-2" /> Eliminar Flete</DropdownMenuItem>
+                              <DropdownMenuItem 
+                                className="text-red-600 focus:bg-red-50 focus:text-red-600" 
+                                onSelect={() => handleDelete(load.id)}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" /> Eliminar Flete Definitivo
+                              </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
