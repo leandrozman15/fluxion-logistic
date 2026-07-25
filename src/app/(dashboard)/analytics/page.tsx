@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState } from "react";
@@ -6,6 +5,7 @@ import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, orderBy, limit } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { KPICard } from "@/components/dashboard/kpi-card";
+import { Badge } from "@/components/ui/badge";
 import { 
   TrendingUp, 
   Loader2,
