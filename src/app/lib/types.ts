@@ -351,4 +351,12 @@ export interface Load {
     lastPauseType?: string;
     pauseStartedAt?: any;
   };
+
+  proofOfDelivery?: {
+    receiverName: string;
+    photoUrl?: string;
+    signatureUrl?: string;
+    confirmedAt: any;
+    notes?: string;
+  };
 }

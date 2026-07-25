@@ -21,7 +21,7 @@ import {
   Wallet, Plus, DollarSign, Camera, Fuel, Utensils, Bed, Wrench, Receipt,
   Zap, Satellite, SignalHigh, Loader2, Compass, Gauge, History, 
   Coffee, Moon, Car, Battery, Flame, CloudRain, Construction, FileWarning, HelpCircle,
-  Siren, LifeBuoy, PlayCircle
+  Siren, LifeBuoy, PlayCircle, Edit3, UserCheck, UploadCloud
 } from "lucide-react";
 import { Load, Expense, ExpenseCategory, LoadStatus } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -69,6 +69,7 @@ export default function RouteDetailPage() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isExpenseOpen, setIsExpenseOpen] = useState(false);
   const [isIncidentOpen, setIsIncidentOpen] = useState(false);
+  const [isPODOpen, setIsPODOpen] = useState(false);
   const [selectedIncidentType, setSelectedIncidentType] = useState<string | null>(null);
   
   // GPS State
@@ -78,6 +79,7 @@ export default function RouteDetailPage() {
   // Throttling State
   const lastUpdateRef = useRef<number>(0);
   const lastPosRef = useRef<{lat: number, lng: number} | null>(null);
+  const podPhotoInputRef = useRef<HTMLInputElement>(null);
 
   const [expenseData, setExpenseData] = useState<Partial<Expense>>({
     category: 'fuel',
@@ -91,6 +93,13 @@ export default function RouteDetailPage() {
     severity: "medium",
     locationDesc: "",
     actionTaken: ""
+  });
+
+  const [podData, setPodData] = useState({
+    receiverName: "",
+    photoUrl: "",
+    signatureUrl: "",
+    notes: ""
   });
 
   useEffect(() => {
@@ -258,6 +267,29 @@ export default function RouteDetailPage() {
     }
   };
 
+  const handleConfirmDelivery = async () => {
+    if (!loadRef) return;
+    setIsUpdating(true);
+    try {
+      await updateDoc(loadRef, {
+        status: 'delivered',
+        proofOfDelivery: {
+          ...podData,
+          confirmedAt: serverTimestamp()
+        },
+        updatedAt: serverTimestamp()
+      });
+      setGpsActive(false);
+      toast({ title: "Entrega Confirmada", description: "Misión cumplida. Datos de POD guardados." });
+      setIsPODOpen(false);
+      router.push('/rutas');
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al confirmar entrega" });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handleAddExpense = async () => {
     if (!db || !id || !user) return;
     setIsUpdating(true);
@@ -300,6 +332,18 @@ export default function RouteDetailPage() {
       toast({ variant: "destructive", title: "Error al enviar" });
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const onPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setPodData({ ...podData, photoUrl: event.target?.result as string });
+        toast({ title: "Foto cargada" });
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -373,9 +417,66 @@ export default function RouteDetailPage() {
                           <p className="text-xl font-black">{load.tracking?.distanceTraveledKm?.toFixed(1) || 0} <span className="text-[10px] font-normal text-slate-400">km</span></p>
                        </div>
                     </div>
-                    <Button className="w-full bg-green-600 h-14 text-lg font-bold shadow-lg" onClick={() => handleUpdateStatus('delivered')} disabled={isUpdating}>
-                      CONFIRMAR ENTREGA
-                    </Button>
+                    
+                    <Dialog open={isPODOpen} onOpenChange={setIsPODOpen}>
+                      <DialogTrigger asChild>
+                        <Button className="w-full bg-green-600 h-14 text-lg font-bold shadow-lg">
+                          CONFIRMAR ENTREGA
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-[95vw] rounded-2xl">
+                        <DialogHeader>
+                          <DialogTitle>Prueba de Entrega (POD)</DialogTitle>
+                          <DialogDescription>Complete el protocolo para finalizar el flete.</DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div className="space-y-2">
+                            <Label>Nombre de quien recibe</Label>
+                            <Input 
+                              placeholder="Ej: Marcelo Gomez (Seguridad)" 
+                              value={podData.receiverName}
+                              onChange={e => setPodData({...podData, receiverName: e.target.value})}
+                            />
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-3">
+                            <Button 
+                              variant="outline" 
+                              className={cn("h-24 flex flex-col gap-2 border-dashed border-2", podData.photoUrl ? "border-green-500 bg-green-50" : "")}
+                              onClick={() => podPhotoInputRef.current?.click()}
+                            >
+                              <Camera className={cn("w-6 h-6", podData.photoUrl ? "text-green-600" : "text-slate-400")} />
+                              <span className="text-[10px] font-bold uppercase">{podData.photoUrl ? "Foto Lista" : "Foto Remito"}</span>
+                            </Button>
+                            <input type="file" accept="image/*" capture="environment" className="hidden" ref={podPhotoInputRef} onChange={onPhotoChange} />
+                            
+                            <Button variant="outline" className="h-24 flex flex-col gap-2 border-dashed border-2">
+                               <Edit3 className="w-6 h-6 text-slate-400" />
+                               <span className="text-[10px] font-bold uppercase">Firma Digital</span>
+                            </Button>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>Observaciones de Entrega</Label>
+                            <Textarea 
+                              placeholder="Novedades, faltantes o daños..." 
+                              value={podData.notes}
+                              onChange={e => setPodData({...podData, notes: e.target.value})}
+                            />
+                          </div>
+                        </div>
+                        <DialogFooter>
+                          <Button 
+                            className="w-full h-14 bg-green-600 text-lg font-bold shadow-xl" 
+                            disabled={!podData.receiverName || isUpdating}
+                            onClick={handleConfirmDelivery}
+                          >
+                            {isUpdating ? <Loader2 className="animate-spin mr-2" /> : <UserCheck className="mr-2" />}
+                            FINALIZAR MISIÓN
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
                   </>
                 )}
               </div>
