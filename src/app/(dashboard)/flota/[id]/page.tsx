@@ -239,6 +239,19 @@ export default function TruckDetailPage() {
               <p className="text-[10px] text-white/50 mt-1 uppercase font-bold tracking-widest">Total Acumulado 2025</p>
             </CardContent>
           </Card>
+
+          <Card className="bg-amber-50 border-amber-200 shadow-none">
+            <CardHeader className="pb-2">
+               <CardTitle className="text-xs uppercase font-bold text-amber-800 flex items-center gap-2">
+                 <AlertTriangle size={14} /> Nota Legislativa 2024
+               </CardTitle>
+            </CardHeader>
+            <CardContent>
+               <p className="text-[11px] text-amber-700 leading-tight">
+                 El <b>Decreto 1109/2024</b> eliminó el RUTA. El sistema ya no lo marca como obligatorio para transporte de carga propia.
+               </p>
+            </CardContent>
+          </Card>
         </div>
 
         <div className="lg:col-span-2">
@@ -422,7 +435,7 @@ export default function TruckDetailPage() {
                    </TableBody>
                 </Table>
               </Card>
-            </div>
+            </TabsContent>
           </Tabs>
         </div>
       </div>
