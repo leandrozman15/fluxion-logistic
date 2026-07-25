@@ -17,6 +17,7 @@ export type MaintenanceStatus = 'scheduled' | 'in_progress' | 'completed' | 'can
 
 export interface Maintenance {
   id: string;
+  orderNumber: string;
   truckId: string;
   type: MaintenanceType;
   status: MaintenanceStatus;
@@ -386,4 +387,3 @@ export interface Load {
     notes?: string;
   };
 }
-
