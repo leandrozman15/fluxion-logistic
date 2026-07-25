@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Truck, ArrowLeft, ArrowRight, Save, Loader2, 
   Gauge, Box, Thermometer, Droplets, Anchor, Layers, 
-  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, InfoIcon
+  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, InfoIcon, MapPin
 } from "lucide-react";
 import { Truck as TruckType } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -105,7 +105,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
         });
         toast({ title: "Unidad Actualizada", description: `Los cambios en ${formData.plate} han sido guardados.` });
       } else {
-        const newRef = doc(collection(db, "trucks"));
+        const newRef = doc(collection(db, "drivers"));
         await setDoc(newRef, {
           ...formData,
           id: newRef.id,
