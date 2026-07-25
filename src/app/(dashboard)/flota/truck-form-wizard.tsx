@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Truck, ArrowLeft, ArrowRight, Save, Loader2, 
   Gauge, Box, Thermometer, Droplets, Anchor, Layers, 
-  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, InfoIcon, MapPin, Camera, Image as ImageIcon
+  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon
 } from "lucide-react";
 import { Truck as TruckType } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -89,6 +89,8 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
           location: { ...prev.location!, lat: pos.coords.latitude, lng: pos.coords.longitude, country: "Argentina" }
         }));
         toast({ title: "GPS: Ubicación obtenida" });
+      }, () => {
+        toast({ variant: "destructive", title: "Error GPS", description: "No se pudo obtener la ubicación." });
       });
     }
   };
@@ -128,17 +130,24 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
       }
       router.push('/flota');
     } catch (e) {
+      console.error(e);
       toast({ variant: "destructive", title: "Error al guardar los datos" });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (loadingExisting) return <div className="h-[60vh] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
+  if (loadingExisting && truckId) {
+    return (
+      <div className="h-[60vh] flex items-center justify-center">
+        <Loader2 className="animate-spin text-blue-600 w-10 h-10" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-24">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => router.back()}><ArrowLeft /></Button>
           <div>
@@ -147,16 +156,16 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
           </div>
         </div>
         {formData.plate && (
-          <Badge variant="outline" className="h-8 px-4 font-mono text-blue-600 bg-blue-50 border-blue-100">
+          <Badge variant="outline" className="h-8 px-4 font-mono text-blue-600 bg-blue-50 border-blue-100 hidden sm:flex">
             {formData.plate}
           </Badge>
         )}
       </div>
 
-      <div className="bg-white p-4 rounded-xl border shadow-sm">
+      <div className="bg-white p-4 rounded-xl border shadow-sm mx-4">
         <div className="flex items-center justify-between">
           {[
-            { id: 1, label: "Identificación", icon: InfoIcon },
+            { id: 1, label: "Identificación", icon: Info },
             { id: 2, label: "Especificaciones", icon: Gauge },
             { id: 3, label: "Ubicación Base", icon: MapPin }
           ].map((s) => (
@@ -176,14 +185,14 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
         </div>
       </div>
 
-      <div className="animate-in fade-in duration-300">
+      <div className="animate-in fade-in duration-300 mx-4">
         {step === 1 && (
           <Card className="border-none shadow-sm">
             <CardHeader><CardTitle>Datos de Identificación</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="flex flex-col items-center justify-center space-y-4 p-6 bg-slate-50 rounded-2xl border-2 border-dashed">
                 <Avatar className="w-32 h-32 border-4 border-white shadow-xl">
-                  <AvatarImage src={formData.avatarUrl} />
+                  <AvatarImage src={formData.avatarUrl} className="object-cover" />
                   <AvatarFallback className="bg-blue-100 text-blue-600">
                     <Truck size={48} />
                   </AvatarFallback>
@@ -297,7 +306,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                   <div className="space-y-2">
                     <Label>Provincia Base</Label>
                     <Select value={formData.location?.province} onValueChange={v => setFormData({...formData, location: {...formData.location!, province: v, country: "Argentina"}})}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {PROVINCIAS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                       </SelectContent>
@@ -305,7 +314,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                   </div>
                   <div className="space-y-2">
                     <Label>Localidad</Label>
-                    <Input value={formData.location?.city || ''} onChange={e => setFormData({...formData, location: {...formData.location!, city: e.target.value}})} />
+                    <Input className="bg-white" value={formData.location?.city || ''} onChange={e => setFormData({...formData, location: {...formData.location!, city: e.target.value}})} />
                   </div>
                   <Button variant="outline" className="w-full text-xs" onClick={handleGetLocation}>
                     <Crosshair size={14} className="mr-2" /> Capturar GPS de la Base
@@ -313,7 +322,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                 </div>
                 <div className="space-y-4">
                    <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl space-y-2">
-                      <p className="text-xs font-bold text-blue-700 flex items-center gap-2"><InfoIcon size={14} /> Sincronización Automática</p>
+                      <p className="text-xs font-bold text-blue-700 flex items-center gap-2"><Info size={14} /> Sincronización Automática</p>
                       <p className="text-[10px] text-blue-600 leading-relaxed">
                         Al guardar, el sistema validará el estado de la VTV y Seguro. Asegúrese de que el odómetro sea el reflejado en el último ticket de combustible para un cálculo de eficiencia preciso.
                       </p>
@@ -337,7 +346,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
               </Button>
             ) : (
               <Button onClick={handleSubmit} className="bg-green-600 min-w-[150px]" disabled={isSubmitting}>
-                {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <ShieldCheck size={16} className="mr-2" />}
+                {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save size={16} className="mr-2" />}
                 {truckId ? 'Guardar Cambios' : 'Habilitar Unidad'}
               </Button>
             )}
