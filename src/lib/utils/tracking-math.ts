@@ -3,10 +3,14 @@
  * Utilitários matemáticos para telemetria e rastreamento.
  */
 
+export const STANDARD_HEAVY_CONSUMPTION = 32; // L/100km (Promedio camión pesado cargado)
+
 /**
  * Calcula a distância entre dois pontos (Haversine Formula) em km.
  */
 export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
+  
   const R = 6371; // Raio da Terra em km
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
@@ -16,6 +20,14 @@ export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
+}
+
+/**
+ * Calcula o consumo estimado de combustível (Litros) baseado na distância e consumo médio.
+ */
+export function estimateFuelLiters(distanceKm: number, avgConsumption = STANDARD_HEAVY_CONSUMPTION): number {
+  if (distanceKm <= 0) return 0;
+  return (distanceKm * avgConsumption) / 100;
 }
 
 /**
