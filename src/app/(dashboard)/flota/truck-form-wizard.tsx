@@ -246,7 +246,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>Patente / Matrícula</Label>
-                    <Input placeholder="AE-123-BC" value={formData.plate || ''} onChange={e => setFormData({...formData, plate: e.target.value.toUpperCase()})} />
+                    <Input placeholder="AE-123-BC" value={formData.plate ?? ''} onChange={e => setFormData({...formData, plate: e.target.value.toUpperCase()})} />
                   </div>
                   
                   <div className="space-y-2">
@@ -369,7 +369,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                     <Label>Patente Semirremolque</Label>
                     <Input 
                       placeholder="N° de Patente" 
-                      value={formData.semiTrailer?.plate || ''} 
+                      value={formData.semiTrailer?.plate ?? ''} 
                       onChange={e => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, plate: e.target.value.toUpperCase()}})} 
                     />
                   </div>
@@ -390,7 +390,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                       <Label>Año</Label>
                       <Input 
                         type="number" 
-                        value={formData.semiTrailer?.year || ''} 
+                        value={formData.semiTrailer?.year ?? 0} 
                         onChange={e => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, year: parseInt(e.target.value) || 0}})} 
                       />
                     </div>
@@ -415,7 +415,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                     <Label>Cantidad de Ejes</Label>
                     <Input 
                       type="number" 
-                      value={formData.semiTrailer?.axles || 3} 
+                      value={formData.semiTrailer?.axles ?? 3} 
                       onChange={e => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, axles: parseInt(e.target.value) || 0}})} 
                     />
                   </div>
@@ -442,7 +442,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                   </div>
                   <div className="space-y-2">
                     <Label>Localidad</Label>
-                    <Input className="bg-white" value={formData.location?.city || ''} onChange={e => setFormData({...formData, location: {...formData.location!, city: e.target.value}})} />
+                    <Input className="bg-white" value={formData.location?.city ?? ''} onChange={e => setFormData({...formData, location: {...formData.location!, city: e.target.value}})} />
                   </div>
                   <Button variant="outline" type="button" className="w-full text-xs" onClick={handleGetLocation}>
                     <Crosshair size={14} className="mr-2" /> Capturar GPS de la Base

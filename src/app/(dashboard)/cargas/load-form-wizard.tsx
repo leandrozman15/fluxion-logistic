@@ -574,8 +574,8 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
             <CardHeader><CardTitle>Aspecto Financiero</CardTitle></CardHeader>
             <CardContent className="space-y-8">
                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="space-y-2"><Label>Precio Base / Flete Total (ARS)</Label><Input type="number" value={formData.totalAmount ?? ''} onChange={e => setFormData({...formData, totalAmount: parseFloat(e.target.value) || 0})} /></div>
-                  <div className="space-y-2"><Label>Anticipo Viáticos Chofer</Label><Input type="number" value={formData.budget?.initialAdvance ?? ''} onChange={e => setFormData({...formData, budget: {...formData.budget!, initialAdvance: parseFloat(e.target.value) || 0}})} /></div>
+                  <div className="space-y-2"><Label>Precio Base / Flete Total (ARS)</Label><Input type="number" value={formData.totalAmount ?? 0} onChange={e => setFormData({...formData, totalAmount: parseFloat(e.target.value) || 0})} /></div>
+                  <div className="space-y-2"><Label>Anticipo Viáticos Chofer</Label><Input type="number" value={formData.budget?.initialAdvance ?? 0} onChange={e => setFormData({...formData, budget: {...formData.budget!, initialAdvance: parseFloat(e.target.value) || 0}})} /></div>
                </div>
             </CardContent>
           </Card>

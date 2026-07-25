@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from "react";
@@ -235,24 +236,24 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Número de DNI</Label>
-                  <Input placeholder="Sin puntos" value={formData.dni || ''} onChange={e => setFormData({...formData, dni: e.target.value.replace(/\D/g, '')})} />
+                  <Input placeholder="Sin puntos" value={formData.dni ?? ''} onChange={e => setFormData({...formData, dni: e.target.value.replace(/\D/g, '')})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Nombres</Label>
-                  <Input placeholder="Juan Carlos" value={formData.firstName || ''} onChange={e => setFormData({...formData, firstName: e.target.value})} />
+                  <Input placeholder="Juan Carlos" value={formData.firstName ?? ''} onChange={e => setFormData({...formData, firstName: e.target.value})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Apellidos</Label>
-                  <Input placeholder="Pérez González" value={formData.lastName || ''} onChange={e => setFormData({...formData, lastName: e.target.value})} />
+                  <Input placeholder="Pérez González" value={formData.lastName ?? ''} onChange={e => setFormData({...formData, lastName: e.target.value})} />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Fecha de Nacimiento</Label>
-                    <Input type="date" value={formData.birthDate || ''} onChange={e => setFormData({...formData, birthDate: e.target.value})} />
+                    <Input type="date" value={formData.birthDate ?? ''} onChange={e => setFormData({...formData, birthDate: e.target.value})} />
                   </div>
                   <div className="space-y-2">
                     <Label>Nacionalidad</Label>
-                    <Input value={formData.nationality || ''} onChange={e => setFormData({...formData, nationality: e.target.value})} />
+                    <Input value={formData.nationality ?? ''} onChange={e => setFormData({...formData, nationality: e.target.value})} />
                   </div>
                 </div>
               </div>
@@ -272,7 +273,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Licencia Nacional de Conducir</Label>
-                  <Input placeholder="Número de Licencia" value={formData.licenseNumber || ''} onChange={e => setFormData({...formData, licenseNumber: e.target.value})} />
+                  <Input placeholder="Número de Licencia" value={formData.licenseNumber ?? ''} onChange={e => setFormData({...formData, licenseNumber: e.target.value})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Clase (Mínimo C o E para Semis)</Label>
@@ -291,7 +292,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                 </div>
                 <div className="space-y-2">
                   <Label>Vencimiento de Licencia</Label>
-                  <Input type="date" value={formData.licenseExpiry || ''} onChange={e => setFormData({...formData, licenseExpiry: e.target.value})} />
+                  <Input type="date" value={formData.licenseExpiry ?? ''} onChange={e => setFormData({...formData, licenseExpiry: e.target.value})} />
                 </div>
               </div>
               <div className="space-y-4">
@@ -307,11 +308,11 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                      <div className="space-y-3 animate-in fade-in duration-200">
                        <div className="space-y-1">
                          <Label className="text-[10px] uppercase font-bold text-blue-400">N° LINTI</Label>
-                         <Input className="bg-white h-8" value={formData.lintiNumber || ''} onChange={e => setFormData({...formData, lintiNumber: e.target.value})} />
+                         <Input className="bg-white h-8" value={formData.lintiNumber ?? ''} onChange={e => setFormData({...formData, lintiNumber: e.target.value})} />
                        </div>
                        <div className="space-y-1">
                          <Label className="text-[10px] uppercase font-bold text-blue-400">Vencimiento LINTI</Label>
-                         <Input type="date" className="bg-white h-8" value={formData.lintiExpiry || ''} onChange={e => setFormData({...formData, lintiExpiry: e.target.value})} />
+                         <Input type="date" className="bg-white h-8" value={formData.lintiExpiry ?? ''} onChange={e => setFormData({...formData, lintiExpiry: e.target.value})} />
                        </div>
                      </div>
                    )}
@@ -328,11 +329,11 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Teléfono Celular</Label>
-                  <Input placeholder="Ej: 11 5555-1234" value={formData.phone || ''} onChange={e => setFormData({...formData, phone: e.target.value})} />
+                  <Input placeholder="Ej: 11 5555-1234" value={formData.phone ?? ''} onChange={e => setFormData({...formData, phone: e.target.value})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Correo Electrónico</Label>
-                  <Input type="email" placeholder="juan.perez@email.com" value={formData.email || ''} onChange={e => setFormData({...formData, email: e.target.value})} />
+                  <Input type="email" placeholder="juan.perez@email.com" value={formData.email ?? ''} onChange={e => setFormData({...formData, email: e.target.value})} />
                 </div>
               </div>
               <div className="space-y-4">
@@ -352,7 +353,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                     </div>
                     <div className="space-y-1">
                       <Label className="text-[10px] uppercase font-bold text-red-400">Obra Social</Label>
-                      <Input className="bg-white h-8" value={formData.healthInsurance || ''} onChange={e => setFormData({...formData, healthInsurance: e.target.value})} />
+                      <Input className="bg-white h-8" value={formData.healthInsurance ?? ''} onChange={e => setFormData({...formData, healthInsurance: e.target.value})} />
                     </div>
                   </div>
                 </div>
@@ -409,7 +410,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
               </div>
               <div className="space-y-2 pt-4 border-t">
                 <Label>Observaciones Laborales</Label>
-                <Textarea className="min-h-[100px]" value={formData.observations || ''} onChange={e => setFormData({...formData, observations: e.target.value})} />
+                <Textarea className="min-h-[100px]" value={formData.observations ?? ''} onChange={e => setFormData({...formData, observations: e.target.value})} />
               </div>
             </CardContent>
           </Card>
