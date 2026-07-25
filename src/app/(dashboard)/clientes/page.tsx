@@ -10,10 +10,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
   Users, Plus, Search, MoreVertical, Trash2, Edit2, 
   Building2, Phone, Mail, MapPin, Loader2, Globe, FileText,
-  ChevronRight, Star, Image as ImageIcon, Locate
+  ChevronRight, Star, Image as ImageIcon, Locate, Eye
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -32,6 +33,7 @@ export default function ClientesPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
 
   const clientsQuery = useMemo(() => {
     if (!db) return null;
@@ -56,15 +58,6 @@ export default function ClientesPage() {
       toast({ title: "Cliente eliminado" });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al eliminar" });
-    }
-  };
-
-  const getCategoryBadge = (category?: string) => {
-    switch (category) {
-      case 'premium': return <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-none">💎 Premium</Badge>;
-      case 'regular': return <Badge variant="secondary">⭐ Regular</Badge>;
-      case 'occasional': return <Badge variant="outline">📦 Ocasional</Badge>;
-      default: return null;
     }
   };
 
@@ -177,8 +170,8 @@ export default function ClientesPage() {
                              <DropdownMenuItem onClick={() => window.open(`https://www.google.com/maps?q=${client.address?.lat},${client.address?.lng}`, '_blank')}>
                                <Locate className="w-4 h-4 mr-2" /> Ver en Google Maps
                              </DropdownMenuItem>
-                             <DropdownMenuItem>
-                               <ImageIcon className="w-4 h-4 mr-2" /> Ver Fachada
+                             <DropdownMenuItem disabled={!client.facadePhotoUrl} onClick={() => setViewerUrl(client.facadePhotoUrl!)}>
+                               <Eye className="w-4 h-4 mr-2" /> Ver Fachada
                              </DropdownMenuItem>
                              <DropdownMenuSeparator />
                              <DropdownMenuItem className="text-red-600" onClick={() => handleDelete(client.id)}>
@@ -195,6 +188,15 @@ export default function ClientesPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!viewerUrl} onOpenChange={(o) => !o && setViewerUrl(null)}>
+        <DialogContent className="max-w-2xl h-[60vh] flex flex-col">
+          <DialogHeader><DialogTitle>Foto de Fachada / Destino</DialogTitle></DialogHeader>
+          <div className="flex-1 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden border mt-2">
+            <img src={viewerUrl || ""} className="max-w-full max-h-full object-contain" alt="Fachada" />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

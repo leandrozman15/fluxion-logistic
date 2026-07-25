@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Users, UserPlus, Search, Phone, Mail, MoreHorizontal, 
   Trash2, Edit2, Loader2, ShieldCheck, AlertTriangle, 
-  CheckCircle2, MessageCircle, MoreVertical, User, Download, FileText, Calendar, Clock, Truck as TruckIcon, Package
+  CheckCircle2, MessageCircle, MoreVertical, User, Download, FileText, Calendar, Clock, Truck as TruckIcon, Package, Eye
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -122,9 +122,17 @@ export default function ChoferesPage() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      toast({ title: "Descarga iniciada", description: filename });
+      toast({ title: "Archivo procesado", description: filename });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error de descarga", description: "El archivo podría estar corrupto o ser demasiado grande." });
+      toast({ variant: "destructive", title: "Error de apertura", description: "El archivo podría ser demasiado grande para el navegador." });
+    }
+  };
+
+  const handleView = (dataUrl: string | undefined) => {
+    if (!dataUrl) return;
+    const win = window.open();
+    if (win) {
+      win.document.write(`<iframe src="${dataUrl}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
     }
   };
 
@@ -306,23 +314,23 @@ export default function ChoferesPage() {
                               
                               <DropdownMenuItem 
                                 disabled={!driver.dniFileUrl} 
-                                onClick={() => handleDownload(driver.dniFileUrl, `DNI_${driver.lastName}.jpg`)}
+                                onClick={() => handleView(driver.dniFileUrl)}
                               >
-                                <Download className="w-4 h-4 mr-2" /> Descargar DNI
+                                <Eye className="w-4 h-4 mr-2" /> Ver DNI
                               </DropdownMenuItem>
                               
                               <DropdownMenuItem 
                                 disabled={!driver.licenseFileUrl} 
-                                onClick={() => handleDownload(driver.licenseFileUrl, `Licencia_${driver.lastName}.jpg`)}
+                                onClick={() => handleView(driver.licenseFileUrl)}
                               >
-                                <FileText className="w-4 h-4 mr-2" /> Descargar Licencia
+                                <Eye className="w-4 h-4 mr-2" /> Ver Licencia
                               </DropdownMenuItem>
                               
                               <DropdownMenuItem 
                                 disabled={!driver.lintiFileUrl} 
-                                onClick={() => handleDownload(driver.lintiFileUrl, `LINTI_${driver.lastName}.jpg`)}
+                                onClick={() => handleView(driver.lintiFileUrl)}
                               >
-                                <ShieldCheck className="w-4 h-4 mr-2" /> Descargar LINTI
+                                <Eye className="w-4 h-4 mr-2" /> Ver LINTI
                               </DropdownMenuItem>
 
                               <DropdownMenuSeparator />
@@ -347,4 +355,3 @@ export default function ChoferesPage() {
     </div>
   );
 }
-

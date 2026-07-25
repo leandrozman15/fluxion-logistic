@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection } from "@/firebase";
 import { doc, updateDoc, serverTimestamp, collection, query, where, getDoc } from "firebase/firestore";
@@ -10,11 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
   Truck as TruckIcon, FileText, Calendar, AlertTriangle, 
   CheckCircle2, Clock, Upload, ArrowLeft, ShieldCheck, 
   MapPin, Gauge, Box, Info, Download, Trash2, MoreVertical, LayoutGrid, Fuel, DollarSign, Activity, TrendingUp, User, Building2, Briefcase, Edit2,
-  Loader2
+  Loader2, Eye
 } from "lucide-react";
 import { Truck, VehicleDocument, DocStatus, Expense, Driver } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -41,6 +43,9 @@ export default function TruckDetailPage() {
   
   const [assignedDriver, setAssignedDriver] = useState<Driver | null>(null);
   const [loadingDriver, setLoadingDriver] = useState(false);
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+  const [activeUploadId, setActiveUploadId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const truckRef = useMemo(() => {
     if (!db || !id) return null;
@@ -112,13 +117,44 @@ export default function TruckDetailPage() {
         documentation: updatedDocs,
         updatedAt: serverTimestamp()
       });
-      toast({ title: "Documento actualizado" });
+      toast({ title: "Vencimiento actualizado" });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al actualizar" });
     }
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center"><Clock className="animate-spin text-blue-600" /></div>;
+  const handleUploadClick = (docId: string) => {
+    setActiveUploadId(docId);
+    fileInputRef.current?.click();
+  };
+
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeUploadId || !truck || !truckRef) return;
+
+    if (file.size > 850000) {
+      toast({ variant: "destructive", title: "Archivo muy pesado", description: "Límite: 800KB" });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64 = event.target?.result as string;
+      const updatedDocs = truck.documentation.map(d => 
+        d.id === activeUploadId ? { ...d, fileUrl: base64 } : d
+      );
+      
+      try {
+        await updateDoc(truckRef, { documentation: updatedDocs });
+        toast({ title: "Documento adjuntado" });
+      } catch (err) {
+        toast({ variant: "destructive", title: "Error al subir" });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!truck) return <div className="p-10 text-center">Vehículo no encontrado.</div>;
 
   const docProgress = truck.documentation ? 
@@ -304,7 +340,16 @@ export default function TruckDetailPage() {
                          value={doc.expiryDate || ""}
                          onChange={(e) => handleUpdateDocDate(doc.id, e.target.value)}
                        />
-                       <Button variant="outline" size="icon" className="h-8 w-8 text-blue-600"><Upload size={14}/></Button>
+                       <div className="flex gap-1">
+                        {doc.fileUrl && (
+                          <Button variant="outline" size="icon" className="h-8 w-8 text-green-600" onClick={() => setViewerUrl(doc.fileUrl!)}>
+                            <Eye size={14} />
+                          </Button>
+                        )}
+                        <Button variant="outline" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleUploadClick(doc.id)}>
+                          <Upload size={14}/>
+                        </Button>
+                       </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -352,7 +397,16 @@ export default function TruckDetailPage() {
                          value={doc.expiryDate || ""}
                          onChange={(e) => handleUpdateDocDate(doc.id, e.target.value)}
                        />
-                       <Button variant="outline" size="icon" className="h-8 w-8 text-blue-600"><Upload size={14}/></Button>
+                       <div className="flex gap-1">
+                        {doc.fileUrl && (
+                          <Button variant="outline" size="icon" className="h-8 w-8 text-green-600" onClick={() => setViewerUrl(doc.fileUrl!)}>
+                            <Eye size={14} />
+                          </Button>
+                        )}
+                        <Button variant="outline" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleUploadClick(doc.id)}>
+                          <Upload size={14}/>
+                        </Button>
+                       </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -439,6 +493,29 @@ export default function TruckDetailPage() {
           </Tabs>
         </div>
       </div>
+
+      {/* Hidden file input for uploads */}
+      <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={onFileChange} />
+
+      {/* Document Viewer Modal */}
+      <Dialog open={!!viewerUrl} onOpenChange={(o) => !o && setViewerUrl(null)}>
+        <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Visualizador de Documentos</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center border mt-4">
+            {viewerUrl?.startsWith('data:application/pdf') ? (
+              <iframe src={viewerUrl} className="w-full h-full" />
+            ) : (
+              <img src={viewerUrl || ""} className="max-w-full max-h-full object-contain" alt="Documento" />
+            )}
+          </div>
+          <div className="mt-4 flex justify-end">
+             <Button onClick={() => window.open(viewerUrl || "", "_blank")}>Abrir en pantalla completa</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
