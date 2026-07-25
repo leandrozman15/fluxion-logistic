@@ -11,33 +11,36 @@ import { KPICard } from "@/components/dashboard/kpi-card";
 import { 
   Truck as TruckIcon, 
   Package, 
-  TrendingUp, 
-  AlertTriangle, 
-  CheckCircle2,
-  Calendar,
-  MapPin,
-  DollarSign,
-  Plus,
-  Activity,
-  Building2,
-  Loader2,
-  Zap,
-  Globe,
-  Clock,
-  ArrowRight,
-  Navigation,
-  Compass,
-  User,
-  Scale,
-  Timer,
-  Route as RouteIcon
+  CheckCircle2, 
+  Calendar, 
+  MapPin, 
+  DollarSign, 
+  Plus, 
+  Activity, 
+  Building2, 
+  Loader2, 
+  Globe, 
+  Clock, 
+  ArrowRight, 
+  Navigation, 
+  User, 
+  Scale, 
+  Timer, 
+  Route as RouteIcon,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  ShieldCheck,
+  Repeat,
+  AlertTriangle
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Truck, Driver, Load, Hub, Client } from "@/app/lib/types";
-import { isToday, startOfMonth, format, parseISO } from "date-fns";
+import { isToday, startOfMonth, format } from "date-fns";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
@@ -53,6 +56,7 @@ export default function MonitorOperativoPage() {
   
   const [mounted, setMounted] = useState(false);
   const [L, setL] = useState<any>(null);
+  const [expandedLoadId, setExpandedLoadId] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -186,85 +190,200 @@ export default function MonitorOperativoPage() {
         <KPICard title="Incidencias" value={stats.incidents} icon={AlertTriangle} description="Atención req." />
       </div>
 
-      {/* Agenda Operativa del Día - Consolidada */}
-      <Card className="border-none shadow-sm border-l-4 border-l-blue-600">
-        <CardHeader className="pb-3 border-b flex flex-row items-center justify-between">
+      {/* Agenda Operativa del Día - Expandible */}
+      <Card className="border-none shadow-md overflow-hidden">
+        <CardHeader className="pb-3 border-b bg-slate-50 dark:bg-slate-900/50 flex flex-row items-center justify-between">
            <div>
              <CardTitle className="text-lg flex items-center gap-2">
                <Activity className="w-5 h-5 text-blue-600" /> Agenda Operativa del Día
              </CardTitle>
-             <CardDescription className="text-xs font-bold uppercase">Consolidado detallado de viajes activos y programados hoy</CardDescription>
+             <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Control de trayectos, paradas y documentación</CardDescription>
            </div>
-           <Badge variant="outline" className="h-6 font-bold">{dailyOperations.length} Operaciones hoy</Badge>
+           <Badge variant="outline" className="h-6 font-mono font-bold border-blue-200 text-blue-600">{dailyOperations.length} OPERACIONES</Badge>
         </CardHeader>
-        <CardContent className="pt-4 px-0">
-           <div className="flex flex-col">
+        <CardContent className="p-0">
+           <div className="divide-y divide-slate-100 dark:divide-slate-800">
              {dailyOperations.map(load => {
                const driver = drivers?.find(d => d.id === load.assignedDriverId);
                const truck = trucks?.find(t => t.id === load.assignedTruckId);
                const totalWeight = (load.outboundStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0) + (load.returnStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0);
                const lastStop = load.outboundStops?.[load.outboundStops.length - 1];
+               const isExpanded = expandedLoadId === load.id;
 
                return (
-                 <div key={load.id} className="px-6 py-5 flex flex-col lg:flex-row items-start lg:items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b last:border-0 border-slate-100 dark:border-slate-800 cursor-pointer group gap-6" onClick={() => window.location.href = load.status === 'on_route' ? `/tracking/${load.id}` : `/cargas/${load.id}/orden`}>
-                    <div className="flex items-center gap-5 flex-1 min-w-0">
-                       <div className={cn(
-                         "w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border transition-colors shadow-sm",
-                         load.status === 'on_route' ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 border-blue-200" : "bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200"
-                       )}>
-                         {load.status === 'on_route' ? <Navigation size={24} className="animate-pulse" /> : <Clock size={24} />}
-                       </div>
-                       
-                       <div className="space-y-1.5 min-w-0 flex-1">
-                          <div className="flex items-center gap-3">
-                            <p className="text-base font-black text-slate-900 dark:text-slate-100 tracking-tight">{load.orderNumber}</p>
-                            {load.status === 'on_route' && <Badge className="text-[9px] bg-blue-600 text-white border-none animate-pulse px-2 h-4">LIVE tracking</Badge>}
-                          </div>
-                          
-                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-                             <span className="font-bold text-slate-500 uppercase flex items-center gap-1.5"><Building2 size={12} className="text-slate-400" /> {load.clientName}</span>
-                             <span className="font-bold text-blue-600 flex items-center gap-1.5"><MapPin size={12} /> {load.pickupTime}hs → {lastStop?.city || 'Destino'}</span>
-                          </div>
-                       </div>
-                    </div>
+                 <Collapsible 
+                   key={load.id} 
+                   open={isExpanded} 
+                   onOpenChange={() => setExpandedLoadId(isExpanded ? null : load.id)}
+                   className="group transition-all"
+                 >
+                   {/* Main Summary Row */}
+                   <div className={cn(
+                     "px-6 py-4 flex flex-col lg:flex-row items-start lg:items-center justify-between transition-colors cursor-pointer group hover:bg-slate-50 dark:hover:bg-slate-800/30",
+                     isExpanded && "bg-blue-50/50 dark:bg-blue-900/10 border-l-4 border-l-blue-600"
+                   )}>
+                      <div className="flex items-center gap-5 flex-1 min-w-0" onClick={() => setExpandedLoadId(isExpanded ? null : load.id)}>
+                         <div className={cn(
+                           "w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border transition-all shadow-sm",
+                           load.status === 'on_route' ? "bg-blue-600 text-white border-blue-400" : "bg-white dark:bg-slate-800 text-slate-400 border-slate-200"
+                         )}>
+                           {load.status === 'on_route' ? <Navigation size={24} className="animate-pulse" /> : <Clock size={24} />}
+                         </div>
+                         
+                         <div className="space-y-1 min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="text-base font-black text-slate-900 dark:text-slate-100 tracking-tighter">{load.orderNumber}</p>
+                              {load.status === 'on_route' ? (
+                                <Badge className="text-[8px] bg-blue-600 text-white border-none animate-pulse px-2 h-4 uppercase font-bold">LIVE tracking</Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-[8px] uppercase font-bold text-slate-400 h-4">{load.status.replace('_', ' ')}</Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500 uppercase">
+                               <Building2 size={12} className="text-blue-500" /> {load.clientName}
+                            </div>
+                         </div>
+                      </div>
 
-                    {/* Información Detallada del Viaje */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-4 flex-[2] w-full lg:w-auto border-t lg:border-t-0 pt-4 lg:pt-0">
-                       <div className="space-y-1">
-                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Conductor</p>
-                          <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 truncate">
-                             <User size={12} className="text-blue-500" /> {driver ? `${driver.lastName}, ${driver.firstName[0]}.` : 'No asignado'}
-                          </p>
-                       </div>
-                       <div className="space-y-1">
-                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Camión</p>
-                          <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                             <TruckIcon size={12} className="text-blue-500" /> {truck?.plate || 'Sin unidad'}
-                          </p>
-                       </div>
-                       <div className="space-y-1">
-                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Carga Total</p>
-                          <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                             <Scale size={12} className="text-slate-400" /> {totalWeight.toLocaleString()} <span className="text-[9px] font-normal opacity-50 uppercase">Kg</span>
-                          </p>
-                       </div>
-                       <div className="space-y-1">
-                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Itinerario</p>
-                          <div className="flex items-center gap-3">
-                             <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                                <RouteIcon size={12} className="text-slate-400" /> ~700 <span className="text-[9px] opacity-50">km</span>
-                             </p>
-                             <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                                <Timer size={12} className="text-slate-400" /> {load.estimatedArrivalTime}hs <span className="text-[9px] opacity-50">ETA</span>
-                             </p>
-                          </div>
-                       </div>
-                    </div>
+                      {/* Technical Info Grid */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-3 flex-[2] w-full lg:w-auto mt-4 lg:mt-0 border-t lg:border-t-0 pt-4 lg:pt-0">
+                         <div className="space-y-1">
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Conductor</p>
+                            <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 truncate">
+                               <User size={10} className="text-blue-500" /> {driver ? `${driver.lastName}, ${driver.firstName[0]}.` : 'No asignado'}
+                            </p>
+                         </div>
+                         <div className="space-y-1">
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Patente Unidad</p>
+                            <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                               <TruckIcon size={10} className="text-blue-500" /> {truck?.plate || 'S/D'}
+                            </p>
+                         </div>
+                         <div className="space-y-1">
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Carga Útil</p>
+                            <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                               <Scale size={10} className="text-slate-400" /> {totalWeight.toLocaleString()} <span className="text-[8px] font-normal opacity-50 uppercase">Kg</span>
+                            </p>
+                         </div>
+                         <div className="space-y-1">
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Logística</p>
+                            <div className="flex items-center gap-3">
+                               <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                                  <RouteIcon size={10} className="text-slate-400" /> ~700 <span className="text-[8px] opacity-50">km</span>
+                               </p>
+                               <p className="text-xs font-bold text-blue-600 flex items-center gap-1">
+                                  <Timer size={10} /> {load.estimatedArrivalTime}hs
+                               </p>
+                            </div>
+                         </div>
+                      </div>
 
-                    <div className="hidden lg:block">
-                       <ArrowRight size={20} className="text-slate-200 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
-                    </div>
-                 </div>
+                      <div className="flex items-center gap-2 mt-4 lg:mt-0 w-full lg:w-auto">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="flex-1 lg:flex-none text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/20"
+                          asChild
+                        >
+                          <Link href={load.status === 'on_route' ? `/tracking/${load.id}` : `/cargas/${load.id}/orden`}>
+                            {load.status === 'on_route' ? 'MONITOR' : 'HOJA RUTA'} <ArrowRight size={12} className="ml-1" />
+                          </Link>
+                        </Button>
+                        <CollapsibleTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                             {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                          </Button>
+                        </CollapsibleTrigger>
+                      </div>
+                   </div>
+
+                   {/* Expandable Content: Stops and Docs */}
+                   <CollapsibleContent className="bg-slate-50 dark:bg-slate-900/80 border-t border-slate-200 dark:border-slate-800 p-6 animate-in slide-in-from-top-2">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                         {/* Tramo Ida */}
+                         <div className="space-y-4">
+                            <h4 className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-2 tracking-widest">
+                               <Navigation size={14} /> Tramo 1: Hoja de Ruta (Ida)
+                            </h4>
+                            <div className="space-y-3 relative pl-4 border-l-2 border-dashed border-blue-200 dark:border-blue-800">
+                               {/* Origen */}
+                               <div className="relative">
+                                  <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-blue-600 border-2 border-white dark:border-slate-900 shadow-sm"></div>
+                                  <div className="space-y-0.5">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase">Carga Inicial</p>
+                                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{load.origin.name}</p>
+                                  </div>
+                               </div>
+                               {/* Paradas */}
+                               {load.outboundStops?.map((stop, idx) => (
+                                 <div key={stop.id} className="relative pt-2">
+                                    <div className="absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full bg-white dark:bg-slate-800 border-2 border-blue-400 shadow-sm"></div>
+                                    <div className="bg-white dark:bg-slate-800/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm space-y-2">
+                                       <div className="flex justify-between items-start">
+                                          <div>
+                                             <p className="text-[10px] font-black text-blue-600 uppercase">Destino {idx + 1}</p>
+                                             <p className="text-xs font-bold">{stop.name}</p>
+                                          </div>
+                                          <Badge className="bg-blue-50 text-blue-600 text-[8px] border-blue-100">{stop.weightKg} Kg</Badge>
+                                       </div>
+                                       {/* Docs stop */}
+                                       <div className="flex flex-wrap gap-1.5 pt-1">
+                                          {stop.documents?.map(doc => (
+                                            <div key={doc.id} className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 rounded border border-slate-200 dark:border-slate-600 text-[9px] font-bold">
+                                               <FileText size={10} className="text-slate-500" /> 
+                                               {doc.number} {doc.sealNumber && <span className="text-blue-600 ml-1">P:{doc.sealNumber}</span>}
+                                            </div>
+                                          ))}
+                                       </div>
+                                    </div>
+                                 </div>
+                               ))}
+                            </div>
+                         </div>
+
+                         {/* Tramo Retorno */}
+                         <div className="space-y-4">
+                            <h4 className="text-[10px] font-black uppercase text-orange-600 flex items-center gap-2 tracking-widest">
+                               <Repeat size={14} /> Tramo 2: Logística de Retorno
+                            </h4>
+                            {load.isRoundTrip ? (
+                               <div className="space-y-3 relative pl-4 border-l-2 border-dashed border-orange-200 dark:border-orange-800">
+                                  {load.returnStops?.map((stop) => (
+                                    <div key={stop.id} className="relative pt-2">
+                                       <div className="absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full bg-orange-500 border-2 border-white dark:border-slate-900 shadow-sm"></div>
+                                       <div className="bg-orange-50/50 dark:bg-orange-950/10 p-3 rounded-lg border border-orange-100 dark:border-orange-900/30 shadow-sm space-y-2">
+                                          <div className="flex justify-between items-start">
+                                             <p className="text-xs font-bold text-orange-700 dark:text-orange-400">Recolección: {stop.name}</p>
+                                             <Badge className="bg-orange-100 text-orange-700 text-[8px] border-orange-200">{stop.weightKg} Kg</Badge>
+                                          </div>
+                                          <div className="flex flex-wrap gap-1.5">
+                                            {stop.documents?.map(doc => (
+                                              <Badge key={doc.id} variant="outline" className="text-[9px] border-orange-200 text-orange-600">R:{doc.number}</Badge>
+                                            ))}
+                                          </div>
+                                       </div>
+                                    </div>
+                                  ))}
+                                  {load.returnDestination?.name && (
+                                    <div className="relative pt-2">
+                                       <div className="absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full bg-slate-900 border-2 border-white shadow-sm"></div>
+                                       <div className="bg-slate-900 text-white p-3 rounded-lg space-y-1">
+                                          <p className="text-[8px] font-black text-white/50 uppercase">Descarga Final Retorno</p>
+                                          <p className="text-xs font-bold uppercase">{load.returnDestination.name}</p>
+                                       </div>
+                                    </div>
+                                  )}
+                               </div>
+                            ) : (
+                               <div className="h-24 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl bg-white/30 dark:bg-slate-900/30 text-slate-300">
+                                  <Repeat size={24} className="opacity-20 mb-2" />
+                                  <p className="text-[10px] font-bold uppercase italic">Flete de solo ida</p>
+                               </div>
+                            )}
+                         </div>
+                      </div>
+                   </CollapsibleContent>
+                 </Collapsible>
                );
              })}
              {dailyOperations.length === 0 && (
@@ -339,3 +458,4 @@ export default function MonitorOperativoPage() {
     </div>
   );
 }
+
