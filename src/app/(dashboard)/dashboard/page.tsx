@@ -26,7 +26,11 @@ import {
   Clock,
   ArrowRight,
   Navigation,
-  Compass
+  Compass,
+  User,
+  Scale,
+  Timer,
+  Route as RouteIcon
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,9 +43,9 @@ const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
   { ssr: false, loading: () => <div className="h-full w-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center"><Loader2 className="animate-spin" /></div> }
 );
-const TileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false });
-const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), { ssr: false });
-const Popup = dynamic(() => import("react-leaflet").then((mod) => mod.Popup), { ssr: false });
+const TileLayer = dynamic(() => import("react-leaflet").then((mod) => import("react-leaflet").then(m => m.TileLayer)), { ssr: false });
+const Marker = dynamic(() => import("react-leaflet").then((mod) => import("react-leaflet").then(m => m.Marker)), { ssr: false });
+const Popup = dynamic(() => import("react-leaflet").then((mod) => import("react-leaflet").then(m => m.Popup)), { ssr: false });
 
 export default function MonitorOperativoPage() {
   const db = useFirestore();
@@ -77,10 +81,16 @@ export default function MonitorOperativoPage() {
     return collection(db, "clients");
   }, [db]);
 
+  const driversQuery = useMemo(() => {
+    if (!db) return null;
+    return collection(db, "drivers");
+  }, [db]);
+
   const { data: trucks } = useCollection<Truck>(trucksQuery);
   const { data: loads } = useCollection<Load>(loadsQuery);
   const { data: hubs } = useCollection<Hub>(hubsQuery);
   const { data: clients } = useCollection<Client>(clientsQuery);
+  const { data: drivers } = useCollection<Driver>(driversQuery);
 
   const todayStr = format(new Date(), "yyyy-MM-dd");
 
@@ -116,12 +126,10 @@ export default function MonitorOperativoPage() {
 
   const dailyOperations = useMemo(() => {
     if (!loads) return [];
-    // Filtramos viajes en ruta (sin importar fecha) + viajes programados para hoy (que no esten terminados)
     return loads.filter(l => 
       l.status === 'on_route' || 
       (l.pickupDate === todayStr && l.status !== 'delivered' && l.status !== 'cancelled')
     ).sort((a, b) => {
-      // Priorizar en ruta, luego por hora de salida
       if (a.status === 'on_route' && b.status !== 'on_route') return -1;
       if (a.status !== 'on_route' && b.status === 'on_route') return 1;
       return (a.pickupTime || '').localeCompare(b.pickupTime || '');
@@ -178,53 +186,103 @@ export default function MonitorOperativoPage() {
         <KPICard title="Incidencias" value={stats.incidents} icon={AlertTriangle} description="Atención req." />
       </div>
 
-      {/* Agenda Operativa del Día - Ahora Arriba */}
+      {/* Agenda Operativa del Día - Consolidada */}
       <Card className="border-none shadow-sm border-l-4 border-l-blue-600">
         <CardHeader className="pb-3 border-b flex flex-row items-center justify-between">
            <div>
              <CardTitle className="text-lg flex items-center gap-2">
                <Activity className="w-5 h-5 text-blue-600" /> Agenda Operativa del Día
              </CardTitle>
-             <CardDescription className="text-xs font-bold uppercase">Consolidado de viajes en curso y programados hoy</CardDescription>
+             <CardDescription className="text-xs font-bold uppercase">Consolidado detallado de viajes activos y programados hoy</CardDescription>
            </div>
-           <Badge variant="outline" className="h-6">{dailyOperations.length} Operaciones</Badge>
+           <Badge variant="outline" className="h-6 font-bold">{dailyOperations.length} Operaciones hoy</Badge>
         </CardHeader>
         <CardContent className="pt-4 px-0">
-           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1">
-             {dailyOperations.map(load => (
-               <div key={load.id} className="px-4 py-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b md:border-r last:border-0 border-slate-100 dark:border-slate-800 cursor-pointer group" onClick={() => window.location.href = load.status === 'on_route' ? `/tracking/${load.id}` : `/cargas/${load.id}/orden`}>
-                  <div className="flex items-center gap-4">
-                     <div className={cn(
-                       "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border transition-colors",
-                       load.status === 'on_route' ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 border-blue-200" : "bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200"
-                     )}>
-                       {load.status === 'on_route' ? <Navigation size={20} className="animate-pulse" /> : <Clock size={20} />}
-                     </div>
-                     <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{load.orderNumber}</p>
-                          {load.status === 'on_route' && <Badge className="text-[8px] bg-blue-600 text-white border-none animate-pulse h-4">LIVE</Badge>}
-                        </div>
-                        <p className="text-[10px] text-slate-500 uppercase font-bold truncate">{load.clientName}</p>
-                        <p className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
-                          <MapPin size={10} /> {load.pickupTime} hs → {load.outboundStops?.[load.outboundStops.length-1]?.city || 'Destino'}
-                        </p>
-                     </div>
-                  </div>
-                  <ArrowRight size={16} className="text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
-               </div>
-             ))}
+           <div className="flex flex-col">
+             {dailyOperations.map(load => {
+               const driver = drivers?.find(d => d.id === load.assignedDriverId);
+               const truck = trucks?.find(t => t.id === load.assignedTruckId);
+               const totalWeight = (load.outboundStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0) + (load.returnStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0);
+               const lastStop = load.outboundStops?.[load.outboundStops.length - 1];
+
+               return (
+                 <div key={load.id} className="px-6 py-5 flex flex-col lg:flex-row items-start lg:items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b last:border-0 border-slate-100 dark:border-slate-800 cursor-pointer group gap-6" onClick={() => window.location.href = load.status === 'on_route' ? `/tracking/${load.id}` : `/cargas/${load.id}/orden`}>
+                    <div className="flex items-center gap-5 flex-1 min-w-0">
+                       <div className={cn(
+                         "w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border transition-colors shadow-sm",
+                         load.status === 'on_route' ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 border-blue-200" : "bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200"
+                       )}>
+                         {load.status === 'on_route' ? <Navigation size={24} className="animate-pulse" /> : <Clock size={24} />}
+                       </div>
+                       
+                       <div className="space-y-1.5 min-w-0 flex-1">
+                          <div className="flex items-center gap-3">
+                            <p className="text-base font-black text-slate-900 dark:text-slate-100 tracking-tight">{load.orderNumber}</p>
+                            {load.status === 'on_route' && <Badge className="text-[9px] bg-blue-600 text-white border-none animate-pulse px-2 h-4">LIVE tracking</Badge>}
+                          </div>
+                          
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                             <span className="font-bold text-slate-500 uppercase flex items-center gap-1.5"><Building2 size={12} className="text-slate-400" /> {load.clientName}</span>
+                             <span className="font-bold text-blue-600 flex items-center gap-1.5"><MapPin size={12} /> {load.pickupTime}hs → {lastStop?.city || 'Destino'}</span>
+                          </div>
+                       </div>
+                    </div>
+
+                    {/* Información Detallada del Viaje */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-4 flex-[2] w-full lg:w-auto border-t lg:border-t-0 pt-4 lg:pt-0">
+                       <div className="space-y-1">
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Conductor</p>
+                          <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 truncate">
+                             <User size={12} className="text-blue-500" /> {driver ? `${driver.lastName}, ${driver.firstName[0]}.` : 'No asignado'}
+                          </p>
+                       </div>
+                       <div className="space-y-1">
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Camión</p>
+                          <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                             <TruckIcon size={12} className="text-blue-500" /> {truck?.plate || 'Sin unidad'}
+                          </p>
+                       </div>
+                       <div className="space-y-1">
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Carga Total</p>
+                          <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                             <Scale size={12} className="text-slate-400" /> {totalWeight.toLocaleString()} <span className="text-[9px] font-normal opacity-50 uppercase">Kg</span>
+                          </p>
+                       </div>
+                       <div className="space-y-1">
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Itinerario</p>
+                          <div className="flex items-center gap-3">
+                             <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                                <RouteIcon size={12} className="text-slate-400" /> ~700 <span className="text-[9px] opacity-50">km</span>
+                             </p>
+                             <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                                <Timer size={12} className="text-slate-400" /> {load.estimatedArrivalTime}hs <span className="text-[9px] opacity-50">ETA</span>
+                             </p>
+                          </div>
+                       </div>
+                    </div>
+
+                    <div className="hidden lg:block">
+                       <ArrowRight size={20} className="text-slate-200 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+                    </div>
+                 </div>
+               );
+             })}
              {dailyOperations.length === 0 && (
-                <div className="col-span-full py-20 text-center flex flex-col items-center gap-2">
-                  <Package className="w-12 h-12 text-slate-200" />
-                  <p className="text-sm text-slate-400 italic">No hay operaciones registradas para hoy.</p>
+                <div className="py-24 text-center flex flex-col items-center gap-4">
+                  <div className="w-16 h-16 bg-slate-50 dark:bg-slate-900 rounded-full flex items-center justify-center text-slate-200 dark:text-slate-800">
+                    <Package size={32} />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-bold text-slate-400 uppercase tracking-widest italic">Parrilla Operativa Vacía</p>
+                    <p className="text-xs text-slate-300">No hay fletes programados para el inicio o en tránsito hoy.</p>
+                  </div>
                 </div>
              )}
            </div>
         </CardContent>
       </Card>
 
-      {/* Mapa de Flota - Debajo de la Agenda */}
+      {/* Mapa de Flota */}
       <Card className="border-none shadow-sm overflow-hidden h-[500px] relative">
         {mounted && (
           <MapContainer 
