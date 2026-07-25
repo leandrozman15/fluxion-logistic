@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useDoc } from "@/firebase";
 import { collection, serverTimestamp, doc, updateDoc, setDoc } from "firebase/firestore";
@@ -16,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Users, ArrowLeft, ArrowRight, Save, Loader2, 
   ShieldCheck, CheckCircle2, User, FileText, 
-  Phone, HeartPulse, InfoIcon, X, Briefcase, Upload, AlertTriangle
+  Phone, HeartPulse, Info, X, Briefcase, Upload, AlertTriangle
 } from "lucide-react";
 import { Driver } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -28,7 +27,6 @@ interface DriverFormWizardProps {
 
 const LICENSE_CLASSES = ["C", "D", "E", "F", "G"];
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "0+", "0-"];
-const CONTRACT_TYPES = ["Tiempo completo", "Tiempo parcial", "Eventual / Temporario", "Contratista independiente"];
 
 export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   const db = useFirestore();
@@ -69,10 +67,12 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
     observations: ""
   });
 
-  // Load data if editing
-  const { data: existingDriver, loading: loadingExisting } = useDoc<Driver>(
+  // Persist the document reference to avoid infinite loops in useDoc
+  const driverRef = useMemo(() => 
     driverId && db ? doc(db, "drivers", driverId) : null
-  );
+  , [db, driverId]);
+
+  const { data: existingDriver, loading: loadingExisting } = useDoc<Driver>(driverRef);
 
   useEffect(() => {
     if (existingDriver) {
@@ -127,24 +127,24 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
     setFormData({ ...formData, licenseClasses: updated });
   };
 
-  if (loadingExisting) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
+  if (loadingExisting && driverId) return <div className="h-[60vh] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-20">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => router.back()}>
             <ArrowLeft />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">{driverId ? 'Editar Chofer' : 'Nuevo Chofer Professional'}</h1>
-            <p className="text-sm text-slate-500">Registro integral de personal y cumplimiento de normativa argentina.</p>
+            <h1 className="text-2xl font-bold text-slate-900">{driverId ? 'Editar Chofer' : 'Nuevo Chofer Profesional'}</h1>
+            <p className="text-sm text-slate-500">Registro integral de personal y cumplimiento normativo.</p>
           </div>
         </div>
       </div>
 
-      <div className="bg-white p-6 rounded-xl border shadow-sm">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-white p-4 rounded-xl border shadow-sm mx-4">
+        <div className="flex items-center justify-between">
           {[
             { id: 1, label: "Datos Personales", icon: User },
             { id: 2, label: "Habilitaciones", icon: FileText },
@@ -167,7 +167,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
         </div>
       </div>
 
-      <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+      <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 mx-4">
         {step === 1 && (
           <Card className="border-none shadow-sm">
             <CardHeader><CardTitle>DNI y Datos Personales</CardTitle></CardHeader>
@@ -205,7 +205,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
             <CardHeader>
               <CardTitle>Licencias y Habilitaciones</CardTitle>
               <CardDescription className="text-orange-600 flex items-center gap-1 font-bold">
-                <AlertTriangle size={14} /> El RUTA ha sido eliminado (Decreto 1109/2024). Ya no se exige.
+                <AlertTriangle size={14} /> El RUTA ha sido eliminado (Decreto 1109/2024).
               </CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -235,7 +235,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                    <div className="flex items-center justify-between">
                      <div className="space-y-0.5">
                        <Label>Licencia LINTI</Label>
-                       <p className="text-[10px] text-blue-600 font-bold uppercase">Obligatoria para Interjurisdiccional</p>
+                       <p className="text-[10px] text-blue-600 font-bold uppercase">Obligatoria Interjurisdiccional</p>
                      </div>
                      <Switch checked={formData.hasLinti} onCheckedChange={(v) => setFormData({...formData, hasLinti: v})} />
                    </div>
@@ -251,13 +251,6 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                        </div>
                      </div>
                    )}
-                </div>
-                <div className="flex items-center justify-between p-4 border rounded-xl">
-                   <div className="space-y-0.5">
-                      <Label>Habilitación CNRT</Label>
-                      <p className="text-[10px] text-slate-400">Sólo si transporta para terceros.</p>
-                   </div>
-                   <Switch checked={formData.hasCnrt} onCheckedChange={v => setFormData({...formData, hasCnrt: v})} />
                 </div>
               </div>
             </CardContent>
@@ -336,7 +329,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center z-50">
-        <div className="max-w-4xl w-full flex justify-between items-center">
+        <div className="max-w-4xl w-full flex justify-between items-center px-4">
           <Button variant="ghost" onClick={handleBack} disabled={step === 1 || isSubmitting}>
             <ArrowLeft className="mr-2" size={16} /> Volver
           </Button>
