@@ -37,16 +37,19 @@ import {
   Gauge,
   History,
   Phone,
-  Radio
+  Radio,
+  TrendingUp,
+  ArrowRightLeft
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Truck, Driver, Load, Hub, Client } from "@/app/lib/types";
-import { isToday, startOfMonth, format, formatDistanceToNow } from "date-fns";
+import { isToday, startOfMonth, format, formatDistanceToNow, addMinutes } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Progress } from "@/components/ui/progress";
 
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
@@ -169,6 +172,22 @@ export default function MonitorOperativoPage() {
     iconAnchor: [14, 14]
   }) : null;
 
+  const calculateETA = (distanceRemaining: number, currentSpeed: number) => {
+    if (!distanceRemaining || !currentSpeed || currentSpeed < 5) return "CALCULANDO...";
+    const hours = distanceRemaining / currentSpeed;
+    const etaDate = addMinutes(new Date(), Math.round(hours * 60));
+    return format(etaDate, "HH:mm") + " hs";
+  };
+
+  const calculateEfficiency = (load: Load) => {
+    if (load.status !== 'on_route' && load.status !== 'on_pause') return 0;
+    const alerts = load.tracking?.alerts?.length || 0;
+    const base = 100;
+    // Penalización por alertas o excesos de velocidad
+    const speedPenalty = (load.tracking?.maxSpeed || 0) > 90 ? 15 : 0;
+    return Math.max(0, base - (alerts * 10) - speedPenalty);
+  };
+
   return (
     <div className="space-y-6">
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border shadow-sm space-y-4">
@@ -214,6 +233,9 @@ export default function MonitorOperativoPage() {
                const totalWeight = (load.outboundStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0) + (load.returnStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0);
                const isExpanded = expandedLoadId === load.id;
                const tracking = load.tracking;
+               const destination = load.outboundStops?.[load.outboundStops.length - 1]?.name || 'S/D';
+               const efficiency = calculateEfficiency(load);
+               const progress = tracking ? (tracking.distanceTraveledKm / (tracking.distanceTraveledKm + tracking.distanceRemainingKm)) * 100 : 0;
 
                return (
                  <Collapsible 
@@ -258,15 +280,15 @@ export default function MonitorOperativoPage() {
                                 <Badge variant="outline" className="text-[8px] uppercase font-black text-slate-400 h-4 border-slate-300">{load.status.replace('_', ' ')}</Badge>
                               )}
                             </div>
-                            <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500 uppercase">
-                               <Building2 size={12} className="text-blue-500" /> {load.clientName}
+                            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-tight truncate">
+                               <Building2 size={12} className="text-blue-500" /> {load.origin.name} <ArrowRight size={10} className="text-slate-300" /> {destination}
                             </div>
                          </div>
                       </div>
 
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-3 flex-[2] w-full lg:w-auto mt-4 lg:mt-0 border-t lg:border-t-0 pt-4 lg:pt-0">
                          <div className="space-y-1">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Conductor y Patente</p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Personal y Unidad</p>
                             <div className="space-y-0.5">
                               <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 truncate">
                                 <User size={10} className="text-blue-500" /> {driver ? `${driver.lastName}, ${driver.firstName[0]}.` : 'Sin Chofer'}
@@ -277,28 +299,28 @@ export default function MonitorOperativoPage() {
                             </div>
                          </div>
                          <div className="space-y-1">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Carga Útil</p>
-                            <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                               <Scale size={10} className="text-slate-400" /> {totalWeight.toLocaleString()} <span className="text-[8px] font-normal opacity-50 uppercase">Kg</span>
-                            </p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">ETA (Llegada Est.)</p>
+                            <div className="space-y-0.5">
+                               {(load.status === 'on_route' || load.status === 'on_pause') && tracking ? (
+                                  <p className="text-xs font-black text-green-600 dark:text-green-400 flex items-center gap-1">
+                                    <Clock size={10} /> {calculateETA(tracking.distanceRemainingKm, tracking.currentSpeed)}
+                                  </p>
+                               ) : (
+                                  <p className="text-xs font-bold text-slate-400 italic">Pendiente Inicio</p>
+                               )}
+                               <p className="text-[9px] font-bold text-slate-400 uppercase">Salida: {load.pickupTime}hs</p>
+                            </div>
                          </div>
                          
                          <div className="space-y-1">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Logística Telemetría</p>
-                            {(load.status === 'on_route' || load.status === 'on_pause') && tracking ? (
-                              <div className="space-y-0.5">
-                                <div className="flex items-center gap-2 text-[10px] font-bold text-blue-600">
-                                  <Navigation size={10} /> {tracking.distanceTraveledKm?.toFixed(1)} <span className="opacity-50">km recorridos</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-[10px] font-bold text-orange-600">
-                                  <ArrowRight size={10} /> {tracking.distanceRemainingKm?.toFixed(1)} <span className="opacity-50">km restantes</span>
-                                </div>
-                              </div>
-                            ) : (
-                              <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                                <RouteIcon size={10} className="text-slate-400" /> {load.pickupTime}hs <span className="text-[8px] opacity-50 ml-1 uppercase">Salida</span>
-                              </p>
-                            )}
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Eficiencia de Ruta</p>
+                            <div className="space-y-1">
+                               <div className="flex items-center gap-1.5">
+                                  <TrendingUp size={10} className={cn(efficiency > 80 ? "text-green-500" : "text-orange-500")} />
+                                  <span className={cn("text-xs font-black", efficiency > 80 ? "text-green-600" : "text-orange-600")}>{efficiency}%</span>
+                               </div>
+                               <Progress value={progress} className="h-1 w-20 bg-slate-100" />
+                            </div>
                          </div>
 
                          <div className="space-y-1">
@@ -360,7 +382,7 @@ export default function MonitorOperativoPage() {
                                   <span>{tracking?.lastUpdateAt ? formatDistanceToNow(tracking.lastUpdateAt.toDate ? tracking.lastUpdateAt.toDate() : new Date(tracking.lastUpdateAt), { addSuffix: true, locale: es }) : 'S/D'}</span>
                                 </p>
                                 <div className="h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                                  <div className="h-full bg-blue-500" style={{ width: `${(tracking?.distanceTraveledKm || 0) / ((tracking?.distanceTraveledKm || 0) + (tracking?.distanceRemainingKm || 1)) * 100}%` }}></div>
+                                  <div className="h-full bg-blue-500" style={{ width: `${progress}%` }}></div>
                                 </div>
                                 <Button variant="outline" size="sm" className="w-full text-[10px] font-bold" asChild>
                                    <Link href={`/tracking/${load.id}`}>
