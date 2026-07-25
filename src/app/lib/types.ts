@@ -19,6 +19,7 @@ export interface LoadDocument {
   hasCot?: boolean;
   cotNumber?: string;
   despachoNumber?: string;
+  leg?: 'outbound' | 'return'; // Indica a qué tramo pertenece
 }
 
 export type ExpenseCategory = 
@@ -227,7 +228,10 @@ export interface Load {
   assignedDriverId?: string;
   assignedTruckId?: string;
   
+  isRoundTrip?: boolean; // Viaje de ida y vuelta
+
   origin: {
+    id?: string; // ID de Hub o Cliente si fue seleccionado
     name: string;
     phone: string;
     contact: string;
@@ -242,6 +246,7 @@ export interface Load {
   };
   
   destination: {
+    id?: string; // ID de Hub o Cliente si fue seleccionado
     name: string;
     phone: string;
     contact: string;
@@ -298,6 +303,11 @@ export interface Load {
   volumeM3: number;
   units: number;
   unitType: string;
+
+  // Carga de Retorno (opcional)
+  returnCargoDescription?: string;
+  returnCargoWeightKg?: number;
+  returnCargoVolumeM3?: number;
 
   basePrice: number;
   currency: 'ARS' | 'USD' | 'CLP' | 'BRL' | 'PYG' | 'BOB';

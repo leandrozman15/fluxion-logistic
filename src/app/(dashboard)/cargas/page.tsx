@@ -20,7 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { 
   Package, Plus, Search, MapPin, Scale, DollarSign, 
   Loader2, MoreVertical, Trash2, Truck, CheckCircle2, 
-  Clock, AlertTriangle, FileText, ExternalLink, Printer, Wallet, FilePlus, Upload, Trash
+  Clock, AlertTriangle, FileText, ExternalLink, Printer, Wallet, FilePlus, Upload, Trash, Repeat
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -243,7 +243,10 @@ export default function CargasPage() {
                             <Package size={20} />
                           </div>
                           <div>
-                            <div className="font-bold text-slate-900">{load.orderNumber}</div>
+                            <div className="flex items-center gap-2">
+                               <div className="font-bold text-slate-900">{load.orderNumber}</div>
+                               {load.isRoundTrip && <Badge variant="outline" className="bg-orange-50 text-orange-600 border-orange-200 text-[8px] h-4"><Repeat size={8} className="mr-1" /> IDA Y VUELTA</Badge>}
+                            </div>
                             <div className="text-[10px] text-slate-500 uppercase font-bold truncate max-w-[150px]">{load.clientName}</div>
                           </div>
                         </div>
@@ -269,7 +272,7 @@ export default function CargasPage() {
                              </Badge>
                           </div>
                           <div className="flex items-center gap-1 text-[10px] font-semibold text-slate-600">
-                            <Scale size={10} /> {load.weightKg?.toLocaleString() || 0} Kg
+                            <Scale size={10} /> {(load.weightKg + (load.returnCargoWeightKg || 0))?.toLocaleString() || 0} Kg
                           </div>
                         </div>
                       </TableCell>
