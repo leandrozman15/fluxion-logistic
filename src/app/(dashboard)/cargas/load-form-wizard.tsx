@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
-import { collection, serverTimestamp, doc, setDoc, query, orderBy, updateDoc } from "firebase/firestore";
+import { collection, serverTimestamp, doc, setDoc, query, orderBy, updateDoc, limit, getDocs } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +40,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingNumber, setIsLoadingNumber] = useState(false);
 
   // Stop Modal State
   const [isStopModalOpen, setIsStopModalOpen] = useState(false);
@@ -73,6 +74,46 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
   const loadRef = useMemo(() => loadId && db ? doc(db, "loads", loadId) : null, [db, loadId]);
   const { data: existingLoad, loading: loadingExisting } = useDoc<Load>(loadRef);
 
+  // LOGICA PARA NÚMERO CONSECUTIVO
+  useEffect(() => {
+    async function fetchNextOrderNumber() {
+      if (loadId || !db) return;
+      
+      setIsLoadingNumber(true);
+      try {
+        const q = query(collection(db, "loads"), orderBy("orderNumber", "desc"), limit(1));
+        const querySnapshot = await getDocs(q);
+        
+        let nextNumber = 1;
+        const currentYear = new Date().getFullYear();
+
+        if (!querySnapshot.empty) {
+          const lastLoad = querySnapshot.docs[0].data() as Load;
+          // FL-2025-0001 -> extrae 0001
+          const parts = lastLoad.orderNumber.split("-");
+          if (parts.length === 3) {
+            const lastSeq = parseInt(parts[2]);
+            if (!isNaN(lastSeq)) {
+              nextNumber = lastSeq + 1;
+            }
+          }
+        }
+
+        const paddedNumber = String(nextNumber).padStart(4, '0');
+        setFormData(prev => ({
+          ...prev,
+          orderNumber: `FL-${currentYear}-${paddedNumber}`
+        }));
+      } catch (e) {
+        console.error("Error fetching order number sequence:", e);
+      } finally {
+        setIsLoadingNumber(false);
+      }
+    }
+
+    if (!loadId) fetchNextOrderNumber();
+  }, [db, loadId]);
+
   useEffect(() => {
     if (existingLoad) {
       setFormData({
@@ -82,13 +123,8 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
         outboundStops: existingLoad.outboundStops || [],
         returnStops: existingLoad.returnStops || [],
       });
-    } else if (!loadId) {
-      setFormData(prev => ({
-        ...prev,
-        orderNumber: `FL-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
-      }));
     }
-  }, [existingLoad, loadId]);
+  }, [existingLoad]);
 
   const clientsQuery = useMemo(() => db ? query(collection(db, "clients"), orderBy("name")) : null, [db]);
   const hubsQuery = useMemo(() => db ? query(collection(db, "hubs"), orderBy("name")) : null, [db]);
@@ -289,9 +325,12 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
             <p className="text-sm text-slate-500">Gestión de fletes multi-destino nacional.</p>
           </div>
         </div>
-        <Badge variant="outline" className="h-8 px-4 font-mono text-blue-600 bg-blue-50 border-blue-100 hidden sm:flex">
-          {formData.orderNumber || ''}
-        </Badge>
+        <div className="flex items-center gap-2">
+          {isLoadingNumber && <Loader2 className="w-4 h-4 animate-spin text-blue-600" />}
+          <Badge variant="outline" className="h-8 px-4 font-mono text-blue-600 bg-blue-50 border-blue-100 hidden sm:flex">
+            {formData.orderNumber || 'GENERANDO...'}
+          </Badge>
+        </div>
       </div>
 
       <div className="bg-white p-4 rounded-xl border shadow-sm mx-4 overflow-x-auto">
@@ -351,7 +390,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                     </div>
                     <div className="space-y-2">
                       <Label>Unidad Tractora (Camión)</Label>
-                      <Select value={formData.assignedTruckId} onValueChange={handleTruckSelect}>
+                      <Select value={formData.assignedTruckId ?? ''} onValueChange={handleTruckSelect}>
                         <SelectTrigger className="bg-white"><SelectValue placeholder="Seleccionar camión" /></SelectTrigger>
                         <SelectContent>
                           {trucks?.map(t => (
@@ -377,7 +416,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                     </div>
                     <div className="space-y-2">
                       <Label>Chofer Responsable</Label>
-                      <Select value={formData.assignedDriverId} onValueChange={v => setFormData({...formData, assignedDriverId: v})}>
+                      <Select value={formData.assignedDriverId ?? ''} onValueChange={v => setFormData({...formData, assignedDriverId: v})}>
                         <SelectTrigger className="bg-white"><SelectValue placeholder="Seleccionar chofer" /></SelectTrigger>
                         <SelectContent>
                           {drivers?.map(d => (
@@ -424,7 +463,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                       <div className="flex items-center gap-2 text-blue-600 font-bold text-xs uppercase">
                         <Repeat size={16} /> Viaje de Retorno
                       </div>
-                      <Switch checked={formData.isRoundTrip} onCheckedChange={v => setFormData({...formData, isRoundTrip: v})} />
+                      <Switch checked={formData.isRoundTrip ?? false} onCheckedChange={v => setFormData({...formData, isRoundTrip: v})} />
                     </div>
                     {formData.isRoundTrip ? (
                       <div className="space-y-4 animate-in fade-in">
@@ -476,7 +515,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                 <div className="flex items-center gap-2 text-blue-600 font-bold text-xs uppercase tracking-widest">
                   <div className="w-2 h-2 rounded-full bg-blue-600" /> Punto de Carga Inicial (Origen)
                 </div>
-                <Select onValueChange={handleOriginSelect} value={formData.origin?.id}>
+                <Select onValueChange={handleOriginSelect} value={formData.origin?.id ?? ''}>
                   <SelectTrigger className="bg-white"><SelectValue placeholder="Seleccionar origen (Sede/Cliente)" /></SelectTrigger>
                   <SelectContent>{locationsList.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent>
                 </Select>
@@ -619,7 +658,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
             <div className="grid grid-cols-1 gap-4 p-4 bg-slate-50 rounded-xl border border-dashed">
               <div className="space-y-2">
                 <Label>Seleccionar Ubicación</Label>
-                <Select onValueChange={handleStopLocationSelect} value={editingStop.locationId}>
+                <Select onValueChange={handleStopLocationSelect} value={editingStop.locationId ?? ''}>
                   <SelectTrigger className="bg-white"><SelectValue placeholder="Sede o Cliente" /></SelectTrigger>
                   <SelectContent>{locationsList.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent>
                 </Select>
@@ -651,7 +690,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                     <Input className="h-8 text-xs" placeholder="N° Remito" value={newDoc.number ?? ''} onChange={e => setNewDoc({...newDoc, number: e.target.value})} />
                     <Input className="h-8 text-xs" placeholder="Despacho (SIM)" value={newDoc.despachoNumber ?? ''} onChange={e => setNewDoc({...newDoc, despachoNumber: e.target.value})} />
                     <div className="flex items-center gap-2 px-2 bg-slate-50 border rounded h-8">
-                       <Switch checked={newDoc.hasCot} onCheckedChange={v => setNewDoc({...newDoc, hasCot: v})} />
+                       <Switch checked={newDoc.hasCot ?? false} onCheckedChange={v => setNewDoc({...newDoc, hasCot: v})} />
                        <span className="text-[9px] font-bold uppercase">COT</span>
                     </div>
                     <Button size="sm" className="h-8 bg-blue-600" onClick={addRemitoToStop} disabled={!newDoc.number}><Plus size={14}/></Button>
