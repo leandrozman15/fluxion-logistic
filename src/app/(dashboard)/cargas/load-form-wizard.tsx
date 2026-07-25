@@ -172,7 +172,9 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     const stops = isOutbound ? formData.outboundStops : formData.returnStops;
     
     // Punto de origen para el tramo actual
-    const origin = isOutbound ? formData.origin : (formData.outboundStops?.[formData.outboundStops?.length - 1] || formData.origin);
+    const origin = isOutbound 
+      ? formData.origin 
+      : (formData.outboundStops?.[formData.outboundStops?.length - 1] || formData.origin);
     
     // Punto de destino final para el tramo actual
     const destination = isOutbound 
@@ -185,6 +187,8 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     }
 
     const apiKey = tenant?.settings?.mapApiKey;
+    
+    // Si no hay API Key configurada, aplicamos fallback manual pero avisando al usuario
     if (!apiKey || tenant?.settings?.mapProvider !== 'google') {
       const startDateTime = parse(`${dateStr} ${timeStr}`, "yyyy-MM-dd HH:mm", new Date());
       const endDateTime = addMinutes(startDateTime, 480); 
@@ -193,29 +197,41 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
       } else {
         setFormData(prev => ({ ...prev, returnEstimatedArrivalDate: format(endDateTime, "yyyy-MM-dd"), returnEstimatedArrivalTime: format(endDateTime, "HH:mm") }));
       }
-      toast({ title: "ETA Estimado (Manual)", description: "Se aplicó un tiempo de tránsito de 8 horas por falta de API Key." });
+      toast({ 
+        title: "ETA (Cálculo Manual)", 
+        description: "Se aplicó un tiempo fijo de 8hs por falta de API Key en Ajustes.",
+        variant: "default" 
+      });
       return;
     }
 
     setIsCalculating(true);
     try {
-      // Puntos intermedios (waypoints)
-      const points = [origin.address, ...(stops?.map(s => s.address) || []), destination.address];
-      const result = await calculateRouteDetails(points, apiKey);
+      // Construcción del itinerario para la API
+      // Origen + Waypoints (paradas menos la última) + Destino
+      const itineraryAddresses = isOutbound 
+        ? [origin.address, ...(stops?.map(s => s.address) || [])]
+        : [origin.address, ...(stops?.map(s => s.address) || []), destination.address];
+
+      const result = await calculateRouteDetails(itineraryAddresses, apiKey);
 
       if (result) {
         const startDateTime = parse(`${dateStr} ${timeStr}`, "yyyy-MM-dd HH:mm", new Date());
-        const endDateTime = addMinutes(startDateTime, result.durationMinutes + (stops?.length || 0) * 30); 
+        // Tiempo de viaje + 30 min por cada parada cargada
+        const totalMinutes = result.durationMinutes + (stops?.length || 0) * 30;
+        const endDateTime = addMinutes(startDateTime, totalMinutes); 
         
         if (isOutbound) {
           setFormData(prev => ({ ...prev, estimatedArrivalDate: format(endDateTime, "yyyy-MM-dd"), estimatedArrivalTime: format(endDateTime, "HH:mm") }));
         } else {
           setFormData(prev => ({ ...prev, returnEstimatedArrivalDate: format(endDateTime, "yyyy-MM-dd"), returnEstimatedArrivalTime: format(endDateTime, "HH:mm") }));
         }
-        toast({ title: "Google Maps: ETA Calculado", description: `Ruta de ${result.distanceKm} km calculada con éxito.` });
+        toast({ title: "Google Maps: Éxito", description: `Ruta de ${result.distanceKm} km calculada. Resumen: ${result.summary}` });
+      } else {
+        throw new Error("No se pudo obtener una respuesta válida de Google Maps.");
       }
-    } catch (e) {
-      toast({ variant: "destructive", title: "Error en cálculo" });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error en cálculo Real", description: e.message });
     } finally {
       setIsCalculating(false);
     }
