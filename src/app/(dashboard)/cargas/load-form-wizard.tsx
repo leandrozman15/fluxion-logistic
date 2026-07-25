@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from "react";
@@ -540,12 +539,9 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
 
         {step === 2 && (
           <Card className="border-none shadow-sm">
-            <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div>
-                <CardTitle>Logística de Ida</CardTitle>
-                <CardDescription>Establezca el punto de carga inicial y todos los puntos de descarga.</CardDescription>
-              </div>
-              <Button size="sm" className="bg-blue-600 w-full sm:w-auto" onClick={() => { setActiveLeg('outbound'); setEditingStop({ id: "", name: "", address: "", province: "Buenos Aires", country: "Argentina", contact: "", phone: "", description: "", weightKg: 0, volumeM3: 0, units: 0, unitType: "Pallet", documents: [] }); setIsStopModalOpen(true); }}><Plus size={14} className="mr-1" /> Agregar Destino</Button>
+            <CardHeader>
+              <CardTitle>Logística de Ida</CardTitle>
+              <CardDescription>Establezca el punto de carga inicial y todos los puntos de descarga.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="p-4 bg-slate-50 rounded-xl border border-dashed space-y-4">
@@ -562,6 +558,21 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                     <div className="text-xs font-bold text-slate-600">{formData.origin.address ?? ''}</div>
                   </div>
                 )}
+                
+                {/* BOTÓN MOVIDO AQUÍ SEGÚN SOLICITUD */}
+                <div className="pt-2">
+                  <Button 
+                    size="sm" 
+                    className="bg-blue-600 w-full" 
+                    onClick={() => { 
+                      setActiveLeg('outbound'); 
+                      setEditingStop({ id: "", name: "", address: "", province: "Buenos Aires", country: "Argentina", contact: "", phone: "", description: "", weightKg: 0, volumeM3: 0, units: 0, unitType: "Pallet", documents: [] }); 
+                      setIsStopModalOpen(true); 
+                    }}
+                  >
+                    <Plus size={14} className="mr-1" /> Agregar Destino de Carga
+                  </Button>
+                </div>
               </div>
 
               <div className="space-y-3">
@@ -621,16 +632,26 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                </CardContent>
             ) : (
               <>
-                <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div>
-                    <CardTitle>Logística de Vuelta (Retorno)</CardTitle>
-                    <CardDescription>Cargue los puntos de recolección y el destino final de la mercadería de retorno.</CardDescription>
-                  </div>
-                  <Button size="sm" className="bg-orange-600 w-full sm:w-auto" onClick={() => { setActiveLeg('return'); setEditingStop({ id: "", name: "", address: "", province: "Buenos Aires", country: "Argentina", contact: "", phone: "", description: "", weightKg: 0, volumeM3: 0, units: 0, unitType: "Pallet", documents: [] }); setIsStopModalOpen(true); }}><Plus size={14} className="mr-1" /> Agregar Parada Retorno</Button>
+                <CardHeader>
+                  <CardTitle>Logística de Vuelta (Retorno)</CardTitle>
+                  <CardDescription>Cargue los puntos de recolección y el destino final de la mercadería de retorno.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="space-y-4">
                     <Label className="text-xs uppercase font-bold text-slate-400">Puntos de Recolección en Ruta (Vuelta)</Label>
+                    
+                    <Button 
+                      size="sm" 
+                      className="bg-orange-600 w-full" 
+                      onClick={() => { 
+                        setActiveLeg('return'); 
+                        setEditingStop({ id: "", name: "", address: "", province: "Buenos Aires", country: "Argentina", contact: "", phone: "", description: "", weightKg: 0, volumeM3: 0, units: 0, unitType: "Pallet", documents: [] }); 
+                        setIsStopModalOpen(true); 
+                      }}
+                    >
+                      <Plus size={14} className="mr-1" /> Agregar Parada Retorno
+                    </Button>
+
                     {formData.returnStops?.length === 0 ? (
                       <div className="text-center py-10 bg-slate-50 rounded-xl border border-dashed text-slate-400 italic text-xs">Sin paradas de retorno registradas.</div>
                     ) : (
