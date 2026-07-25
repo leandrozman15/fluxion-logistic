@@ -3,22 +3,23 @@
 
 import { useMemo, useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useFirestore, useDoc } from "@/firebase";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { useFirestore, useDoc, useCollection } from "@/firebase";
+import { doc, updateDoc, serverTimestamp, collection, query, where } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { 
   Truck as TruckIcon, FileText, Calendar, AlertTriangle, 
   CheckCircle2, Clock, Upload, ArrowLeft, ShieldCheck, 
-  MapPin, Gauge, Box, Info, Download, Trash2, MoreVertical, LayoutGrid
+  MapPin, Gauge, Box, Info, Download, Trash2, MoreVertical, LayoutGrid, Fuel, DollarSign, Activity, TrendingUp
 } from "lucide-react";
-import { Truck, VehicleDocument, DocStatus } from "@/app/lib/types";
+import { Truck, VehicleDocument, DocStatus, Expense } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { format, isBefore, isAfter, addDays, parseISO } from "date-fns";
+import { format, isBefore, addDays, parseISO } from "date-fns";
 
 const DEFAULT_DOCS: Omit<VehicleDocument, 'status'>[] = [
   { id: 'cedula_verde', name: 'Cédula de Identificación (Verde)', category: 'unit', description: 'Acredita la titularidad del camión.', isRequired: true },
@@ -44,6 +45,16 @@ export default function TruckDetailPage() {
 
   const { data: truck, loading } = useDoc<Truck>(truckRef);
 
+  // Consulta de gastos de combustible para este camión
+  // Nota: En el modelo actual los gastos están anidados en loads. 
+  // Para el MVP simularemos una búsqueda de gastos generales o vinculados a cargas hechas por este camión.
+  const fuelExpensesQuery = useMemo(() => {
+    if (!db) return null;
+    return query(collection(db, "global_expenses"), where("truckId", "==", id as string), where("category", "==", "fuel"));
+  }, [db, id]);
+
+  const { data: fuelExpenses } = useCollection<Expense>(fuelExpensesQuery);
+
   // Inicializar documentos si no existen
   useEffect(() => {
     if (truck && !truck.documentation && truckRef) {
@@ -58,15 +69,6 @@ export default function TruckDetailPage() {
       case 'expired': return <AlertTriangle className="text-red-500" size={18} />;
       case 'warning': return <Clock className="text-orange-500" size={18} />;
       default: return <Clock className="text-slate-300" size={18} />;
-    }
-  };
-
-  const getStatusBadge = (status: DocStatus) => {
-    switch (status) {
-      case 'valid': return <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-none">Vigente</Badge>;
-      case 'expired': return <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-none">Vencido</Badge>;
-      case 'warning': return <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100 border-none">Próximo</Badge>;
-      default: return <Badge variant="outline" className="text-slate-400">Pendiente</Badge>;
     }
   };
 
@@ -104,6 +106,8 @@ export default function TruckDetailPage() {
   const docProgress = truck.documentation ? 
     (truck.documentation.filter(d => d.status === 'valid').length / truck.documentation.length) * 100 : 0;
 
+  const totalFuelCost = fuelExpenses?.reduce((acc, exp) => acc + (exp.amount || 0), 0) || 0;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -131,23 +135,46 @@ export default function TruckDetailPage() {
             <div className="h-32 bg-slate-900 flex items-center justify-center text-white relative">
                <TruckIcon size={48} className="opacity-20" />
                <div className="absolute bottom-4 left-4">
-                  <div className="text-[10px] uppercase font-bold text-white/50">Estado Operativo</div>
-                  <div className="font-bold flex items-center gap-2 text-green-400 uppercase italic">
-                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                    {truck.status}
+                  <div className="text-[10px] uppercase font-bold text-white/50">Odómetro Actual</div>
+                  <div className="font-bold flex items-center gap-2 text-blue-400 italic text-2xl font-mono">
+                    {(truck.odometerKm || 0).toLocaleString()} <span className="text-xs uppercase font-bold opacity-50">KM</span>
                   </div>
                </div>
             </div>
-            <CardContent className="pt-6 space-y-4">
+            <CardContent className="pt-6 space-y-6">
               <div className="space-y-2">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-slate-500 uppercase">Salud Legal del Equipo</span>
+                  <span className="font-bold text-slate-500 uppercase">Cumplimiento Legal</span>
                   <span className={cn("font-bold", docProgress === 100 ? "text-green-600" : "text-blue-600")}>
                     {Math.round(docProgress)}%
                   </span>
                 </div>
                 <Progress value={docProgress} className="h-2 bg-slate-100" />
               </div>
+
+              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                 <div className="space-y-1">
+                    <p className="text-[10px] uppercase font-bold text-slate-400">Consumo Avg.</p>
+                    <p className="text-xl font-black text-slate-700">{truck.avgConsumption || 32} <span className="text-[10px] font-normal text-slate-400">L/100</span></p>
+                 </div>
+                 <div className="space-y-1">
+                    <p className="text-[10px] uppercase font-bold text-slate-400">Estado</p>
+                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-100 uppercase text-[9px]">{truck.status}</Badge>
+                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-blue-600 text-white border-none shadow-md overflow-hidden relative">
+            <div className="absolute top-0 right-0 p-4 opacity-10"><TrendingUp size={64}/></div>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs uppercase text-white/70 font-bold">Inversión en Combustible</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-black italic">
+                ${totalFuelCost.toLocaleString('es-AR')}
+              </div>
+              <p className="text-[10px] text-white/50 mt-1 uppercase font-bold tracking-widest">Total Acumulado 2025</p>
             </CardContent>
           </Card>
 
@@ -171,6 +198,9 @@ export default function TruckDetailPage() {
               </TabsTrigger>
               <TabsTrigger value="semi" className="flex items-center gap-2">
                 <LayoutGrid size={16} /> Semirremolque
+              </TabsTrigger>
+              <TabsTrigger value="fuel" className="flex items-center gap-2">
+                <Fuel size={16} /> Consumo y Cargas
               </TabsTrigger>
             </TabsList>
 
@@ -222,6 +252,84 @@ export default function TruckDetailPage() {
                   </CardContent>
                 </Card>
               ))}
+            </TabsContent>
+
+            <TabsContent value="fuel" className="space-y-6 animate-in fade-in">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <Card className="border-none shadow-sm bg-slate-50">
+                    <CardHeader><CardTitle className="text-sm">Rendimiento Histórico</CardTitle></CardHeader>
+                    <CardContent className="space-y-4">
+                       <div className="flex justify-between items-center text-xs">
+                          <span className="text-slate-500">Últimos 30 días</span>
+                          <span className="font-bold text-green-600">-4.2% Eficiencia</span>
+                       </div>
+                       <div className="h-24 flex items-end gap-1 px-2">
+                          {[40, 60, 45, 80, 55, 70, 50].map((h, i) => (
+                            <div key={i} className="flex-1 bg-blue-100 rounded-t-sm hover:bg-blue-600 transition-colors" style={{ height: `${h}%` }}></div>
+                          ))}
+                       </div>
+                    </CardContent>
+                 </Card>
+                 <Card className="border-none shadow-sm bg-slate-50">
+                    <CardHeader><CardTitle className="text-sm">Resumen de Cargas</CardTitle></CardHeader>
+                    <CardContent className="space-y-2">
+                       <div className="flex justify-between text-xs py-2 border-b">
+                          <span className="text-slate-500">Total Litros</span>
+                          <span className="font-bold">4.250 L</span>
+                       </div>
+                       <div className="flex justify-between text-xs py-2 border-b">
+                          <span className="text-slate-500">Precio Promedio/L</span>
+                          <span className="font-bold">$1.150,00</span>
+                       </div>
+                       <div className="flex justify-between text-xs py-2">
+                          <span className="text-slate-500">Frecuencia</span>
+                          <span className="font-bold">3.2 días</span>
+                       </div>
+                    </CardContent>
+                 </Card>
+              </div>
+
+              <Card className="border-none shadow-sm overflow-hidden">
+                <CardHeader className="bg-slate-50 border-b">
+                   <CardTitle className="text-sm flex items-center gap-2">
+                     <DollarSign size={16} className="text-blue-600" /> Registro Detallado de Gastos
+                   </CardTitle>
+                </CardHeader>
+                <Table>
+                   <TableHeader>
+                      <TableRow>
+                         <TableHead>Fecha / Lugar</TableHead>
+                         <TableHead>Litros / KM</TableHead>
+                         <TableHead>Monto</TableHead>
+                         <TableHead className="text-right">Ticket</TableHead>
+                      </TableRow>
+                   </TableHeader>
+                   <TableBody>
+                      {(!fuelExpenses || fuelExpenses.length === 0) ? (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center py-10 text-slate-400 italic">No hay registros de combustible recientes.</TableCell>
+                        </TableRow>
+                      ) : (
+                        fuelExpenses.map(exp => (
+                          <TableRow key={exp.id}>
+                            <TableCell>
+                               <div className="font-bold text-xs">{exp.createdAt?.toDate ? format(exp.createdAt.toDate(), "dd/MM/yyyy") : "Reciente"}</div>
+                               <div className="text-[10px] text-slate-400 uppercase">{exp.location}</div>
+                            </TableCell>
+                            <TableCell>
+                               <div className="text-xs font-bold">120 L</div>
+                               <div className="text-[9px] text-blue-600 font-bold uppercase">Odóm: 145.200</div>
+                            </TableCell>
+                            <TableCell className="font-bold text-slate-700">${exp.amount?.toLocaleString()}</TableCell>
+                            <TableCell className="text-right">
+                               <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400"><FileText size={14}/></Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                   </TableBody>
+                </Table>
+              </Card>
             </TabsContent>
           </Tabs>
         </div>

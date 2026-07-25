@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   Truck, Plus, Search, MoreHorizontal, Trash2, Edit2, MapPin, Gauge, Loader2, 
   ChevronRight, ChevronLeft, InfoIcon, ShieldCheck, Box, Thermometer, Droplets, 
-  Anchor, Layers, Scale, Crosshair, CheckCircle2, AlertTriangle, FileText
+  Anchor, Layers, Scale, Crosshair, CheckCircle2, AlertTriangle, FileText, Fuel
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Truck as TruckType, TruckStatus } from "@/app/lib/types";
@@ -75,6 +75,8 @@ export default function FlotaPage() {
     grossWeight: 0,
     fuelType: "Diesel",
     tankLiters: 0,
+    odometerKm: 0,
+    avgConsumption: 32, // L/100km standard
     status: "available",
     location: { city: "", province: "Buenos Aires", lat: 0, lng: 0 }
   });
@@ -105,7 +107,7 @@ export default function FlotaPage() {
       navigator.geolocation.getCurrentPosition((pos) => {
         setFormData(prev => ({
           ...prev,
-          location: { ...prev.location!, lat: pos.coords.latitude, lng: pos.coords.longitude }
+          location: { ...prev.location!, lat: pos.coords.latitude, lng: pos.coords.longitude, country: "Argentina" }
         }));
         toast({ title: "Ubicación obtenida", description: "Coordenadas GPS atualizadas." });
       });
@@ -131,7 +133,8 @@ export default function FlotaPage() {
         axles: 2, vehicleType: "Camión Rígido", capacityKg: 0, volumeM3: 0,
         dimensions: { length: 0, width: 0, height: 0 }, bodyType: "furgon",
         grossWeight: 0, fuelType: "Diesel", tankLiters: 0, status: "available",
-        location: { city: "", province: "Buenos Aires" }
+        odometerKm: 0, avgConsumption: 32,
+        location: { city: "", province: "Buenos Aires", country: "Argentina" }
       });
     } catch (error) {
       toast({ variant: "destructive", title: "Error al registrar" });
@@ -269,39 +272,36 @@ export default function FlotaPage() {
             {step === 2 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4 animate-in fade-in slide-in-from-right-4">
                 <div className="space-y-4">
+                  <div className="p-4 bg-slate-900 text-white rounded-xl space-y-4">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Gauge size={18} className="text-blue-400" /> Control de Odómetro
+                    </CardTitle>
+                    <div className="space-y-2">
+                      <Label className="text-white/50">Kilometraje Actual (KM)</Label>
+                      <Input 
+                        type="number" 
+                        className="bg-white/5 border-white/20 text-white font-mono text-xl"
+                        value={formData.odometerKm ?? 0} 
+                        onChange={e => handleNumericChange('odometerKm', e.target.value)} 
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-white/50">Consumo Objetivo (L/100km)</Label>
+                      <Input 
+                        type="number" 
+                        className="bg-white/5 border-white/20 text-white"
+                        value={formData.avgConsumption ?? 32} 
+                        onChange={e => handleNumericChange('avgConsumption', e.target.value)} 
+                      />
+                    </div>
+                  </div>
                   <div className="space-y-2">
-                    <Label>Capacidad (Kg)</Label>
+                    <Label>Capacidad de Carga (Kg)</Label>
                     <Input 
                       type="number" 
                       value={formData.capacityKg ?? 0} 
                       onChange={e => handleNumericChange('capacityKg', e.target.value)} 
                     />
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase font-bold">Largo</Label>
-                      <Input 
-                        type="number" 
-                        value={formData.dimensions?.length ?? 0} 
-                        onChange={e => handleNumericChange('dimensions', e.target.value, 'length')} 
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase font-bold">Ancho</Label>
-                      <Input 
-                        type="number" 
-                        value={formData.dimensions?.width ?? 0} 
-                        onChange={e => handleNumericChange('dimensions', e.target.value, 'width')} 
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase font-bold">Alto</Label>
-                      <Input 
-                        type="number" 
-                        value={formData.dimensions?.height ?? 0} 
-                        onChange={e => handleNumericChange('dimensions', e.target.value, 'height')} 
-                      />
-                    </div>
                   </div>
                 </div>
                 <div className="space-y-4">
@@ -331,7 +331,7 @@ export default function FlotaPage() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>Provincia Base</Label>
-                    <Select value={formData.location?.province} onValueChange={v => setFormData({...formData, location: {...formData.location!, province: v}})}>
+                    <Select value={formData.location?.province} onValueChange={v => setFormData({...formData, location: {...formData.location!, province: v, country: "Argentina"}})}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {PROVINCIAS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
@@ -343,7 +343,7 @@ export default function FlotaPage() {
                     <Input value={formData.location?.city || ''} onChange={e => setFormData({...formData, location: {...formData.location!, city: e.target.value}})} />
                   </div>
                   <Button variant="outline" className="w-full text-xs" size="sm" onClick={handleGetLocation}>
-                    <Crosshair size={14} className="mr-2" /> GPS
+                    <Crosshair size={14} className="mr-2" /> Capturar GPS Actual
                   </Button>
                 </div>
                 <div className="space-y-4">
@@ -403,8 +403,8 @@ export default function FlotaPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Patente</TableHead>
-                  <TableHead>Vehículo</TableHead>
+                  <TableHead>Patente / Marca</TableHead>
+                  <TableHead>Kilometraje</TableHead>
                   <TableHead>Documentación</TableHead>
                   <TableHead>Ubicación</TableHead>
                   <TableHead>Estado</TableHead>
@@ -412,55 +412,82 @@ export default function FlotaPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredTrucks.map((truck) => {
-                   const docCount = truck.documentation?.length || 0;
-                   const validDocs = truck.documentation?.filter(d => d.status === 'valid').length || 0;
-                   const isCritical = truck.documentation?.some(d => d.status === 'expired');
+                {filteredTrucks.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-20 text-slate-400 italic">No hay vehículos registrados.</TableCell>
+                  </TableRow>
+                ) : (
+                  filteredTrucks.map((truck) => {
+                    const docCount = truck.documentation?.length || 0;
+                    const validDocs = truck.documentation?.filter(d => d.status === 'valid').length || 0;
+                    const isCritical = truck.documentation?.some(d => d.status === 'expired');
 
-                   return (
-                    <TableRow 
-                      key={truck.id} 
-                      className="cursor-pointer hover:bg-slate-50 transition-colors"
-                      onClick={() => router.push(`/flota/${truck.id}`)}
-                    >
-                      <TableCell><div className="font-bold">{truck.plate || ''}</div></TableCell>
-                      <TableCell>{truck.brand || ''} {truck.model || ''}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Progress value={docCount > 0 ? (validDocs / docCount) * 100 : 0} className="h-1.5 w-16" />
-                          <span className={cn("text-[10px] font-bold", isCritical ? "text-red-600" : "text-slate-500")}>
-                            {validDocs}/{docCount}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{truck.location?.city || ''}</TableCell>
-                      <TableCell>{getStatusBadge(truck.status)}</TableCell>
-                      <TableCell className="text-right" onClick={e => e.stopPropagation()}>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Gestión de Unidad</DropdownMenuLabel>
-                            <DropdownMenuItem onClick={() => router.push(`/flota/${truck.id}`)}>
-                              <FileText className="w-4 h-4 mr-2" /> Ver Documentación
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <Edit2 className="w-4 h-4 mr-2" /> Editar Ficha
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem 
-                              className="text-red-600"
-                              onClick={() => deleteDoc(doc(db!, "trucks", truck.id))}
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" /> Eliminar
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                   );
-                })}
+                    return (
+                      <TableRow 
+                        key={truck.id} 
+                        className="cursor-pointer hover:bg-slate-50 transition-colors"
+                        onClick={() => router.push(`/flota/${truck.id}`)}
+                      >
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                             <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+                               <Truck size={20} />
+                             </div>
+                             <div>
+                               <div className="font-bold text-slate-900">{truck.plate || ''}</div>
+                               <div className="text-[10px] text-slate-400 uppercase font-bold">{truck.brand} {truck.model}</div>
+                             </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Gauge size={14} className="text-slate-400" />
+                            <span className="font-mono font-bold text-slate-700">{(truck.odometerKm || 0).toLocaleString()} km</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Progress value={docCount > 0 ? (validDocs / docCount) * 100 : 0} className="h-1.5 w-16" />
+                            <span className={cn("text-[10px] font-bold", isCritical ? "text-red-600" : "text-slate-500")}>
+                              {validDocs}/{docCount}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>{truck.location?.city || 'N/A'}</TableCell>
+                        <TableCell>{getStatusBadge(truck.status)}</TableCell>
+                        <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-100">
+                                <MoreHorizontal size={16} />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuLabel>Gestión de Unidad</DropdownMenuLabel>
+                              <DropdownMenuItem onClick={() => router.push(`/flota/${truck.id}`)}>
+                                <FileText className="w-4 h-4 mr-2" /> Ver Documentación
+                              </DropdownMenuItem>
+                              <DropdownMenuItem>
+                                <Edit2 className="w-4 h-4 mr-2" /> Editar Ficha
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem 
+                                className="text-red-600 focus:bg-red-50 focus:text-red-600"
+                                onClick={() => {
+                                  if(confirm("¿Eliminar este camión definitivamente?")) {
+                                    deleteDoc(doc(db!, "trucks", truck.id));
+                                  }
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" /> Eliminar Unidad
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
               </TableBody>
             </Table>
           )}

@@ -80,6 +80,8 @@ export interface Truck {
   grossWeight: number;
   fuelType: string;
   tankLiters: number;
+  odometerKm: number;
+  avgConsumption: number; // L/100km
   status: TruckStatus;
   location: { city: string; province: string; country: Country; lat: number; lng: number };
   documentation: VehicleDocument[];
@@ -223,6 +225,7 @@ export interface Load {
   clientName: string;
   clientId?: string;
   assignedDriverId?: string;
+  assignedTruckId?: string;
   
   origin: {
     name: string;
