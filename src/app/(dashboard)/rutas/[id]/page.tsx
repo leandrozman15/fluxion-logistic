@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -363,7 +362,7 @@ export default function RouteDetailPage() {
           <TabsTrigger value="mission" className="text-[10px] uppercase font-bold">Misión</TabsTrigger>
           <TabsTrigger value="time" className="text-[10px] uppercase font-bold">Tiempo</TabsTrigger>
           <TabsTrigger value="incidents" className="text-[10px] uppercase font-bold">Alertas</TabsTrigger>
-          <TabsTrigger value="wallet" className="text-[10px] uppercase font-bold">Pesos</TabsTrigger>
+          <TabsTrigger value="wallet" className="text-[10px] uppercase font-bold">Gastos</TabsTrigger>
         </TabsList>
 
         {/* TAB: MISION */}
@@ -642,7 +641,7 @@ export default function RouteDetailPage() {
            </div>
         </TabsContent>
 
-        {/* TAB: BILLETERA (PESOS) */}
+        {/* TAB: GESTION DE GASTOS */}
         <TabsContent value="wallet" className="space-y-6 animate-in fade-in">
           <Card className="border-none shadow-sm bg-gradient-to-br from-slate-800 to-slate-900 text-white overflow-hidden">
             <CardContent className="p-6 space-y-6">
