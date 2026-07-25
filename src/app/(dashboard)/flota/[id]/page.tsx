@@ -419,10 +419,10 @@ export default function TruckDetailPage() {
                           </TableRow>
                         ))
                       )}
-                   </tbody>
+                   </TableBody>
                 </Table>
               </Card>
-            </TabsContent>
+            </div>
           </Tabs>
         </div>
       </div>
