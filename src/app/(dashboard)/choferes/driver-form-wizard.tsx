@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from "react";
@@ -280,7 +279,11 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                   <div className="flex flex-wrap gap-4 p-3 bg-slate-50 rounded-lg border">
                     {LICENSE_CLASSES.map(cls => (
                       <div key={cls} className="flex items-center space-x-2">
-                        <Checkbox id={`cls-${cls}`} checked={formData.licenseClasses?.includes(cls)} onValueChange={() => toggleLicenseClass(cls)} />
+                        <Checkbox 
+                          id={`cls-${cls}`} 
+                          checked={formData.licenseClasses?.includes(cls)} 
+                          onCheckedChange={() => toggleLicenseClass(cls)} 
+                        />
                         <label htmlFor={`cls-${cls}`} className="text-sm font-medium leading-none">{cls}</label>
                       </div>
                     ))}
