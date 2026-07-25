@@ -178,7 +178,53 @@ export default function MonitorOperativoPage() {
         <KPICard title="Incidencias" value={stats.incidents} icon={AlertTriangle} description="Atención req." />
       </div>
 
-      {/* Mapa de Flota - Ancho Completo */}
+      {/* Agenda Operativa del Día - Ahora Arriba */}
+      <Card className="border-none shadow-sm border-l-4 border-l-blue-600">
+        <CardHeader className="pb-3 border-b flex flex-row items-center justify-between">
+           <div>
+             <CardTitle className="text-lg flex items-center gap-2">
+               <Activity className="w-5 h-5 text-blue-600" /> Agenda Operativa del Día
+             </CardTitle>
+             <CardDescription className="text-xs font-bold uppercase">Consolidado de viajes en curso y programados hoy</CardDescription>
+           </div>
+           <Badge variant="outline" className="h-6">{dailyOperations.length} Operaciones</Badge>
+        </CardHeader>
+        <CardContent className="pt-4 px-0">
+           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1">
+             {dailyOperations.map(load => (
+               <div key={load.id} className="px-4 py-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b md:border-r last:border-0 border-slate-100 dark:border-slate-800 cursor-pointer group" onClick={() => window.location.href = load.status === 'on_route' ? `/tracking/${load.id}` : `/cargas/${load.id}/orden`}>
+                  <div className="flex items-center gap-4">
+                     <div className={cn(
+                       "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border transition-colors",
+                       load.status === 'on_route' ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 border-blue-200" : "bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200"
+                     )}>
+                       {load.status === 'on_route' ? <Navigation size={20} className="animate-pulse" /> : <Clock size={20} />}
+                     </div>
+                     <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{load.orderNumber}</p>
+                          {load.status === 'on_route' && <Badge className="text-[8px] bg-blue-600 text-white border-none animate-pulse h-4">LIVE</Badge>}
+                        </div>
+                        <p className="text-[10px] text-slate-500 uppercase font-bold truncate">{load.clientName}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
+                          <MapPin size={10} /> {load.pickupTime} hs → {load.outboundStops?.[load.outboundStops.length-1]?.city || 'Destino'}
+                        </p>
+                     </div>
+                  </div>
+                  <ArrowRight size={16} className="text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+               </div>
+             ))}
+             {dailyOperations.length === 0 && (
+                <div className="col-span-full py-20 text-center flex flex-col items-center gap-2">
+                  <Package className="w-12 h-12 text-slate-200" />
+                  <p className="text-sm text-slate-400 italic">No hay operaciones registradas para hoy.</p>
+                </div>
+             )}
+           </div>
+        </CardContent>
+      </Card>
+
+      {/* Mapa de Flota - Debajo de la Agenda */}
       <Card className="border-none shadow-sm overflow-hidden h-[500px] relative">
         {mounted && (
           <MapContainer 
@@ -232,53 +278,6 @@ export default function MonitorOperativoPage() {
           </div>
         </div>
       </Card>
-
-      {/* Operaciones del Día - Ancho Completo */}
-      <Card className="border-none shadow-sm border-l-4 border-l-blue-600">
-        <CardHeader className="pb-3 border-b flex flex-row items-center justify-between">
-           <div>
-             <CardTitle className="text-lg flex items-center gap-2">
-               <Activity className="w-5 h-5 text-blue-600" /> Agenda Operativa del Día
-             </CardTitle>
-             <CardDescription className="text-xs font-bold uppercase">Consolidado de viajes en curso y programados hoy</CardDescription>
-           </div>
-           <Badge variant="outline" className="h-6">{dailyOperations.length} Operaciones</Badge>
-        </CardHeader>
-        <CardContent className="pt-4 px-0">
-           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1">
-             {dailyOperations.map(load => (
-               <div key={load.id} className="px-4 py-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b md:border-r last:border-0 border-slate-100 dark:border-slate-800 cursor-pointer group" onClick={() => window.location.href = load.status === 'on_route' ? `/tracking/${load.id}` : `/cargas/${load.id}/orden`}>
-                  <div className="flex items-center gap-4">
-                     <div className={cn(
-                       "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border transition-colors",
-                       load.status === 'on_route' ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 border-blue-200" : "bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200"
-                     )}>
-                       {load.status === 'on_route' ? <Navigation size={20} className="animate-pulse" /> : <Clock size={20} />}
-                     </div>
-                     <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{load.orderNumber}</p>
-                          {load.status === 'on_route' && <Badge className="text-[8px] bg-blue-600 text-white border-none animate-pulse h-4">LIVE</Badge>}
-                        </div>
-                        <p className="text-[10px] text-slate-500 uppercase font-bold truncate">{load.clientName}</p>
-                        <p className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
-                          <MapPin size={10} /> {load.pickupTime} hs → {load.outboundStops?.[load.outboundStops.length-1]?.city || 'Destino'}
-                        </p>
-                     </div>
-                  </div>
-                  <ArrowRight size={16} className="text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
-               </div>
-             ))}
-             {dailyOperations.length === 0 && (
-                <div className="col-span-full py-20 text-center flex flex-col items-center gap-2">
-                  <Package className="w-12 h-12 text-slate-200" />
-                  <p className="text-sm text-slate-400 italic">No hay operaciones registradas para hoy.</p>
-                </div>
-             )}
-           </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
-
