@@ -79,6 +79,27 @@
   }
 }
 
+/* Sidebar Smart Expand Effect */
+[data-state="collapsed"][data-collapsible="icon"] {
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-state="collapsed"][data-collapsible="icon"]:hover {
+  width: var(--sidebar-width) !important;
+  box-shadow: 10px 0 30px -10px rgba(0,0,0,0.15);
+  z-index: 50;
+}
+
+[data-state="collapsed"][data-collapsible="icon"]:hover .group-data-\[collapsible\=icon\]\:hidden {
+  display: flex !important;
+  opacity: 1;
+  transition: opacity 0.2s ease-in-out;
+}
+
+[data-state="collapsed"][data-collapsible="icon"]:hover .group-data-\[collapsible\=icon\]\:-mt-8 {
+  margin-top: 0 !important;
+}
+
 /* Custom styles for Leaflet markers */
 .leaflet-container {
   width: 100%;

@@ -46,7 +46,7 @@ import { Button } from "@/components/ui/button";
  * Componente interno que maneja la lógica de cierre automático en móviles.
  */
 function DashboardSidebar() {
-  const { setOpenMobile, isMobile } = useSidebar();
+  const { setOpenMobile, isMobile, state } = useSidebar();
   const auth = useAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -80,18 +80,18 @@ function DashboardSidebar() {
   };
 
   return (
-    <Sidebar variant="sidebar" collapsible="icon">
+    <Sidebar variant="sidebar" collapsible="icon" className="transition-all duration-300 ease-in-out">
       <SidebarHeader className="h-16 flex items-center px-4 border-b">
         <Link href="/dashboard" className="flex items-center gap-2 font-bold text-blue-600" onClick={handleLinkClick}>
-          <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white">
+          <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white shrink-0">
             <Truck size={18} />
           </div>
-          <span className="group-data-[collapsible=icon]:hidden tracking-tight text-xl">Logística<span className="text-slate-900 dark:text-slate-100">Ar</span></span>
+          <span className="group-data-[collapsible=icon]:hidden tracking-tight text-xl truncate">Logística<span className="text-slate-900 dark:text-slate-100">Ar</span></span>
         </Link>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Centro de Mando</SidebarGroupLabel>
+          <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Centro de Mando</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {menuItems.map((item) => (
@@ -114,13 +114,14 @@ function DashboardSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Configuración</SidebarGroupLabel>
+          <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Configuración</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton 
                   asChild 
                   isActive={pathname === "/settings/tenant"}
+                  tooltip="Ajustes del Sistema"
                   onClick={handleLinkClick}
                 >
                   <Link href="/settings/tenant">
@@ -137,9 +138,10 @@ function DashboardSidebar() {
         <SidebarMenuButton 
           className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
           onClick={handleLogout}
+          tooltip="Salir del Sistema"
         >
           <LogOut />
-          <span className="group-data-[collapsible=icon]:hidden">Salir del Sistema</span>
+          <span className="group-data-[collapsible=icon]:hidden">Salir</span>
         </SidebarMenuButton>
       </div>
     </Sidebar>
@@ -150,7 +152,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { theme, setTheme } = useTheme();
 
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={false}>
       <div className="flex min-h-screen w-full">
         <DashboardSidebar />
         <SidebarInset className="bg-slate-50/50 dark:bg-slate-950/50">
