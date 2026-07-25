@@ -24,7 +24,8 @@ import {
   Zap,
   Globe,
   Clock,
-  ArrowRight
+  ArrowRight,
+  Navigation
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,11 +61,6 @@ export default function MonitorOperativoPage() {
     return collection(db, "trucks");
   }, [db]);
 
-  const driversQuery = useMemo(() => {
-    if (!db) return null;
-    return collection(db, "drivers");
-  }, [db]);
-
   const loadsQuery = useMemo(() => {
     if (!db) return null;
     return query(collection(db, "loads"), orderBy("createdAt", "desc"));
@@ -85,29 +81,24 @@ export default function MonitorOperativoPage() {
   const { data: hubs } = useCollection<Hub>(hubsQuery);
   const { data: clients } = useCollection<Client>(clientsQuery);
 
+  const todayStr = format(new Date(), "yyyy-MM-dd");
+
   const stats = useMemo(() => {
     const today = new Date();
-    const todayStr = format(today, "yyyy-MM-dd");
     const monthStart = startOfMonth(today);
 
-    // Entregas finalizadas hoy
     const deliveredToday = loads?.filter(l => 
       l.status === 'delivered' && 
-      isToday(new Date(l.updatedAt?.seconds * 1000 || l.updatedAt))
+      (l.updatedAt?.seconds ? isToday(new Date(l.updatedAt.seconds * 1000)) : isToday(new Date(l.updatedAt)))
     ).length || 0;
 
-    // Fletes programados para hoy (activos o pendientes)
     const scheduledToday = loads?.filter(l => l.pickupDate === todayStr).length || 0;
-    
-    // Viajes actualmente en ruta
     const onRouteCount = loads?.filter(l => l.status === 'on_route').length || 0;
-
-    // Flota activa (En viaje o camión ocupado)
     const activeTrucks = trucks?.filter(t => t.status === 'in_trip').length || 0;
     
     const billingMonth = loads?.filter(l => 
       l.status === 'delivered' && 
-      new Date(l.updatedAt?.seconds * 1000 || l.updatedAt) >= monthStart
+      (l.updatedAt?.seconds ? new Date(l.updatedAt.seconds * 1000) >= monthStart : new Date(l.updatedAt) >= monthStart)
     ).reduce((acc, l) => acc + (l.totalAmount || 0), 0) || 0;
 
     const incidents = loads?.filter(l => l.status === 'incident').length || 0;
@@ -118,10 +109,17 @@ export default function MonitorOperativoPage() {
       onRouteCount,
       activeTrucks: Math.max(activeTrucks, onRouteCount), 
       billingMonth, 
-      incidents, 
-      otif: 94.5
+      incidents
     };
-  }, [trucks, loads]);
+  }, [trucks, loads, todayStr]);
+
+  const currentTrips = useMemo(() => {
+    return loads?.filter(l => l.status === 'on_route').slice(0, 5) || [];
+  }, [loads]);
+
+  const todayScheduled = useMemo(() => {
+    return loads?.filter(l => l.pickupDate === todayStr && l.status !== 'on_route' && l.status !== 'delivered').slice(0, 5) || [];
+  }, [loads, todayStr]);
 
   const truckIcon = L ? L.divIcon({
     className: 'custom-truck-icon',
@@ -172,7 +170,7 @@ export default function MonitorOperativoPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <Card className="lg:col-span-8 border-none shadow-sm overflow-hidden h-[550px] relative">
+        <Card className="lg:col-span-8 border-none shadow-sm overflow-hidden h-[600px] relative">
           {mounted && (
             <MapContainer 
               center={[-28.0, -58.0]} 
@@ -227,37 +225,68 @@ export default function MonitorOperativoPage() {
         </Card>
 
         <div className="lg:col-span-4 space-y-6">
-          <Card className="border-none shadow-sm h-fit">
+          {/* VIAJES EN CURSO */}
+          <Card className="border-none shadow-sm border-l-4 border-l-blue-600 h-fit">
             <CardHeader className="pb-3 border-b">
                <CardTitle className="text-sm flex items-center gap-2">
-                 <Clock className="w-4 h-4 text-blue-600" /> Salidas Programadas Hoy
+                 <Activity className="w-4 h-4 text-blue-600" /> Viajes en Curso (En Ruta)
                </CardTitle>
+               <CardDescription className="text-[10px] uppercase font-bold">Monitoreo de tráfico activo</CardDescription>
             </CardHeader>
             <CardContent className="pt-4 px-0">
                <div className="space-y-1">
-                 {loads?.filter(l => l.pickupDate === format(new Date(), "yyyy-MM-dd")).slice(0, 5).map(load => (
-                   <div key={load.id} className="px-4 py-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b last:border-0 border-slate-100 dark:border-slate-800">
+                 {currentTrips.map(load => (
+                   <div key={load.id} className="px-4 py-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b last:border-0 border-slate-100 dark:border-slate-800 cursor-pointer" onClick={() => window.location.href = `/tracking/${load.id}`}>
                       <div className="flex items-center gap-3">
                          <div className="w-8 h-8 rounded bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
-                           <Package size={16} />
+                           <Navigation size={16} />
+                         </div>
+                         <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">{load.orderNumber}</p>
+                            <p className="text-[10px] text-slate-500 uppercase font-medium">{load.clientName}</p>
+                         </div>
+                      </div>
+                      <Badge className="text-[8px] bg-blue-600 text-white border-none animate-pulse">LIVE</Badge>
+                   </div>
+                 ))}
+                 {currentTrips.length === 0 && (
+                    <div className="py-10 text-center text-xs text-slate-400 italic">No hay camiones en ruta actualmente.</div>
+                 )}
+               </div>
+            </CardContent>
+          </Card>
+
+          {/* SALIDAS PROGRAMADAS HOY */}
+          <Card className="border-none shadow-sm h-fit">
+            <CardHeader className="pb-3 border-b">
+               <CardTitle className="text-sm flex items-center gap-2">
+                 <Clock className="w-4 h-4 text-slate-600" /> Salidas Programadas (Hoy)
+               </CardTitle>
+               <CardDescription className="text-[10px] uppercase font-bold">Pendientes de inicio</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-4 px-0">
+               <div className="space-y-1">
+                 {todayScheduled.map(load => (
+                   <div key={load.id} className="px-4 py-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b last:border-0 border-slate-100 dark:border-slate-800 cursor-pointer" onClick={() => window.location.href = `/cargas/${load.id}/orden`}>
+                      <div className="flex items-center gap-3">
+                         <div className="w-8 h-8 rounded bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 shrink-0">
+                           <Calendar size={16} />
                          </div>
                          <div className="min-w-0">
                             <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">{load.orderNumber}</p>
                             <p className="text-[10px] text-slate-500 uppercase font-medium">{load.pickupTime} hs - {load.clientName}</p>
                          </div>
                       </div>
-                      <Badge variant={load.status === 'on_route' ? 'default' : 'outline'} className="text-[8px] uppercase h-5">
-                         {load.status === 'on_route' ? 'En viaje' : 'Pendiente'}
-                      </Badge>
+                      <Badge variant="outline" className="text-[8px] uppercase">Pendiente</Badge>
                    </div>
                  ))}
-                 {(!loads || loads.filter(l => l.pickupDate === format(new Date(), "yyyy-MM-dd")).length === 0) && (
-                    <div className="py-10 text-center text-xs text-slate-400 italic">No hay salidas programadas para hoy.</div>
+                 {todayScheduled.length === 0 && (
+                    <div className="py-10 text-center text-xs text-slate-400 italic">No hay más salidas programadas para hoy.</div>
                  )}
                </div>
                <div className="px-4 pt-4">
                   <Button variant="link" className="w-full text-xs font-bold text-blue-600 dark:text-blue-400 p-0 h-auto" asChild>
-                    <Link href="/cargas">Ver todos los fletes <ArrowRight size={12} className="ml-1" /></Link>
+                    <Link href="/cargas">Ver agenda completa <ArrowRight size={12} className="ml-1" /></Link>
                   </Button>
                </div>
             </CardContent>
@@ -266,11 +295,11 @@ export default function MonitorOperativoPage() {
           <Card className="border-none shadow-sm bg-blue-600 dark:bg-blue-700 text-white overflow-hidden relative">
             <div className="absolute top-0 right-0 p-4 opacity-10"><Zap size={64} /></div>
             <CardHeader className="pb-2">
-              <CardTitle className="text-xs uppercase text-white/70 font-bold tracking-widest">Optimización Bioceánica</CardTitle>
+              <CardTitle className="text-xs uppercase text-white/70 font-bold tracking-widest">Optimización</CardTitle>
             </CardHeader>
             <CardContent>
                <p className="text-[11px] leading-relaxed opacity-90">
-                 Detección de retorno vacío en Ruta 9. Recomendamos asignar carga de retorno desde Córdoba para optimizar un 42% el costo de combustible.
+                 Se recomienda asignar retornos desde Córdoba para optimizar un 42% el costo de combustible en las rutas de hoy.
                </p>
             </CardContent>
           </Card>
