@@ -30,13 +30,17 @@ import {
   Building2, 
   Briefcase, 
   BarChart3, 
-  Mail 
+  Mail,
+  Moon,
+  Sun
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { useRouter, usePathname } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
+import { useTheme } from "next-themes";
+import { Button } from "@/components/ui/button";
 
 /**
  * Componente interno que maneja la lógica de cierre automático en móviles.
@@ -82,7 +86,7 @@ function DashboardSidebar() {
           <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white">
             <Truck size={18} />
           </div>
-          <span className="group-data-[collapsible=icon]:hidden tracking-tight text-xl">Logística<span className="text-slate-900">Ar</span></span>
+          <span className="group-data-[collapsible=icon]:hidden tracking-tight text-xl">Logística<span className="text-slate-900 dark:text-slate-100">Ar</span></span>
         </Link>
       </SidebarHeader>
       <SidebarContent>
@@ -143,21 +147,31 @@ function DashboardSidebar() {
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const { theme, setTheme } = useTheme();
+
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full">
         <DashboardSidebar />
-        <SidebarInset className="bg-slate-50/50">
-          <header className="h-16 flex items-center justify-between px-4 border-b bg-white sticky top-0 z-10 shadow-sm">
+        <SidebarInset className="bg-slate-50/50 dark:bg-slate-950/50">
+          <header className="h-16 flex items-center justify-between px-4 border-b bg-white dark:bg-slate-900 sticky top-0 z-10 shadow-sm">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="text-blue-600" />
-              <h2 className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-widest truncate">Panel de Control Nacional</h2>
+              <h2 className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest truncate">Panel de Control Nacional</h2>
             </div>
             <div className="flex items-center gap-4">
-               <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs shrink-0">
+               <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                className="text-slate-500 hover:text-blue-600"
+               >
+                 {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+               </Button>
+               <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-xs shrink-0">
                  AR
                </div>
-               <span className="text-sm font-semibold text-slate-700 hidden lg:block">Operador Central</span>
+               <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 hidden lg:block">Operador Central</span>
             </div>
           </header>
           <main className="p-4 sm:p-6">
