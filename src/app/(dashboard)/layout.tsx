@@ -1,3 +1,4 @@
+
 'use client';
 
 import { 
@@ -31,8 +32,9 @@ import {
   BarChart3, 
   Mail,
   Moon,
-  Sun
-} from "lucide-react";
+  Sun,
+  Smartphone
+} from "lucide-round";
 import Link from "next/link";
 import { useAuth } from "@/firebase";
 import { signOut } from "firebase/auth";
@@ -51,15 +53,18 @@ function DashboardSidebar() {
   const pathname = usePathname();
   const { toast } = useToast();
 
-  const menuItems = [
+  const adminMenu = [
     { title: "Monitor Operativo", icon: LayoutDashboard, href: "/dashboard" },
     { title: "Flota de Camiones", icon: Truck, href: "/flota" },
     { title: "Gestión Choferes", icon: Users, href: "/choferes" },
     { title: "Cartera Clientes", icon: Briefcase, href: "/clientes" },
     { title: "Cargas y Fletes", icon: Package, href: "/cargas" },
     { title: "Sedes Logísticas", icon: Building2, href: "/sedes" },
-    { title: "Hoja de Ruta", icon: Route, href: "/rutas" },
     { title: "Análisis de Datos", icon: BarChart3, href: "/analytics" },
+  ];
+
+  const driverMenu = [
+    { title: "App Chofer (Mis Viajes)", icon: Smartphone, href: "/rutas" },
   ];
 
   const handleLinkClick = () => {
@@ -90,10 +95,10 @@ function DashboardSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Centro de Mando</SidebarGroupLabel>
+          <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Administración</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {menuItems.map((item) => (
+              {adminMenu.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton 
                     asChild 
@@ -104,6 +109,30 @@ function DashboardSidebar() {
                     <Link href={item.href}>
                       <item.icon />
                       <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden text-blue-600 dark:text-blue-400 font-black">Área Conductores</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {driverMenu.map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton 
+                    asChild 
+                    tooltip={item.title} 
+                    isActive={pathname.startsWith(item.href)}
+                    onClick={handleLinkClick}
+                    className="hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                  >
+                    <Link href={item.href}>
+                      <item.icon className="text-blue-600" />
+                      <span className="font-bold">{item.title}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

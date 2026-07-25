@@ -35,7 +35,8 @@ import {
   AlertTriangle,
   Zap,
   Gauge,
-  History
+  History,
+  Phone
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -112,7 +113,7 @@ export default function MonitorOperativoPage() {
     ).length || 0;
 
     const scheduledToday = loads?.filter(l => l.pickupDate === todayStr).length || 0;
-    const onRouteCount = loads?.filter(l => l.status === 'on_route').length || 0;
+    const onRouteCount = loads?.filter(l => l.status === 'on_route' || l.status === 'on_pause').length || 0;
     const activeTrucks = trucks?.filter(t => t.status === 'in_trip').length || 0;
     
     const billingMonth = loads?.filter(l => 
@@ -136,6 +137,7 @@ export default function MonitorOperativoPage() {
     if (!loads) return [];
     return loads.filter(l => 
       l.status === 'on_route' || 
+      l.status === 'on_pause' ||
       (l.pickupDate === todayStr && l.status !== 'delivered' && l.status !== 'cancelled')
     ).sort((a, b) => {
       if (a.status === 'on_route' && b.status !== 'on_route') return -1;
@@ -158,22 +160,14 @@ export default function MonitorOperativoPage() {
     iconAnchor: [18, 18]
   }) : null;
 
-  const clientIcon = L ? L.divIcon({
-    className: 'custom-client-icon',
-    html: `<div class="bg-green-600 text-white p-2 rounded-full shadow-lg border-2 border-white flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>`,
-    iconSize: [32, 32],
-    iconAnchor: [16, 16]
-  }) : null;
-
   return (
     <div className="space-y-6">
-      {/* Barra de Estado Superior */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border shadow-sm space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4 text-sm font-medium text-slate-500 dark:text-slate-400">
             <span className="flex items-center gap-1.5"><Globe size={16} /> Red Regional: {trucks?.length || 0} Unidades</span>
             <span className="h-4 w-[1px] bg-slate-200 dark:bg-slate-800 hidden md:block"></span>
-            <span className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 font-bold"><Activity size={16} /> {stats.onRouteCount} En Tránsito</span>
+            <span className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 font-bold"><Activity size={16} /> {stats.onRouteCount} Operativos</span>
             <span className="h-4 w-[1px] bg-slate-200 dark:bg-slate-800 hidden md:block"></span>
             <span className="flex items-center gap-1.5 text-green-600 dark:text-green-400"><Building2 size={16} /> {clients?.length || 0} Clientes</span>
           </div>
@@ -185,25 +179,23 @@ export default function MonitorOperativoPage() {
         </div>
       </div>
 
-      {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <KPICard title="Entregas Hoy" value={stats.deliveredToday} icon={CheckCircle2} description="Finalizadas" />
         <KPICard title="Salidas Hoy" value={stats.scheduledToday} icon={Calendar} description="Programadas" />
-        <KPICard title="Flota Activa" value={stats.activeTrucks} icon={TruckIcon} description="En carretera" />
+        <KPICard title="Operativos" value={stats.onRouteCount} icon={TruckIcon} description="En tránsito o pausa" />
         <KPICard title="Facturación" value={stats.billingMonth.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })} icon={DollarSign} description="Mes actual" />
         <KPICard title="Incidencias" value={stats.incidents} icon={AlertTriangle} description="Atención req." />
       </div>
 
-      {/* Agenda Operativa del Día - Expandible */}
       <Card className="border-none shadow-md overflow-hidden">
         <CardHeader className="pb-3 border-b bg-slate-50 dark:bg-slate-900/50 flex flex-row items-center justify-between">
            <div>
              <CardTitle className="text-lg flex items-center gap-2">
                <Activity className="w-5 h-5 text-blue-600" /> Agenda Operativa del Día
              </CardTitle>
-             <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Telemetría en vivo, itinerario y control de carga</CardDescription>
+             <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Torre de control: Telemetría y Hoja de Ruta</CardDescription>
            </div>
-           <Badge variant="outline" className="h-6 font-mono font-bold border-blue-200 text-blue-600">{dailyOperations.length} OPERACIONES</Badge>
+           <Badge variant="outline" className="h-6 font-mono font-bold border-blue-200 text-blue-600">{dailyOperations.length} MOVIMIENTOS</Badge>
         </CardHeader>
         <CardContent className="p-0">
            <div className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -221,7 +213,6 @@ export default function MonitorOperativoPage() {
                    onOpenChange={() => setExpandedLoadId(isExpanded ? null : load.id)}
                    className="group transition-all"
                  >
-                   {/* Main Summary Row */}
                    <div className={cn(
                      "px-6 py-4 flex flex-col lg:flex-row items-start lg:items-center justify-between transition-colors cursor-pointer group hover:bg-slate-50 dark:hover:bg-slate-800/30",
                      isExpanded && "bg-blue-50/50 dark:bg-blue-900/10 border-l-4 border-l-blue-600"
@@ -229,9 +220,12 @@ export default function MonitorOperativoPage() {
                       <div className="flex items-center gap-5 flex-1 min-w-0" onClick={() => setExpandedLoadId(isExpanded ? null : load.id)}>
                          <div className={cn(
                            "w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border transition-all shadow-sm",
-                           load.status === 'on_route' ? "bg-blue-600 text-white border-blue-400" : "bg-white dark:bg-slate-800 text-slate-400 border-slate-200"
+                           load.status === 'on_route' ? "bg-blue-600 text-white border-blue-400" : 
+                           load.status === 'on_pause' ? "bg-orange-500 text-white border-orange-300" :
+                           "bg-white dark:bg-slate-800 text-slate-400 border-slate-200"
                          )}>
-                           {load.status === 'on_route' ? <Navigation size={24} className="animate-pulse" /> : <Clock size={24} />}
+                           {load.status === 'on_route' ? <Navigation size={24} className="animate-pulse" /> : 
+                            load.status === 'on_pause' ? <History size={24} /> : <Clock size={24} />}
                          </div>
                          
                          <div className="space-y-1 min-w-0 flex-1">
@@ -239,11 +233,10 @@ export default function MonitorOperativoPage() {
                               <p className="text-base font-black text-slate-900 dark:text-slate-100 tracking-tighter">{load.orderNumber}</p>
                               {load.status === 'on_route' ? (
                                 <Badge className="text-[8px] bg-blue-600 text-white border-none animate-pulse px-2 h-4 uppercase font-bold">LIVE GPS</Badge>
+                              ) : load.status === 'on_pause' ? (
+                                <Badge className="text-[8px] bg-orange-500 text-white border-none px-2 h-4 uppercase font-bold">PAUSA: {tracking?.lastPauseType || 'Descanso'}</Badge>
                               ) : (
                                 <Badge variant="outline" className="text-[8px] uppercase font-black text-slate-400 h-4 border-slate-300">{load.status.replace('_', ' ')}</Badge>
-                              )}
-                              {tracking?.alerts && tracking.alerts.length > 0 && (
-                                <Badge variant="destructive" className="text-[8px] h-4 animate-bounce"><AlertTriangle size={10} className="mr-1" /> ALERTA</Badge>
                               )}
                             </div>
                             <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500 uppercase">
@@ -252,16 +245,15 @@ export default function MonitorOperativoPage() {
                          </div>
                       </div>
 
-                      {/* Technical Info Grid */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-3 flex-[2] w-full lg:w-auto mt-4 lg:mt-0 border-t lg:border-t-0 pt-4 lg:pt-0">
                          <div className="space-y-1">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Chofer y Unidad</p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Conductor y Patente</p>
                             <div className="space-y-0.5">
                               <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 truncate">
-                                <User size={10} className="text-blue-500" /> {driver ? `${driver.lastName}, ${driver.firstName[0]}.` : 'S/D'}
+                                <User size={10} className="text-blue-500" /> {driver ? `${driver.lastName}, ${driver.firstName[0]}.` : 'Sin Chofer'}
                               </p>
                               <p className="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400">
-                                <TruckIcon size={10} className="inline mr-1" /> {truck?.plate || 'S/D'}
+                                <ShieldCheck size={10} className="inline mr-1" /> {truck?.plate || 'Sin Camión'}
                               </p>
                             </div>
                          </div>
@@ -272,36 +264,33 @@ export default function MonitorOperativoPage() {
                             </p>
                          </div>
                          
-                         {/* DINAMIC LOGISTICS BLOCK */}
                          <div className="space-y-1">
                             <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Logística Telemetría</p>
-                            {load.status === 'on_route' && tracking ? (
+                            {(load.status === 'on_route' || load.status === 'on_pause') && tracking ? (
                               <div className="space-y-0.5">
                                 <div className="flex items-center gap-2 text-[10px] font-bold text-blue-600">
-                                  <Navigation size={10} /> {tracking.distanceTraveledKm?.toFixed(1)} <span className="opacity-50">recorrido</span>
+                                  <Navigation size={10} /> {tracking.distanceTraveledKm?.toFixed(1)} <span className="opacity-50">km recorridos</span>
                                 </div>
                                 <div className="flex items-center gap-2 text-[10px] font-bold text-orange-600">
-                                  <ArrowRight size={10} /> {tracking.distanceRemainingKm?.toFixed(1)} <span className="opacity-50">faltan</span>
+                                  <ArrowRight size={10} /> {tracking.distanceRemainingKm?.toFixed(1)} <span className="opacity-50">km restantes</span>
                                 </div>
                               </div>
                             ) : (
                               <p className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                                <RouteIcon size={10} className="text-slate-400" /> ~700 <span className="text-[8px] opacity-50">KM EST.</span>
+                                <RouteIcon size={10} className="text-slate-400" /> {load.pickupTime}hs <span className="text-[8px] opacity-50 ml-1 uppercase">Salida</span>
                               </p>
                             )}
                          </div>
 
                          <div className="space-y-1">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Tiempo / ETA</p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Tiempo de Jornada</p>
                             <div className="space-y-0.5">
                                <p className="text-xs font-bold text-blue-600 flex items-center gap-1">
-                                  <Timer size={10} /> {load.estimatedArrivalTime}hs
+                                  <Timer size={10} /> {tracking?.timeOnRouteMinutes || 0} min <span className="text-[8px] font-normal opacity-50">Conducción</span>
                                </p>
-                               {load.status === 'on_route' && (
-                                 <p className="text-[9px] font-bold text-slate-500 flex items-center gap-1">
-                                   <History size={10} /> {tracking?.timeOnRouteMinutes || 0} min conduciendo
-                                 </p>
-                               )}
+                               <p className="text-[9px] font-bold text-slate-500 flex items-center gap-1">
+                                 <History size={10} /> {tracking?.timeStoppedMinutes || 0} min <span className="text-[8px] font-normal opacity-50">Parado</span>
+                               </p>
                             </div>
                          </div>
                       </div>
@@ -310,11 +299,11 @@ export default function MonitorOperativoPage() {
                         <Button 
                           variant="ghost" 
                           size="sm" 
-                          className="flex-1 lg:flex-none text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/20"
+                          className="flex-1 lg:flex-none text-[10px] font-bold text-blue-600 bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200"
                           asChild
                         >
-                          <Link href={load.status === 'on_route' ? `/tracking/${load.id}` : `/cargas/${load.id}/orden`}>
-                            {load.status === 'on_route' ? 'CENTRAL TRACKING' : 'HOJA RUTA'} <ArrowRight size={12} className="ml-1" />
+                          <Link href={`/rutas/${load.id}`}>
+                            <Zap size={12} className="mr-1" /> APP CHOFER
                           </Link>
                         </Button>
                         <CollapsibleTrigger asChild>
@@ -325,11 +314,9 @@ export default function MonitorOperativoPage() {
                       </div>
                    </div>
 
-                   {/* Expandable Content: Detailed GPS & Itinerary */}
                    <CollapsibleContent className="bg-slate-50 dark:bg-slate-900/80 border-t border-slate-200 dark:border-slate-800 p-6 animate-in slide-in-from-top-2">
                       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                         {/* Telemetría Avanzada (On Route Only) */}
-                         {load.status === 'on_route' && (
+                         {(load.status === 'on_route' || load.status === 'on_pause') && (
                            <div className="space-y-4 lg:border-r pr-6">
                               <h4 className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-2 tracking-widest">
                                  <Zap size={14} /> Telemetría GPS Nativa
@@ -360,8 +347,7 @@ export default function MonitorOperativoPage() {
                            </div>
                          )}
 
-                         {/* Tramo Ida */}
-                         <div className={cn("space-y-4", load.status !== 'on_route' && "lg:col-span-2")}>
+                         <div className={cn("space-y-4", (load.status !== 'on_route' && load.status !== 'on_pause') && "lg:col-span-2")}>
                             <h4 className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-2 tracking-widest">
                                <Navigation size={14} /> Tramo 1: Hoja de Ruta (Ida)
                             </h4>
@@ -398,7 +384,6 @@ export default function MonitorOperativoPage() {
                             </div>
                          </div>
 
-                         {/* Tramo Retorno */}
                          <div className="space-y-4">
                             <h4 className="text-[10px] font-black uppercase text-orange-600 flex items-center gap-2 tracking-widest">
                                <Repeat size={14} /> Tramo 2: Logística de Retorno
@@ -458,7 +443,6 @@ export default function MonitorOperativoPage() {
         </CardContent>
       </Card>
 
-      {/* Mapa de Flota */}
       <Card className="border-none shadow-sm overflow-hidden h-[500px] relative">
         {mounted && (
           <MapContainer 
@@ -515,3 +499,4 @@ export default function MonitorOperativoPage() {
     </div>
   );
 }
+

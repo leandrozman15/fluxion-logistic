@@ -145,7 +145,6 @@ export default function RouteDetailPage() {
         const now = Date.now();
         const currentSpeedKmH = (speed || 0) * 3.6;
         
-        // Adaptive transmission: 20s if moving, 60s if stopped
         const interval = currentSpeedKmH > 5 ? 20000 : 60000;
         if (now - lastUpdateRef.current < interval) return;
 
@@ -162,7 +161,8 @@ export default function RouteDetailPage() {
           "tracking.currentSpeed": Math.round(currentSpeedKmH),
           "tracking.distanceTraveledKm": increment(distanceInc),
           "tracking.distanceRemainingKm": Math.max(0, distRemaining - distanceInc),
-          "tracking.lastUpdateAt": serverTimestamp()
+          "tracking.lastUpdateAt": serverTimestamp(),
+          updatedAt: serverTimestamp()
         });
 
         lastUpdateRef.current = now;
@@ -181,7 +181,6 @@ export default function RouteDetailPage() {
     const lat = displayDestination.lat;
     const lng = displayDestination.lng;
     
-    // Detect OS and open map
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     const url = isIOS 
       ? `maps://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`
@@ -329,7 +328,7 @@ export default function RouteDetailPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 bg-slate-100 p-1">
+        <TabsList className="grid w-full grid-cols-4 bg-slate-100 dark:bg-slate-800 p-1">
           <TabsTrigger value="mission" className="text-[10px] uppercase font-bold">Misión</TabsTrigger>
           <TabsTrigger value="time" className="text-[10px] uppercase font-bold">Tiempo</TabsTrigger>
           <TabsTrigger value="incidents" className="text-[10px] uppercase font-bold">Alertas</TabsTrigger>
@@ -352,7 +351,7 @@ export default function RouteDetailPage() {
                 <h2 className="text-2xl font-black uppercase italic">{load.status.replace('_', ' ')}</h2>
               </div>
               <div className="flex flex-col gap-2">
-                {load.status === 'assigned' && (
+                {(load.status === 'assigned' || load.status === 'pending') && (
                   <Button className="w-full bg-blue-600 h-14 text-lg font-bold shadow-lg" onClick={handleStartTrip} disabled={isUpdating}>
                     INICIAR VIAJE
                   </Button>
@@ -402,13 +401,13 @@ export default function RouteDetailPage() {
           <div className="space-y-6 px-2">
             <div className="flex gap-4">
               <div className="flex flex-col items-center">
-                <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2", load.status !== 'pending' && load.status !== 'assigned' ? 'bg-green-500 border-green-500 text-white' : 'bg-white border-slate-200 text-slate-400')}>
+                <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2", load.status !== 'pending' && load.status !== 'assigned' ? 'bg-green-50 border-green-500 text-white' : 'bg-white border-slate-200 text-slate-400')}>
                   {load.status !== 'pending' && load.status !== 'assigned' ? <CheckCircle2 size={16}/> : <Package size={16}/>}
                 </div>
-                <div className="w-0.5 h-full bg-slate-100 min-h-[40px]"></div>
+                <div className="w-0.5 h-full bg-slate-100 dark:bg-slate-800 min-h-[40px]"></div>
               </div>
               <div className="flex-1 space-y-1">
-                <h3 className="font-bold text-slate-900 text-sm">Punto de Carga (Origen)</h3>
+                <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">Punto de Carga (Origen)</h3>
                 <p className="text-[11px] text-slate-500 leading-tight">{load.origin.name}</p>
                 <p className="text-[10px] text-slate-400 italic">{load.origin.address}</p>
               </div>
@@ -416,12 +415,12 @@ export default function RouteDetailPage() {
 
             <div className="flex gap-4">
               <div className="flex flex-col items-center">
-                <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2", load.status === 'delivered' ? 'bg-green-500 border-green-500 text-white' : 'bg-white border-slate-200 text-slate-400')}>
+                <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2", load.status === 'delivered' ? 'bg-green-50 border-green-500 text-white' : 'bg-white border-slate-200 text-slate-400')}>
                    <Navigation size={16}/>
                 </div>
               </div>
               <div className="flex-1 space-y-1">
-                <h3 className="font-bold text-slate-900 text-sm">Destino Final</h3>
+                <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">Destino Final</h3>
                 <p className="text-[11px] text-slate-500 leading-tight">{displayDestination.name}</p>
                 <p className="text-[10px] text-slate-400 italic">{displayDestination.address}</p>
                 <div className="flex gap-2 pt-2">
@@ -479,15 +478,6 @@ export default function RouteDetailPage() {
                </div>
              )}
           </div>
-
-          <div className="px-2 space-y-3">
-            <Label className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">Normativa y Penalidades</Label>
-            <div className="p-4 bg-slate-50 border rounded-xl space-y-2">
-               <p className="text-[10px] text-slate-600 leading-relaxed italic">
-                 "El conductor debe realizar una pausa de 30 min cada 4 horas de conducción continua. El descanso nocturno debe ser de al menos 8 horas."
-               </p>
-            </div>
-          </div>
         </TabsContent>
 
         {/* TAB: REPORTAR INCIDENTES */}
@@ -507,13 +497,13 @@ export default function RouteDetailPage() {
                   <Dialog key={type.id}>
                     <DialogTrigger asChild>
                       <button 
-                        className="flex flex-col items-center justify-center p-3 rounded-xl border bg-white hover:bg-slate-50 transition-all gap-2"
+                        className="flex flex-col items-center justify-center p-3 rounded-xl border bg-white dark:bg-slate-900 hover:bg-slate-50 transition-all gap-2"
                         onClick={() => setSelectedIncidentType(type.id)}
                       >
                         <div className={cn("w-10 h-10 rounded-full flex items-center justify-center text-white", type.color)}>
                           <type.icon size={20} />
                         </div>
-                        <span className="text-[9px] uppercase font-bold text-slate-600 text-center leading-tight">{type.label}</span>
+                        <span className="text-[9px] uppercase font-bold text-slate-600 dark:text-slate-400 text-center leading-tight">{type.label}</span>
                       </button>
                     </DialogTrigger>
                     <DialogContent className="max-w-[90vw] rounded-xl">
@@ -631,12 +621,12 @@ export default function RouteDetailPage() {
               {expenses?.map(exp => {
                 const CategoryIcon = EXPENSE_CATEGORIES.find(c => c.id === exp.category)?.icon || Receipt;
                 return (
-                  <Card key={exp.id} className="border-none shadow-sm bg-white">
+                  <Card key={exp.id} className="border-none shadow-sm bg-white dark:bg-slate-900">
                     <CardContent className="p-3 flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-slate-50 flex items-center justify-center text-slate-600 border"><CategoryIcon size={18} /></div>
+                        <div className="w-10 h-10 rounded-lg bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400 border"><CategoryIcon size={18} /></div>
                         <div>
-                          <div className="font-bold text-sm text-slate-800">${exp.amount?.toLocaleString()}</div>
+                          <div className="font-bold text-sm text-slate-800 dark:text-slate-200">${exp.amount?.toLocaleString()}</div>
                           <div className="text-[10px] text-slate-400 uppercase font-bold">{exp.location}</div>
                         </div>
                       </div>
@@ -650,9 +640,8 @@ export default function RouteDetailPage() {
         </TabsContent>
       </Tabs>
 
-      {/* BOTONES DE ACCION FIJOS */}
       <div className="fixed bottom-6 left-6 right-6 flex gap-3 z-40">
-         <Button variant="outline" className="flex-1 h-14 font-bold shadow-lg bg-white border-slate-200" onClick={() => window.open(`tel:0800-LOGISTICA`)}>
+         <Button variant="outline" className="flex-1 h-14 font-bold shadow-lg bg-white dark:bg-slate-900 border-slate-200" onClick={() => window.open(`tel:0800-LOGISTICA`)}>
            <LifeBuoy className="mr-2 text-blue-600" /> CENTRAL
          </Button>
          <Button className="bg-red-600 flex-1 h-14 font-bold shadow-lg text-white" onClick={() => setActiveTab('incidents')}>
