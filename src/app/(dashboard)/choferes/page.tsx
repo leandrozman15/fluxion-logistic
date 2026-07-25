@@ -26,6 +26,7 @@ import { Driver, DriverStatus, Truck, Load } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import Link from "next/link";
 
 export default function ChoferesPage() {
   const db = useFirestore();
@@ -104,14 +105,6 @@ export default function ChoferesPage() {
       return <span className="text-green-600">Vigente ({days}d)</span>;
     } catch (e) {
       return null;
-    }
-  };
-
-  const handleView = (dataUrl: string | undefined) => {
-    if (!dataUrl) return;
-    const win = window.open();
-    if (win) {
-      win.document.write(`<iframe src="${dataUrl}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
     }
   };
 
@@ -207,16 +200,16 @@ export default function ChoferesPage() {
                     return (
                       <TableRow key={driver.id} className="hover:bg-slate-50 transition-colors">
                         <TableCell>
-                          <div className="flex items-center gap-3">
-                            <Avatar className="w-10 h-10 rounded-full border shadow-sm">
+                          <Link href={`/choferes/${driver.id}`} className="flex items-center gap-3 group">
+                            <Avatar className="w-10 h-10 rounded-full border shadow-sm group-hover:border-blue-400 transition-colors">
                               <AvatarImage src={driver.avatarUrl} className="object-cover" />
                               <AvatarFallback className="bg-blue-50 text-blue-600 text-xs font-bold">{driver.firstName[0]}{driver.lastName[0]}</AvatarFallback>
                             </Avatar>
                             <div>
-                              <div className="font-bold text-slate-900">{driver.lastName}, {driver.firstName}</div>
+                              <div className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{driver.lastName}, {driver.firstName}</div>
                               <div className="text-[10px] text-slate-500 font-mono">DNI: {driver.dni}</div>
                             </div>
-                          </div>
+                          </Link>
                         </TableCell>
                         <TableCell>
                           <div className="space-y-1">
@@ -255,11 +248,12 @@ export default function ChoferesPage() {
                             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical size={16} /></Button></DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-56">
                               <DropdownMenuLabel>Gestión de Chofer</DropdownMenuLabel>
-                              <DropdownMenuItem onClick={() => router.push(`/choferes/${driver.id}/editar`)}>Editar Perfil</DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem disabled={!driver.dniFileUrl} onClick={() => handleView(driver.dniFileUrl)}>Ver DNI</DropdownMenuItem>
-                              <DropdownMenuItem disabled={!driver.licenseFileUrl} onClick={() => handleView(driver.licenseFileUrl)}>Ver Licencia</DropdownMenuItem>
-                              <DropdownMenuItem disabled={!driver.lintiFileUrl} onClick={() => handleView(driver.lintiFileUrl)}>Ver LINTI</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => router.push(`/choferes/${driver.id}`)}>
+                                <Eye className="w-4 h-4 mr-2" /> Ver Expediente
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => router.push(`/choferes/${driver.id}/editar`)}>
+                                <Edit2 className="w-4 h-4 mr-2" /> Editar Perfil
+                              </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem className="text-red-600 focus:bg-red-50 focus:text-red-600" onSelect={() => handleDeleteDriver(driver.id, `${driver.firstName} ${driver.lastName}`)}>Eliminar Registro</DropdownMenuItem>
                             </DropdownMenuContent>
@@ -277,3 +271,5 @@ export default function ChoferesPage() {
     </div>
   );
 }
+
+import { Edit2 } from "lucide-react";
