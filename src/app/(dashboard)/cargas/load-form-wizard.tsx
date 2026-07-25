@@ -170,36 +170,42 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     const dateStr = isOutbound ? formData.pickupDate : formData.returnPickupDate;
     const timeStr = isOutbound ? formData.pickupTime : formData.returnPickupTime;
     const stops = isOutbound ? formData.outboundStops : formData.returnStops;
+    
+    // Punto de origen para el tramo actual
     const origin = isOutbound ? formData.origin : (formData.outboundStops?.[formData.outboundStops?.length - 1] || formData.origin);
-    const destination = isOutbound ? (formData.outboundStops?.[formData.outboundStops?.length - 1] || formData.origin) : (formData.returnDestination);
+    
+    // Punto de destino final para el tramo actual
+    const destination = isOutbound 
+      ? (formData.outboundStops?.[formData.outboundStops?.length - 1]) 
+      : (formData.returnDestination);
 
     if (!dateStr || !timeStr || !origin?.address || !destination?.address) {
-      toast({ variant: "destructive", title: "Datos incompletos", description: "Asegúrese de cargar salida, origen y destino." });
+      toast({ variant: "destructive", title: "Datos incompletos", description: "Asegúrese de cargar salida y al menos un punto de destino." });
       return;
     }
 
     const apiKey = tenant?.settings?.mapApiKey;
     if (!apiKey || tenant?.settings?.mapProvider !== 'google') {
-      // Fallback manual si no hay API
       const startDateTime = parse(`${dateStr} ${timeStr}`, "yyyy-MM-dd HH:mm", new Date());
-      const endDateTime = addMinutes(startDateTime, 480); // 8 horas default
+      const endDateTime = addMinutes(startDateTime, 480); 
       if (isOutbound) {
         setFormData(prev => ({ ...prev, estimatedArrivalDate: format(endDateTime, "yyyy-MM-dd"), estimatedArrivalTime: format(endDateTime, "HH:mm") }));
       } else {
         setFormData(prev => ({ ...prev, returnEstimatedArrivalDate: format(endDateTime, "yyyy-MM-dd"), returnEstimatedArrivalTime: format(endDateTime, "HH:mm") }));
       }
-      toast({ title: "ETA Estimado (Manual)", description: "Se aplicó un tiempo de tránsito de 8 horas." });
+      toast({ title: "ETA Estimado (Manual)", description: "Se aplicó un tiempo de tránsito de 8 horas por falta de API Key." });
       return;
     }
 
     setIsCalculating(true);
     try {
+      // Puntos intermedios (waypoints)
       const points = [origin.address, ...(stops?.map(s => s.address) || []), destination.address];
       const result = await calculateRouteDetails(points, apiKey);
 
       if (result) {
         const startDateTime = parse(`${dateStr} ${timeStr}`, "yyyy-MM-dd HH:mm", new Date());
-        const endDateTime = addMinutes(startDateTime, result.durationMinutes + (stops?.length || 0) * 30); // Agregamos 30 min por parada
+        const endDateTime = addMinutes(startDateTime, result.durationMinutes + (stops?.length || 0) * 30); 
         
         if (isOutbound) {
           setFormData(prev => ({ ...prev, estimatedArrivalDate: format(endDateTime, "yyyy-MM-dd"), estimatedArrivalTime: format(endDateTime, "HH:mm") }));
@@ -449,15 +455,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                         </SelectContent>
                       </Select>
                     </div>
-                    {selectedTruck?.semiTrailer && (
-                      <div className="p-3 bg-slate-50 rounded-lg border flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <p className="text-[10px] font-bold text-slate-400 uppercase">Semirremolque Vinculado</p>
-                          <p className="text-xs font-bold text-slate-700">{selectedTruck.semiTrailer.plate} - {selectedTruck.semiTrailer.brand}</p>
-                        </div>
-                        <Badge className="bg-blue-100 text-blue-600 border-none text-[8px] uppercase">{selectedTruck.semiTrailer.type}</Badge>
-                      </div>
-                    )}
                   </div>
 
                   <div className="space-y-4">
@@ -493,20 +490,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                         <Input type="time" value={formData.pickupTime ?? ''} onChange={e => setFormData({...formData, pickupTime: e.target.value})} />
                       </div>
                     </div>
-                    <Button variant="outline" size="sm" className="w-full text-[10px] font-bold" onClick={() => handleCalculateArrival(true)} disabled={isCalculating}>
-                      {isCalculating ? <Loader2 size={12} className="animate-spin mr-1" /> : null}
-                      Calcular ETA Ida (Google Maps)
-                    </Button>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <Label className="text-[10px] uppercase text-green-600 font-bold">ETA Fecha Llegada</Label>
-                        <Input type="date" value={formData.estimatedArrivalDate ?? ''} onChange={e => setFormData({...formData, estimatedArrivalDate: e.target.value})} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] uppercase text-green-600 font-bold">ETA Hora Llegada</Label>
-                        <Input type="time" value={formData.estimatedArrivalTime ?? ''} onChange={e => setFormData({...formData, estimatedArrivalTime: e.target.value})} />
-                      </div>
-                    </div>
                   </div>
 
                   <div className="space-y-4">
@@ -526,20 +509,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                           <div className="space-y-1">
                             <Label className="text-[10px] uppercase">Hora Inicio Retorno</Label>
                             <Input type="time" value={formData.returnPickupTime ?? ''} onChange={e => setFormData({...formData, returnPickupTime: e.target.value})} />
-                          </div>
-                        </div>
-                        <Button variant="outline" size="sm" className="w-full text-[10px] font-bold" onClick={() => handleCalculateArrival(false)} disabled={isCalculating}>
-                          {isCalculating ? <Loader2 size={12} className="animate-spin mr-1" /> : null}
-                          Calcular ETA Retorno (Google Maps)
-                        </Button>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                            <Label className="text-[10px] uppercase text-green-600 font-bold">ETA Llegada Final</Label>
-                            <Input type="date" value={formData.returnEstimatedArrivalDate ?? ''} onChange={e => setFormData({...formData, returnEstimatedArrivalDate: e.target.value})} />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[10px] uppercase text-green-600 font-bold">ETA Hora Final</Label>
-                            <Input type="time" value={formData.returnEstimatedArrivalTime ?? ''} onChange={e => setFormData({...formData, returnEstimatedArrivalTime: e.target.value})} />
                           </div>
                         </div>
                       </div>
@@ -575,10 +544,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                   <div className="p-3 bg-white border rounded-lg space-y-1">
                     <div className="text-[10px] font-bold text-slate-400 uppercase">Dirección Completa Origen</div>
                     <div className="text-xs font-bold text-slate-600">{formData.origin.address ?? ''}</div>
-                    <div className="text-[9px] text-slate-400 flex items-center gap-3 mt-1">
-                       <span className="flex items-center gap-1"><Info size={10} /> {formData.origin.contact ?? ''}</span>
-                       <span className="flex items-center gap-1"><Clock size={10} /> {formData.origin.phone ?? ''}</span>
-                    </div>
                   </div>
                 )}
               </div>
@@ -594,11 +559,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                           <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 font-bold text-xs shrink-0">{idx + 1}</div>
                           <div>
                             <p className="font-bold text-sm text-slate-800">{stop.name ?? ''}</p>
-                            <p className="text-[10px] text-slate-500 uppercase font-medium leading-tight max-w-[200px] sm:max-w-none">{stop.address ?? ''}</p>
-                            <div className="flex gap-2 mt-1.5">
-                               <Badge variant="outline" className="text-[8px] h-4 bg-blue-50 border-blue-100">{stop.weightKg ?? 0} Kg</Badge>
-                               <Badge variant="secondary" className="text-[8px] h-4">{stop.documents?.length || 0} Remitos</Badge>
-                            </div>
+                            <p className="text-[10px] text-slate-500 uppercase font-medium leading-tight">{stop.address ?? ''}</p>
                           </div>
                        </div>
                        <div className="flex gap-2">
@@ -608,6 +569,27 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                     </div>
                   ))
                 )}
+              </div>
+
+              {/* CALCULO DE ETA IDA */}
+              <div className="pt-6 border-t space-y-4">
+                 <div className="flex items-center gap-2 text-blue-600 font-bold text-xs uppercase">
+                    <Clock size={16} /> Cálculo de Llegada Estimada (Ida)
+                 </div>
+                 <Button variant="outline" size="sm" className="w-full text-[10px] font-bold h-10 border-blue-200 text-blue-600" onClick={() => handleCalculateArrival(true)} disabled={isCalculating || formData.outboundStops?.length === 0}>
+                    {isCalculating ? <Loader2 size={12} className="animate-spin mr-1" /> : <Zap size={12} className="mr-1" />}
+                    Calcular ETA Ida (Google Maps)
+                 </Button>
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase text-green-600 font-bold">ETA Fecha Llegada</Label>
+                      <Input type="date" value={formData.estimatedArrivalDate ?? ''} onChange={e => setFormData({...formData, estimatedArrivalDate: e.target.value})} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase text-green-600 font-bold">ETA Hora Llegada</Label>
+                      <Input type="time" value={formData.estimatedArrivalTime ?? ''} onChange={e => setFormData({...formData, estimatedArrivalTime: e.target.value})} />
+                    </div>
+                 </div>
               </div>
             </CardContent>
           </Card>
@@ -642,11 +624,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                               <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-600 font-bold text-xs shrink-0">{idx + 1}</div>
                               <div>
                                 <p className="font-bold text-sm text-slate-800">{stop.name ?? ''}</p>
-                                <p className="text-[10px] text-slate-500 uppercase font-medium leading-tight max-w-[200px] sm:max-w-none">{stop.address ?? ''}</p>
-                                <div className="flex gap-2 mt-1.5">
-                                   <Badge variant="outline" className="text-[8px] h-4 bg-orange-50 border-orange-100">{stop.weightKg ?? 0} Kg</Badge>
-                                   <Badge variant="secondary" className="text-[8px] h-4">{stop.documents?.length || 0} Remitos</Badge>
-                                </div>
+                                <p className="text-[10px] text-slate-500 uppercase font-medium leading-tight">{stop.address ?? ''}</p>
                               </div>
                            </div>
                            <div className="flex gap-2">
@@ -666,16 +644,27 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                       <SelectTrigger className="bg-white border-orange-200"><SelectValue placeholder="Seleccionar destino final (Sede/Cliente)" /></SelectTrigger>
                       <SelectContent>{locationsList.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent>
                     </Select>
-                    {formData.returnDestination?.name && (
-                      <div className="p-3 bg-white border border-orange-100 rounded-lg space-y-1">
-                        <div className="text-[10px] font-bold text-slate-400 uppercase">Dirección de Finalización Retorno</div>
-                        <div className="text-xs font-bold text-slate-600">{formData.returnDestination.address ?? ''}</div>
-                        <div className="text-[9px] text-slate-400 flex items-center gap-3 mt-1">
-                           <span className="flex items-center gap-1"><Info size={10} /> {formData.returnDestination.contact ?? ''}</span>
-                           <span className="flex items-center gap-1"><Clock size={10} /> {formData.returnDestination.phone ?? ''}</span>
+                  </div>
+
+                  {/* CALCULO DE ETA RETORNO */}
+                  <div className="pt-6 border-t space-y-4">
+                    <div className="flex items-center gap-2 text-orange-600 font-bold text-xs uppercase">
+                        <Clock size={16} /> Cálculo de Llegada Final (Retorno)
+                    </div>
+                    <Button variant="outline" size="sm" className="w-full text-[10px] font-bold h-10 border-orange-200 text-orange-600" onClick={() => handleCalculateArrival(false)} disabled={isCalculating || !formData.returnDestination?.name}>
+                        {isCalculating ? <Loader2 size={12} className="animate-spin mr-1" /> : <Zap size={12} className="mr-1" />}
+                        Calcular ETA Retorno (Google Maps)
+                    </Button>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase text-green-600 font-bold">ETA Llegada Final</Label>
+                          <Input type="date" value={formData.returnEstimatedArrivalDate ?? ''} onChange={e => setFormData({...formData, returnEstimatedArrivalDate: e.target.value})} />
                         </div>
-                      </div>
-                    )}
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase text-green-600 font-bold">ETA Hora Final</Label>
+                          <Input type="time" value={formData.returnEstimatedArrivalTime ?? ''} onChange={e => setFormData({...formData, returnEstimatedArrivalTime: e.target.value})} />
+                        </div>
+                    </div>
                   </div>
                 </CardContent>
               </>
