@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection, useUser } from "@/firebase";
@@ -22,9 +22,9 @@ import {
 import { Load, Expense, ExpenseCategory, TrackingPoint } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { calculateDistance, estimateFuelFactor } from "@/lib/utils/tracking-math";
+import { calculateDistance, calculateAdjustedETA } from "@/lib/utils/tracking-math";
 
-// Carregamento dinâmico do Mapa para evitar erros de SSR
+// Cargamento dinámico del Mapa
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
   { ssr: false, loading: () => <div className="h-48 w-full bg-slate-100 animate-pulse rounded-xl flex items-center justify-center text-xs text-slate-400">Cargando Mapa...</div> }
@@ -47,13 +47,17 @@ export default function RouteDetailPage() {
   const db = useFirestore();
   const { user } = useUser();
   const { toast } = useToast();
+  
   const [isUpdating, setIsUpdating] = useState(false);
   const [isExpenseOpen, setIsExpenseOpen] = useState(false);
   
   // GPS State
   const [gpsActive, setGpsActive] = useState(false);
-  const [watchId, setWatchId] = useState<number | null>(null);
   const [L, setL] = useState<any>(null);
+  
+  // Throttling State
+  const lastUpdateRef = useRef<number>(0);
+  const lastPosRef = useRef<{lat: number, lng: number} | null>(null);
 
   const [expenseData, setExpenseData] = useState<Partial<Expense>>({
     category: 'fuel',
@@ -86,56 +90,84 @@ export default function RouteDetailPage() {
     return expenses?.reduce((acc, exp) => acc + (exp.amount || 0), 0) || 0;
   }, [expenses]);
 
-  // Derivar destino final para evitar errores de undefined
   const displayDestination = useMemo(() => {
     if (!load) return { name: 'Cargando...', address: '', lat: 0, lng: 0 };
-    if (load.destination?.name) return load.destination;
     if (load.outboundStops && load.outboundStops.length > 0) {
       const last = load.outboundStops[load.outboundStops.length - 1];
       return { name: last.name, address: last.address, lat: last.lat || 0, lng: last.lng || 0 };
     }
-    return { name: 'No definido', address: 'Dirección no disponible', lat: 0, lng: 0 };
+    return { name: 'S/D', address: '-', lat: 0, lng: 0 };
   }, [load]);
 
-  // GPS Tracking Logic
+  // LOGICA DE RASTREO GPS NATIVO OPTIMIZADO
+  useEffect(() => {
+    if (!gpsActive || !loadRef) return;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude, speed } = pos.coords;
+        const now = Date.now();
+        const currentSpeedKmH = (speed || 0) * 3.6;
+        
+        // Determinar intervalo según movimiento (Optimización de datos)
+        // 20s si se mueve (>5km/h), 60s si está detenido
+        const interval = currentSpeedKmH > 5 ? 20000 : 60000;
+
+        if (now - lastUpdateRef.current < interval) return;
+
+        // Calcular distancia recorrida localmente (Fórmula Haversine - Gratuita)
+        let distanceInc = 0;
+        if (lastPosRef.current) {
+          distanceInc = calculateDistance(
+            lastPosRef.current.lat, 
+            lastPosRef.current.lng, 
+            latitude, 
+            longitude
+          );
+        }
+
+        // Calcular ETA Dinámico localmente (Gratuito)
+        const distRemaining = load?.tracking?.distanceRemainingKm || 100;
+        const newEtaMinutes = calculateAdjustedETA(distRemaining, currentSpeedKmH, currentSpeedKmH);
+
+        // Transmisión al servidor (Sin pasar por Google Maps API)
+        updateDoc(loadRef, {
+          "tracking.currentLat": latitude,
+          "tracking.currentLng": longitude,
+          "tracking.currentSpeed": Math.round(currentSpeedKmH),
+          "tracking.distanceTraveledKm": increment(distanceInc),
+          "tracking.distanceRemainingKm": Math.max(0, distRemaining - distanceInc),
+          "tracking.lastUpdateAt": serverTimestamp()
+        });
+
+        lastUpdateRef.current = now;
+        lastPosRef.current = { lat: latitude, lng: longitude };
+      },
+      (err) => {
+        console.error("GPS Native Error:", err);
+        toast({ variant: "destructive", title: "Falla de Sensores", description: "Verifique permisos de ubicación nativa." });
+      },
+      { 
+        enableHighAccuracy: true, // Forzar uso de GPS Satelital/Glonass
+        timeout: 10000, 
+        maximumAge: 0 
+      }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [gpsActive, loadRef, load?.tracking?.distanceRemainingKm, toast]);
+
   const toggleGPS = () => {
     if (gpsActive) {
-      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
       setGpsActive(false);
-      setWatchId(null);
-      toast({ title: "GPS Desactivado", description: "El rastreo se ha detenido." });
+      toast({ title: "GPS Desactivado", description: "Sensor nativo desconectado." });
     } else {
       if (!navigator.geolocation) {
-        toast({ variant: "destructive", title: "GPS no soportado", description: "Su dispositivo no permite geolocalización." });
+        toast({ variant: "destructive", title: "Error", description: "Dispositivo sin soporte GPS." });
         return;
       }
-
-      const id = navigator.geolocation.watchPosition(
-        (pos) => {
-          if (!loadRef) return;
-          const { latitude, longitude, speed } = pos.coords;
-          const currentSpeed = (speed || 0) * 3.6; // m/s to km/h
-
-          // Atualizar Firestore com telemetria básica
-          updateDoc(loadRef, {
-            "tracking.currentLat": latitude,
-            "tracking.currentLng": longitude,
-            "tracking.currentSpeed": Math.round(currentSpeed),
-            "tracking.lastUpdateAt": serverTimestamp(),
-            "tracking.distanceTraveledKm": increment(0.01)
-          });
-        },
-        (err) => {
-          console.error("GPS Error:", err);
-          toast({ variant: "destructive", title: "Error de GPS", description: "Asegúrese de dar permisos de ubicación." });
-          setGpsActive(false);
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-      );
-
-      setWatchId(id);
       setGpsActive(true);
-      toast({ title: "GPS Activado", description: "Transmitiendo ubicación a la base." });
+      toast({ title: "Rastreo Nativo Activo", description: "Transmitiendo vía hardware del teléfono." });
     }
   };
 
@@ -147,8 +179,8 @@ export default function RouteDetailPage() {
         status: newStatus,
         updatedAt: serverTimestamp() 
       });
-      toast({ title: "Estado Actualizado", description: `Viaje marcado como ${newStatus}.` });
-      if (newStatus === 'on_route' && !gpsActive) toggleGPS();
+      toast({ title: "Estado Actualizado" });
+      if (newStatus === 'on_route') toggleGPS();
     } catch (e) {
       toast({ variant: "destructive", title: "Error" });
     } finally {
@@ -167,11 +199,11 @@ export default function RouteDetailPage() {
         status: 'registered',
         createdAt: serverTimestamp()
       });
-      toast({ title: "Gasto Registrado", description: "El gasto ha sido enviado a administración." });
+      toast({ title: "Gasto Registrado" });
       setIsExpenseOpen(false);
       setExpenseData({ category: 'fuel', amount: 0, description: "", location: "" });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al registrar gasto" });
+      toast({ variant: "destructive", title: "Error" });
     } finally {
       setIsUpdating(false);
     }
@@ -211,9 +243,9 @@ export default function RouteDetailPage() {
           <Card className="bg-slate-900 text-white border-none overflow-hidden relative">
             <div className="absolute top-2 right-2">
               {gpsActive ? (
-                 <Badge className="bg-green-500 border-none text-[8px] animate-pulse">📡 GPS TRANSMITIENDO</Badge>
+                 <Badge className="bg-green-500 border-none text-[8px] animate-pulse">📡 GPS NATIVO ON</Badge>
               ) : (
-                 <Badge variant="outline" className="text-white/30 border-white/20 text-[8px]">📡 GPS APAGADO</Badge>
+                 <Badge variant="outline" className="text-white/30 border-white/20 text-[8px]">📡 GPS STANDBY</Badge>
               )}
             </div>
             <CardContent className="p-6 text-center space-y-4">
@@ -223,7 +255,7 @@ export default function RouteDetailPage() {
               </div>
               <div className="flex flex-col gap-2">
                 {load.status === 'assigned' && (
-                  <Button className="w-full bg-blue-600 h-14 text-lg font-bold shadow-lg shadow-blue-900/50" onClick={() => handleUpdateStatus('on_route')} disabled={isUpdating}>
+                  <Button className="w-full bg-blue-600 h-14 text-lg font-bold shadow-lg" onClick={() => handleUpdateStatus('on_route')} disabled={isUpdating}>
                     INICIAR VIAJE
                   </Button>
                 )}
@@ -239,7 +271,7 @@ export default function RouteDetailPage() {
                           <p className="text-xl font-black">{load.tracking?.distanceTraveledKm?.toFixed(1) || 0} <span className="text-[10px] font-normal opacity-50">km</span></p>
                        </div>
                     </div>
-                    <Button className="w-full bg-green-600 h-14 text-lg font-bold shadow-lg shadow-green-900/50" onClick={() => handleUpdateStatus('delivered')} disabled={isUpdating}>
+                    <Button className="w-full bg-green-600 h-14 text-lg font-bold shadow-lg" onClick={() => handleUpdateStatus('delivered')} disabled={isUpdating}>
                       CONFIRMAR ENTREGA
                     </Button>
                   </>
@@ -248,7 +280,6 @@ export default function RouteDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Mapa de Ruta */}
           <Card className="border-none shadow-sm overflow-hidden h-48 relative">
              {typeof window !== 'undefined' && L && (
                <MapContainer 
@@ -348,9 +379,7 @@ export default function RouteDetailPage() {
                   <Button size="sm" className="h-8 bg-blue-600 font-bold text-xs"><Plus size={14} className="mr-1" /> Registrar Gasto</Button>
                 </DialogTrigger>
                 <DialogContent className="max-w-[90vw] rounded-xl">
-                  <DialogHeader>
-                    <DialogTitle>Nuevo Gasto de Viaje</DialogTitle>
-                  </DialogHeader>
+                  <DialogHeader><DialogTitle>Nuevo Gasto de Viaje</DialogTitle></DialogHeader>
                   <div className="space-y-4 py-4">
                     <div className="space-y-2">
                       <Label>Categoría</Label>
@@ -376,14 +405,14 @@ export default function RouteDetailPage() {
                           type="number" 
                           className="pl-9" 
                           placeholder="0.00" 
-                          value={expenseData.amount || ''} 
+                          value={expenseData.amount ?? 0} 
                           onChange={e => setExpenseData({...expenseData, amount: parseFloat(e.target.value) || 0})}
                         />
                       </div>
                     </div>
                     <div className="space-y-2">
                       <Label>Lugar / Estación</Label>
-                      <Input placeholder="Ej: YPF Ruta 9 km 45" value={expenseData.location || ''} onChange={e => setExpenseData({...expenseData, location: e.target.value})} />
+                      <Input placeholder="Ej: YPF Ruta 9" value={expenseData.location ?? ''} onChange={e => setExpenseData({...expenseData, location: e.target.value})} />
                     </div>
                     <Button variant="outline" className="w-full border-dashed border-2 h-16 text-slate-500">
                       <Camera className="mr-2" /> Adjuntar Foto Ticket
@@ -423,19 +452,16 @@ export default function RouteDetailPage() {
                   </Card>
                 );
               })}
-              {(!expenses || expenses.length === 0) && (
-                <div className="py-10 text-center text-slate-400 text-xs italic">No hay gastos registrados aún.</div>
-              )}
             </div>
           </div>
         </TabsContent>
       </Tabs>
 
       <div className="fixed bottom-6 left-6 right-6 flex gap-3 z-40">
-         <Button variant="destructive" className="flex-1 h-14 font-bold shadow-lg shadow-red-900/20">
+         <Button variant="destructive" className="flex-1 h-14 font-bold shadow-lg">
            <AlertTriangle className="mr-2" /> INCIDENTE
          </Button>
-         <Button className="bg-blue-600 flex-1 h-14 font-bold shadow-lg shadow-blue-900/20" onClick={() => window.open(`tel:0800-LOGISTICA`)}>
+         <Button className="bg-blue-600 flex-1 h-14 font-bold shadow-lg" onClick={() => window.open(`tel:0800-LOGISTICA`)}>
            <Phone className="mr-2" /> CENTRAL
          </Button>
       </div>
