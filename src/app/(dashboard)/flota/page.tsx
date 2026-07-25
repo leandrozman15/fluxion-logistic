@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { 
   Truck, Plus, Search, MoreHorizontal, Trash2, Edit2, 
-  Gauge, Loader2, FileText
+  Gauge, Loader2, FileText, Building2, User
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -23,7 +23,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Truck as TruckType, TruckStatus } from "@/app/lib/types";
+import { Truck as TruckType, TruckStatus, Driver } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -41,6 +41,11 @@ export default function FlotaPage() {
   }, [db]);
 
   const { data: trucks, loading } = useCollection<TruckType>(trucksQuery);
+
+  const driversQuery = useMemo(() => 
+    db ? query(collection(db, "drivers")) : null
+  , [db]);
+  const { data: drivers } = useCollection<Driver>(driversQuery);
 
   const filteredTrucks = useMemo(() => {
     if (!trucks) return [];
@@ -70,6 +75,12 @@ export default function FlotaPage() {
       case 'maintenance': return <Badge className="bg-orange-100 text-orange-700 border-none">Mantenimiento</Badge>;
       default: return <Badge variant="secondary">{status}</Badge>;
     }
+  };
+
+  const getDriverName = (driverId?: string) => {
+    if (!driverId || driverId === 'none') return "Sin asignar";
+    const d = drivers?.find(dr => dr.id === driverId);
+    return d ? `${d.lastName}, ${d.firstName}` : "Cargando...";
   };
 
   return (
@@ -110,10 +121,10 @@ export default function FlotaPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Patente / Marca</TableHead>
+                  <TableHead>Unidad / Marca</TableHead>
+                  <TableHead>Titularidad / Chofer</TableHead>
                   <TableHead>Kilometraje</TableHead>
                   <TableHead>Documentación</TableHead>
-                  <TableHead>Ubicación</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
@@ -138,7 +149,7 @@ export default function FlotaPage() {
                         <TableCell>
                           <div className="flex items-center gap-3">
                              <Avatar className="w-10 h-10 rounded-lg shadow-sm border border-white">
-                               <AvatarImage src={truck.avatarUrl} />
+                               <AvatarImage src={truck.avatarUrl} className="object-cover" />
                                <AvatarFallback className="bg-blue-50 text-blue-600 rounded-lg">
                                  <Truck size={20} />
                                </AvatarFallback>
@@ -147,6 +158,21 @@ export default function FlotaPage() {
                                <div className="font-bold text-slate-900">{truck.plate || ''}</div>
                                <div className="text-[10px] text-slate-400 uppercase font-bold">{truck.brand} {truck.model}</div>
                              </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5">
+                              {truck.ownershipType === 'company' ? (
+                                <Badge variant="outline" className="text-[8px] bg-blue-50 text-blue-700 border-blue-100 uppercase h-4">Propio</Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-[8px] bg-orange-50 text-orange-700 border-orange-100 uppercase h-4">Tercero</Badge>
+                              )}
+                            </div>
+                            <div className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                              <User size={12} className="text-slate-400" />
+                              {getDriverName(truck.assignedDriverId)}
+                            </div>
                           </div>
                         </TableCell>
                         <TableCell>
@@ -163,7 +189,6 @@ export default function FlotaPage() {
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell>{truck.location?.city || 'N/A'}</TableCell>
                         <TableCell>{getStatusBadge(truck.status)}</TableCell>
                         <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                           <DropdownMenu>

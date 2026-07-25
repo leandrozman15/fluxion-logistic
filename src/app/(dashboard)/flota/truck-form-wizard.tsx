@@ -3,8 +3,8 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useDoc } from "@/firebase";
-import { collection, serverTimestamp, doc, updateDoc, setDoc } from "firebase/firestore";
+import { useFirestore, useDoc, useCollection } from "@/firebase";
+import { collection, serverTimestamp, doc, updateDoc, setDoc, query, orderBy } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,9 +14,9 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Truck, ArrowLeft, ArrowRight, Save, Loader2, 
   Gauge, Box, Thermometer, Droplets, Anchor, Layers, 
-  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon, LayoutGrid
+  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon, LayoutGrid, Users, Building2, User
 } from "lucide-react";
-import { Truck as TruckType } from "@/app/lib/types";
+import { Truck as TruckType, Driver, OwnershipType } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -66,6 +66,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     dimensions: { length: 0, width: 0, height: 0 }, bodyType: "furgon",
     grossWeight: 0, fuelType: "Diesel", tankLiters: 0, odometerKm: 0,
     avgConsumption: 32, status: "available",
+    ownershipType: 'company',
     location: { city: "", province: "Buenos Aires", country: "Argentina", lat: 0, lng: 0 },
     avatarUrl: "",
     semiTrailer: {
@@ -84,6 +85,12 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
 
   const { data: existingTruck, loading: loadingExisting } = useDoc<TruckType>(truckRef);
 
+  const driversQuery = useMemo(() => 
+    db ? query(collection(db, "drivers"), orderBy("lastName")) : null
+  , [db]);
+
+  const { data: drivers } = useCollection<Driver>(driversQuery);
+
   useEffect(() => {
     if (existingTruck) {
       setFormData({
@@ -91,6 +98,8 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
         location: existingTruck.location || { city: "", province: "Buenos Aires", country: "Argentina", lat: 0, lng: 0 },
         odometerKm: existingTruck.odometerKm || 0,
         avatarUrl: existingTruck.avatarUrl || "",
+        ownershipType: existingTruck.ownershipType || 'company',
+        assignedDriverId: existingTruck.assignedDriverId || "",
         semiTrailer: existingTruck.semiTrailer || { plate: "", brand: "", model: "", year: new Date().getFullYear(), type: "plataforma", axles: 3 }
       });
     }
@@ -121,8 +130,13 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      toast({ title: "Imagen lista", description: "La foto se ha cargado temporalmente." });
-      setFormData(prev => ({ ...prev, avatarUrl: URL.createObjectURL(file) }));
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        setFormData(prev => ({ ...prev, avatarUrl: base64 }));
+        toast({ title: "Imagen lista" });
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -208,62 +222,85 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
 
       <div className="animate-in fade-in duration-300 mx-4">
         {step === 1 && (
-          <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Datos de Identificación</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="flex flex-col items-center justify-center space-y-4 p-6 bg-slate-50 rounded-2xl border-2 border-dashed">
-                <Avatar className="w-32 h-32 border-4 border-white shadow-xl">
-                  <AvatarImage src={formData.avatarUrl} className="object-cover" />
-                  <AvatarFallback className="bg-blue-100 text-blue-600">
-                    <Truck size={48} />
-                  </AvatarFallback>
-                </Avatar>
-                <div className="text-center space-y-1">
-                  <p className="text-xs font-bold uppercase text-slate-600">Foto de la Unidad</p>
-                  <p className="text-[10px] text-slate-400">Ayuda a identificar el camión en el panel</p>
+          <div className="space-y-6">
+            <Card className="border-none shadow-sm">
+              <CardHeader><CardTitle>Identificación y Titularidad</CardTitle></CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="flex flex-col items-center justify-center space-y-4 p-6 bg-slate-50 rounded-2xl border-2 border-dashed">
+                  <Avatar className="w-32 h-32 border-4 border-white shadow-xl rounded-2xl">
+                    <AvatarImage src={formData.avatarUrl} className="object-cover" />
+                    <AvatarFallback className="bg-blue-100 text-blue-600 rounded-2xl">
+                      <Truck size={48} />
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="text-center space-y-1">
+                    <p className="text-xs font-bold uppercase text-slate-600">Foto de la Unidad</p>
+                    <p className="text-[10px] text-slate-400">Identificación visual para el panel</p>
+                  </div>
+                  <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
+                  <Button variant="outline" type="button" size="sm" onClick={() => fileInputRef.current?.click()} className="bg-white">
+                    <Camera size={14} className="mr-2" /> {formData.avatarUrl ? 'Cambiar Foto' : 'Subir Foto'}
+                  </Button>
                 </div>
-                <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
-                <Button variant="outline" type="button" size="sm" onClick={() => fileInputRef.current?.click()} className="bg-white">
-                  <Camera size={14} className="mr-2" /> {formData.avatarUrl ? 'Cambiar Foto' : 'Subir Foto'}
-                </Button>
-              </div>
 
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Patente / Matrícula</Label>
-                  <Input placeholder="AE-123-BC" value={formData.plate || ''} onChange={e => setFormData({...formData, plate: e.target.value.toUpperCase()})} />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Marca</Label>
-                    <Select value={formData.brand} onValueChange={v => setFormData({...formData, brand: v, model: ""})}>
-                      <SelectTrigger><SelectValue placeholder="Marca" /></SelectTrigger>
+                    <Label>Patente / Matrícula</Label>
+                    <Input placeholder="AE-123-BC" value={formData.plate || ''} onChange={e => setFormData({...formData, plate: e.target.value.toUpperCase()})} />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label>Titularidad del Vehículo</Label>
+                    <Select value={formData.ownershipType} onValueChange={(v: OwnershipType) => setFormData({...formData, ownershipType: v})}>
+                      <SelectTrigger className="bg-white">
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
-                        {Object.keys(BRANDS).map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                        <SelectItem value="company"><div className="flex items-center gap-2"><Building2 size={14} className="text-blue-600"/> Propio (Empresa)</div></SelectItem>
+                        <SelectItem value="third_party"><div className="flex items-center gap-2"><User size={14} className="text-orange-600"/> Tercero (Chofer / Propietario)</div></SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
+
                   <div className="space-y-2">
-                    <Label>Modelo</Label>
-                    <Select value={formData.model} onValueChange={v => setFormData({...formData, model: v})} disabled={!formData.brand}>
-                      <SelectTrigger><SelectValue placeholder="Modelo" /></SelectTrigger>
+                    <Label>Chofer Asignado</Label>
+                    <Select value={formData.assignedDriverId} onValueChange={v => setFormData({...formData, assignedDriverId: v})}>
+                      <SelectTrigger className="bg-white">
+                        <SelectValue placeholder="Seleccionar chofer" />
+                      </SelectTrigger>
                       <SelectContent>
-                        {formData.brand && (BRANDS as any)[formData.brand]?.map((m: string) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                        <SelectItem value="none">Sin asignar</SelectItem>
+                        {drivers?.map(d => (
+                          <SelectItem key={d.id} value={d.id}>{d.lastName}, {d.firstName}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Marca</Label>
+                      <Select value={formData.brand} onValueChange={v => setFormData({...formData, brand: v, model: ""})}>
+                        <SelectTrigger><SelectValue placeholder="Marca" /></SelectTrigger>
+                        <SelectContent>
+                          {Object.keys(BRANDS).map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Modelo</Label>
+                      <Select value={formData.model} onValueChange={v => setFormData({...formData, model: v})} disabled={!formData.brand}>
+                        <SelectTrigger><SelectValue placeholder="Modelo" /></SelectTrigger>
+                        <SelectContent>
+                          {formData.brand && (BRANDS as any)[formData.brand]?.map((m: string) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Año de Fabricación</Label>
-                  <Input type="number" value={formData.year || ''} onChange={e => handleNumericChange('year', e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Número de Chasis (VIN)</Label>
-                  <Input placeholder="17 caracteres" maxLength={17} value={formData.chassis || ''} onChange={e => setFormData({...formData, chassis: e.target.value.toUpperCase()})} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {step === 2 && (

@@ -4,7 +4,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection } from "@/firebase";
-import { doc, updateDoc, serverTimestamp, collection, query, where } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp, collection, query, where, getDoc } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,9 +14,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { 
   Truck as TruckIcon, FileText, Calendar, AlertTriangle, 
   CheckCircle2, Clock, Upload, ArrowLeft, ShieldCheck, 
-  MapPin, Gauge, Box, Info, Download, Trash2, MoreVertical, LayoutGrid, Fuel, DollarSign, Activity, TrendingUp
+  MapPin, Gauge, Box, Info, Download, Trash2, MoreVertical, LayoutGrid, Fuel, DollarSign, Activity, TrendingUp, User, Building2, Briefcase
 } from "lucide-react";
-import { Truck, VehicleDocument, DocStatus, Expense } from "@/app/lib/types";
+import { Truck, VehicleDocument, DocStatus, Expense, Driver } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { format, isBefore, addDays, parseISO } from "date-fns";
@@ -38,6 +38,9 @@ export default function TruckDetailPage() {
   const router = useRouter();
   const db = useFirestore();
   const { toast } = useToast();
+  
+  const [assignedDriver, setAssignedDriver] = useState<Driver | null>(null);
+  const [loadingDriver, setLoadingDriver] = useState(false);
 
   const truckRef = useMemo(() => {
     if (!db || !id) return null;
@@ -58,7 +61,25 @@ export default function TruckDetailPage() {
       const initialDocs = DEFAULT_DOCS.map(d => ({ ...d, status: 'pending' as DocStatus }));
       updateDoc(truckRef, { documentation: initialDocs });
     }
-  }, [truck, truckRef]);
+    
+    const fetchDriver = async () => {
+      if (truck?.assignedDriverId && truck.assignedDriverId !== 'none' && db) {
+        setLoadingDriver(true);
+        try {
+          const dSnap = await getDoc(doc(db, "drivers", truck.assignedDriverId));
+          if (dSnap.exists()) setAssignedDriver(dSnap.data() as Driver);
+        } catch (e) {
+          console.error(e);
+        } finally {
+          setLoadingDriver(false);
+        }
+      } else {
+        setAssignedDriver(null);
+      }
+    };
+    
+    fetchDriver();
+  }, [truck, truckRef, db]);
 
   const getStatusIcon = (status: DocStatus) => {
     switch (status) {
@@ -122,8 +143,11 @@ export default function TruckDetailPage() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-bold text-slate-900">{truck.plate}</h1>
-                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-100 uppercase text-[10px]">
-                  {truck.brand} {truck.model}
+                <Badge variant="outline" className={cn(
+                  "uppercase text-[10px]",
+                  truck.ownershipType === 'company' ? "bg-blue-50 text-blue-700 border-blue-100" : "bg-orange-50 text-orange-700 border-orange-100"
+                )}>
+                  {truck.ownershipType === 'company' ? 'Propiedad Empresa' : 'Tercero / Chofer'}
                 </Badge>
               </div>
               <p className="text-sm text-slate-500 flex items-center gap-1">
@@ -132,6 +156,9 @@ export default function TruckDetailPage() {
             </div>
           </div>
         </div>
+        <Button onClick={() => router.push(`/flota/${truck.id}/editar`)} variant="outline">
+          <Edit2 className="w-4 h-4 mr-2" /> Editar Unidad
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -170,6 +197,36 @@ export default function TruckDetailPage() {
             </CardContent>
           </Card>
 
+          <Card className="border-none shadow-sm border-l-4 border-l-blue-600">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs uppercase font-bold text-slate-500 flex items-center gap-2">
+                <User size={14} className="text-blue-600" /> Chofer Designado
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loadingDriver ? (
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Cargando chofer...
+                </div>
+              ) : assignedDriver ? (
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-10 w-10 border shadow-sm">
+                    <AvatarImage src={assignedDriver.avatarUrl} className="object-cover" />
+                    <AvatarFallback className="text-[10px] font-bold">
+                      {assignedDriver.firstName[0]}{assignedDriver.lastName[0]}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">{assignedDriver.lastName}, {assignedDriver.firstName}</p>
+                    <p className="text-[10px] text-slate-500 uppercase font-bold">LIC: {assignedDriver.licenseNumber}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-xs italic text-slate-400 py-2">Sin chofer asignado a esta unidad.</div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card className="bg-blue-600 text-white border-none shadow-md overflow-hidden relative">
             <div className="absolute top-0 right-0 p-4 opacity-10"><TrendingUp size={64}/></div>
             <CardHeader className="pb-2">
@@ -180,17 +237,6 @@ export default function TruckDetailPage() {
                 ${totalFuelCost.toLocaleString('es-AR')}
               </div>
               <p className="text-[10px] text-white/50 mt-1 uppercase font-bold tracking-widest">Total Acumulado 2025</p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-orange-50 border-orange-200">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs flex items-center gap-2 text-orange-800">
-                <Info size={14} /> Nota Legislativa 2024
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-[10px] text-orange-700 leading-relaxed">
-              El <b>Decreto 1109/2024</b> eliminó el RUTA. El sistema ya no lo marca como obligatorio para transporte de carga propia.
             </CardContent>
           </Card>
         </div>

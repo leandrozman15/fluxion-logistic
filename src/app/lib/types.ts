@@ -9,6 +9,8 @@ export type Country = 'Argentina' | 'Chile' | 'Paraguay' | 'Ushort' | 'Bolivia' 
 
 export type LoadDocType = 'remito' | 'factura' | 'cot' | 'otro' | 'despacho';
 
+export type OwnershipType = 'company' | 'third_party';
+
 export interface LoadDocument {
   id: string;
   type: LoadDocType;
@@ -120,6 +122,8 @@ export interface Truck {
   location: { city: string; province: string; country: Country; lat: number; lng: number };
   documentation: VehicleDocument[];
   avatarUrl?: string;
+  ownershipType: OwnershipType;
+  assignedDriverId?: string;
   createdAt: any;
   updatedAt: any;
   
