@@ -1,8 +1,35 @@
-
 'use client';
 
-import { SidebarProvider, SidebarInset, Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarGroup, SidebarGroupLabel, SidebarGroupContent } from "@/components/ui/sidebar";
-import { Truck, Users, Package, MapPin, TrendingUp, Settings, LogOut, LayoutDashboard, Route, History, Building2, Briefcase, BarChart3, Mail } from "lucide-react";
+import { 
+  SidebarProvider, 
+  SidebarInset, 
+  Sidebar, 
+  SidebarContent, 
+  SidebarHeader, 
+  SidebarMenu, 
+  SidebarMenuItem, 
+  SidebarMenuButton, 
+  SidebarGroup, 
+  SidebarGroupLabel, 
+  SidebarGroupContent,
+  SidebarTrigger
+} from "@/components/ui/sidebar";
+import { 
+  Truck, 
+  Users, 
+  Package, 
+  MapPin, 
+  TrendingUp, 
+  Settings, 
+  LogOut, 
+  LayoutDashboard, 
+  Route, 
+  History, 
+  Building2, 
+  Briefcase, 
+  BarChart3, 
+  Mail 
+} from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/firebase";
 import { signOut } from "firebase/auth";
@@ -95,18 +122,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </Sidebar>
         <SidebarInset className="bg-slate-50/50">
-          <header className="h-16 flex items-center justify-between px-6 border-b bg-white sticky top-0 z-10 shadow-sm">
-            <div className="flex items-center gap-4">
-              <h2 className="text-sm font-bold text-slate-500 uppercase tracking-widest">Panel de Control Nacional</h2>
+          <header className="h-16 flex items-center justify-between px-4 border-b bg-white sticky top-0 z-10 shadow-sm">
+            <div className="flex items-center gap-2">
+              <SidebarTrigger className="text-blue-600" />
+              <h2 className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-widest truncate">Panel de Control Nacional</h2>
             </div>
             <div className="flex items-center gap-4">
-               <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">
+               <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs shrink-0">
                  AR
                </div>
-               <span className="text-sm font-semibold text-slate-700 hidden sm:block">Operador Central</span>
+               <span className="text-sm font-semibold text-slate-700 hidden lg:block">Operador Central</span>
             </div>
           </header>
-          <main className="p-6">
+          <main className="p-4 sm:p-6">
             {children}
           </main>
         </SidebarInset>
