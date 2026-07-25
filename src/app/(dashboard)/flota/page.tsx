@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from "react";
@@ -25,7 +26,7 @@ import {
 import { Truck as TruckType, TruckStatus } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import Link from "next/link";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export default function FlotaPage() {
   const db = useFirestore();
@@ -136,9 +137,12 @@ export default function FlotaPage() {
                       >
                         <TableCell>
                           <div className="flex items-center gap-3">
-                             <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
-                               <Truck size={20} />
-                             </div>
+                             <Avatar className="w-10 h-10 rounded-lg shadow-sm border border-white">
+                               <AvatarImage src={truck.avatarUrl} />
+                               <AvatarFallback className="bg-blue-50 text-blue-600 rounded-lg">
+                                 <Truck size={20} />
+                               </AvatarFallback>
+                             </Avatar>
                              <div>
                                <div className="font-bold text-slate-900">{truck.plate || ''}</div>
                                <div className="text-[10px] text-slate-400 uppercase font-bold">{truck.brand} {truck.model}</div>

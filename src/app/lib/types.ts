@@ -5,7 +5,7 @@ export type LoadStatus = 'pending' | 'assigned' | 'on_route' | 'delivered' | 'in
 export type DocStatus = 'pending' | 'valid' | 'expired' | 'warning';
 export type HubType = 'hub' | 'warehouse' | 'office';
 export type MapProvider = 'google' | 'mapbox';
-export type Country = 'Argentina' | 'Chile' | 'Paraguay' | 'Uruguay' | 'Bolivia' | 'Brasil';
+export type Country = 'Argentina' | 'Chile' | 'Paraguay' | 'Ushort' | 'Bolivia' | 'Brasil' | 'Uruguay';
 
 export type LoadDocType = 'remito' | 'factura' | 'cot' | 'otro' | 'despacho';
 
@@ -109,6 +109,7 @@ export interface Truck {
   status: TruckStatus;
   location: { city: string; province: string; country: Country; lat: number; lng: number };
   documentation: VehicleDocument[];
+  avatarUrl?: string;
   createdAt: any;
   updatedAt: any;
 }

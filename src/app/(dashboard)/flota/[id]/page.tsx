@@ -20,6 +20,7 @@ import { Truck, VehicleDocument, DocStatus, Expense } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { format, isBefore, addDays, parseISO } from "date-fns";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const DEFAULT_DOCS: Omit<VehicleDocument, 'status'>[] = [
   { id: 'cedula_verde', name: 'Cédula de Identificación (Verde)', category: 'unit', description: 'Acredita la titularidad del camión.', isRequired: true },
@@ -45,9 +46,6 @@ export default function TruckDetailPage() {
 
   const { data: truck, loading } = useDoc<Truck>(truckRef);
 
-  // Consulta de gastos de combustible para este camión
-  // Nota: En el modelo actual los gastos están anidados en loads. 
-  // Para el MVP simularemos una búsqueda de gastos generales o vinculados a cargas hechas por este camión.
   const fuelExpensesQuery = useMemo(() => {
     if (!db) return null;
     return query(collection(db, "global_expenses"), where("truckId", "==", id as string), where("category", "==", "fuel"));
@@ -55,7 +53,6 @@ export default function TruckDetailPage() {
 
   const { data: fuelExpenses } = useCollection<Expense>(fuelExpensesQuery);
 
-  // Inicializar documentos si no existen
   useEffect(() => {
     if (truck && !truck.documentation && truckRef) {
       const initialDocs = DEFAULT_DOCS.map(d => ({ ...d, status: 'pending' as DocStatus }));
@@ -115,16 +112,24 @@ export default function TruckDetailPage() {
           <Button variant="ghost" size="icon" onClick={() => router.back()}>
             <ArrowLeft />
           </Button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-slate-900">{truck.plate}</h1>
-              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-100 uppercase text-[10px]">
-                {truck.brand} {truck.model}
-              </Badge>
+          <div className="flex items-center gap-4">
+            <Avatar className="w-16 h-16 border-2 border-white shadow-md rounded-xl">
+              <AvatarImage src={truck.avatarUrl} className="object-cover" />
+              <AvatarFallback className="bg-blue-50 text-blue-600 rounded-xl">
+                <TruckIcon size={32} />
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold text-slate-900">{truck.plate}</h1>
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-100 uppercase text-[10px]">
+                  {truck.brand} {truck.model}
+                </Badge>
+              </div>
+              <p className="text-sm text-slate-500 flex items-center gap-1">
+                <MapPin size={14} /> Base: {truck.location.city}, {truck.location.province}
+              </p>
             </div>
-            <p className="text-sm text-slate-500 flex items-center gap-1">
-              <MapPin size={14} /> Base: {truck.location.city}, {truck.location.province}
-            </p>
           </div>
         </div>
       </div>
