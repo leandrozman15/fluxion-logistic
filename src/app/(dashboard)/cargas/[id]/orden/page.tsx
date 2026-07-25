@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useEffect, useState } from "react";
@@ -7,13 +8,11 @@ import { doc, getDoc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { 
   Printer, ArrowLeft, Truck, User, MapPin, 
-  Package, Calendar, ShieldCheck, Globe, 
-  FileText, Anchor, Loader2
+  Package, Calendar, Globe, Anchor, Loader2, Navigation, FileText, CheckCircle2
 } from "lucide-react";
 import { Load, Driver, Truck as TruckType } from "@/app/lib/types";
 import { QRCodeSVG } from "qrcode.react";
 import { format } from "date-fns";
-import { es } from "date-fns/locale";
 
 export default function LoadOrderDocumentPage() {
   const { id } = useParams();
@@ -39,12 +38,13 @@ export default function LoadOrderDocumentPage() {
           const dSnap = await getDoc(doc(db, "drivers", load.assignedDriverId));
           if (dSnap.exists()) setDriver(dSnap.data() as Driver);
         }
-        // Para el MVP, si no hay asignación directa, buscamos el primer camión como ejemplo
-        // En producción se usaría load.assignedTruckId
-        const tSnap = await getDoc(doc(db, "trucks", "default_truck_id")); // Placeholder logic
-        if (tSnap.exists()) setTruck(tSnap.data() as TruckType);
+        // Simulando camión para el documento del MVP
+        if (load.assignedTruckId) {
+          const tSnap = await getDoc(doc(db, "trucks", load.assignedTruckId));
+          if (tSnap.exists()) setTruck(tSnap.data() as TruckType);
+        }
       } catch (e) {
-        console.error("Error fetching extras", e);
+        console.error(e);
       } finally {
         setLoadingExtras(false);
       }
@@ -52,19 +52,7 @@ export default function LoadOrderDocumentPage() {
     if (load) fetchExtras();
   }, [db, load]);
 
-  const handlePrint = () => {
-    window.print();
-  };
-
-  if (loadLoading || loadingExtras) {
-    return (
-      <div className="h-screen flex flex-col items-center justify-center gap-4">
-        <Loader2 className="animate-spin text-blue-600 h-10 w-10" />
-        <p className="text-slate-500 font-medium">Generando Documento de Transporte...</p>
-      </div>
-    );
-  }
-
+  if (loadLoading || loadingExtras) return <div className="h-screen flex items-center justify-center gap-2"><Loader2 className="animate-spin" /> Generando Documentación...</div>;
   if (!load) return <div className="p-20 text-center">Orden no encontrada.</div>;
 
   const confirmationUrl = typeof window !== 'undefined' ? `${window.location.origin}/rutas/${load.id}` : '';
@@ -72,178 +60,155 @@ export default function LoadOrderDocumentPage() {
   return (
     <div className="min-h-screen bg-slate-100 py-10 print:bg-white print:py-0">
       <div className="max-w-4xl mx-auto space-y-6 print:space-y-0">
-        {/* Controls - Hidden on Print */}
         <div className="flex justify-between items-center print:hidden px-4">
-          <Button variant="ghost" onClick={() => router.back()}>
-            <ArrowLeft className="mr-2" /> Volver
-          </Button>
-          <Button onClick={handlePrint} className="bg-blue-600">
-            <Printer className="mr-2" /> Imprimir / Guardar PDF
-          </Button>
+          <Button variant="ghost" onClick={() => router.back()}><ArrowLeft className="mr-2" /> Volver</Button>
+          <Button onClick={() => window.print()} className="bg-blue-600"><Printer className="mr-2" /> Imprimir Documento</Button>
         </div>
 
-        {/* The Document */}
-        <div className="bg-white shadow-2xl rounded-xl p-12 print:shadow-none print:rounded-none min-h-[297mm] flex flex-col border border-slate-200 print:border-none">
-          
-          {/* Header */}
+        <div className="bg-white shadow-2xl p-12 print:shadow-none min-h-[297mm] flex flex-col border border-slate-200 print:border-none rounded-xl print:rounded-none">
+          {/* Cabecera */}
           <div className="flex justify-between items-start border-b-2 border-slate-900 pb-8 mb-8">
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-blue-600 font-bold text-3xl">
                 <Truck size={36} />
                 <span>Logística<span className="text-slate-900">Ar</span></span>
               </div>
-              <p className="text-[10px] text-slate-500 max-w-[200px] uppercase font-bold tracking-tighter">
-                Servicios de Transporte Nacional e Internacional <br />
-                Casa Central: Buenos Aires, Argentina
-              </p>
+              <p className="text-[10px] text-slate-500 uppercase font-bold tracking-tight">Orden de Transporte Multidestino Nacional/Internacional</p>
             </div>
             <div className="text-right">
-              <h1 className="text-2xl font-black uppercase tracking-tighter">Orden de Transporte</h1>
+              <h1 className="text-2xl font-black uppercase tracking-tighter">Hoja de Ruta</h1>
               <p className="text-4xl font-mono text-blue-600 font-bold">{load.orderNumber}</p>
-              <p className="text-xs text-slate-500 font-bold mt-1">Fecha Emisión: {format(new Date(), "dd/MM/yyyy HH:mm")}</p>
+              <p className="text-xs text-slate-500 font-bold">Emisión: {format(new Date(), "dd/MM/yyyy HH:mm")}</p>
             </div>
           </div>
 
-          {/* Section: Main Cargo Info */}
-          <div className="grid grid-cols-2 gap-10 mb-10">
+          <div className="grid grid-cols-2 gap-10 mb-8">
             <div className="space-y-4">
-              <h2 className="text-xs font-black uppercase bg-slate-900 text-white px-2 py-1 inline-block">Dador de Carga / Cliente</h2>
-              <div>
-                <p className="text-xl font-bold text-slate-900">{load.clientName}</p>
-                <p className="text-sm text-slate-600 mt-1">ID Operación: {load.id.substring(0, 8).toUpperCase()}</p>
-              </div>
+              <h2 className="text-xs font-black uppercase bg-slate-900 text-white px-2 py-1 inline-block">Dador de Carga</h2>
+              <p className="text-xl font-bold text-slate-900">{load.clientName}</p>
             </div>
             <div className="space-y-4">
-              <h2 className="text-xs font-black uppercase bg-slate-900 text-white px-2 py-1 inline-block">Tipo de Servicio</h2>
-              <div className="flex items-center gap-2">
-                {load.serviceType === 'customs' ? <Globe className="text-blue-600" /> : <Package className="text-blue-600" />}
-                <p className="text-lg font-bold capitalize">{load.serviceType?.replace('_', ' ')}</p>
-              </div>
+              <h2 className="text-xs font-black uppercase bg-slate-900 text-white px-2 py-1 inline-block">Tipo de Operación</h2>
+              <p className="text-lg font-bold capitalize">{load.serviceType} {load.isRoundTrip ? '(IDA Y VUELTA)' : '(SOLO IDA)'}</p>
             </div>
           </div>
 
-          {/* Section: Route */}
-          <div className="grid grid-cols-2 gap-8 p-6 bg-slate-50 rounded-xl border border-slate-200 mb-10">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-slate-400 font-bold text-[10px] uppercase tracking-widest">
-                <MapPin size={14} /> Punto de Carga
-              </div>
-              <div className="space-y-1">
-                <p className="font-bold text-slate-900">{load.origin.name}</p>
-                <p className="text-xs text-slate-600 leading-relaxed">{load.origin.address}</p>
-                <p className="text-[10px] font-black text-blue-600">
-                  {(load.origin.province || 'N/A').toUpperCase()}, {(load.origin.country || 'N/A').toUpperCase()}
-                </p>
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-slate-400 font-bold text-[10px] uppercase tracking-widest">
-                <MapPin size={14} /> Punto de Destino
-              </div>
-              <div className="space-y-1">
-                <p className="font-bold text-slate-900">{load.destination.name}</p>
-                <p className="text-xs text-slate-600 leading-relaxed">{load.destination.address}</p>
-                <p className="text-[10px] font-black text-blue-600">
-                  {(load.destination.province || 'N/A').toUpperCase()}, {(load.destination.country || 'N/A').toUpperCase()}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Section: Resources */}
-          <div className="grid grid-cols-2 gap-10 mb-10 border-t pt-8">
-            <div className="space-y-4">
-              <h2 className="text-xs font-black uppercase text-slate-400">Personal Asignado</h2>
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
-                  <User size={24} />
-                </div>
-                <div>
-                  <p className="font-bold text-slate-900">{driver ? `${driver.lastName}, ${driver.firstName}` : 'SIN ASIGNAR'}</p>
-                  <p className="text-xs text-slate-500">DNI: {driver?.dni || 'N/A'}</p>
-                  <p className="text-[10px] font-bold text-slate-400">Licencia: {driver?.licenseNumber || 'N/A'}</p>
-                </div>
-              </div>
-            </div>
-            <div className="space-y-4">
-              <h2 className="text-xs font-black uppercase text-slate-400">Unidad de Transporte</h2>
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
-                  <Truck size={24} />
-                </div>
-                <div>
-                  <p className="font-bold text-slate-900">Patente: {truck?.plate || 'SIN ASIGNAR'}</p>
-                  <p className="text-xs text-slate-500">{truck?.brand} {truck?.model}</p>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase">Capacidad: {truck?.capacityKg?.toLocaleString()} Kg</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Section: Comex if applicable */}
-          {load.serviceType === 'customs' && load.international && (
-            <div className="mb-10 p-6 border-2 border-dashed border-blue-200 rounded-xl bg-blue-50/30">
-              <h2 className="text-sm font-black uppercase flex items-center gap-2 text-blue-800 mb-4">
-                <Anchor size={18} /> Información Aduanera (INTERNACIONAL)
-              </h2>
-              <div className="grid grid-cols-3 gap-6">
+          {/* Trayecto de Ida */}
+          <div className="mb-10 space-y-4">
+            <h3 className="text-sm font-black uppercase flex items-center gap-2 text-blue-700">
+              <Navigation size={18} /> TRAMO 1: LOGÍSTICA DE IDA
+            </h3>
+            <div className="p-4 bg-slate-50 border rounded-xl space-y-4">
+              <div className="flex gap-4">
+                <div className="w-1.5 bg-blue-500 rounded-full"></div>
                 <div className="space-y-1">
-                  <p className="text-[9px] uppercase font-bold text-slate-400">Aduana Salida</p>
-                  <p className="text-xs font-bold">{load.international.exitCustoms}</p>
+                  <p className="text-[9px] uppercase font-bold text-slate-400">Punto de Carga (Origen)</p>
+                  <p className="font-bold text-slate-900">{load.origin.name}</p>
+                  <p className="text-xs text-slate-600">{load.origin.address}, {load.origin.province}</p>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-[9px] uppercase font-bold text-slate-400">N° Declaración</p>
-                  <p className="text-xs font-bold">{load.international.declarationNumber || '-'}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-[9px] uppercase font-bold text-slate-400">Manifiesto MIC/DTA</p>
-                  <p className="text-xs font-bold">{load.international.micDtaNumber || '-'}</p>
+              </div>
+              <div className="grid gap-4 pl-6">
+                 {load.outboundStops?.map((stop, i) => (
+                   <div key={i} className="p-3 bg-white border rounded-lg space-y-2 relative">
+                      <div className="absolute -left-5 top-1/2 -translate-y-1/2 w-4 h-4 bg-blue-100 rounded-full flex items-center justify-center text-[8px] font-bold">D{i+1}</div>
+                      <div className="flex justify-between items-start">
+                         <div className="space-y-1">
+                           <p className="text-[10px] font-bold uppercase text-blue-600">Destino: {stop.name}</p>
+                           <p className="text-[9px] text-slate-500">{stop.address}, {stop.province}</p>
+                         </div>
+                         <div className="text-right">
+                           <p className="text-[10px] font-bold">{stop.weightKg} Kg</p>
+                           <p className="text-[8px] text-slate-400 uppercase">{stop.description}</p>
+                         </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2 pt-2 border-t border-dashed">
+                        {stop.documents?.map(doc => (
+                          <Badge key={doc.id} variant="outline" className="text-[7px] border-slate-300 font-mono">
+                            {doc.type.toUpperCase()}: {doc.number} {doc.hasCot ? '(COT OK)' : ''}
+                          </Badge>
+                        ))}
+                      </div>
+                   </div>
+                 ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Trayecto de Vuelta si existe */}
+          {load.isRoundTrip && (
+            <div className="mb-10 space-y-4">
+              <h3 className="text-sm font-black uppercase flex items-center gap-2 text-orange-700">
+                <Repeat size={18} /> TRAMO 2: LOGÍSTICA DE VUELTA (RETORNO)
+              </h3>
+              <div className="p-4 bg-orange-50/30 border border-orange-100 rounded-xl space-y-4">
+                <div className="grid gap-4">
+                   {load.returnStops?.length === 0 ? (
+                     <p className="text-xs text-slate-400 italic">Retorno vacío (Solo transporte).</p>
+                   ) : (
+                     load.returnStops?.map((stop, i) => (
+                      <div key={i} className="p-3 bg-white border border-orange-100 rounded-lg space-y-2 relative">
+                          <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-orange-100 rounded-full flex items-center justify-center text-[8px] font-bold text-orange-600">R{i+1}</div>
+                          <div className="flex justify-between items-start">
+                            <div className="space-y-1">
+                              <p className="text-[10px] font-bold uppercase text-orange-600">Punto Retorno: {stop.name}</p>
+                              <p className="text-[9px] text-slate-500">{stop.address}, {stop.province}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[10px] font-bold">{stop.weightKg} Kg</p>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2 pt-2 border-t border-dashed">
+                            {stop.documents?.map(doc => (
+                              <Badge key={doc.id} variant="outline" className="text-[7px] border-orange-200 text-orange-700 font-mono">
+                                {doc.type.toUpperCase()}: {doc.number}
+                              </Badge>
+                            ))}
+                          </div>
+                      </div>
+                     ))
+                   )}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Footer & QR */}
+          {/* Recursos y Aduana */}
+          <div className="grid grid-cols-2 gap-10 border-t pt-8 mb-10">
+            <div className="space-y-4">
+              <h2 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Personal y Unidad</h2>
+              <div className="space-y-2">
+                <p className="text-sm font-bold">{driver ? `${driver.lastName}, ${driver.firstName}` : 'SIN CHOFER ASIGNADO'}</p>
+                <p className="text-[10px] text-slate-500 uppercase font-bold">DNI: {driver?.dni || '-'} | Licencia: {driver?.licenseNumber || '-'}</p>
+                <p className="text-sm font-bold text-blue-600">PATENTE: {truck?.plate || 'SIN UNIDAD'}</p>
+              </div>
+            </div>
+            {load.international && (
+              <div className="space-y-4">
+                <h2 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Información Aduanera</h2>
+                <div className="grid grid-cols-2 gap-2 text-[10px] font-bold">
+                  <div><p className="opacity-50">Declaración SIM</p><p>{load.international.declarationNumber || '-'}</p></div>
+                  <div><p className="opacity-50">Aduana Salida</p><p>{load.international.exitCustoms || '-'}</p></div>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="mt-auto border-t pt-10 flex justify-between items-end">
             <div className="space-y-6">
               <div className="flex gap-16">
-                <div className="w-48 border-t border-slate-900 text-center pt-2">
-                  <p className="text-[10px] font-bold uppercase">Firma Responsable Carga</p>
-                </div>
-                <div className="w-48 border-t border-slate-900 text-center pt-2">
-                  <p className="text-[10px] font-bold uppercase">Firma Transportista</p>
-                </div>
+                <div className="w-48 border-t border-slate-900 text-center pt-2"><p className="text-[9px] font-bold uppercase">Firma Responsable Logística</p></div>
+                <div className="w-48 border-t border-slate-900 text-center pt-2"><p className="text-[9px] font-bold uppercase">Firma Transportista</p></div>
               </div>
-              <p className="text-[8px] text-slate-400 italic max-w-sm">
-                Este documento es una orden de transporte válida. El transportista declara haber recibido la mercadería en óptimas condiciones, salvo anotación en contrario.
-              </p>
+              <p className="text-[8px] text-slate-400 italic max-w-sm">Esta orden de transporte es un documento interno oficial. El chofer debe confirmar cada entrega mediante el sistema digital.</p>
             </div>
-            
             <div className="text-center space-y-2">
-              <div className="p-2 border-2 border-slate-100 rounded-lg bg-white">
-                <QRCodeSVG value={confirmationUrl} size={100} />
-              </div>
-              <p className="text-[8px] font-black uppercase text-slate-400 tracking-tighter">Escaneo de Confirmación</p>
+              <div className="p-2 border-2 border-slate-100 rounded-lg bg-white"><QRCodeSVG value={confirmationUrl} size={80} /></div>
+              <p className="text-[7px] font-black uppercase text-slate-400">Escaneo de Control</p>
             </div>
           </div>
-
         </div>
       </div>
-
-      <style jsx global>{`
-        @media print {
-          @page {
-            size: A4;
-            margin: 0;
-          }
-          body {
-            background: white;
-          }
-          .print-hidden {
-            display: none !important;
-          }
-        }
-      `}</style>
+      <style jsx global>{` @media print { @page { size: A4; margin: 0; } body { background: white; } .print-hidden { display: none !important; } } `}</style>
     </div>
   );
 }

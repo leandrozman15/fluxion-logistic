@@ -19,7 +19,30 @@ export interface LoadDocument {
   hasCot?: boolean;
   cotNumber?: string;
   despachoNumber?: string;
-  leg?: 'outbound' | 'return'; // Indica a qué tramo pertenece
+  leg?: 'outbound' | 'return';
+}
+
+export interface LoadLegStop {
+  id: string;
+  locationId?: string;
+  name: string;
+  address: string;
+  province: string;
+  city?: string;
+  country: Country;
+  contact: string;
+  phone: string;
+  lat?: number;
+  lng?: number;
+  instructions?: string;
+  
+  // Cargo details for THIS specific stop
+  description: string;
+  weightKg: number;
+  volumeM3: number;
+  units: number;
+  unitType: string;
+  documents: LoadDocument[];
 }
 
 export type ExpenseCategory = 
@@ -82,7 +105,7 @@ export interface Truck {
   fuelType: string;
   tankLiters: number;
   odometerKm: number;
-  avgConsumption: number; // L/100km
+  avgConsumption: number;
   status: TruckStatus;
   location: { city: string; province: string; country: Country; lat: number; lng: number };
   documentation: VehicleDocument[];
@@ -101,7 +124,7 @@ export interface Driver {
   gender?: string;
   nationality: string;
   licenseNumber: string;
-  licenseClasses: string[]; // Ej: C, E
+  licenseClasses: string[];
   licenseExpiry: string;
   licenseFileUrl?: string;
   hasLinti: boolean;
@@ -186,7 +209,7 @@ export interface Client {
     street: string;
     number: string;
     floor?: string;
-    barrio?: string; // Barrio o Zona Industrial
+    barrio?: string;
     city: string;
     province: string;
     country: Country;
@@ -228,10 +251,10 @@ export interface Load {
   assignedDriverId?: string;
   assignedTruckId?: string;
   
-  isRoundTrip?: boolean; // Viaje de ida y vuelta
+  isRoundTrip: boolean;
 
   origin: {
-    id?: string; // ID de Hub o Cliente si fue seleccionado
+    id?: string;
     name: string;
     phone: string;
     contact: string;
@@ -245,20 +268,8 @@ export interface Load {
     lng?: number;
   };
   
-  destination: {
-    id?: string; // ID de Hub o Cliente si fue seleccionado
-    name: string;
-    phone: string;
-    contact: string;
-    address: string;
-    province: string;
-    city?: string;
-    country: Country;
-    zip: string;
-    instructions: string;
-    lat?: number;
-    lng?: number;
-  };
+  outboundStops: LoadLegStop[];
+  returnStops: LoadLegStop[];
 
   international?: {
     operationType: 'import' | 'export' | 'transit';
@@ -278,8 +289,7 @@ export interface Load {
     importDutiesUsd: number;
     customsIvaUsd: number;
     totalCustomsCostsUsd: number;
-    relacionCargaAerea?: string;
-    isMalvinaPresented?: boolean;
+    isMalvinaPresented: boolean;
   };
 
   budget?: {
@@ -287,27 +297,6 @@ export interface Load {
     totalBudget: number;
     categories: Partial<Record<ExpenseCategory, number>>;
   };
-
-  documents?: LoadDocument[];
-
-  pickupDate: string;
-  pickupTimeFrom: string;
-  pickupTimeTo: string;
-  deliveryLimitDate: string;
-  deliveryTimeFrom: string;
-  deliveryTimeTo: string;
-
-  description: string;
-  classification: string;
-  weightKg: number;
-  volumeM3: number;
-  units: number;
-  unitType: string;
-
-  // Carga de Retorno (opcional)
-  returnCargoDescription?: string;
-  returnCargoWeightKg?: number;
-  returnCargoVolumeM3?: number;
 
   basePrice: number;
   currency: 'ARS' | 'USD' | 'CLP' | 'BRL' | 'PYG' | 'BOB';
@@ -331,19 +320,4 @@ export interface Load {
     history: TrackingPoint[];
     alerts: DrivingAlert[];
   };
-}
-
-export interface TenantSettings {
-  mapProvider: MapProvider;
-  mapApiKey?: string;
-  fleetEngineEnabled?: boolean;
-  onboardingCompleted?: boolean;
-}
-
-export interface Tenant {
-  id: string;
-  name: string;
-  plan: 'free' | 'pro';
-  settings?: TenantSettings;
-  updatedAt: any;
 }
