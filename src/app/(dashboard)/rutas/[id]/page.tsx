@@ -146,7 +146,7 @@ export default function RouteDetailPage() {
 
   // LOGICA DE RASTREO GPS NATIVO OPTIMIZADO
   useEffect(() => {
-    if (!gpsActive || !loadRef) return;
+    if (!gpsActive || !loadRef || typeof window === 'undefined' || !navigator.geolocation) return;
 
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
@@ -154,6 +154,7 @@ export default function RouteDetailPage() {
         const now = Date.now();
         const currentSpeedKmH = (speed || 0) * 3.6;
         
+        // Frecuencia dinámica: 20s si se mueve, 60s si está parado
         const interval = currentSpeedKmH > 5 ? 20000 : 60000;
         if (now - lastUpdateRef.current < interval) return;
 
@@ -162,14 +163,15 @@ export default function RouteDetailPage() {
           distanceInc = calculateDistance(lastPosRef.current.lat, lastPosRef.current.lng, latitude, longitude);
         }
 
-        const distRemaining = load?.tracking?.distanceRemainingKm || 100;
-        
+        // Evitar actualizaciones de menos de 100 metros para ahorrar batería y datos
+        if (distanceInc < 0.1 && lastUpdateRef.current !== 0) return;
+
         updateDoc(loadRef, {
           "tracking.currentLat": latitude,
           "tracking.currentLng": longitude,
           "tracking.currentSpeed": Math.round(currentSpeedKmH),
           "tracking.distanceTraveledKm": increment(distanceInc),
-          "tracking.distanceRemainingKm": Math.max(0, distRemaining - distanceInc),
+          "tracking.distanceRemainingKm": increment(-distanceInc),
           "tracking.lastUpdateAt": serverTimestamp(),
           updatedAt: serverTimestamp()
         });
@@ -178,13 +180,28 @@ export default function RouteDetailPage() {
         lastPosRef.current = { lat: latitude, lng: longitude };
       },
       (err) => {
-        console.error("GPS Native Error:", err);
+        const errMsgs = {
+          1: "Permiso de ubicación denegado por el usuario.",
+          2: "Ubicación no disponible.",
+          3: "Tiempo de espera agotado al obtener ubicación."
+        };
+        const msg = (errMsgs as any)[err.code] || "Error desconocido de GPS nativo";
+        console.warn("GPS Tracking Notification:", msg);
+        
+        if (err.code === 1) {
+          toast({ 
+            variant: "destructive", 
+            title: "GPS Bloqueado", 
+            description: "Por favor, habilite los permisos de ubicación en su navegador para el seguimiento." 
+          });
+          setGpsActive(false);
+        }
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [gpsActive, loadRef, load?.tracking?.distanceRemainingKm]);
+  }, [gpsActive, loadRef, toast]);
 
   const openNativeNavigator = () => {
     const lat = displayDestination.lat;
