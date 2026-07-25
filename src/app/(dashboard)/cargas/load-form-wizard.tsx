@@ -397,11 +397,11 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <Label className="text-[10px] uppercase">Fecha Salida</Label>
-                        <Input type="date" value={formData.pickupDate} onChange={e => setFormData({...formData, pickupDate: e.target.value})} />
+                        <Input type="date" value={formData.pickupDate ?? ''} onChange={e => setFormData({...formData, pickupDate: e.target.value})} />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] uppercase">Hora Salida</Label>
-                        <Input type="time" value={formData.pickupTime} onChange={e => setFormData({...formData, pickupTime: e.target.value})} />
+                        <Input type="time" value={formData.pickupTime ?? ''} onChange={e => setFormData({...formData, pickupTime: e.target.value})} />
                       </div>
                     </div>
                     <Button variant="outline" size="sm" className="w-full text-[10px] font-bold" onClick={() => handleCalculateArrival(true)}>
@@ -410,11 +410,11 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <Label className="text-[10px] uppercase text-green-600 font-bold">ETA Fecha Llegada</Label>
-                        <Input type="date" value={formData.estimatedArrivalDate} onChange={e => setFormData({...formData, estimatedArrivalDate: e.target.value})} />
+                        <Input type="date" value={formData.estimatedArrivalDate ?? ''} onChange={e => setFormData({...formData, estimatedArrivalDate: e.target.value})} />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] uppercase text-green-600 font-bold">ETA Hora Llegada</Label>
-                        <Input type="time" value={formData.estimatedArrivalTime} onChange={e => setFormData({...formData, estimatedArrivalTime: e.target.value})} />
+                        <Input type="time" value={formData.estimatedArrivalTime ?? ''} onChange={e => setFormData({...formData, estimatedArrivalTime: e.target.value})} />
                       </div>
                     </div>
                   </div>
@@ -431,11 +431,11 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1">
                             <Label className="text-[10px] uppercase">Fecha Inicio Retorno</Label>
-                            <Input type="date" value={formData.returnPickupDate} onChange={e => setFormData({...formData, returnPickupDate: e.target.value})} />
+                            <Input type="date" value={formData.returnPickupDate ?? ''} onChange={e => setFormData({...formData, returnPickupDate: e.target.value})} />
                           </div>
                           <div className="space-y-1">
                             <Label className="text-[10px] uppercase">Hora Inicio Retorno</Label>
-                            <Input type="time" value={formData.returnPickupTime} onChange={e => setFormData({...formData, returnPickupTime: e.target.value})} />
+                            <Input type="time" value={formData.returnPickupTime ?? ''} onChange={e => setFormData({...formData, returnPickupTime: e.target.value})} />
                           </div>
                         </div>
                         <Button variant="outline" size="sm" className="w-full text-[10px] font-bold" onClick={() => handleCalculateArrival(false)}>
@@ -444,11 +444,11 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1">
                             <Label className="text-[10px] uppercase text-green-600 font-bold">ETA Llegada Final</Label>
-                            <Input type="date" value={formData.returnEstimatedArrivalDate} onChange={e => setFormData({...formData, returnEstimatedArrivalDate: e.target.value})} />
+                            <Input type="date" value={formData.returnEstimatedArrivalDate ?? ''} onChange={e => setFormData({...formData, returnEstimatedArrivalDate: e.target.value})} />
                           </div>
                           <div className="space-y-1">
                             <Label className="text-[10px] uppercase text-green-600 font-bold">ETA Hora Final</Label>
-                            <Input type="time" value={formData.returnEstimatedArrivalTime} onChange={e => setFormData({...formData, returnEstimatedArrivalTime: e.target.value})} />
+                            <Input type="time" value={formData.returnEstimatedArrivalTime ?? ''} onChange={e => setFormData({...formData, returnEstimatedArrivalTime: e.target.value})} />
                           </div>
                         </div>
                       </div>
@@ -483,10 +483,10 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                 {formData.origin?.name && (
                   <div className="p-3 bg-white border rounded-lg space-y-1">
                     <div className="text-[10px] font-bold text-slate-400 uppercase">Dirección Completa Origen</div>
-                    <div className="text-xs font-bold text-slate-600">{formData.origin.address}</div>
+                    <div className="text-xs font-bold text-slate-600">{formData.origin.address ?? ''}</div>
                     <div className="text-[9px] text-slate-400 flex items-center gap-3 mt-1">
-                       <span className="flex items-center gap-1"><Info size={10} /> {formData.origin.contact}</span>
-                       <span className="flex items-center gap-1"><Clock size={10} /> {formData.origin.phone}</span>
+                       <span className="flex items-center gap-1"><Info size={10} /> {formData.origin.contact ?? ''}</span>
+                       <span className="flex items-center gap-1"><Clock size={10} /> {formData.origin.phone ?? ''}</span>
                     </div>
                   </div>
                 )}
@@ -502,10 +502,10 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                        <div className="flex items-center gap-4">
                           <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 font-bold text-xs shrink-0">{idx + 1}</div>
                           <div>
-                            <p className="font-bold text-sm text-slate-800">{stop.name}</p>
-                            <p className="text-[10px] text-slate-500 uppercase font-medium leading-tight max-w-[200px] sm:max-w-none">{stop.address}</p>
+                            <p className="font-bold text-sm text-slate-800">{stop.name ?? ''}</p>
+                            <p className="text-[10px] text-slate-500 uppercase font-medium leading-tight max-w-[200px] sm:max-w-none">{stop.address ?? ''}</p>
                             <div className="flex gap-2 mt-1.5">
-                               <Badge variant="outline" className="text-[8px] h-4 bg-blue-50 border-blue-100">{stop.weightKg} Kg</Badge>
+                               <Badge variant="outline" className="text-[8px] h-4 bg-blue-50 border-blue-100">{stop.weightKg ?? 0} Kg</Badge>
                                <Badge variant="secondary" className="text-[8px] h-4">{stop.documents?.length || 0} Remitos</Badge>
                             </div>
                           </div>
@@ -548,10 +548,10 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                          <div className="flex items-center gap-4">
                             <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-600 font-bold text-xs shrink-0">{idx + 1}</div>
                             <div>
-                              <p className="font-bold text-sm text-slate-800">{stop.name}</p>
-                              <p className="text-[10px] text-slate-500 uppercase font-medium leading-tight max-w-[200px] sm:max-w-none">{stop.address}</p>
+                              <p className="font-bold text-sm text-slate-800">{stop.name ?? ''}</p>
+                              <p className="text-[10px] text-slate-500 uppercase font-medium leading-tight max-w-[200px] sm:max-w-none">{stop.address ?? ''}</p>
                               <div className="flex gap-2 mt-1.5">
-                                 <Badge variant="outline" className="text-[8px] h-4 bg-orange-50 border-orange-100">{stop.weightKg} Kg</Badge>
+                                 <Badge variant="outline" className="text-[8px] h-4 bg-orange-50 border-orange-100">{stop.weightKg ?? 0} Kg</Badge>
                                  <Badge variant="secondary" className="text-[8px] h-4">{stop.documents?.length || 0} Remitos</Badge>
                               </div>
                             </div>
@@ -574,8 +574,8 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
             <CardHeader><CardTitle>Aspecto Financiero</CardTitle></CardHeader>
             <CardContent className="space-y-8">
                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="space-y-2"><Label>Precio Base / Flete Total (ARS)</Label><Input type="number" value={formData.totalAmount || ''} onChange={e => setFormData({...formData, totalAmount: parseFloat(e.target.value) || 0})} /></div>
-                  <div className="space-y-2"><Label>Anticipo Viáticos Chofer</Label><Input type="number" value={formData.budget?.initialAdvance || ''} onChange={e => setFormData({...formData, budget: {...formData.budget!, initialAdvance: parseFloat(e.target.value) || 0}})} /></div>
+                  <div className="space-y-2"><Label>Precio Base / Flete Total (ARS)</Label><Input type="number" value={formData.totalAmount ?? ''} onChange={e => setFormData({...formData, totalAmount: parseFloat(e.target.value) || 0})} /></div>
+                  <div className="space-y-2"><Label>Anticipo Viáticos Chofer</Label><Input type="number" value={formData.budget?.initialAdvance ?? ''} onChange={e => setFormData({...formData, budget: {...formData.budget!, initialAdvance: parseFloat(e.target.value) || 0}})} /></div>
                </div>
             </CardContent>
           </Card>
@@ -627,11 +627,11 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Nombre Identificador</Label>
-                  <Input placeholder="Ej: Depósito ACME" value={editingStop.name} onChange={e => setEditingStop({...editingStop, name: e.target.value})} />
+                  <Input placeholder="Ej: Depósito ACME" value={editingStop.name ?? ''} onChange={e => setEditingStop({...editingStop, name: e.target.value})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Dirección de Entrega (Completa)</Label>
-                  <Input placeholder="Se completa automáticamente al seleccionar" value={editingStop.address} onChange={e => setEditingStop({...editingStop, address: e.target.value})} />
+                  <Input placeholder="Se completa automáticamente al seleccionar" value={editingStop.address ?? ''} onChange={e => setEditingStop({...editingStop, address: e.target.value})} />
                 </div>
               </div>
             </div>
@@ -640,16 +640,16 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
               <CardHeader className="py-3"><CardTitle className="text-sm">Mercadería y Remitos</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                   <div className="space-y-1"><Label className="text-[10px] font-bold uppercase">Descripción</Label><Input className="bg-white" value={editingStop.description} onChange={e => setEditingStop({...editingStop, description: e.target.value})} /></div>
-                   <div className="space-y-1"><Label className="text-[10px] font-bold uppercase">Peso (Kg)</Label><Input className="bg-white" type="number" value={editingStop.weightKg} onChange={e => setEditingStop({...editingStop, weightKg: parseFloat(e.target.value) || 0})} /></div>
-                   <div className="space-y-1"><Label className="text-[10px] font-bold uppercase">Bultos</Label><Input className="bg-white" type="number" value={editingStop.units} onChange={e => setEditingStop({...editingStop, units: parseInt(e.target.value) || 0})} /></div>
+                   <div className="space-y-1"><Label className="text-[10px] font-bold uppercase">Descripción</Label><Input className="bg-white" value={editingStop.description ?? ''} onChange={e => setEditingStop({...editingStop, description: e.target.value})} /></div>
+                   <div className="space-y-1"><Label className="text-[10px] font-bold uppercase">Peso (Kg)</Label><Input className="bg-white" type="number" value={editingStop.weightKg ?? 0} onChange={e => setEditingStop({...editingStop, weightKg: parseFloat(e.target.value) || 0})} /></div>
+                   <div className="space-y-1"><Label className="text-[10px] font-bold uppercase">Bultos</Label><Input className="bg-white" type="number" value={editingStop.units ?? 0} onChange={e => setEditingStop({...editingStop, units: parseInt(e.target.value) || 0})} /></div>
                 </div>
 
                 <div className="p-4 bg-white rounded-xl border space-y-4">
                   <Label className="text-blue-600 font-bold text-[10px] uppercase flex items-center gap-2"><FileText size={14}/> Carga de Remitos</Label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                    <Input className="h-8 text-xs" placeholder="N° Remito" value={newDoc.number} onChange={e => setNewDoc({...newDoc, number: e.target.value})} />
-                    <Input className="h-8 text-xs" placeholder="Despacho (SIM)" value={newDoc.despachoNumber} onChange={e => setNewDoc({...newDoc, despachoNumber: e.target.value})} />
+                    <Input className="h-8 text-xs" placeholder="N° Remito" value={newDoc.number ?? ''} onChange={e => setNewDoc({...newDoc, number: e.target.value})} />
+                    <Input className="h-8 text-xs" placeholder="Despacho (SIM)" value={newDoc.despachoNumber ?? ''} onChange={e => setNewDoc({...newDoc, despachoNumber: e.target.value})} />
                     <div className="flex items-center gap-2 px-2 bg-slate-50 border rounded h-8">
                        <Switch checked={newDoc.hasCot} onCheckedChange={v => setNewDoc({...newDoc, hasCot: v})} />
                        <span className="text-[9px] font-bold uppercase">COT</span>
@@ -661,9 +661,9 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                        {editingStop.documents.map(doc => (
                          <div key={doc.id} className="flex items-center justify-between p-2 bg-slate-50 rounded border text-[10px] font-bold">
                             <div className="flex gap-2">
-                               <span className="text-slate-700">R: {doc.number}</span>
+                               <span className="text-slate-700">R: {doc.number ?? ''}</span>
                                {doc.hasCot && <Badge className="h-3 text-[7px] bg-green-500 border-none">COT OK</Badge>}
-                               {doc.despachoNumber && <Badge variant="outline" className="h-3 text-[7px] border-blue-200 text-blue-600">SIM: {doc.despachoNumber}</Badge>}
+                               {doc.despachoNumber && <Badge variant="outline" className="h-3 text-[7px] border-blue-200 text-blue-600">SIM: {doc.despachoNumber ?? ''}</Badge>}
                             </div>
                             <Button variant="ghost" size="icon" className="h-5 w-5 text-red-500" onClick={() => setEditingStop({...editingStop, documents: editingStop.documents?.filter(d => d.id !== doc.id)}) }><Trash2 size={10}/></Button>
                          </div>
