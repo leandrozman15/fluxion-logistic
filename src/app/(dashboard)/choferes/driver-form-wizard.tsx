@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useDoc } from "@/firebase";
 import { collection, serverTimestamp, doc, updateDoc, setDoc } from "firebase/firestore";
@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Users, ArrowLeft, ArrowRight, Save, Loader2, 
   ShieldCheck, CheckCircle2, User, FileText, 
-  Phone, HeartPulse, Info, X, Briefcase, Upload, AlertTriangle
+  Phone, HeartPulse, Info, X, Briefcase, Upload, AlertTriangle, FileCheck
 } from "lucide-react";
 import { Driver } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -34,6 +34,11 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Refs para inputs de archivo
+  const dniInputRef = useRef<HTMLInputElement>(null);
+  const licenseInputRef = useRef<HTMLInputElement>(null);
+  const lintiInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<Partial<Driver>>({
     docType: 'DNI',
@@ -64,10 +69,12 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
     hireDate: new Date().toISOString().split('T')[0],
     contractType: "Tiempo completo",
     status: "active",
-    observations: ""
+    observations: "",
+    dniFileUrl: "",
+    licenseFileUrl: "",
+    lintiFileUrl: ""
   });
 
-  // Persist the document reference to avoid infinite loops in useDoc
   const driverRef = useMemo(() => 
     driverId && db ? doc(db, "drivers", driverId) : null
   , [db, driverId]);
@@ -90,6 +97,25 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
 
   const handleNext = () => setStep(s => s + 1);
   const handleBack = () => setStep(s => s - 1);
+
+  const handleFileClick = (key: string) => {
+    if (key === 'dniFileUrl') dniInputRef.current?.click();
+    if (key === 'licenseFileUrl') licenseInputRef.current?.click();
+    if (key === 'lintiFileUrl') lintiInputRef.current?.click();
+  };
+
+  const onFileChange = (key: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Simulación de carga: en producción se subiría a Firebase Storage
+      const fileUrl = URL.createObjectURL(file);
+      setFormData(prev => ({ ...prev, [key]: fileUrl }));
+      toast({ 
+        title: "Documento adjuntado", 
+        description: `El archivo ${file.name} ha sido vinculado correctamente.` 
+      });
+    }
+  };
 
   const handleSubmit = async () => {
     if (!db) return;
@@ -219,7 +245,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                   <div className="flex flex-wrap gap-4 p-3 bg-slate-50 rounded-lg border">
                     {LICENSE_CLASSES.map(cls => (
                       <div key={cls} className="flex items-center space-x-2">
-                        <Checkbox id={`cls-${cls}`} checked={formData.licenseClasses?.includes(cls)} onCheckedChange={() => toggleLicenseClass(cls)} />
+                        <Checkbox id={`cls-${cls}`} checked={formData.licenseClasses?.includes(cls)} onValueChange={() => toggleLicenseClass(cls)} />
                         <label htmlFor={`cls-${cls}`} className="text-sm font-medium leading-none">{cls}</label>
                       </div>
                     ))}
@@ -302,22 +328,46 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
             <CardHeader><CardTitle>Adjuntos de Documentación</CardTitle></CardHeader>
             <CardContent className="space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* Inputs ocultos para archivos */}
+                <input type="file" ref={dniInputRef} className="hidden" accept="image/*,application/pdf" onChange={(e) => onFileChange('dniFileUrl', e)} />
+                <input type="file" ref={licenseInputRef} className="hidden" accept="image/*,application/pdf" onChange={(e) => onFileChange('licenseFileUrl', e)} />
+                <input type="file" ref={lintiInputRef} className="hidden" accept="image/*,application/pdf" onChange={(e) => onFileChange('lintiFileUrl', e)} />
+
                 {[
                   { label: "DNI (Frente/Dorso)", key: "dniFileUrl" },
                   { label: "Licencia de Conducir", key: "licenseFileUrl" },
                   { label: "Licencia LINTI", key: "lintiFileUrl" }
-                ].map((doc) => (
-                  <div key={doc.key} className="p-4 bg-slate-50 border-2 border-dashed rounded-xl text-center space-y-3">
-                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center mx-auto border text-slate-400">
-                      <Upload size={18} />
+                ].map((doc) => {
+                  const hasFile = !!formData[doc.key as keyof typeof formData];
+                  return (
+                    <div key={doc.key} className={cn(
+                      "p-4 bg-slate-50 border-2 border-dashed rounded-xl text-center space-y-3 transition-colors",
+                      hasFile ? "border-green-500 bg-green-50/30" : "border-slate-200"
+                    )}>
+                      <div className={cn(
+                        "w-10 h-10 rounded-full flex items-center justify-center mx-auto border shadow-sm",
+                        hasFile ? "bg-green-500 text-white border-green-600" : "bg-white text-slate-400 border-slate-100"
+                      )}>
+                        {hasFile ? <FileCheck size={20} /> : <Upload size={18} />}
+                      </div>
+                      <div>
+                        <p className={cn("text-[10px] font-bold uppercase", hasFile ? "text-green-700" : "text-slate-500")}>
+                          {hasFile ? "Archivo Cargado" : doc.label}
+                        </p>
+                        <p className="text-[8px] text-slate-400 mt-0.5">PDF o JPG (Máx 5MB)</p>
+                      </div>
+                      <Button 
+                        variant={hasFile ? "secondary" : "outline"} 
+                        type="button" 
+                        size="sm" 
+                        className={cn("h-7 text-[10px] w-full", hasFile ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-white")}
+                        onClick={() => handleFileClick(doc.key)}
+                      >
+                        {hasFile ? "Cambiar Archivo" : "Seleccionar"}
+                      </Button>
                     </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase text-slate-500">{doc.label}</p>
-                      <p className="text-[8px] text-slate-400 mt-0.5">PDF o JPG (Máx 5MB)</p>
-                    </div>
-                    <Button variant="outline" type="button" size="sm" className="h-7 text-[10px] w-full bg-white">Seleccionar</Button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <div className="space-y-2 pt-4 border-t">
                 <Label>Observaciones Laborales</Label>
