@@ -78,28 +78,42 @@ export default function ChoferesPage() {
 
   const getExpiryLabel = (expiryDateStr?: string) => {
     if (!expiryDateStr) return null;
-    const expiryDate = parseISO(expiryDateStr);
-    const now = new Date();
-    const days = differenceInDays(expiryDate, now);
+    try {
+      const expiryDate = parseISO(expiryDateStr);
+      const now = new Date();
+      const days = differenceInDays(expiryDate, now);
 
-    if (days < 0) {
-      return <span className="text-red-600 font-bold">Vencido ({Math.abs(days)}d)</span>;
+      if (days < 0) {
+        return <span className="text-red-600 font-bold">Vencido ({Math.abs(days)}d)</span>;
+      }
+      if (days <= 30) {
+        return <span className="text-orange-600 font-bold">Vence en {days}d</span>;
+      }
+      return <span className="text-green-600">Vigente ({days}d)</span>;
+    } catch (e) {
+      return null;
     }
-    if (days <= 30) {
-      return <span className="text-orange-600 font-bold">Vence en {days}d</span>;
-    }
-    return <span className="text-green-600">Vigente ({days}d)</span>;
   };
 
-  const handleDownload = (url: string | undefined, filename: string) => {
-    if (!url) return;
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast({ title: "Descarga iniciada", description: filename });
+  const handleDownload = (dataUrl: string | undefined, filename: string) => {
+    if (!dataUrl) {
+      toast({ variant: "destructive", title: "Archivo no disponible", description: "No se encontró el documento adjunto." });
+      return;
+    }
+
+    try {
+      const link = document.createElement('a');
+      link.href = dataUrl;
+      link.download = filename;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast({ title: "Descarga iniciada", description: filename });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error de descarga", description: "El archivo podría estar corrupto o ser demasiado grande." });
+    }
   };
 
   return (
@@ -147,7 +161,11 @@ export default function ChoferesPage() {
             <div>
               <p className="text-[10px] uppercase font-bold text-orange-400">Vencimientos Próximos</p>
               <p className="text-xl font-bold text-orange-700">
-                {drivers?.filter(d => (d.licenseExpiry && differenceInDays(parseISO(d.licenseExpiry), new Date()) <= 30) || (d.lintiExpiry && differenceInDays(parseISO(d.lintiExpiry), new Date()) <= 30)).length || 0}
+                {drivers?.filter(d => {
+                  const licExp = d.licenseExpiry ? differenceInDays(parseISO(d.licenseExpiry), new Date()) : 999;
+                  const lintiExp = d.lintiExpiry ? differenceInDays(parseISO(d.lintiExpiry), new Date()) : 999;
+                  return licExp <= 30 || lintiExp <= 30;
+                }).length || 0}
               </p>
             </div>
           </CardContent>

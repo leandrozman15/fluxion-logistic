@@ -111,14 +111,28 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
 
   const onFileChange = (key: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const fileUrl = URL.createObjectURL(file);
-      setFormData(prev => ({ ...prev, [key]: fileUrl }));
+    if (!file) return;
+
+    // Validación de tamaño para el prototipo (Máx 800KB para evitar límites de Firestore)
+    if (file.size > 850000) {
+      toast({ 
+        variant: "destructive", 
+        title: "Archivo muy pesado", 
+        description: "En este prototipo el límite es 800KB. Reduzca la calidad de la imagen o use un archivo más pequeño." 
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      setFormData(prev => ({ ...prev, [key]: base64 }));
       toast({ 
         title: key === 'avatarUrl' ? "Foto cargada" : "Documento adjuntado", 
-        description: `Archivo vinculado correctamente.` 
+        description: "El archivo se ha procesado para persistencia." 
       });
-    }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSubmit = async () => {
@@ -266,7 +280,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                   <div className="flex flex-wrap gap-4 p-3 bg-slate-50 rounded-lg border">
                     {LICENSE_CLASSES.map(cls => (
                       <div key={cls} className="flex items-center space-x-2">
-                        <Checkbox id={`cls-${cls}`} checked={formData.licenseClasses?.includes(cls)} onCheckedChange={() => toggleLicenseClass(cls)} />
+                        <Checkbox id={`cls-${cls}`} checked={formData.licenseClasses?.includes(cls)} onValueChange={() => toggleLicenseClass(cls)} />
                         <label htmlFor={`cls-${cls}`} className="text-sm font-medium leading-none">{cls}</label>
                       </div>
                     ))}
@@ -375,7 +389,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                         <p className={cn("text-[10px] font-bold uppercase", hasFile ? "text-green-700" : "text-slate-500")}>
                           {hasFile ? "Archivo Cargado" : doc.label}
                         </p>
-                        <p className="text-[8px] text-slate-400 mt-0.5">PDF o JPG (Máx 5MB)</p>
+                        <p className="text-[8px] text-slate-400 mt-0.5">PDF o JPG (Máx 800KB)</p>
                       </div>
                       <Button 
                         variant={hasFile ? "secondary" : "outline"} 
