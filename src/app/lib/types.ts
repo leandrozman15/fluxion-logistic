@@ -1,5 +1,4 @@
 
-
 export type TruckStatus = 'available' | 'in_trip' | 'maintenance';
 export type DriverStatus = 'active' | 'in_trip' | 'resting' | 'suspended' | 'retired';
 export type LoadStatus = 'pending' | 'assigned' | 'on_route' | 'on_pause' | 'delivered' | 'incident' | 'cancelled';
@@ -172,6 +171,7 @@ export interface Driver {
   docType: string;
   dni: string;
   dniFileUrl?: string;
+  dniBackFileUrl?: string;
   firstName: string;
   lastName: string;
   birthDate: string;
@@ -181,6 +181,7 @@ export interface Driver {
   licenseClasses: string[];
   licenseExpiry: string;
   licenseFileUrl?: string;
+  licenseBackFileUrl?: string;
   hasLinti: boolean;
   lintiNumber?: string;
   lintiExpiry?: string;

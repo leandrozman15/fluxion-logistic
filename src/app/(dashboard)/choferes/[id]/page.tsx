@@ -14,7 +14,7 @@ import {
   Phone, ArrowLeft, Edit2, Loader2, 
   Truck as TruckIcon, Package, CheckCircle2, 
   AlertTriangle, History, Mail, MapPin, Eye,
-  ChevronRight, ExternalLink
+  ChevronRight, ExternalLink, RefreshCw
 } from "lucide-react";
 import { Driver, Load, Truck, DriverStatus } from "@/app/lib/types";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -26,11 +26,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import Link from "next/link";
 import { toSafeDate } from "@/lib/utils/date-utils";
 
+interface ActiveDoc {
+  front?: string;
+  back?: string;
+  title: string;
+}
+
 export default function DriverProfilePage() {
   const { id } = useParams();
   const router = useRouter();
   const db = useFirestore();
-  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+  const [activeDoc, setActiveDoc] = useState<ActiveDoc | null>(null);
+  const [viewingBack, setViewingBack] = useState(false);
 
   const driverRef = useMemo(() => {
     if (!db || !id) return null;
@@ -84,6 +91,11 @@ export default function DriverProfilePage() {
     if (days < 0) return <Badge variant="destructive" className="animate-pulse">VENCIDO</Badge>;
     if (days <= 30) return <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50">POR VENCER ({days}d)</Badge>;
     return <Badge variant="outline" className="text-green-600 border-green-100 bg-green-50">VIGENTE</Badge>;
+  };
+
+  const openViewer = (title: string, front?: string, back?: string) => {
+    setActiveDoc({ title, front, back });
+    setViewingBack(false);
   };
 
   if (driverLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
@@ -210,7 +222,15 @@ export default function DriverProfilePage() {
                       </div>
                       <div className="pt-3 border-t flex justify-between items-center">
                         <div className="text-[10px] text-slate-400 font-bold uppercase">Vence: {driver.licenseExpiry ? format(parseISO(driver.licenseExpiry), "dd/MM/yyyy") : '-'}</div>
-                        <Button variant="ghost" size="sm" className="h-7 text-[10px] font-bold text-blue-600" onClick={() => driver.licenseFileUrl && setViewerUrl(driver.licenseFileUrl)} disabled={!driver.licenseFileUrl}>VER ARCHIVO</Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-7 text-[10px] font-bold text-blue-600" 
+                          onClick={() => openViewer("Licencia Nacional", driver.licenseFileUrl, driver.licenseBackFileUrl)} 
+                          disabled={!driver.licenseFileUrl}
+                        >
+                          VER ARCHIVO
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
@@ -228,7 +248,15 @@ export default function DriverProfilePage() {
                       </div>
                       <div className="pt-3 border-t flex justify-between items-center">
                         <div className="text-[10px] text-slate-400 font-bold uppercase">Vence: {driver.lintiExpiry ? format(parseISO(driver.lintiExpiry), "dd/MM/yyyy") : '-'}</div>
-                        <Button variant="ghost" size="sm" className="h-7 text-[10px] font-bold text-orange-600" onClick={() => driver.lintiFileUrl && setViewerUrl(driver.lintiFileUrl)} disabled={!driver.lintiFileUrl}>VER ARCHIVO</Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-7 text-[10px] font-bold text-orange-600" 
+                          onClick={() => openViewer("Habilitación LINTI", driver.lintiFileUrl)} 
+                          disabled={!driver.lintiFileUrl}
+                        >
+                          VER ARCHIVO
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
@@ -236,19 +264,22 @@ export default function DriverProfilePage() {
 
                <Card className="border-none shadow-sm">
                   <CardHeader className="py-4 border-b">
-                    <CardTitle className="text-sm">Otros Adjuntos</CardTitle>
+                    <CardTitle className="text-sm">Identidad Nacional (DNI)</CardTitle>
                   </CardHeader>
-                  <CardContent className="p-0">
-                     <Table>
-                        <TableBody>
-                           <TableRow>
-                              <TableCell className="font-bold text-xs uppercase">Documento Nacional (DNI)</TableCell>
-                              <TableCell className="text-right">
-                                 <Button variant="ghost" size="sm" className="h-7 text-[10px] font-bold" onClick={() => driver.dniFileUrl && setViewerUrl(driver.dniFileUrl)} disabled={!driver.dniFileUrl}>VISUALIZAR</Button>
-                              </TableCell>
-                           </TableRow>
-                        </TableBody>
-                     </Table>
+                  <CardContent className="p-4 flex items-center justify-between">
+                     <div className="flex items-center gap-2">
+                        <User size={16} className="text-slate-400" />
+                        <span className="font-bold text-xs uppercase">Documento Nacional de Identidad</span>
+                     </div>
+                     <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="h-7 text-[10px] font-bold" 
+                      onClick={() => openViewer("DNI Chofer", driver.dniFileUrl, driver.dniBackFileUrl)} 
+                      disabled={!driver.dniFileUrl}
+                    >
+                      VISUALIZAR
+                    </Button>
                   </CardContent>
                </Card>
             </TabsContent>
@@ -343,30 +374,35 @@ export default function DriverProfilePage() {
         </div>
       </div>
 
-      {/* Document Viewer Modal */}
-      <Dialog open={!!viewerUrl} onOpenChange={(o) => !o && setViewerUrl(null)}>
+      {/* Flip Document Viewer Modal */}
+      <Dialog open={!!activeDoc} onOpenChange={(o) => !o && setActiveDoc(null)}>
         <DialogContent className="max-w-4xl h-[80vh] flex flex-col rounded-xl overflow-hidden p-0 gap-0">
-          <DialogHeader className="p-4 border-b bg-slate-50">
+          <DialogHeader className="p-4 border-b bg-slate-50 flex flex-row items-center justify-between">
             <DialogTitle className="text-sm flex items-center gap-2">
-              <FileText size={18} className="text-blue-600" /> Visualizador de Documentos Digitales
+              <FileText size={18} className="text-blue-600" /> {activeDoc?.title}
+              {activeDoc?.back && (
+                <Badge variant="secondary" className="text-[8px] uppercase h-4">
+                  {viewingBack ? 'DORSO' : 'FRENTE'}
+                </Badge>
+              )}
             </DialogTitle>
           </DialogHeader>
           
           <div className="flex-1 bg-slate-100 flex items-center justify-center overflow-hidden relative">
-            {viewerUrl ? (
+            {activeDoc ? (
               <>
-                {viewerUrl.startsWith('data:application/pdf') ? (
+                {(viewingBack ? activeDoc.back : activeDoc.front)?.startsWith('data:application/pdf') ? (
                   <iframe 
-                    src={viewerUrl} 
+                    src={viewingBack ? activeDoc.back : activeDoc.front} 
                     className="w-full h-full border-none" 
                     title="Visor PDF"
                   />
                 ) : (
-                  <div className="w-full h-full p-4 flex items-center justify-center">
+                  <div className="w-full h-full p-6 flex items-center justify-center animate-in fade-in zoom-in-95 duration-300">
                     <img 
-                      src={viewerUrl} 
-                      className="max-w-full max-h-full object-contain shadow-2xl rounded-sm border bg-white" 
-                      alt="Documento del Chofer" 
+                      src={(viewingBack ? activeDoc.back : activeDoc.front) || undefined} 
+                      className="max-w-full max-h-full object-contain shadow-2xl rounded-sm border bg-white ring-1 ring-slate-900/5" 
+                      alt="Documento" 
                     />
                   </div>
                 )}
@@ -374,29 +410,65 @@ export default function DriverProfilePage() {
             ) : (
               <div className="flex flex-col items-center gap-2 text-slate-400">
                 <Loader2 className="animate-spin" />
-                <p className="text-xs font-bold uppercase">Cargando archivo...</p>
+                <p className="text-xs font-bold uppercase">Cargando...</p>
+              </div>
+            )}
+
+            {/* Navigation Arrows if back exists */}
+            {activeDoc?.back && (
+              <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-between px-4 pointer-events-none">
+                <Button 
+                  variant="secondary" 
+                  size="icon" 
+                  className={cn("h-12 w-12 rounded-full shadow-xl border-2 border-white pointer-events-auto", !viewingBack && "opacity-20")}
+                  onClick={() => setViewingBack(false)}
+                  disabled={!viewingBack}
+                >
+                  <ChevronRight className="rotate-180" />
+                </Button>
+                <Button 
+                  variant="secondary" 
+                  size="icon" 
+                  className={cn("h-12 w-12 rounded-full shadow-xl border-2 border-white pointer-events-auto", viewingBack && "opacity-20")}
+                  onClick={() => setViewingBack(true)}
+                  disabled={viewingBack}
+                >
+                  <ChevronRight />
+                </Button>
               </div>
             )}
           </div>
 
           <DialogFooter className="p-4 border-t bg-slate-50 flex flex-row justify-between items-center">
-            <p className="text-[10px] text-slate-400 font-bold uppercase">Protocolo de Auditoría Digital v1.0</p>
+            <div className="flex items-center gap-4">
+              <p className="text-[10px] text-slate-400 font-bold uppercase hidden sm:block tracking-widest">Protocolo de Auditoría Digital</p>
+              {activeDoc?.back && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-8 text-[10px] font-bold border-blue-200 text-blue-600 bg-blue-50 hover:bg-blue-100" 
+                  onClick={() => setViewingBack(!viewingBack)}
+                >
+                  <RefreshCw size={12} className="mr-1" /> VER {viewingBack ? 'FRENTE' : 'DORSO'}
+                </Button>
+              )}
+            </div>
             <div className="flex gap-2">
               <Button 
                 variant="outline" 
                 size="sm" 
                 className="h-8 text-[10px] font-bold" 
-                onClick={() => setViewerUrl(null)}
+                onClick={() => setActiveDoc(null)}
               >
                 CERRAR
               </Button>
-              {viewerUrl && (
+              {(viewingBack ? activeDoc?.back : activeDoc?.front) && (
                 <Button 
                   size="sm" 
                   className="h-8 text-[10px] font-bold bg-blue-600" 
-                  onClick={() => window.open(viewerUrl, "_blank")}
+                  onClick={() => window.open(viewingBack ? activeDoc?.back : activeDoc?.front, "_blank")}
                 >
-                  <ExternalLink size={12} className="mr-1" /> ABRIR EN PANTALLA COMPLETA
+                  <ExternalLink size={12} className="mr-1" /> PANTALLA COMPLETA
                 </Button>
               )}
             </div>

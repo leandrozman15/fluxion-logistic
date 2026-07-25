@@ -42,7 +42,9 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   // Refs para inputs de archivo
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const dniInputRef = useRef<HTMLInputElement>(null);
+  const dniBackInputRef = useRef<HTMLInputElement>(null);
   const licenseInputRef = useRef<HTMLInputElement>(null);
+  const licenseBackInputRef = useRef<HTMLInputElement>(null);
   const lintiInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<Partial<Driver>>({
@@ -77,7 +79,9 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
     observations: "",
     avatarUrl: "",
     dniFileUrl: "",
+    dniBackFileUrl: "",
     licenseFileUrl: "",
+    licenseBackFileUrl: "",
     lintiFileUrl: ""
   });
 
@@ -107,7 +111,9 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   const handleFileClick = (key: string) => {
     if (key === 'avatarUrl') avatarInputRef.current?.click();
     if (key === 'dniFileUrl') dniInputRef.current?.click();
+    if (key === 'dniBackFileUrl') dniBackInputRef.current?.click();
     if (key === 'licenseFileUrl') licenseInputRef.current?.click();
+    if (key === 'licenseBackFileUrl') licenseBackInputRef.current?.click();
     if (key === 'lintiFileUrl') lintiInputRef.current?.click();
   };
 
@@ -129,8 +135,8 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
       setFormData(prev => ({ ...prev, [key]: finalData }));
       setIsProcessingFile(null);
       toast({ 
-        title: key === 'avatarUrl' ? "Foto cargada" : "Documento adjuntado", 
-        description: "El archivo se ha procesado y optimizado correctamente." 
+        title: "Archivo procesado", 
+        description: "El documento se ha cargado correctamente." 
       });
     };
     reader.readAsDataURL(file);
@@ -366,48 +372,54 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
 
         {step === 4 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Adjuntos de Documentación</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle>Adjuntos de Documentación</CardTitle>
+              <CardDescription>Cargue frente y dorso de los documentos habilitantes.</CardDescription>
+            </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
                 {/* Inputs ocultos para archivos */}
                 <input type="file" ref={dniInputRef} className="hidden" accept="image/*,application/pdf" onChange={(e) => onFileChange('dniFileUrl', e)} />
+                <input type="file" ref={dniBackInputRef} className="hidden" accept="image/*,application/pdf" onChange={(e) => onFileChange('dniBackFileUrl', e)} />
                 <input type="file" ref={licenseInputRef} className="hidden" accept="image/*,application/pdf" onChange={(e) => onFileChange('licenseFileUrl', e)} />
+                <input type="file" ref={licenseBackInputRef} className="hidden" accept="image/*,application/pdf" onChange={(e) => onFileChange('licenseBackFileUrl', e)} />
                 <input type="file" ref={lintiInputRef} className="hidden" accept="image/*,application/pdf" onChange={(e) => onFileChange('lintiFileUrl', e)} />
 
                 {[
-                  { label: "DNI (Frente/Dorso)", key: "dniFileUrl" },
-                  { label: "Licencia de Conducir", key: "licenseFileUrl" },
-                  { label: "Licencia LINTI", key: "lintiFileUrl" }
+                  { label: "DNI Frente", key: "dniFileUrl" },
+                  { label: "DNI Dorso", key: "dniBackFileUrl" },
+                  { label: "Licencia Frente", key: "licenseFileUrl" },
+                  { label: "Licencia Dorso", key: "licenseBackFileUrl" },
+                  { label: "LINTI", key: "lintiFileUrl" }
                 ].map((doc) => {
                   const hasFile = !!formData[doc.key as keyof typeof formData];
                   const isProcessing = isProcessingFile === doc.key;
 
                   return (
                     <div key={doc.key} className={cn(
-                      "p-4 bg-slate-50 border-2 border-dashed rounded-xl text-center space-y-3 transition-colors",
+                      "p-3 bg-slate-50 border-2 border-dashed rounded-xl text-center space-y-2 transition-colors",
                       hasFile ? "border-green-500 bg-green-50/30" : "border-slate-200"
                     )}>
                       <div className={cn(
-                        "w-10 h-10 rounded-full flex items-center justify-center mx-auto border shadow-sm",
+                        "w-8 h-8 rounded-full flex items-center justify-center mx-auto border shadow-sm",
                         hasFile ? "bg-green-500 text-white border-green-600" : "bg-white text-slate-400 border-slate-100"
                       )}>
-                        {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : (hasFile ? <FileCheck size={20} /> : <Upload size={18} />)}
+                        {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : (hasFile ? <FileCheck size={16} /> : <Upload size={14} />)}
                       </div>
                       <div>
-                        <p className={cn("text-[10px] font-bold uppercase", hasFile ? "text-green-700" : "text-slate-500")}>
-                          {isProcessing ? "Procesando..." : (hasFile ? "Archivo Cargado" : doc.label)}
+                        <p className={cn("text-[9px] font-bold uppercase truncate", hasFile ? "text-green-700" : "text-slate-500")}>
+                          {doc.label}
                         </p>
-                        <p className="text-[8px] text-slate-400 mt-0.5">PDF o Imagen (Autocompresión)</p>
                       </div>
                       <Button 
                         variant={hasFile ? "secondary" : "outline"} 
                         type="button" 
                         size="sm" 
-                        className={cn("h-7 text-[10px] w-full", hasFile ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-white")}
+                        className={cn("h-6 text-[8px] w-full", hasFile ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-white")}
                         onClick={() => handleFileClick(doc.key)}
                         disabled={isProcessing}
                       >
-                        {hasFile ? "Cambiar Archivo" : "Seleccionar"}
+                        {hasFile ? "Cambiar" : "Subir"}
                       </Button>
                     </div>
                   );
