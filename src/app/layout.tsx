@@ -1,9 +1,9 @@
-
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { FirebaseClientProvider } from "@/firebase";
 import { ThemeProvider } from "next-themes";
+import { OfflineStatus } from "@/components/OfflineStatus";
 
 export const metadata: Metadata = {
   title: 'LogísticaAr | Gestión de Frotas Argentina',
@@ -20,6 +20,7 @@ export default function RootLayout({
       <body className="font-sans">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <FirebaseClientProvider>
+            <OfflineStatus />
             {children}
             <Toaster />
           </FirebaseClientProvider>
