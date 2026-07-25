@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from "react";
@@ -54,7 +55,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
   });
 
   // Remito Sub-modal state
-  const [newDoc, setNewDoc] = useState<Partial<LoadDocument>>({ type: 'remito', number: '', hasCot: false, cotNumber: '', despachoNumber: '' });
+  const [newDoc, setNewDoc] = useState<Partial<LoadDocument>>({ type: 'remito', number: '', hasCot: false, cotNumber: '', despachoNumber: '', sealNumber: '' });
 
   const [formData, setFormData] = useState<Partial<Load>>({
     orderNumber: "",
@@ -323,11 +324,12 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
       hasCot: newDoc.hasCot,
       cotNumber: newDoc.cotNumber,
       despachoNumber: newDoc.despachoNumber,
+      sealNumber: newDoc.sealNumber,
       uploadedAt: new Date().toISOString(),
       leg: activeLeg
     };
     setEditingStop(prev => ({ ...prev, documents: [...(prev.documents || []), docObj] }));
-    setNewDoc({ type: 'remito', number: '', hasCot: false, cotNumber: '', despachoNumber: '' });
+    setNewDoc({ type: 'remito', number: '', hasCot: false, cotNumber: '', despachoNumber: '', sealNumber: '' });
   };
 
   const saveStop = () => {
@@ -786,9 +788,10 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                 </div>
 
                 <div className="p-4 bg-white rounded-xl border space-y-4">
-                  <Label className="text-blue-600 font-bold text-[10px] uppercase flex items-center gap-2"><FileText size={14}/> Carga de Remitos</Label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                  <Label className="text-blue-600 font-bold text-[10px] uppercase flex items-center gap-2"><FileText size={14}/> Carga de Remitos y Seguridad</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
                     <Input className="h-8 text-xs" placeholder="N° Remito" value={newDoc.number ?? ''} onChange={e => setNewDoc({...newDoc, number: e.target.value})} />
+                    <Input className="h-8 text-xs" placeholder="N° Precinto" value={newDoc.sealNumber ?? ''} onChange={e => setNewDoc({...newDoc, sealNumber: e.target.value})} />
                     <Input className="h-8 text-xs" placeholder="Despacho (SIM)" value={newDoc.despachoNumber ?? ''} onChange={e => setNewDoc({...newDoc, despachoNumber: e.target.value})} />
                     <div className="flex items-center gap-2 px-2 bg-slate-50 border rounded h-8">
                        <Switch checked={newDoc.hasCot ?? false} onCheckedChange={v => setNewDoc({...newDoc, hasCot: v})} />
@@ -802,6 +805,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                          <div key={doc.id} className="flex items-center justify-between p-2 bg-slate-50 rounded border text-[10px] font-bold">
                             <div className="flex gap-2">
                                <span className="text-slate-700">R: {doc.number ?? ''}</span>
+                               {doc.sealNumber && <Badge variant="outline" className="h-3 text-[7px] border-orange-200 text-orange-600 bg-orange-50">PREC: {doc.sealNumber}</Badge>}
                                {doc.hasCot && <Badge className="h-3 text-[7px] bg-green-500 border-none">COT OK</Badge>}
                                {doc.despachoNumber && <Badge variant="outline" className="h-3 text-[7px] border-blue-200 text-blue-600">SIM: {doc.despachoNumber ?? ''}</Badge>}
                             </div>

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useEffect, useState } from "react";
@@ -167,7 +168,7 @@ export default function LoadOrderDocumentPage() {
                       {stop.documents?.map(doc => (
                         <div key={doc.id} className="text-[9px] font-black border-2 border-slate-900 px-2 py-0.5 uppercase flex items-center gap-1.5">
                           <div className="w-2 h-2 rounded-full bg-slate-900"></div>
-                          {doc.type}: {doc.number} {doc.hasCot ? `[COT OK]` : ''}
+                          {doc.type}: {doc.number} {doc.sealNumber ? `[PREC: ${doc.sealNumber}]` : ''} {doc.hasCot ? `[COT OK]` : ''}
                         </div>
                       ))}
                     </div>
@@ -207,8 +208,8 @@ export default function LoadOrderDocumentPage() {
                       </div>
                       <div className="flex flex-wrap gap-2 pt-2 border-t border-dashed border-orange-200">
                         {stop.documents?.map(doc => (
-                          <div key={doc.id} className="text-[9px] font-black border-2 border-orange-600 text-orange-700 px-2 py-0.5 uppercase">
-                             REMITO: {doc.number}
+                          <div key={doc.id} className="text-[9px] font-black border-2 border-orange-600 text-orange-700 px-2 py-0.5 uppercase flex items-center gap-1.5">
+                             REMITO: {doc.number} {doc.sealNumber ? `[PREC: ${doc.sealNumber}]` : ''}
                           </div>
                         ))}
                       </div>

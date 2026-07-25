@@ -46,6 +46,7 @@ export interface LoadDocument {
   hasCot?: boolean;
   cotNumber?: string;
   despachoNumber?: string;
+  sealNumber?: string;
   leg?: 'outbound' | 'return';
 }
 
