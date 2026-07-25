@@ -14,7 +14,7 @@ import {
   Phone, ArrowLeft, Edit2, Loader2, 
   Truck as TruckIcon, Package, CheckCircle2, 
   AlertTriangle, History, Mail, MapPin, Eye,
-  ChevronRight, ExternalLink, RefreshCw
+  ChevronRight, ExternalLink, RefreshCw, Navigation, Gauge
 } from "lucide-react";
 import { Driver, Load, Truck, DriverStatus } from "@/app/lib/types";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -55,6 +55,11 @@ export default function DriverProfilePage() {
   }, [db, id]);
 
   const { data: trips, loading: tripsLoading } = useCollection<Load>(tripsQuery);
+
+  const totalKm = useMemo(() => {
+    if (!trips) return 0;
+    return trips.reduce((acc, trip) => acc + (trip.tracking?.distanceTraveledKm || 0), 0);
+  }, [trips]);
 
   const sortedTrips = useMemo(() => {
     if (!trips) return [];
@@ -130,22 +135,29 @@ export default function DriverProfilePage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="space-y-6">
           <Card className="border-none shadow-sm bg-slate-900 text-white overflow-hidden relative">
-            <div className="absolute top-0 right-0 p-4 opacity-10"><Package size={64}/></div>
+            <div className="absolute top-0 right-0 p-4 opacity-10"><Gauge size={64}/></div>
             <CardHeader className="pb-2">
-              <CardTitle className="text-xs uppercase text-white/50 font-bold">Desempeño Operativo</CardTitle>
+              <CardTitle className="text-xs uppercase text-white/50 font-bold tracking-widest">Desempeño Operativo</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-               <div>
-                  <p className="text-4xl font-black italic">{trips?.length || 0}</p>
-                  <p className="text-[10px] uppercase font-bold text-white/40 tracking-widest">Viajes Realizados</p>
+            <CardContent className="space-y-6">
+               <div className="flex items-end gap-6">
+                  <div className="space-y-1">
+                     <p className="text-5xl font-black italic text-blue-400 leading-none">{Math.round(totalKm).toLocaleString()}</p>
+                     <p className="text-[10px] uppercase font-bold text-white/30 tracking-tighter">Km Conducidos</p>
+                  </div>
+                  <div className="space-y-1 border-l border-white/10 pl-4">
+                     <p className="text-2xl font-black italic">{trips?.length || 0}</p>
+                     <p className="text-[10px] uppercase font-bold text-white/30 tracking-tighter">Viajes Realizados</p>
+                  </div>
                </div>
+               
                <div className="pt-4 border-t border-white/10 grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                     <p className="text-[9px] font-bold text-white/30 uppercase">Antigüedad</p>
+                     <p className="text-[9px] font-bold text-white/30 uppercase">Alta Sistema</p>
                      <p className="text-xs font-bold">{driver.hireDate ? format(parseISO(driver.hireDate), "MMM yyyy", { locale: es }) : '-'}</p>
                   </div>
-                  <div className="space-y-1">
-                     <p className="text-[9px] font-bold text-white/30 uppercase">Experiencia</p>
+                  <div className="space-y-1 text-right">
+                     <p className="text-[9px] font-bold text-white/30 uppercase">Exp. Declarada</p>
                      <p className="text-xs font-bold">{driver.experienceYears || 0} Años</p>
                   </div>
                </div>
