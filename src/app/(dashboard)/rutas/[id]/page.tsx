@@ -21,12 +21,12 @@ import {
   Wallet, Plus, DollarSign, Camera, Fuel, Utensils, Bed, Wrench, Receipt,
   Zap, Satellite, SignalHigh, Loader2, Compass, Gauge, History, 
   Coffee, Moon, Car, Battery, Flame, CloudRain, Construction, FileWarning, HelpCircle,
-  Siren, LifeBuoy
+  Siren, LifeBuoy, PlayCircle
 } from "lucide-react";
-import { Load, Expense, ExpenseCategory } from "@/app/lib/types";
+import { Load, Expense, ExpenseCategory, LoadStatus } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { calculateDistance, calculateAdjustedETA } from "@/lib/utils/tracking-math";
+import { calculateDistance } from "@/lib/utils/tracking-math";
 
 // Cargamento dinámico del Mapa
 const MapContainer = dynamic(
@@ -106,6 +106,15 @@ export default function RouteDetailPage() {
 
   const { data: load, loading } = useDoc<Load>(loadRef);
 
+  // Sync GPS Active state with DB status
+  useEffect(() => {
+    if (load?.status === 'on_route') {
+      setGpsActive(true);
+    } else {
+      setGpsActive(false);
+    }
+  }, [load?.status]);
+
   const expensesQuery = useMemo(() => {
     if (!db || !id) return null;
     return collection(db, "loads", id as string, "expenses");
@@ -136,6 +145,7 @@ export default function RouteDetailPage() {
         const now = Date.now();
         const currentSpeedKmH = (speed || 0) * 3.6;
         
+        // Adaptive transmission: 20s if moving, 60s if stopped
         const interval = currentSpeedKmH > 5 ? 20000 : 60000;
         if (now - lastUpdateRef.current < interval) return;
 
@@ -171,7 +181,7 @@ export default function RouteDetailPage() {
     const lat = displayDestination.lat;
     const lng = displayDestination.lng;
     
-    // Detectar OS y abrir el mapa correspondiente
+    // Detect OS and open map
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     const url = isIOS 
       ? `maps://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`
@@ -198,7 +208,42 @@ export default function RouteDetailPage() {
     }
   };
 
-  const handleUpdateStatus = async (newStatus: any) => {
+  const handleStartPause = async (type: string) => {
+    if (!loadRef) return;
+    setIsUpdating(true);
+    try {
+      await updateDoc(loadRef, {
+        status: 'on_pause',
+        "tracking.lastPauseType": type,
+        "tracking.pauseStartedAt": serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      toast({ title: `Pausa iniciada: ${type}` });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al iniciar pausa" });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleResumeTrip = async () => {
+    if (!loadRef) return;
+    setIsUpdating(true);
+    try {
+      await updateDoc(loadRef, {
+        status: 'on_route',
+        updatedAt: serverTimestamp()
+      });
+      toast({ title: "Viaje reanudado", description: "GPS en modo conducción." });
+      openNativeNavigator();
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al reanudar" });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleUpdateStatus = async (newStatus: LoadStatus) => {
     if (!loadRef) return;
     setIsUpdating(true);
     try {
@@ -312,6 +357,11 @@ export default function RouteDetailPage() {
                     INICIAR VIAJE
                   </Button>
                 )}
+                {load.status === 'on_pause' && (
+                  <Button className="w-full bg-orange-600 h-14 text-lg font-bold shadow-lg flex items-center justify-center gap-2" onClick={handleResumeTrip} disabled={isUpdating}>
+                    <PlayCircle size={24} /> REANUDAR VIAJE
+                  </Button>
+                )}
                 {load.status === 'on_route' && (
                   <>
                     <div className="grid grid-cols-2 gap-2">
@@ -352,8 +402,8 @@ export default function RouteDetailPage() {
           <div className="space-y-6 px-2">
             <div className="flex gap-4">
               <div className="flex flex-col items-center">
-                <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2", load.status !== 'pending' ? 'bg-green-500 border-green-500 text-white' : 'bg-white border-slate-200 text-slate-400')}>
-                  {load.status !== 'pending' ? <CheckCircle2 size={16}/> : <Package size={16}/>}
+                <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2", load.status !== 'pending' && load.status !== 'assigned' ? 'bg-green-500 border-green-500 text-white' : 'bg-white border-slate-200 text-slate-400')}>
+                  {load.status !== 'pending' && load.status !== 'assigned' ? <CheckCircle2 size={16}/> : <Package size={16}/>}
                 </div>
                 <div className="w-0.5 h-full bg-slate-100 min-h-[40px]"></div>
               </div>
@@ -392,42 +442,50 @@ export default function RouteDetailPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <p className="text-[9px] uppercase font-bold text-slate-500">Conduciendo Hoy</p>
-                  <p className="text-xl font-bold text-blue-600">3:45 <span className="text-xs font-normal text-slate-400">hs</span></p>
+                  <p className="text-xl font-bold text-blue-600">{load.tracking?.timeOnRouteMinutes || 0} <span className="text-xs font-normal text-slate-400">min</span></p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-[9px] uppercase font-bold text-slate-500">Descanso Tomado</p>
-                  <p className="text-xl font-bold text-green-600">1:30 <span className="text-xs font-normal text-slate-400">hs</span></p>
+                  <p className="text-[9px] uppercase font-bold text-slate-500">Detenido</p>
+                  <p className="text-xl font-bold text-orange-600">{load.tracking?.timeStoppedMinutes || 0} <span className="text-xs font-normal text-slate-400">min</span></p>
                 </div>
               </div>
               <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl flex items-center gap-3">
                  <Zap className="text-amber-600 shrink-0" size={16} />
-                 <p className="text-[10px] text-amber-800 font-bold">⚠️ Próxima pausa obligatoria: en 15 min</p>
+                 <p className="text-[10px] text-amber-800 font-bold">⚠️ Límite: 8h conducción diaria (Ley 24.449)</p>
               </div>
             </CardContent>
           </Card>
 
           <div className="px-2 space-y-4">
-             <Label className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">Iniciar Pausa / Descanso</Label>
-             <div className="grid grid-cols-2 gap-3">
-                <Button variant="outline" className="flex flex-col h-16 gap-1"><Coffee size={18} /> <span className="text-[10px] font-bold">COMIDA</span></Button>
-                <Button variant="outline" className="flex flex-col h-16 gap-1"><Bed size={18} /> <span className="text-[10px] font-bold">DESCANSO</span></Button>
-                <Button variant="outline" className="flex flex-col h-16 gap-1 col-span-2"><Moon size={18} /> <span className="text-[10px] font-bold">PERNOCTAR (DORMIR)</span></Button>
-             </div>
+             <Label className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">Registrar Pausa / Descanso</Label>
+             
+             {load.status === 'on_pause' ? (
+                <div className="p-6 bg-orange-50 border-2 border-orange-200 rounded-2xl text-center space-y-4">
+                   <div className="flex flex-col items-center gap-2">
+                      <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center text-orange-600 animate-pulse">
+                         <History size={28} />
+                      </div>
+                      <p className="text-sm font-black text-orange-800 uppercase italic">PAUSA ACTIVA: {load.tracking?.lastPauseType}</p>
+                   </div>
+                   <Button className="w-full bg-orange-600 h-14 text-lg font-bold" onClick={handleResumeTrip} disabled={isUpdating}>
+                      REANUDAR CONDUCCIÓN
+                   </Button>
+                </div>
+             ) : (
+               <div className="grid grid-cols-2 gap-3">
+                  <Button variant="outline" className="flex flex-col h-16 gap-1" onClick={() => handleStartPause('COMIDA')}><Utensils size={18} /> <span className="text-[10px] font-bold">COMIDA</span></Button>
+                  <Button variant="outline" className="flex flex-col h-16 gap-1" onClick={() => handleStartPause('DESCANSO')}><Coffee size={18} /> <span className="text-[10px] font-bold">DESCANSO</span></Button>
+                  <Button variant="outline" className="flex flex-col h-16 gap-1 col-span-2 bg-slate-900 text-white" onClick={() => handleStartPause('PERNOCTE')}><Moon size={18} /> <span className="text-[10px] font-bold">PERNOCTAR (DORMIR)</span></Button>
+               </div>
+             )}
           </div>
 
           <div className="px-2 space-y-3">
-            <Label className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">Historial de Jornada</Label>
-            <div className="space-y-2">
-               {[
-                 { time: '07:30 - 12:00', label: 'Conduciendo', duration: '4:30 hs', status: 'done' },
-                 { time: '12:00 - 13:00', label: '☕ Almuerzo', duration: '1:00 hs', status: 'done' },
-                 { time: '13:00 - 16:45', label: 'Conduciendo', duration: '3:45 hs', status: 'done' }
-               ].map((log, i) => (
-                 <div key={i} className="flex justify-between items-center p-3 bg-white border rounded-xl text-[11px]">
-                    <div className="font-bold text-slate-700">{log.label}</div>
-                    <div className="text-slate-400">{log.time} ({log.duration})</div>
-                 </div>
-               ))}
+            <Label className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">Normativa y Penalidades</Label>
+            <div className="p-4 bg-slate-50 border rounded-xl space-y-2">
+               <p className="text-[10px] text-slate-600 leading-relaxed italic">
+                 "El conductor debe realizar una pausa de 30 min cada 4 horas de conducción continua. El descanso nocturno debe ser de al menos 8 horas."
+               </p>
             </div>
           </div>
         </TabsContent>

@@ -1,7 +1,7 @@
 
 export type TruckStatus = 'available' | 'in_trip' | 'maintenance';
 export type DriverStatus = 'active' | 'in_trip' | 'resting' | 'suspended' | 'retired';
-export type LoadStatus = 'pending' | 'assigned' | 'on_route' | 'delivered' | 'incident' | 'cancelled';
+export type LoadStatus = 'pending' | 'assigned' | 'on_route' | 'on_pause' | 'delivered' | 'incident' | 'cancelled';
 export type DocStatus = 'pending' | 'valid' | 'expired' | 'warning';
 export type HubType = 'hub' | 'warehouse' | 'office';
 export type MapProvider = 'google' | 'mapbox';
@@ -345,9 +345,10 @@ export interface Load {
     distanceRemainingKm: number;
     timeOnRouteMinutes: number;
     timeStoppedMinutes: number;
-    estimatedFuelLiters: number;
     lastUpdateAt: any;
     history: TrackingPoint[];
     alerts: DrivingAlert[];
+    lastPauseType?: string;
+    pauseStartedAt?: any;
   };
 }
