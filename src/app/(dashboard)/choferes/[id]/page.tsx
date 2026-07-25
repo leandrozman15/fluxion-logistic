@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection } from "@/firebase";
-import { doc, collection, query, where, orderBy } from "firebase/firestore";
+import { doc, collection, query, where } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -37,16 +37,26 @@ export default function DriverProfilePage() {
 
   const { data: driver, loading: driverLoading } = useDoc<Driver>(driverRef);
 
+  // Consulta simplificada para evitar requerimiento de índice compuesto (orderBy + where)
   const tripsQuery = useMemo(() => {
     if (!db || !id) return null;
     return query(
       collection(db, "loads"),
-      where("assignedDriverId", "==", id as string),
-      orderBy("createdAt", "desc")
+      where("assignedDriverId", "==", id as string)
     );
   }, [db, id]);
 
   const { data: trips, loading: tripsLoading } = useCollection<Load>(tripsQuery);
+
+  // Ordenamiento manual en memoria para evitar errores de índice
+  const sortedTrips = useMemo(() => {
+    if (!trips) return [];
+    return [...trips].sort((a, b) => {
+      const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt).getTime();
+      const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt).getTime();
+      return dateB - dateA;
+    });
+  }, [trips]);
 
   const trucksQuery = useMemo(() => {
     if (!db || !id) return null;
@@ -259,10 +269,10 @@ export default function DriverProfilePage() {
                      <TableBody>
                         {tripsLoading ? (
                            <TableRow><TableCell colSpan={4} className="text-center py-10"><Loader2 className="animate-spin mx-auto"/></TableCell></TableRow>
-                        ) : trips?.length === 0 ? (
+                        ) : sortedTrips.length === 0 ? (
                            <TableRow><TableCell colSpan={4} className="text-center py-10 text-slate-400 italic text-xs">Sin viajes registrados.</TableCell></TableRow>
                         ) : (
-                           trips?.map(trip => (
+                           sortedTrips.map(trip => (
                               <TableRow key={trip.id}>
                                  <TableCell>
                                     <div className="font-bold text-xs">{trip.orderNumber}</div>
