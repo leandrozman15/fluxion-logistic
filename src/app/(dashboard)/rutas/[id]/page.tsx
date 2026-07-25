@@ -1,10 +1,11 @@
+
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection, useUser } from "@/firebase";
-import { doc, updateDoc, serverTimestamp, collection, addDoc, increment } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp, collection, addDoc, increment, arrayUnion } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +23,7 @@ import {
   Coffee, Moon, Car, Battery, Flame, CloudRain, Construction, FileWarning, HelpCircle,
   Siren, LifeBuoy, PlayCircle, Edit3, UserCheck, UploadCloud
 } from "lucide-react";
-import { Load, Expense, ExpenseCategory, LoadStatus } from "@/app/lib/types";
+import { Load, Expense, ExpenseCategory, LoadStatus, TrackingPoint } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { calculateDistance } from "@/lib/utils/tracking-math";
@@ -146,7 +147,7 @@ export default function RouteDetailPage() {
     return { name: 'S/D', address: '-', lat: -34.6, lng: -58.3 };
   }, [load]);
 
-  // GPS Tracking Logic - Optimized for responsiveness during tests
+  // GPS Tracking Logic
   useEffect(() => {
     if (!gpsActive || !loadRef || typeof window === 'undefined' || !navigator.geolocation) return;
 
@@ -155,26 +156,28 @@ export default function RouteDetailPage() {
         const { latitude, longitude, speed } = pos.coords;
         const now = Date.now();
         
-        // Frecuencia de actualización: cada 5 segundos para que sea sensible a pie
         const UPDATE_INTERVAL = 5000;
         if (now - lastUpdateRef.current < UPDATE_INTERVAL) return;
 
         let distanceInc = 0;
-        let calculatedSpeed = (speed || 0) * 3.6; // Convertir m/s a km/h
+        let calculatedSpeed = (speed || 0) * 3.6;
 
         if (lastPosRef.current) {
           distanceInc = calculateDistance(lastPosRef.current.lat, lastPosRef.current.lng, latitude, longitude);
-          
-          // Si el sensor no da velocidad (común en navegadores), la estimamos
           if (speed === null || speed === 0) {
             const timeDiffHours = (now - lastPosRef.current.timestamp) / (1000 * 3600);
             calculatedSpeed = distanceInc / timeDiffHours;
           }
         }
 
-        // Umbral de movimiento: 5 metros (0.005 km)
-        // Esto permite que el sistema detecte caminatas cortas
         if (distanceInc < 0.005 && lastUpdateRef.current !== 0) return;
+
+        const newPoint: TrackingPoint = {
+          lat: latitude,
+          lng: longitude,
+          speed: Math.round(calculatedSpeed),
+          timestamp: new Date().toISOString()
+        };
 
         updateDoc(loadRef, {
           "tracking.currentLat": latitude,
@@ -183,6 +186,7 @@ export default function RouteDetailPage() {
           "tracking.distanceTraveledKm": increment(distanceInc),
           "tracking.distanceRemainingKm": increment(-distanceInc),
           "tracking.lastUpdateAt": serverTimestamp(),
+          "tracking.history": arrayUnion(newPoint),
           updatedAt: serverTimestamp()
         });
 
@@ -190,11 +194,7 @@ export default function RouteDetailPage() {
         lastPosRef.current = { lat: latitude, lng: longitude, timestamp: now };
       },
       (err) => {
-        let msg = "Error GPS: ";
-        if (err.code === 1) msg += "Permiso denegado.";
-        else if (err.code === 2) msg += "Ubicación no disponible.";
-        else if (err.code === 3) msg += "Tiempo de espera agotado.";
-        console.warn(msg, err);
+        console.warn("GPS Native Error:", err);
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
@@ -205,12 +205,10 @@ export default function RouteDetailPage() {
   const openNativeNavigator = () => {
     const lat = displayDestination.lat;
     const lng = displayDestination.lng;
-    
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     const url = isIOS 
       ? `maps://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`
       : `google.navigation:q=${lat},${lng}`;
-    
     window.location.href = url;
   };
 
@@ -322,9 +320,7 @@ export default function RouteDetailPage() {
         status: 'open',
         driverId: user.uid
       });
-      
       await updateDoc(doc(db, "loads", id as string), { status: 'incident' });
-      
       toast({ title: "Reporte Enviado" });
       setIsIncidentOpen(false);
       setSelectedIncidentType(null);

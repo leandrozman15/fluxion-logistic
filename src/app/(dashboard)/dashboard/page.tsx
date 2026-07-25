@@ -55,6 +55,7 @@ const MapContainer = dynamic(
 const TileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), { ssr: false });
 const Popup = dynamic(() => import("react-leaflet").then((mod) => mod.Popup), { ssr: false });
+const Polyline = dynamic(() => import("react-leaflet").then((mod) => mod.Polyline), { ssr: false });
 
 export default function MonitorOperativoPage() {
   const db = useFirestore();
@@ -229,7 +230,7 @@ export default function MonitorOperativoPage() {
                          <div className={cn(
                            "w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border transition-all shadow-sm",
                            load.status === 'on_route' ? "bg-blue-600 text-white border-blue-400" : 
-                           load.status === 'on_pause' ? "bg-orange-500 text-white border-orange-300" :
+                           load.status === 'on_pause' ? "bg-orange-50 text-white border-orange-300" :
                            "bg-white dark:bg-slate-800 text-slate-400 border-slate-200"
                          )}>
                            {load.status === 'on_route' ? <Navigation size={24} className="animate-pulse" /> : 
@@ -361,6 +362,11 @@ export default function MonitorOperativoPage() {
                                 <div className="h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                                   <div className="h-full bg-blue-500" style={{ width: `${(tracking?.distanceTraveledKm || 0) / ((tracking?.distanceTraveledKm || 0) + (tracking?.distanceRemainingKm || 1)) * 100}%` }}></div>
                                 </div>
+                                <Button variant="outline" size="sm" className="w-full text-[10px] font-bold" asChild>
+                                   <Link href={`/tracking/${load.id}`}>
+                                      <Globe size={12} className="mr-1" /> VER MAPA EN VIVO
+                                   </Link>
+                                </Button>
                               </div>
                            </div>
                          )}
@@ -496,10 +502,14 @@ export default function MonitorOperativoPage() {
               </Marker>
             ))}
 
-            {truckIcon && trucks?.filter(t => t.status === 'in_trip').map((truck) => (
-              <Marker key={truck.id} position={[truck.location?.lat || -34.6, truck.location?.lng || -58.3]} icon={truckIcon}>
+            {truckIcon && dailyOperations.filter(l => (l.status === 'on_route' || l.status === 'on_pause') && l.tracking?.currentLat).map((load) => (
+              <Marker key={load.id} position={[load.tracking!.currentLat, load.tracking!.currentLng]} icon={truckIcon}>
                 <Popup>
-                  <div className="p-1 font-bold text-sm">Patente: {truck.plate}</div>
+                  <div className="p-1 font-bold text-sm">
+                    Orden: {load.orderNumber}
+                    <div className="text-[10px] text-blue-600 uppercase font-bold">{load.status.replace('_', ' ')}</div>
+                    <div className="text-[9px] text-slate-400 mt-1">Velocidad: {load.tracking?.currentSpeed} km/h</div>
+                  </div>
                 </Popup>
               </Marker>
             ))}

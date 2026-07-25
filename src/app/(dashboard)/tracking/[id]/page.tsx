@@ -32,6 +32,7 @@ const MapContainer = dynamic(
 const TileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), { ssr: false });
 const Popup = dynamic(() => import("react-leaflet").then((mod) => mod.Popup), { ssr: false });
+const Polyline = dynamic(() => import("react-leaflet").then((mod) => mod.Polyline), { ssr: false });
 
 export default function LiveTrackingPage() {
   const { id } = useParams();
@@ -75,8 +76,8 @@ export default function LiveTrackingPage() {
         alerts: []
       };
 
-      const newLat = currentTracking.currentLat + 0.001;
-      const newLng = currentTracking.currentLng + 0.001;
+      const newLat = currentTracking.currentLat + (Math.random() * 0.002 - 0.001);
+      const newLng = currentTracking.currentLng + (Math.random() * 0.002 - 0.001);
       const newSpeed = 70 + Math.floor(Math.random() * 15);
       
       const newPoint = {
@@ -86,16 +87,16 @@ export default function LiveTrackingPage() {
         timestamp: new Date().toISOString()
       };
 
-      const updatedHistory = [...(currentTracking.history || []).slice(-19), newPoint];
-      const newFuel = currentTracking.estimatedFuelLiters + (estimateFuelFactor(newSpeed) * 0.001);
+      const updatedHistory = [...(currentTracking.history || []), newPoint].slice(-100);
+      const newFuel = (currentTracking.estimatedFuelLiters || 0) + (estimateFuelFactor(newSpeed) * 0.001);
 
       await updateDoc(loadRef, {
         "tracking.currentLat": newLat,
         "tracking.currentLng": newLng,
         "tracking.currentSpeed": newSpeed,
-        "tracking.maxSpeed": Math.max(currentTracking.maxSpeed, newSpeed),
-        "tracking.distanceTraveledKm": currentTracking.distanceTraveledKm + 0.1,
-        "tracking.distanceRemainingKm": Math.max(0, currentTracking.distanceRemainingKm - 0.1),
+        "tracking.maxSpeed": Math.max(currentTracking.maxSpeed || 0, newSpeed),
+        "tracking.distanceTraveledKm": (currentTracking.distanceTraveledKm || 0) + 0.1,
+        "tracking.distanceRemainingKm": Math.max(0, (currentTracking.distanceRemainingKm || 0) - 0.1),
         "tracking.estimatedFuelLiters": newFuel,
         "tracking.history": updatedHistory,
         "tracking.lastUpdateAt": serverTimestamp()
@@ -112,8 +113,13 @@ export default function LiveTrackingPage() {
     iconAnchor: [20, 20]
   }) : null;
 
+  const breadcrumbs = useMemo(() => {
+    if (!load?.tracking?.history) return [];
+    return load.tracking.history.map(p => [p.lat, p.lng] as [number, number]);
+  }, [load?.tracking?.history]);
+
   if (loading) return <div className="h-screen flex items-center justify-center"><Activity className="animate-spin text-blue-600" /></div>;
-  if (!load) return <div className="p-10 text-center">Operação não encontrada.</div>;
+  if (!load) return <div className="p-10 text-center">Operación não encontrada.</div>;
 
   const tracking = load.tracking;
   const chartData = tracking?.history?.map(p => ({
@@ -137,7 +143,7 @@ export default function LiveTrackingPage() {
               {isSimulating && <Badge className="bg-red-500 animate-pulse border-none">Live Transmission</Badge>}
             </div>
             <p className="text-sm text-slate-500 flex items-center gap-1">
-              <Truck size={14} className="text-blue-600" /> {load.clientName} | Ruta: {load.origin.province} → {load.destination.province}
+              <Truck size={14} className="text-blue-600" /> {load.clientName} | Ruta: {load.origin.province} → {load.outboundStops?.[load.outboundStops.length-1]?.province || 'Destino'}
             </p>
           </div>
         </div>
@@ -212,8 +218,13 @@ export default function LiveTrackingPage() {
                >
                  <TileLayer
                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                   attribution='&copy; OpenStreetMap contributors'
                  />
+                 
+                 {breadcrumbs.length > 0 && (
+                   <Polyline positions={breadcrumbs} color="#2563eb" weight={4} opacity={0.6} />
+                 )}
+
                  <Marker 
                    position={[tracking?.currentLat || -34.6037, tracking?.currentLng || -58.3816]} 
                    icon={truckIcon}
@@ -239,9 +250,9 @@ export default function LiveTrackingPage() {
           <Card className="border-none shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
-                <Activity size={16} className="text-blue-600" /> Análisis de Velocidad (60 min)
+                <Activity size={16} className="text-blue-600" /> Análisis de Velocidad (Historial)
               </CardTitle>
-              <CardDescription className="text-xs">Monitoreo de estabilidad y excesos en tempo real.</CardDescription>
+              <CardDescription className="text-xs">Monitoreo de estabilidad y excesos en tiempo real.</CardDescription>
             </CardHeader>
             <CardContent className="h-[250px] pt-4">
               <ResponsiveContainer width="100%" height="100%">
@@ -274,16 +285,14 @@ export default function LiveTrackingPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                  <div className="space-y-3">
-                    {[
-                      { time: '14:35', msg: 'Frenada brusca detectada (0.7g)', type: 'warning' },
-                      { time: '14:28', msg: 'Velocidad estable en límite', type: 'info' },
-                      { time: '14:15', msg: 'Aceleración brusca en peaje', type: 'warning' }
-                    ].map((alert, i) => (
+                    {tracking?.alerts?.map((alert, i) => (
                       <div key={i} className="flex gap-3 text-xs border-l border-white/10 pl-3">
-                         <span className="opacity-40 font-mono">{alert.time}</span>
-                         <span className={alert.type === 'warning' ? "text-yellow-400" : "text-green-400"}>{alert.msg}</span>
+                         <span className="opacity-40 font-mono">{(alert.timestamp as any)?.toDate ? format((alert.timestamp as any).toDate(), "HH:mm") : '14:35'}</span>
+                         <span className={alert.type === 'warning' ? "text-yellow-400" : alert.type === 'critical' ? "text-red-500" : "text-green-400"}>{alert.message}</span>
                       </div>
-                    ))}
+                    )) || (
+                      <div className="text-[10px] text-white/30 italic">Sin alertas en la jornada actual.</div>
+                    )}
                  </div>
                  <div className="pt-4 border-t border-white/5 space-y-2">
                     <p className="text-[10px] uppercase font-bold text-white/40">Score del Conductor</p>
