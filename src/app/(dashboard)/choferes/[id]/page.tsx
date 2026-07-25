@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Link from "next/link";
+import { toSafeDate } from "@/lib/utils/date-utils";
 
 export default function DriverProfilePage() {
   const { id } = useParams();
@@ -52,8 +53,8 @@ export default function DriverProfilePage() {
   const sortedTrips = useMemo(() => {
     if (!trips) return [];
     return [...trips].sort((a, b) => {
-      const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt).getTime();
-      const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt).getTime();
+      const dateA = toSafeDate(a.createdAt)?.getTime() || 0;
+      const dateB = toSafeDate(b.createdAt)?.getTime() || 0;
       return dateB - dateA;
     });
   }, [trips]);
@@ -355,7 +356,7 @@ export default function DriverProfilePage() {
             {viewerUrl?.startsWith('data:application/pdf') ? (
               <iframe src={viewerUrl} className="w-full h-full" />
             ) : (
-              <img src={viewerUrl || ""} className="max-w-full max-h-full object-contain" alt="Documento" />
+              <img src={viewerUrl || undefined} className="max-w-full max-h-full object-contain" alt="Documento" />
             )}
           </div>
         </DialogContent>

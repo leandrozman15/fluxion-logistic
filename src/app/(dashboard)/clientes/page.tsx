@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo } from "react";
@@ -217,7 +216,7 @@ export default function ClientesPage() {
         <DialogContent className="max-w-2xl h-[60vh] flex flex-col">
           <DialogHeader><DialogTitle>Foto de Fachada / Destino</DialogTitle></DialogHeader>
           <div className="flex-1 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden border mt-2">
-            <img src={viewerUrl || ""} className="max-w-full max-h-full object-contain" alt="Fachada" />
+            <img src={viewerUrl || undefined} className="max-w-full max-h-full object-contain" alt="Fachada" />
           </div>
         </DialogContent>
       </Dialog>

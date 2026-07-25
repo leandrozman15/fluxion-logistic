@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -522,7 +521,7 @@ export default function TruckDetailPage() {
             {viewerUrl?.startsWith('data:application/pdf') ? (
               <iframe src={viewerUrl} className="w-full h-full" />
             ) : (
-              <img src={viewerUrl || ""} className="max-w-full max-h-full object-contain" alt="Documento" />
+              <img src={viewerUrl || undefined} className="max-w-full max-h-full object-contain" alt="Documento" />
             )}
           </div>
           <div className="mt-4 flex justify-end">
