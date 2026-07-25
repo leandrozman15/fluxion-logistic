@@ -8,6 +8,10 @@ import { OfflineStatus } from "@/components/OfflineStatus";
 export const metadata: Metadata = {
   title: 'LogísticaAr | Gestión de Frotas Argentina',
   description: 'Sistema integral de transporte e logística de carga.',
+  icons: {
+    icon: '/icono.png',
+    apple: '/icono.png',
+  }
 };
 
 export default function RootLayout({

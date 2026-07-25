@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useEffect, useState } from "react";
@@ -7,6 +6,7 @@ import { useFirestore, useDoc } from "@/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import Image from "next/image";
 import { 
   Printer, ArrowLeft, Truck, User, MapPin, 
   Package, Calendar, Loader2, Navigation, FileText, CheckCircle2, Repeat, ClipboardCheck, ShieldCheck
@@ -14,7 +14,6 @@ import {
 import { Load, Driver, Truck as TruckType } from "@/app/lib/types";
 import { QRCodeSVG } from "qrcode.react";
 import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 
 export default function LoadOrderDocumentPage() {
   const { id } = useParams();
@@ -75,9 +74,9 @@ export default function LoadOrderDocumentPage() {
         <div className="bg-white shadow-2xl p-10 print:shadow-none min-h-[297mm] flex flex-col border border-slate-300 print:border-none rounded-sm">
           {/* HEADER PRINCIPAL */}
           <div className="flex justify-between items-start border-b-4 border-slate-900 pb-6 mb-6">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-blue-600 font-black text-4xl italic tracking-tighter">
-                <Truck size={40} strokeWidth={2.5} />
+            <div className="space-y-2">
+              <div className="flex items-center gap-4 text-blue-600 font-black text-4xl italic tracking-tighter">
+                <Image src="/icono.png" alt="LogísticaAr" width={56} height={56} className="object-contain" />
                 <span>LOGÍSTICA<span className="text-slate-900">AR</span></span>
               </div>
               <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Sistema de Gestión de Flotas Pesadas</p>
@@ -100,7 +99,6 @@ export default function LoadOrderDocumentPage() {
                 <div className="space-y-1">
                   <p className="text-sm font-black text-slate-800 uppercase">{load.clientName}</p>
                   <p className="text-[11px] text-slate-500 font-medium">TIPO: {load.serviceType.toUpperCase()} {load.isRoundTrip ? '(IDA Y VUELTA)' : '(SOLO IDA)'}</p>
-                  <p className="text-[11px] text-slate-500">OPERACIÓN NACIONAL - CONO SUR</p>
                 </div>
              </div>
 
@@ -114,14 +112,11 @@ export default function LoadOrderDocumentPage() {
                       <p className="text-[9px] font-black text-slate-400 uppercase">Personal</p>
                       <p className="text-[11px] font-black uppercase">{driver ? `${driver.lastName}, ${driver.firstName}` : 'NO ASIGNADO'}</p>
                       <p className="text-[10px] text-slate-500 font-medium">DNI: {driver?.dni || '-'}</p>
-                      <p className="text-[10px] text-slate-500 font-medium">LIC: {driver?.licenseNumber || '-'}</p>
-                      {driver?.hasLinti && <p className="text-[10px] text-blue-600 font-bold">LINTI: {driver.lintiNumber}</p>}
                    </div>
                    <div className="space-y-1">
                       <p className="text-[9px] font-black text-slate-400 uppercase">Vehículo</p>
                       <p className="text-[11px] font-black uppercase text-blue-700">PATENTE: {truck?.plate || 'S/D'}</p>
-                      <p className="text-[10px] text-slate-500 font-medium">{truck?.brand} {truck?.model} ({truck?.year})</p>
-                      <p className="text-[10px] text-slate-500 font-medium">SEMI: {truck?.semiTrailer?.plate || 'S/D'}</p>
+                      <p className="text-[10px] text-slate-500 font-medium">{truck?.brand} {truck?.model}</p>
                    </div>
                 </div>
              </div>
@@ -134,153 +129,39 @@ export default function LoadOrderDocumentPage() {
               <Navigation size={14}/>
             </h3>
             
-            <div className="space-y-6">
-              {/* ORIGEN */}
+            <div className="space-y-4">
               <div className="p-4 bg-slate-50 border rounded-lg border-slate-200">
                 <div className="flex gap-4">
                   <div className="w-1.5 h-12 bg-green-500 rounded-full shrink-0"></div>
                   <div className="space-y-1">
                     <p className="text-[9px] font-black text-slate-400 uppercase">Punto de Carga (Origen)</p>
                     <p className="text-sm font-black text-slate-900 uppercase">{load.origin.name}</p>
-                    <p className="text-[11px] text-slate-600">{load.origin.address}, {load.origin.province}</p>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Contacto: {load.origin.contact} | {load.origin.phone}</p>
+                    <p className="text-[11px] text-slate-600">{load.origin.address}</p>
                   </div>
                 </div>
               </div>
 
-              {/* PARADAS IDA */}
               <div className="grid gap-4 pl-6">
                 {load.outboundStops?.map((stop, i) => (
-                  <div key={stop.id} className="p-4 border-2 border-slate-100 rounded-xl space-y-3 relative bg-white">
-                    <div className="absolute -left-6 top-1/2 -translate-y-1/2 w-5 h-5 bg-blue-600 text-white rounded-full flex items-center justify-center text-[10px] font-black shadow-md border-2 border-white">D{i+1}</div>
+                  <div key={stop.id} className="p-4 border-2 border-slate-100 rounded-xl space-y-2 relative bg-white">
+                    <div className="absolute -left-6 top-1/2 -translate-y-1/2 w-5 h-5 bg-blue-600 text-white rounded-full flex items-center justify-center text-[10px] font-black shadow-md border-2 border-white">{i+1}</div>
                     <div className="flex justify-between items-start">
                       <div className="space-y-1">
                         <p className="text-xs font-black uppercase text-slate-900">{stop.name}</p>
-                        <p className="text-[10px] text-slate-500 leading-tight">{stop.address}, {stop.province}</p>
+                        <p className="text-[10px] text-slate-500 leading-tight">{stop.address}</p>
                       </div>
-                      <div className="text-right space-y-0.5">
+                      <div className="text-right">
                         <div className="text-sm font-black text-blue-600 italic">{stop.weightKg.toLocaleString()} KG</div>
-                        <div className="text-[9px] font-bold text-slate-400 uppercase">{stop.units} {stop.unitType} - {stop.description}</div>
                       </div>
                     </div>
-                    {/* DOCUMENTACIÓN PARADA */}
-                    <div className="flex flex-wrap gap-2 pt-2 border-t border-dashed border-slate-200">
-                      {stop.documents?.map(doc => (
-                        <div key={doc.id} className="text-[9px] font-black border-2 border-slate-900 px-2 py-0.5 uppercase flex items-center gap-1.5">
-                          <div className="w-2 h-2 rounded-full bg-slate-900"></div>
-                          {doc.type}: {doc.number} {doc.sealNumber ? `[PREC: ${doc.sealNumber}]` : ''} {doc.hasCot ? `[COT OK]` : ''}
-                        </div>
-                      ))}
-                    </div>
-                    {stop.instructions && (
-                      <div className="bg-amber-50 p-2 rounded text-[9px] text-amber-700 italic font-medium">
-                        <b>Obs:</b> {stop.instructions}
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* TRAMO 2: RETORNO (SI CORRESPONDE) */}
-          {load.isRoundTrip && (
-            <div className="mb-8">
-              <h3 className="text-xs font-black bg-orange-50 text-orange-700 px-3 py-2 mb-4 flex items-center justify-between border-l-4 border-orange-600 uppercase tracking-widest">
-                <span>TRAMO 2: Logística de Vuelta (Retorno)</span>
-                <Repeat size={14}/>
-              </h3>
-
-              <div className="space-y-6">
-                {/* PARADAS RETORNO */}
-                <div className="grid gap-4 pl-6">
-                  {load.returnStops?.map((stop, i) => (
-                    <div key={stop.id} className="p-4 border-2 border-orange-100 rounded-xl space-y-3 relative bg-orange-50/20">
-                      <div className="absolute -left-6 top-1/2 -translate-y-1/2 w-5 h-5 bg-orange-600 text-white rounded-full flex items-center justify-center text-[10px] font-black shadow-md border-2 border-white">R{i+1}</div>
-                      <div className="flex justify-between items-start">
-                        <div className="space-y-1">
-                          <p className="text-xs font-black uppercase text-slate-900">{stop.name}</p>
-                          <p className="text-[10px] text-slate-500 leading-tight">{stop.address}, {stop.province}</p>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-sm font-black text-orange-600 italic">{stop.weightKg.toLocaleString()} KG</div>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-2 pt-2 border-t border-dashed border-orange-200">
-                        {stop.documents?.map(doc => (
-                          <div key={doc.id} className="text-[9px] font-black border-2 border-orange-600 text-orange-700 px-2 py-0.5 uppercase flex items-center gap-1.5">
-                             REMITO: {doc.number} {doc.sealNumber ? `[PREC: ${doc.sealNumber}]` : ''}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* DESTINO FINAL RETORNO */}
-                {load.returnDestination?.name && (
-                  <div className="p-4 bg-slate-900 text-white rounded-lg ml-6">
-                    <div className="flex gap-4">
-                      <div className="w-1.5 h-10 bg-orange-500 rounded-full shrink-0"></div>
-                      <div className="space-y-1">
-                        <p className="text-[9px] font-black text-white/50 uppercase">Punto de Descarga Final (Retorno)</p>
-                        <p className="text-sm font-black uppercase">{load.returnDestination.name}</p>
-                        <p className="text-[10px] opacity-70 leading-tight">{load.returnDestination.address}, {load.returnDestination.province}</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
           {/* RESUMEN DE OPERACIÓN */}
           <div className="mt-auto pt-6 border-t-2 border-slate-100">
-             <div className="grid grid-cols-2 gap-8 mb-8">
-                <div className="space-y-3">
-                  <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Resumen de Operación</h4>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
-                     <span className="text-slate-500 font-bold">PESO TOTAL:</span>
-                     <span className="font-black text-right">{totalWeight.toLocaleString()} KG</span>
-                     <span className="text-slate-500 font-bold">REMITOS ASOCIADOS:</span>
-                     <span className="font-black text-right">{totalDocs}</span>
-                     <span className="text-slate-500 font-bold">LLEGADA ESTIMADA (ETA):</span>
-                     <span className="font-black text-right">{load.estimatedArrivalDate ? format(new Date(load.estimatedArrivalDate), "dd/MM/yyyy") : '-'} {load.estimatedArrivalTime}hs</span>
-                  </div>
-                </div>
-
-                {/* TABLA DE CONTROL FÍSICO */}
-                <div className="space-y-3">
-                  <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Control de Puntos</h4>
-                  <div className="border border-slate-200 rounded overflow-hidden">
-                    <table className="w-full text-[8px] font-black uppercase">
-                      <thead className="bg-slate-50">
-                        <tr className="border-b border-slate-200">
-                          <th className="px-2 py-1 text-left">PUNTO</th>
-                          <th className="px-2 py-1 text-left">HORA</th>
-                          <th className="px-2 py-1 text-right">FIRMA</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="border-b border-slate-100">
-                          <td className="px-2 py-1.5">ORIGEN</td>
-                          <td className="px-2 py-1.5 border-x">____:____</td>
-                          <td className="px-2 py-1.5">________________</td>
-                        </tr>
-                        {load.outboundStops?.map((_, idx) => (
-                          <tr key={idx} className="border-b border-slate-100">
-                            <td className="px-2 py-1.5">DESTINO {idx + 1}</td>
-                            <td className="px-2 py-1.5 border-x">____:____</td>
-                            <td className="px-2 py-1.5">________________</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-             </div>
-
-             {/* FIRMAS Y QR */}
              <div className="flex justify-between items-end gap-10">
                 <div className="flex-1 space-y-10">
                    <div className="flex gap-16">
@@ -290,12 +171,6 @@ export default function LoadOrderDocumentPage() {
                       <div className="w-48 border-t-2 border-slate-900 pt-2 text-center">
                          <p className="text-[9px] font-black uppercase italic">Firma Transportista / Chofer</p>
                       </div>
-                   </div>
-                   <div className="space-y-1 opacity-50">
-                      <p className="text-[7px] font-black uppercase italic leading-tight max-w-lg">
-                        ESTA ORDEN DE TRANSPORTE ES UN DOCUMENTO INTERNO OFICIAL DE LOGÍSTICA AR. EL CHOFER DEBE CONFIRMAR CADA ENTREGA MEDIANTE EL SISTEMA DIGITAL. LA FALTA DE CONFIRMACIÓN DIGITAL O EL INCUMPLIMIENTO DE LAS NORMAS DE SEGURIDAD VIAL PUEDEN RESULTAR EN PENALIDADES.
-                      </p>
-                      <p className="text-[8px] font-bold">Documento generado electrónicamente - Validez oficial LogísticaAr HQ</p>
                    </div>
                 </div>
 

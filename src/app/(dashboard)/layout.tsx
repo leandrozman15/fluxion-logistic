@@ -1,4 +1,3 @@
-
 'use client';
 
 import { 
@@ -37,6 +36,7 @@ import {
   Wrench
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { useRouter, usePathname } from "next/navigation";
@@ -89,8 +89,8 @@ function DashboardSidebar() {
     <Sidebar variant="sidebar" collapsible="icon" className="transition-all duration-200">
       <SidebarHeader className="h-16 flex items-center px-4 border-b overflow-hidden">
         <Link href="/dashboard" className="flex items-center gap-2 font-bold text-blue-600" onClick={handleLinkClick}>
-          <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white shrink-0">
-            <Truck size={18} />
+          <div className="w-8 h-8 rounded flex items-center justify-center shrink-0 overflow-hidden">
+            <Image src="/icono.png" alt="Logo" width={32} height={32} className="object-contain" />
           </div>
           <span className="group-data-[collapsible=icon]:hidden tracking-tight text-xl truncate">Logística<span className="text-slate-900 dark:text-slate-100">Ar</span></span>
         </Link>
@@ -200,8 +200,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                >
                  {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
                </Button>
-               <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-xs shrink-0">
-                 AR
+               <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shrink-0 border shadow-sm">
+                 <Image src="/icono.png" alt="User Icon" width={24} height={24} className="object-contain" />
                </div>
                <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 hidden lg:block">Operador Central</span>
             </div>

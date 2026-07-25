@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState } from "react";
@@ -8,6 +7,7 @@ import { collection, query, where, orderBy, updateDoc, doc, serverTimestamp } fr
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import Image from "next/image";
 import { 
   Route as RouteIcon, 
   MapPin, 
@@ -83,12 +83,12 @@ export default function DriverRoutesPage() {
 
   return (
     <div className="max-w-md mx-auto space-y-6 pb-20 px-2">
-      <div className="flex items-center gap-2 pt-4">
-        <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-100">
-           <Truck size={20} />
+      <div className="flex items-center gap-3 pt-4">
+        <div className="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden shadow-lg border-2 border-white">
+           <Image src="/icono.png" alt="App Icon" width={48} height={48} className="object-contain" />
         </div>
         <div>
-          <h1 className="text-2xl font-black text-slate-900 italic tracking-tighter">Mis Viajes</h1>
+          <h1 className="text-2xl font-black text-slate-900 italic tracking-tighter leading-none">Mis Viajes</h1>
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Asistente Digital para Conducción</p>
         </div>
       </div>
@@ -108,9 +108,6 @@ export default function DriverRoutesPage() {
             const config = getStatusConfig(route.status);
             const lastStop = route.outboundStops?.[route.outboundStops.length - 1];
             const destAddress = lastStop?.address || 'Destino no definido';
-
-            const totalDocs = (route.outboundStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0) + 
-                             (route.returnStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0);
 
             return (
               <Card key={route.id} className="hover:border-blue-300 transition-all active:scale-[0.98] mb-8 overflow-hidden border-2 shadow-xl rounded-2xl">
@@ -140,28 +137,6 @@ export default function DriverRoutesPage() {
                       </p>
                       <div className="flex items-center gap-1.5 text-[11px] font-black text-blue-700 bg-blue-50 px-2 py-1 rounded-md">
                         <Clock size={12} /> {route.pickupDate} - {route.pickupTime} hs
-                      </div>
-                      <p className="text-[9px] text-orange-600 font-black flex items-center gap-1.5 pt-1 uppercase italic">
-                         <ShieldAlert size={12} /> Llegar 15 min antes para control de seguridad
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Section: Detalles del Viaje */}
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                      <Truck size={12} className="text-blue-500" /> Detalles del Viaje
-                    </div>
-                    <div className="p-4 bg-blue-50/20 rounded-2xl border border-blue-100/50 space-y-4">
-                      <div className="text-xs">
-                        <p className="text-[9px] font-black text-blue-400 uppercase tracking-tighter mb-1">Destino Final</p>
-                        <p className="font-bold text-slate-900 flex items-start gap-2 italic">
-                          <Navigation size={14} className="text-blue-500 shrink-0 mt-0.5" /> {destAddress}
-                        </p>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4 border-t border-blue-100 pt-3 text-[11px] font-black uppercase">
-                        <span>Distancia Est.</span>
-                        <span className="text-right">~700 KM</span>
                       </div>
                     </div>
                   </div>
