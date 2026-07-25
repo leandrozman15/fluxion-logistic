@@ -1,4 +1,5 @@
 
+
 export type TruckStatus = 'available' | 'in_trip' | 'maintenance';
 export type DriverStatus = 'active' | 'in_trip' | 'resting' | 'suspended' | 'retired';
 export type LoadStatus = 'pending' | 'assigned' | 'on_route' | 'on_pause' | 'delivered' | 'incident' | 'cancelled';
@@ -10,6 +11,25 @@ export type Country = 'Argentina' | 'Chile' | 'Paraguay' | 'Ushort' | 'Bolivia' 
 export type LoadDocType = 'remito' | 'factura' | 'cot' | 'otro' | 'despacho';
 
 export type OwnershipType = 'company' | 'third_party';
+
+export type MaintenanceType = 'preventive' | 'corrective' | 'inspection';
+export type MaintenanceStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+
+export interface Maintenance {
+  id: string;
+  truckId: string;
+  type: MaintenanceType;
+  status: MaintenanceStatus;
+  description: string;
+  scheduledDate: string;
+  completedDate?: string;
+  odometerAtMaintenance?: number;
+  estimatedCost: number;
+  actualCost?: number;
+  workshopName: string;
+  createdAt: any;
+  updatedAt: any;
+}
 
 export interface TenantSettings {
   mapProvider?: MapProvider;
@@ -366,3 +386,4 @@ export interface Load {
     notes?: string;
   };
 }
+

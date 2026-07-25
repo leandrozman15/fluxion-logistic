@@ -25,6 +25,10 @@
       "hubs": {
         "description": "Sedes y centros logísticos regionales.",
         "schema": { "$ref": "#/backend/entities/Hub" }
+      },
+      "maintenance": {
+        "description": "Registros de mantenimiento preventivo y correctivo de la flota.",
+        "schema": { "$ref": "#/backend/entities/Maintenance" }
       }
     }
   },
@@ -101,6 +105,22 @@
       "properties": {
         "name": { "type": "string" },
         "country": { "type": "string" }
+      }
+    },
+    "Maintenance": {
+      "title": "Maintenance",
+      "type": "object",
+      "properties": {
+        "truckId": { "type": "string" },
+        "type": { "type": "string", "enum": ["preventive", "corrective", "inspection"] },
+        "status": { "type": "string", "enum": ["scheduled", "in_progress", "completed", "cancelled"] },
+        "description": { "type": "string" },
+        "scheduledDate": { "type": "string" },
+        "completedDate": { "type": "string" },
+        "odometerAtMaintenance": { "type": "number" },
+        "estimatedCost": { "type": "number" },
+        "actualCost": { "type": "number" },
+        "workshopName": { "type": "string" }
       }
     }
   }
