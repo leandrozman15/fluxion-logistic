@@ -21,7 +21,7 @@ import {
   Wallet, Plus, DollarSign, Camera, Fuel, Utensils, Bed, Wrench, Receipt,
   Zap, Satellite, SignalHigh, Loader2, Compass, Gauge, History, 
   Coffee, Moon, Car, Battery, Flame, CloudRain, Construction, FileWarning, HelpCircle,
-  Siren, LifeBuoy, PlayCircle, Edit3, UserCheck, UploadCloud
+  Siren, LifeBuoy, PlayCircle, Edit3, UserCheck, UploadCloud, PauseCircle
 } from "lucide-react";
 import { Load, Expense, ExpenseCategory, LoadStatus, TrackingPoint } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -70,6 +70,7 @@ export default function RouteDetailPage() {
   const [isExpenseOpen, setIsExpenseOpen] = useState(false);
   const [isIncidentOpen, setIsIncidentOpen] = useState(false);
   const [isPODOpen, setIsPODOpen] = useState(false);
+  const [isPauseDialogOpen, setIsPauseDialogOpen] = useState(false);
   const [selectedIncidentType, setSelectedIncidentType] = useState<string | null>(null);
   
   // GPS State
@@ -426,7 +427,7 @@ export default function RouteDetailPage() {
                   </Button>
                 )}
                 {load.status === 'on_route' && (
-                  <>
+                  <div className="flex flex-col gap-3">
                     <div className="grid grid-cols-2 gap-2">
                        <div className="p-3 bg-white/5 border border-white/10 rounded-xl">
                           <p className="text-[9px] uppercase font-bold text-white/40">Velocidad</p>
@@ -438,46 +439,87 @@ export default function RouteDetailPage() {
                        </div>
                     </div>
                     
-                    <Dialog open={isPODOpen} onOpenChange={setIsPODOpen}>
-                      <DialogTrigger asChild>
-                        <Button className="w-full bg-green-600 h-14 text-lg font-bold shadow-lg">
-                          CONFIRMAR ENTREGA
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-[95vw] rounded-2xl">
-                        <DialogHeader>
-                          <DialogTitle>Prueba de Entrega (POD)</DialogTitle>
-                          <DialogDescription>Complete el protocolo para finalizar el flete.</DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-4 py-4">
-                          <div className="space-y-2">
-                            <Label>Nombre de quien recibe</Label>
-                            <Input placeholder="Ej: Marcelo Gomez" value={podData.receiverName} onChange={e => setPodData({...podData, receiverName: e.target.value})} />
-                          </div>
-                          <div className="grid grid-cols-2 gap-3">
-                            <Button variant="outline" className={cn("h-24 flex flex-col gap-2 border-dashed border-2", podData.photoUrl ? "border-green-500 bg-green-50" : "")} onClick={() => podPhotoInputRef.current?.click()}>
-                              <Camera className={cn("w-6 h-6", podData.photoUrl ? "text-green-600" : "text-slate-400")} />
-                              <span className="text-[10px] font-bold uppercase">{podData.photoUrl ? "Foto Lista" : "Foto Remito"}</span>
-                            </Button>
-                            <input type="file" accept="image/*" capture="environment" className="hidden" ref={podPhotoInputRef} onChange={onPhotoChange} />
-                            <Button variant="outline" className="h-24 flex flex-col gap-2 border-dashed border-2">
-                               <Edit3 className="w-6 h-6 text-slate-400" />
-                               <span className="text-[10px] font-bold uppercase">Firma Digital</span>
-                            </Button>
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Observaciones de Entrega</Label>
-                            <Textarea placeholder="Novedades..." value={podData.notes} onChange={e => setPodData({...podData, notes: e.target.value})} />
-                          </div>
-                        </div>
-                        <DialogFooter>
-                          <Button className="w-full h-14 bg-green-600 text-lg font-bold" disabled={!podData.receiverName || isUpdating} onClick={handleConfirmDelivery}>
-                            FINALIZAR MISIÓN
+                    <div className="flex gap-2">
+                      {/* DIALOGO DE PARADA */}
+                      <Dialog open={isPauseDialogOpen} onOpenChange={setIsPauseDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" className="flex-1 h-14 border-orange-500 text-orange-600 font-bold shadow-sm">
+                            <PauseCircle className="mr-2" /> REGISTRAR PARADA
                           </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
-                  </>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-[95vw] rounded-2xl">
+                          <DialogHeader>
+                            <DialogTitle>Registrar Parada</DialogTitle>
+                            <DialogDescription>Indique el motivo de la detención actual.</DialogDescription>
+                          </DialogHeader>
+                          <div className="grid grid-cols-1 gap-3 py-4">
+                            <Button variant="outline" className="h-16 flex items-center justify-start px-6 gap-4" onClick={() => { handleStartPause('COMIDA'); setIsPauseDialogOpen(false); }}>
+                              <Utensils className="text-orange-500" />
+                              <div className="text-left">
+                                <p className="font-bold text-sm">Comida</p>
+                                <p className="text-[10px] text-slate-500">Parada para almuerzo/cena</p>
+                              </div>
+                            </Button>
+                            <Button variant="outline" className="h-16 flex items-center justify-start px-6 gap-4" onClick={() => { handleStartPause('DESCANSO'); setIsPauseDialogOpen(false); }}>
+                              <Coffee className="text-blue-500" />
+                              <div className="text-left">
+                                <p className="font-bold text-sm">Descanso Técnico</p>
+                                <p className="text-[10px] text-slate-500">Pausa reglamentaria</p>
+                              </div>
+                            </Button>
+                            <Button variant="outline" className="h-16 flex items-center justify-start px-6 gap-4" onClick={() => { handleStartPause('PERNOCTE'); setIsPauseDialogOpen(false); }}>
+                              <Moon className="text-slate-900" />
+                              <div className="text-left">
+                                <p className="font-bold text-sm">Pernocte</p>
+                                <p className="text-[10px] text-slate-500">Parada para dormir</p>
+                              </div>
+                            </Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+
+                      {/* DIALOGO DE ENTREGA */}
+                      <Dialog open={isPODOpen} onOpenChange={setIsPODOpen}>
+                        <DialogTrigger asChild>
+                          <Button className="flex-1 bg-green-600 h-14 font-bold shadow-lg">
+                            CONFIRMAR ENTREGA
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-[95vw] rounded-2xl">
+                          <DialogHeader>
+                            <DialogTitle>Prueba de Entrega (POD)</DialogTitle>
+                            <DialogDescription>Complete el protocolo para finalizar el flete.</DialogDescription>
+                          </DialogHeader>
+                          <div className="space-y-4 py-4">
+                            <div className="space-y-2">
+                              <Label>Nombre de quien recibe</Label>
+                              <Input placeholder="Ej: Marcelo Gomez" value={podData.receiverName} onChange={e => setPodData({...podData, receiverName: e.target.value})} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <Button variant="outline" className={cn("h-24 flex flex-col gap-2 border-dashed border-2", podData.photoUrl ? "border-green-500 bg-green-50" : "")} onClick={() => podPhotoInputRef.current?.click()}>
+                                <Camera className={cn("w-6 h-6", podData.photoUrl ? "text-green-600" : "text-slate-400")} />
+                                <span className="text-[10px] font-bold uppercase">{podData.photoUrl ? "Foto Lista" : "Foto Remito"}</span>
+                              </Button>
+                              <input type="file" accept="image/*" capture="environment" className="hidden" ref={podPhotoInputRef} onChange={onPhotoChange} />
+                              <Button variant="outline" className="h-24 flex flex-col gap-2 border-dashed border-2">
+                                 <Edit3 className="w-6 h-6 text-slate-400" />
+                                 <span className="text-[10px] font-bold uppercase">Firma Digital</span>
+                              </Button>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Observaciones de Entrega</Label>
+                              <Textarea placeholder="Novedades..." value={podData.notes} onChange={e => setPodData({...podData, notes: e.target.value})} />
+                            </div>
+                          </div>
+                          <DialogFooter>
+                            <Button className="w-full h-14 bg-green-600 text-lg font-bold" disabled={!podData.receiverName || isUpdating} onClick={handleConfirmDelivery}>
+                              FINALIZAR MISIÓN
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                  </div>
                 )}
               </div>
             </CardContent>
@@ -503,7 +545,7 @@ export default function RouteDetailPage() {
             <div className="flex gap-4">
               <div className="flex flex-col items-center">
                 <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2", load.status !== 'pending' && load.status !== 'assigned' ? 'bg-green-50 border-green-500 text-white' : 'bg-white border-slate-200 text-slate-400')}>
-                  {load.status !== 'pending' && load.status !== 'assigned' ? <CheckCircle2 size={16}/> : <Package size={16}/>}
+                  {load.status !== 'pending' && load.status !== 'assigned' ? <CheckCircle2 size={16} /> : <Package size={16} />}
                 </div>
                 <div className="w-0.5 h-full bg-slate-100 min-h-[40px]"></div>
               </div>
@@ -516,7 +558,7 @@ export default function RouteDetailPage() {
             <div className="flex gap-4">
               <div className="flex flex-col items-center">
                 <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2", load.status === 'delivered' ? 'bg-green-50 border-green-500 text-white' : 'bg-white border-slate-200 text-slate-400')}>
-                   <Navigation size={16}/>
+                   <Navigation size={16} />
                 </div>
               </div>
               <div className="flex-1 space-y-1">
