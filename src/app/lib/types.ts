@@ -84,6 +84,12 @@ export interface Expense {
   location: string;
   status: 'registered' | 'approved' | 'rejected';
   createdAt: any;
+  
+  // Fuel Specific Fields
+  liters?: number;
+  odometerKm?: number;
+  pricePerLiter?: number;
+  fuelBrand?: string;
 }
 
 export type ExpenseCategory = 'fuel' | 'toll' | 'meal' | 'lodging' | 'maintenance' | 'other';

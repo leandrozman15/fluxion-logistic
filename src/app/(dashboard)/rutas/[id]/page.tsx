@@ -85,7 +85,10 @@ export default function RouteDetailPage() {
     category: 'fuel',
     amount: 0,
     description: "",
-    location: ""
+    location: "",
+    liters: 0,
+    odometerKm: 0,
+    pricePerLiter: 0
   });
 
   const [incidentForm, setIncidentForm] = useState({
@@ -144,7 +147,7 @@ export default function RouteDetailPage() {
     return { name: 'S/D', address: '-', lat: -34.6, lng: -58.3 };
   }, [load]);
 
-  // LOGICA DE RASTREO GPS NATIVO OPTIMIZADO
+  // GPS Tracking Logic
   useEffect(() => {
     if (!gpsActive || !loadRef || typeof window === 'undefined' || !navigator.geolocation) return;
 
@@ -154,7 +157,6 @@ export default function RouteDetailPage() {
         const now = Date.now();
         const currentSpeedKmH = (speed || 0) * 3.6;
         
-        // Frecuencia dinámica: 20s si se mueve, 60s si está parado
         const interval = currentSpeedKmH > 5 ? 20000 : 60000;
         if (now - lastUpdateRef.current < interval) return;
 
@@ -163,7 +165,6 @@ export default function RouteDetailPage() {
           distanceInc = calculateDistance(lastPosRef.current.lat, lastPosRef.current.lng, latitude, longitude);
         }
 
-        // Evitar actualizaciones de menos de 100 metros para ahorrar batería y datos
         if (distanceInc < 0.1 && lastUpdateRef.current !== 0) return;
 
         updateDoc(loadRef, {
@@ -180,28 +181,13 @@ export default function RouteDetailPage() {
         lastPosRef.current = { lat: latitude, lng: longitude };
       },
       (err) => {
-        const errMsgs = {
-          1: "Permiso de ubicación denegado por el usuario.",
-          2: "Ubicación no disponible.",
-          3: "Tiempo de espera agotado al obtener ubicación."
-        };
-        const msg = (errMsgs as any)[err.code] || "Error desconocido de GPS nativo";
-        console.warn("GPS Tracking Notification:", msg);
-        
-        if (err.code === 1) {
-          toast({ 
-            variant: "destructive", 
-            title: "GPS Bloqueado", 
-            description: "Por favor, habilite los permisos de ubicación en su navegador para el seguimiento." 
-          });
-          setGpsActive(false);
-        }
+        console.warn("GPS tracking status notification");
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [gpsActive, loadRef, toast]);
+  }, [gpsActive, loadRef]);
 
   const openNativeNavigator = () => {
     const lat = displayDestination.lat;
@@ -259,26 +245,10 @@ export default function RouteDetailPage() {
         status: 'on_route',
         updatedAt: serverTimestamp()
       });
-      toast({ title: "Viaje reanudado", description: "GPS en modo conducción." });
+      toast({ title: "Viaje reanudado" });
       openNativeNavigator();
     } catch (e) {
       toast({ variant: "destructive", title: "Error al reanudar" });
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  const handleUpdateStatus = async (newStatus: LoadStatus) => {
-    if (!loadRef) return;
-    setIsUpdating(true);
-    try {
-      await updateDoc(loadRef, { 
-        status: newStatus,
-        updatedAt: serverTimestamp() 
-      });
-      toast({ title: "Estado Actualizado" });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Error" });
     } finally {
       setIsUpdating(false);
     }
@@ -297,11 +267,11 @@ export default function RouteDetailPage() {
         updatedAt: serverTimestamp()
       });
       setGpsActive(false);
-      toast({ title: "Entrega Confirmada", description: "Misión cumplida. Datos de POD guardados." });
+      toast({ title: "Entrega Confirmada", description: "Misión cumplida." });
       setIsPODOpen(false);
       router.push('/rutas');
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al confirmar entrega" });
+      toast({ variant: "destructive", title: "Error" });
     } finally {
       setIsUpdating(false);
     }
@@ -320,7 +290,7 @@ export default function RouteDetailPage() {
       });
       toast({ title: "Gasto Registrado" });
       setIsExpenseOpen(false);
-      setExpenseData({ category: 'fuel', amount: 0, description: "", location: "" });
+      setExpenseData({ category: 'fuel', amount: 0, description: "", location: "", liters: 0, odometerKm: 0, pricePerLiter: 0 });
     } catch (e) {
       toast({ variant: "destructive", title: "Error" });
     } finally {
@@ -342,11 +312,11 @@ export default function RouteDetailPage() {
       
       await updateDoc(doc(db, "loads", id as string), { status: 'incident' });
       
-      toast({ title: "Reporte Enviado", description: "La central ha sido notificada." });
+      toast({ title: "Reporte Enviado" });
       setIsIncidentOpen(false);
       setSelectedIncidentType(null);
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al enviar" });
+      toast({ variant: "destructive", title: "Error" });
     } finally {
       setIsUpdating(false);
     }
@@ -695,7 +665,7 @@ export default function RouteDetailPage() {
                 <DialogTrigger asChild>
                   <Button size="sm" className="h-8 bg-blue-600 font-bold text-xs"><Plus size={14} className="mr-1" /> Nuevo Ticket</Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-[90vw] rounded-xl">
+                <DialogContent className="max-w-[90vw] rounded-xl overflow-y-auto max-h-[90vh]">
                   <DialogHeader><DialogTitle>Registrar Gasto</DialogTitle></DialogHeader>
                   <div className="space-y-4 py-4">
                     <div className="space-y-2">
@@ -714,20 +684,89 @@ export default function RouteDetailPage() {
                         ))}
                       </div>
                     </div>
+
+                    {/* Campos específicos para Combustible */}
+                    {expenseData.category === 'fuel' && (
+                      <div className="grid grid-cols-2 gap-4 p-4 bg-blue-50 border border-blue-100 rounded-xl animate-in fade-in zoom-in-95">
+                         <div className="space-y-1">
+                            <Label className="text-[10px] uppercase font-bold text-blue-600">Odómetro Actual</Label>
+                            <Input 
+                              type="number" 
+                              className="h-9 bg-white" 
+                              placeholder="KM" 
+                              value={expenseData.odometerKm || ''} 
+                              onChange={e => setExpenseData({...expenseData, odometerKm: parseFloat(e.target.value) || 0})} 
+                            />
+                         </div>
+                         <div className="space-y-1">
+                            <Label className="text-[10px] uppercase font-bold text-blue-600">Cant. Litros</Label>
+                            <Input 
+                              type="number" 
+                              className="h-9 bg-white" 
+                              placeholder="L" 
+                              value={expenseData.liters || ''} 
+                              onChange={e => {
+                                const lits = parseFloat(e.target.value) || 0;
+                                setExpenseData({
+                                  ...expenseData, 
+                                  liters: lits,
+                                  amount: lits * (expenseData.pricePerLiter || 0)
+                                });
+                              }} 
+                            />
+                         </div>
+                         <div className="space-y-1">
+                            <Label className="text-[10px] uppercase font-bold text-blue-600">Precio x Litro</Label>
+                            <Input 
+                              type="number" 
+                              className="h-9 bg-white" 
+                              placeholder="$" 
+                              value={expenseData.pricePerLiter || ''} 
+                              onChange={e => {
+                                const price = parseFloat(e.target.value) || 0;
+                                setExpenseData({
+                                  ...expenseData, 
+                                  pricePerLiter: price,
+                                  amount: (expenseData.liters || 0) * price
+                                });
+                              }} 
+                            />
+                         </div>
+                         <div className="space-y-1">
+                            <Label className="text-[10px] uppercase font-bold text-blue-600">Marca / Bandera</Label>
+                            <Input 
+                              className="h-9 bg-white" 
+                              placeholder="Shell, YPF..." 
+                              value={expenseData.fuelBrand || ''} 
+                              onChange={e => setExpenseData({...expenseData, fuelBrand: e.target.value})} 
+                            />
+                         </div>
+                      </div>
+                    )}
+
                     <div className="space-y-2">
-                      <Label>Monto (ARS)</Label>
+                      <Label>Monto Total (ARS)</Label>
                       <div className="relative">
                         <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                        <Input type="number" className="pl-9" value={expenseData.amount ?? 0} onChange={e => setExpenseData({...expenseData, amount: parseFloat(e.target.value) || 0})} />
+                        <Input 
+                          type="number" 
+                          className="pl-9" 
+                          value={expenseData.amount ?? 0} 
+                          onChange={e => setExpenseData({...expenseData, amount: parseFloat(e.target.value) || 0})} 
+                        />
                       </div>
                     </div>
                     <div className="space-y-2">
                       <Label>Lugar / Punto de Ruta</Label>
-                      <Input placeholder="Ej: Estación Shell km 245" value={expenseData.location ?? ''} onChange={e => setExpenseData({...expenseData, location: e.target.value})} />
+                      <Input 
+                        placeholder="Ej: Estación Shell km 245" 
+                        value={expenseData.location ?? ''} 
+                        onChange={e => setExpenseData({...expenseData, location: e.target.value})} 
+                      />
                     </div>
                   </div>
                   <DialogFooter>
-                    <Button className="w-full bg-blue-600 h-12 text-lg font-bold" onClick={handleAddExpense} disabled={isUpdating || !expenseData.amount}>
+                    <Button className="w-full h-12 bg-blue-600 text-lg font-bold shadow-xl" onClick={handleAddExpense} disabled={isUpdating || !expenseData.amount}>
                       GUARDAR GASTO
                     </Button>
                   </DialogFooter>
@@ -745,7 +784,14 @@ export default function RouteDetailPage() {
                         <div className="w-10 h-10 rounded-lg bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400 border"><CategoryIcon size={18} /></div>
                         <div>
                           <div className="font-bold text-sm text-slate-800 dark:text-slate-200">${exp.amount?.toLocaleString()}</div>
-                          <div className="text-[10px] text-slate-400 uppercase font-bold">{exp.location}</div>
+                          <div className="text-[10px] text-slate-400 uppercase font-bold">
+                            {exp.category === 'fuel' ? `${exp.fuelBrand || ''} - ${exp.location}` : exp.location}
+                          </div>
+                          {exp.category === 'fuel' && exp.liters && (
+                            <div className="text-[9px] text-blue-600 font-bold uppercase mt-0.5">
+                              {exp.liters} L • ${exp.pricePerLiter}/L • Odóm: {exp.odometerKm}
+                            </div>
+                          )}
                         </div>
                       </div>
                       <Badge variant="outline" className="text-[8px] uppercase h-5 font-bold">{exp.status}</Badge>
