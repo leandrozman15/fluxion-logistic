@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState } from "react";
@@ -17,6 +16,7 @@ import {
 import { Load, Expense, ExpenseStatus } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
 
 export default function LoadWalletPage() {
   const { id } = useParams();
