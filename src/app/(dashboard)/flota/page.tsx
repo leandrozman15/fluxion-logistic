@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { 
   Truck, Plus, Search, MoreHorizontal, Trash2, Edit2, 
-  Gauge, Loader2, FileText, User
+  Gauge, Loader2, FileText, User, Wrench, Calendar, AlertTriangle
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -23,10 +23,12 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Truck as TruckType, TruckStatus, Driver } from "@/app/lib/types";
+import { Truck as TruckType, TruckStatus, Driver, Maintenance } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { format, parseISO, isBefore, differenceInDays } from "date-fns";
+import { es } from "date-fns/locale";
 
 export default function FlotaPage() {
   const db = useFirestore();
@@ -44,6 +46,9 @@ export default function FlotaPage() {
 
   const driversQuery = useMemo(() => db ? query(collection(db, "drivers")) : null, [db]);
   const { data: drivers } = useCollection<Driver>(driversQuery);
+
+  const maintenanceQuery = useMemo(() => db ? query(collection(db, "maintenance")) : null, [db]);
+  const { data: maintenanceRecords } = useCollection<Maintenance>(maintenanceQuery);
 
   const filteredTrucks = useMemo(() => {
     if (!trucks) return [];
@@ -82,6 +87,15 @@ export default function FlotaPage() {
     if (!driverId || driverId === 'none') return "Sin asignar";
     const d = drivers?.find(dr => dr.id === driverId);
     return d ? `${d.lastName}, ${d.firstName}` : "Cargando...";
+  };
+
+  const getNextServiceInfo = (truckId: string) => {
+    if (!maintenanceRecords) return null;
+    const truckMaintenances = maintenanceRecords
+      .filter(m => m.truckId === truckId && (m.status === 'scheduled' || m.status === 'in_progress'))
+      .sort((a, b) => parseISO(a.scheduledDate).getTime() - parseISO(b.scheduledDate).getTime());
+
+    return truckMaintenances[0] || null;
   };
 
   return (
@@ -125,18 +139,20 @@ export default function FlotaPage() {
                   <TableHead>Titularidad / Chofer</TableHead>
                   <TableHead>Kilometraje</TableHead>
                   <TableHead>Documentación</TableHead>
+                  <TableHead>Service Programado</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredTrucks.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-20 text-slate-400 italic">No hay vehículos registrados.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} className="text-center py-20 text-slate-400 italic">No hay vehículos registrados.</TableCell></TableRow>
                 ) : (
                   filteredTrucks.map((truck) => {
                     const docCount = truck.documentation?.length || 0;
                     const validDocs = truck.documentation?.filter(d => d.status === 'valid').length || 0;
                     const isCritical = truck.documentation?.some(d => d.status === 'expired');
+                    const nextService = getNextServiceInfo(truck.id);
 
                     return (
                       <TableRow key={truck.id} className="cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => router.push(`/flota/${truck.id}`)}>
@@ -164,6 +180,28 @@ export default function FlotaPage() {
                         </TableCell>
                         <TableCell><div className="flex items-center gap-2"><Gauge size={14} className="text-slate-400" /><span className="font-mono font-bold text-slate-700">{(truck.odometerKm || 0).toLocaleString()} km</span></div></TableCell>
                         <TableCell><div className="flex items-center gap-2"><Progress value={docCount > 0 ? (validDocs / docCount) * 100 : 0} className="h-1.5 w-16" /><span className={cn("text-[10px] font-bold", isCritical ? "text-red-600" : "text-slate-500")}>{validDocs}/{docCount}</span></div></TableCell>
+                        <TableCell>
+                           {nextService ? (
+                             <div className="flex flex-col gap-1">
+                                <div className={cn(
+                                  "flex items-center gap-1 text-[10px] font-bold uppercase",
+                                  nextService.status === 'in_progress' ? "text-orange-600" : "text-blue-600"
+                                )}>
+                                  <Wrench size={10} /> {nextService.type}
+                                </div>
+                                <div className={cn(
+                                  "text-xs font-black flex items-center gap-1",
+                                  isBefore(parseISO(nextService.scheduledDate), new Date()) ? "text-red-600" : 
+                                  differenceInDays(parseISO(nextService.scheduledDate), new Date()) < 7 ? "text-orange-500" : "text-slate-700"
+                                )}>
+                                   <Calendar size={12} /> {format(parseISO(nextService.scheduledDate), "dd/MM/yy")}
+                                   {isBefore(parseISO(nextService.scheduledDate), new Date()) && <AlertTriangle size={10} className="animate-pulse" />}
+                                </div>
+                             </div>
+                           ) : (
+                             <span className="text-[10px] text-slate-300 italic">Sin programar</span>
+                           )}
+                        </TableCell>
                         <TableCell>{getStatusBadge(truck.status)}</TableCell>
                         <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                           <DropdownMenu>
