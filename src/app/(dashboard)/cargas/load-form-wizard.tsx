@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { 
   Package, ArrowLeft, ArrowRight, Save, Loader2, 
   MapPin, Calendar, Clock, DollarSign, Truck, 
-  Info, AlertTriangle, Globe, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, Map, Upload, User, UserCheck
+  Info, AlertTriangle, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, LayoutGrid, UserCheck
 } from "lucide-react";
 import { Load, Client, Hub, LoadLegStop, LoadDocument, LoadDocType, Truck as TruckType, Driver } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -28,7 +28,6 @@ const SERVICE_TYPES = [
   { id: 'FTL', label: 'Carga Completa (FTL)', icon: Truck },
   { id: 'reefer', label: 'Refrigerado', icon: Package },
   { id: 'dangerous', label: 'Carga Peligrosa', icon: AlertTriangle },
-  { id: 'customs', label: 'Internacional / Aduana', icon: Globe },
 ];
 
 export default function LoadFormWizard() {
@@ -64,12 +63,6 @@ export default function LoadFormWizard() {
     basePrice: 0, 
     totalAmount: 0,
     status: "pending",
-    international: {
-      operationType: 'export', exitCustoms: "Ezeiza", entryCustoms: "", declarationNumber: "", micDtaNumber: "",
-      containerNumber: "", sealNumber: "", transportDocType: 'BL', transportDocNumber: "",
-      fobValueUsd: 0, freightValueUsd: 0, insuranceValueUsd: 0, cifValueUsd: 0,
-      importDutiesUsd: 0, customsIvaUsd: 0, totalCustomsCostsUsd: 0, isMalvinaPresented: false
-    },
     budget: { initialAdvance: 0, totalBudget: 0, categories: {} }
   });
 
@@ -120,7 +113,6 @@ export default function LoadFormWizard() {
 
     try {
       const startDateTime = parse(`${dateStr} ${timeStr}`, "yyyy-MM-dd HH:mm", new Date());
-      // Estimación básica: 8 horas de viaje
       const endDateTime = addHours(startDateTime, 8);
       
       if (isOutbound) {
@@ -267,7 +259,7 @@ export default function LoadFormWizard() {
           <Button variant="ghost" size="icon" onClick={() => router.back()}><ArrowLeft /></Button>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Nueva Operación Logística</h1>
-            <p className="text-sm text-slate-500">Gestión de fletes multi-destino nacional/internacional.</p>
+            <p className="text-sm text-slate-500">Gestión de fletes multi-destino nacional.</p>
           </div>
         </div>
         <Badge variant="outline" className="h-8 px-4 font-mono text-blue-600 bg-blue-50 border-blue-100 hidden sm:flex">
@@ -276,14 +268,13 @@ export default function LoadFormWizard() {
       </div>
 
       <div className="bg-white p-4 rounded-xl border shadow-sm mx-4 overflow-x-auto">
-        <div className="flex items-center justify-between min-w-[600px]">
+        <div className="flex items-center justify-between min-w-[500px]">
           {[
             { id: 1, label: "Gerais", icon: Info },
             { id: 2, label: "Logística Ida", icon: MoveRight },
             { id: 3, label: "Vuelta (Retorno)", icon: Repeat },
-            { id: 4, label: "Aduana", icon: Globe },
-            { id: 5, label: "Financeiro", icon: DollarSign },
-            { id: 6, label: "Finalizar", icon: CheckCircle2 }
+            { id: 4, label: "Financiero", icon: DollarSign },
+            { id: 5, label: "Finalizar", icon: CheckCircle2 }
           ].map((s) => (
             <div key={s.id} className="flex flex-col items-center gap-1.5 flex-1 relative">
               <div className={cn(
@@ -295,7 +286,7 @@ export default function LoadFormWizard() {
               <span className={cn("text-[9px] uppercase font-bold text-center", step === s.id ? "text-blue-600" : "text-slate-400")}>
                 {s.label}
               </span>
-              {s.id < 6 && <div className={cn("absolute top-4.5 left-1/2 w-full h-[1px] -z-0", step > s.id ? "bg-green-200" : "bg-slate-100")}></div>}
+              {s.id < 5 && <div className={cn("absolute top-4.5 left-1/2 w-full h-[1px] -z-0", step > s.id ? "bg-green-200" : "bg-slate-100")}></div>}
             </div>
           ))}
         </div>
@@ -309,7 +300,7 @@ export default function LoadFormWizard() {
               <CardContent className="space-y-8">
                 <div className="space-y-4">
                   <Label>Tipo de Servicio</Label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {SERVICE_TYPES.map(type => (
                       <button 
                         key={type.id} 
@@ -547,24 +538,6 @@ export default function LoadFormWizard() {
 
         {step === 4 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle className="flex items-center gap-2"><Globe className="text-blue-600" /> Trámites Internacionales</CardTitle></CardHeader>
-            <CardContent className="space-y-6">
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                 <div className="space-y-1"><Label className="text-[10px] uppercase font-bold">Tipo Operación</Label>
-                   <Select value={formData.international?.operationType} onValueChange={v => setFormData({...formData, international: {...formData.international!, operationType: v as any}})}>
-                     <SelectTrigger><SelectValue /></SelectTrigger>
-                     <SelectContent><SelectItem value="export">Exportación</SelectItem><SelectItem value="import">Importación</SelectItem><SelectItem value="transit">Tránsito</SelectItem></SelectContent>
-                   </Select>
-                 </div>
-                 <div className="space-y-1"><Label className="text-[10px] uppercase font-bold">Aduana Salida</Label><Input value={formData.international?.exitCustoms} onChange={e => setFormData({...formData, international: {...formData.international!, exitCustoms: e.target.value}})} /></div>
-                 <div className="space-y-1"><Label className="text-[10px] uppercase font-bold">N° Declaración (SIM)</Label><Input value={formData.international?.declarationNumber} onChange={e => setFormData({...formData, international: {...formData.international!, declarationNumber: e.target.value}})} /></div>
-               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {step === 5 && (
-          <Card className="border-none shadow-sm">
             <CardHeader><CardTitle>Aspecto Financiero</CardTitle></CardHeader>
             <CardContent className="space-y-8">
                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -575,7 +548,7 @@ export default function LoadFormWizard() {
           </Card>
         )}
 
-        {step === 6 && (
+        {step === 5 && (
           <Card className="border-none shadow-sm">
             <CardHeader><CardTitle>Resumen y Finalización</CardTitle></CardHeader>
             <CardContent className="space-y-6">
@@ -591,7 +564,7 @@ export default function LoadFormWizard() {
                </div>
                <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-3">
                   <Zap className="text-blue-600 mt-1 shrink-0" size={18} />
-                  <p className="text-xs text-blue-700 leading-relaxed">Al confirmar, se generará la hoja de ruta digital para el conductor. Asegúrese de que todos los remitos estén cargados correctamente para evitar demoras en aduana o fiscalización.</p>
+                  <p className="text-xs text-blue-700 leading-relaxed">Al confirmar, se generará la hoja de ruta digital para el conductor. Asegúrese de que todos los remitos estén cargados correctamente para evitar demoras en la fiscalización de ruta.</p>
                </div>
             </CardContent>
             <CardFooter className="flex justify-end"><Button onClick={handleSubmit} className="bg-green-600 w-full sm:w-auto" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} Registrar Operación Completa</Button></CardFooter>
@@ -680,7 +653,7 @@ export default function LoadFormWizard() {
         <div className="max-w-5xl w-full flex justify-between items-center px-4">
           <Button variant="ghost" onClick={() => setStep(prev => prev - 1)} disabled={step === 1 || isSubmitting}><ChevronLeft size={16} /> Volver</Button>
           <div className="flex gap-2">
-            {step < 6 ? (
+            {step < 5 ? (
               <Button onClick={() => setStep(prev => prev + 1)} className="bg-blue-600 min-w-[120px]">Siguiente <ChevronRight size={16}/></Button>
             ) : (
               <Button onClick={handleSubmit} className="bg-green-600 min-w-[120px]" disabled={isSubmitting}>Finalizar <Save size={16}/></Button>
