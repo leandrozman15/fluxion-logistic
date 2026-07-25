@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState } from "react";
@@ -18,7 +17,8 @@ import {
   CheckCircle2, 
   AlertTriangle,
   Loader2,
-  Calendar
+  Calendar,
+  Navigation
 } from "lucide-react";
 import { Load, LoadStatus } from "@/app/lib/types";
 import { cn } from "@/lib/utils";
@@ -68,6 +68,12 @@ export default function DriverRoutesPage() {
         ) : (
           routes?.map((route) => {
             const config = getStatusConfig(route.status);
+            // Fallback for destination address in multi-stop model
+            const destAddress = route.destination?.address || 
+                               (route.outboundStops && route.outboundStops.length > 0 
+                                 ? route.outboundStops[route.outboundStops.length - 1].address 
+                                 : 'Destino no definido');
+
             return (
               <Link key={route.id} href={`/rutas/${route.id}`}>
                 <Card className="hover:border-blue-300 transition-all active:scale-[0.98] mb-4 overflow-hidden">
@@ -93,11 +99,11 @@ export default function DriverRoutesPage() {
                         <div className="flex-1 space-y-3">
                           <div className="text-xs">
                             <p className="text-slate-400 uppercase font-bold text-[9px]">Origen</p>
-                            <p className="font-semibold text-slate-700 truncate">{route.origin.address}</p>
+                            <p className="font-semibold text-slate-700 truncate">{route.origin?.address || 'Origen no definido'}</p>
                           </div>
                           <div className="text-xs">
-                            <p className="text-slate-400 uppercase font-bold text-[9px]">Destino</p>
-                            <p className="font-bold text-slate-900 truncate">{route.destination.address}</p>
+                            <p className="text-slate-400 uppercase font-bold text-[9px]">Destino Final</p>
+                            <p className="font-bold text-slate-900 truncate">{destAddress}</p>
                           </div>
                         </div>
                       </div>
