@@ -22,13 +22,6 @@ import { Load, Client, Hub, LoadLegStop, LoadDocument, LoadDocType } from "@/app
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-const PROVINCIAS = [
-  "Buenos Aires", "CABA", "Catamarca", "Chaco", "Chubut", "Córdoba", "Corrientes", 
-  "Entre Ríos", "Formosa", "Jujuy", "La Pampa", "La Rioja", "Mendoza", "Misiones", 
-  "Neuquén", "Río Negro", "Salta", "San Juan", "San Luis", "Santa Cruz", "Santa Fe", 
-  "Santiago del Estero", "Tierra del Fuego", "Tucumán"
-];
-
 const SERVICE_TYPES = [
   { id: 'standard', label: 'Carga General', icon: Package },
   { id: 'FTL', label: 'Carga Completa (FTL)', icon: Truck },
@@ -89,10 +82,36 @@ export default function LoadFormWizard() {
 
   const locationsList = useMemo(() => {
     const list: any[] = [];
-    hubs?.forEach(h => list.push({ id: h.id, name: `[HUB] ${h.name}`, type: 'hub', data: h }));
-    clients?.forEach(c => list.push({ id: c.id, name: `[CLI] ${c.name}`, type: 'client', data: c }));
+    hubs?.forEach(h => list.push({ id: h.id, name: `[SEDE] ${h.name}`, type: 'hub', data: h }));
+    clients?.forEach(c => list.push({ id: c.id, name: `[CLIENTE] ${c.name}`, type: 'client', data: c }));
     return list;
   }, [hubs, clients]);
+
+  const buildFullAddress = (data: any) => {
+    if (!data) return "";
+    
+    // Si es una Sede (Hub)
+    if (typeof data.address === 'string') {
+      const parts = [data.address, data.city, data.province].filter(Boolean);
+      return parts.join(", ");
+    }
+    
+    // Si es un Cliente (Dirección estructurada)
+    if (data.address && typeof data.address === 'object') {
+      const { street, number, floor, barrio, city, province } = data.address;
+      const streetPart = `${street || ""} ${number || ""}`.trim();
+      const parts = [
+        streetPart, 
+        floor ? `Piso ${floor}` : null, 
+        barrio ? `Zona: ${barrio}` : null, 
+        city, 
+        province
+      ].filter(Boolean);
+      return parts.join(", ");
+    }
+    
+    return "";
+  };
 
   const handleOriginSelect = (id: string) => {
     const selection = locationsList.find(l => l.id === id);
@@ -103,11 +122,11 @@ export default function LoadFormWizard() {
       origin: {
         ...prev.origin!,
         id: selection.id,
-        name: selection.name,
-        address: locData.address || `${locData.address.street} ${locData.address.number}`,
-        province: locData.province,
-        city: locData.city,
-        country: locData.country,
+        name: locData.name,
+        address: buildFullAddress(locData),
+        province: locData.province || locData.address?.province || "",
+        city: locData.city || locData.address?.city || "",
+        country: locData.country || locData.address?.country || "Argentina",
         phone: locData.phone || locData.mainContact?.phone || "",
         contact: locData.mainContact?.name || "",
         lat: locData.lat || locData.address?.lat,
@@ -123,11 +142,11 @@ export default function LoadFormWizard() {
     setEditingStop(prev => ({
       ...prev,
       locationId: selection.id,
-      name: selection.name,
-      address: locData.address || `${locData.address.street} ${locData.address.number}`,
-      province: locData.province,
-      city: locData.city,
-      country: locData.country,
+      name: locData.name,
+      address: buildFullAddress(locData),
+      province: locData.province || locData.address?.province || "",
+      city: locData.city || locData.address?.city || "",
+      country: locData.country || locData.address?.country || "Argentina",
       contact: locData.mainContact?.name || "",
       phone: locData.phone || locData.mainContact?.phone || "",
       lat: locData.lat || locData.address?.lat,
@@ -152,7 +171,10 @@ export default function LoadFormWizard() {
   };
 
   const saveStop = () => {
-    if (!editingStop.name || !editingStop.address) return;
+    if (!editingStop.name || !editingStop.address) {
+      toast({ variant: "destructive", title: "Faltan datos", description: "El destino y la dirección son obligatorios." });
+      return;
+    }
     const stop = { ...editingStop, id: editingStop.id || Math.random().toString(36).substring(7) } as LoadLegStop;
     const field = activeLeg === 'outbound' ? 'outboundStops' : 'returnStops';
     
@@ -198,21 +220,21 @@ export default function LoadFormWizard() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-24">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => router.back()}><ArrowLeft /></Button>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Nueva Operación Logística</h1>
-            <p className="text-sm text-slate-500">Gestión de fletes con múltiples destinos.</p>
+            <p className="text-sm text-slate-500">Gestión de fletes multi-destino nacional/internacional.</p>
           </div>
         </div>
-        <Badge variant="outline" className="h-8 px-4 font-mono text-blue-600 bg-blue-50 border-blue-100">
+        <Badge variant="outline" className="h-8 px-4 font-mono text-blue-600 bg-blue-50 border-blue-100 hidden sm:flex">
           {formData.orderNumber || ''}
         </Badge>
       </div>
 
-      <div className="bg-white p-4 rounded-xl border shadow-sm">
-        <div className="flex items-center justify-between">
+      <div className="bg-white p-4 rounded-xl border shadow-sm mx-4 overflow-x-auto">
+        <div className="flex items-center justify-between min-w-[600px]">
           {[
             { id: 1, label: "Gerais", icon: Info },
             { id: 2, label: "Logística Ida", icon: MoveRight },
@@ -237,7 +259,7 @@ export default function LoadFormWizard() {
         </div>
       </div>
 
-      <div className="animate-in fade-in duration-300">
+      <div className="animate-in fade-in duration-300 mx-4">
         {step === 1 && (
           <Card className="border-none shadow-sm">
             <CardHeader><CardTitle>Configuración Inicial</CardTitle></CardHeader>
@@ -249,12 +271,12 @@ export default function LoadFormWizard() {
                     <button 
                       key={type.id} 
                       className={cn(
-                        "flex flex-col items-center justify-center min-h-[80px] gap-2 p-2 rounded-xl border transition-all text-center",
+                        "flex flex-col items-center justify-center min-h-[80px] gap-2 p-3 rounded-xl border transition-all text-center",
                         formData.serviceType === type.id ? "bg-blue-600 text-white border-blue-600 shadow-md" : "bg-white text-slate-500 border-slate-200 hover:border-blue-300"
                       )}
                       onClick={() => setFormData({...formData, serviceType: type.id as any})}
                     >
-                      <type.icon size={18} />
+                      <type.icon size={20} />
                       <span className="text-[10px] uppercase font-black">{type.label}</span>
                     </button>
                   ))}
@@ -276,12 +298,12 @@ export default function LoadFormWizard() {
 
         {step === 2 && (
           <Card className="border-none shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
                 <CardTitle>Logística de Ida</CardTitle>
                 <CardDescription>Establezca el punto de carga inicial y todos los puntos de descarga.</CardDescription>
               </div>
-              <Button size="sm" className="bg-blue-600" onClick={() => { setActiveLeg('outbound'); setIsStopModalOpen(true); }}><Plus size={14} className="mr-1" /> Agregar Destino</Button>
+              <Button size="sm" className="bg-blue-600 w-full sm:w-auto" onClick={() => { setActiveLeg('outbound'); setIsStopModalOpen(true); }}><Plus size={14} className="mr-1" /> Agregar Destino</Button>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="p-4 bg-slate-50 rounded-xl border border-dashed space-y-4">
@@ -293,8 +315,13 @@ export default function LoadFormWizard() {
                   <SelectContent>{locationsList.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent>
                 </Select>
                 {formData.origin?.name && (
-                  <div className="text-[10px] font-bold text-slate-500 uppercase px-1">
-                    {formData.origin.address}, {formData.origin.province}
+                  <div className="p-3 bg-white border rounded-lg space-y-1">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase">Dirección Completa Origen</div>
+                    <div className="text-xs font-bold text-slate-600">{formData.origin.address}</div>
+                    <div className="text-[9px] text-slate-400 flex items-center gap-3 mt-1">
+                       <span className="flex items-center gap-1"><Info size={10} /> {formData.origin.contact}</span>
+                       <span className="flex items-center gap-1"><Clock size={10} /> {formData.origin.phone}</span>
+                    </div>
                   </div>
                 )}
               </div>
@@ -307,17 +334,17 @@ export default function LoadFormWizard() {
                   formData.outboundStops?.map((stop, idx) => (
                     <div key={stop.id} className="flex items-center justify-between p-4 bg-white border rounded-xl shadow-sm group">
                        <div className="flex items-center gap-4">
-                          <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 font-bold text-xs">{idx + 1}</div>
+                          <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 font-bold text-xs shrink-0">{idx + 1}</div>
                           <div>
-                            <p className="font-bold text-sm">{stop.name}</p>
-                            <p className="text-[10px] text-slate-500 uppercase">{stop.address}</p>
-                            <div className="flex gap-2 mt-1">
-                               <Badge variant="outline" className="text-[8px] h-4 bg-blue-50">{stop.weightKg} Kg</Badge>
+                            <p className="font-bold text-sm text-slate-800">{stop.name}</p>
+                            <p className="text-[10px] text-slate-500 uppercase font-medium leading-tight max-w-[200px] sm:max-w-none">{stop.address}</p>
+                            <div className="flex gap-2 mt-1.5">
+                               <Badge variant="outline" className="text-[8px] h-4 bg-blue-50 border-blue-100">{stop.weightKg} Kg</Badge>
                                <Badge variant="secondary" className="text-[8px] h-4">{stop.documents?.length || 0} Remitos</Badge>
                             </div>
                           </div>
                        </div>
-                       <Button variant="ghost" size="icon" className="text-red-500 opacity-0 group-hover:opacity-100" onClick={() => removeStop('outbound', stop.id)}><Trash2 size={16}/></Button>
+                       <Button variant="ghost" size="icon" className="text-red-500" onClick={() => removeStop('outbound', stop.id)}><Trash2 size={16}/></Button>
                     </div>
                   ))
                 )}
@@ -336,12 +363,12 @@ export default function LoadFormWizard() {
                </CardContent>
             ) : (
               <>
-                <CardHeader className="flex flex-row items-center justify-between">
+                <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div>
                     <CardTitle>Logística de Vuelta (Retorno)</CardTitle>
                     <CardDescription>Cargue los puntos de recolección y entrega para el tramo de regreso.</CardDescription>
                   </div>
-                  <Button size="sm" className="bg-orange-600" onClick={() => { setActiveLeg('return'); setIsStopModalOpen(true); }}><Plus size={14} className="mr-1" /> Agregar Parada Retorno</Button>
+                  <Button size="sm" className="bg-orange-600 w-full sm:w-auto" onClick={() => { setActiveLeg('return'); setIsStopModalOpen(true); }}><Plus size={14} className="mr-1" /> Agregar Parada Retorno</Button>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   {formData.returnStops?.length === 0 ? (
@@ -350,17 +377,17 @@ export default function LoadFormWizard() {
                     formData.returnStops?.map((stop, idx) => (
                       <div key={stop.id} className="flex items-center justify-between p-4 bg-white border rounded-xl shadow-sm group border-l-4 border-l-orange-500">
                          <div className="flex items-center gap-4">
-                            <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-600 font-bold text-xs">{idx + 1}</div>
+                            <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-600 font-bold text-xs shrink-0">{idx + 1}</div>
                             <div>
-                              <p className="font-bold text-sm">{stop.name}</p>
-                              <p className="text-[10px] text-slate-500 uppercase">{stop.address}</p>
-                              <div className="flex gap-2 mt-1">
-                                 <Badge variant="outline" className="text-[8px] h-4 bg-orange-50">{stop.weightKg} Kg</Badge>
+                              <p className="font-bold text-sm text-slate-800">{stop.name}</p>
+                              <p className="text-[10px] text-slate-500 uppercase font-medium leading-tight max-w-[200px] sm:max-w-none">{stop.address}</p>
+                              <div className="flex gap-2 mt-1.5">
+                                 <Badge variant="outline" className="text-[8px] h-4 bg-orange-50 border-orange-100">{stop.weightKg} Kg</Badge>
                                  <Badge variant="secondary" className="text-[8px] h-4">{stop.documents?.length || 0} Remitos</Badge>
                               </div>
                             </div>
                          </div>
-                         <Button variant="ghost" size="icon" className="text-red-500 opacity-0 group-hover:opacity-100" onClick={() => removeStop('return', stop.id)}><Trash2 size={16}/></Button>
+                         <Button variant="ghost" size="icon" className="text-red-500" onClick={() => removeStop('return', stop.id)}><Trash2 size={16}/></Button>
                       </div>
                     ))
                   )}
@@ -404,29 +431,29 @@ export default function LoadFormWizard() {
           <Card className="border-none shadow-sm">
             <CardHeader><CardTitle>Resumen y Finalización</CardTitle></CardHeader>
             <CardContent className="space-y-6">
-               <div className="p-6 bg-slate-900 text-white rounded-2xl flex items-center justify-between">
-                  <div className="space-y-1">
+               <div className="p-6 bg-slate-900 text-white rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="space-y-1 text-center sm:text-left">
                      <p className="text-[10px] uppercase font-bold text-white/50 tracking-widest">Carga Útil Acumulada</p>
                      <p className="text-3xl font-black italic">{totalWeight.toLocaleString()} <span className="text-sm font-normal opacity-50 uppercase">Kg</span></p>
                   </div>
-                  <div className="text-right">
+                  <div className="text-center sm:text-right">
                      <p className="text-[10px] uppercase font-bold text-white/50 tracking-widest">Total Destinos</p>
                      <p className="text-3xl font-black">{(formData.outboundStops?.length || 0) + (formData.returnStops?.length || 0)}</p>
                   </div>
                </div>
                <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-3">
-                  <Zap className="text-blue-600 mt-1" size={18} />
+                  <Zap className="text-blue-600 mt-1 shrink-0" size={18} />
                   <p className="text-xs text-blue-700 leading-relaxed">Al confirmar, se generará la hoja de ruta digital para el conductor. Asegúrese de que todos los remitos estén cargados correctamente para evitar demoras en aduana o fiscalización.</p>
                </div>
             </CardContent>
-            <CardFooter className="flex justify-end"><Button onClick={handleSubmit} className="bg-green-600" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} Registrar Operación Completa</Button></CardFooter>
+            <CardFooter className="flex justify-end"><Button onClick={handleSubmit} className="bg-green-600 w-full sm:w-auto" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} Registrar Operación Completa</Button></CardFooter>
           </Card>
         )}
       </div>
 
       {/* Stop Management Modal */}
       <Dialog open={isStopModalOpen} onOpenChange={setIsStopModalOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto rounded-xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {activeLeg === 'outbound' ? <MoveRight className="text-blue-600" /> : <Repeat className="text-orange-600" />}
@@ -435,7 +462,7 @@ export default function LoadFormWizard() {
           </DialogHeader>
 
           <div className="space-y-6 py-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-slate-50 rounded-xl border border-dashed">
+            <div className="grid grid-cols-1 gap-4 p-4 bg-slate-50 rounded-xl border border-dashed">
               <div className="space-y-2">
                 <Label>Seleccionar Ubicación</Label>
                 <Select onValueChange={handleStopLocationSelect}>
@@ -443,13 +470,15 @@ export default function LoadFormWizard() {
                   <SelectContent>{locationsList.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Nombre Personalizado</Label>
-                <Input value={editingStop.name} onChange={e => setEditingStop({...editingStop, name: e.target.value})} />
-              </div>
-              <div className="md:col-span-2 space-y-2">
-                <Label>Dirección Entrega</Label>
-                <Input value={editingStop.address} onChange={e => setEditingStop({...editingStop, address: e.target.value})} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Nombre Identificador</Label>
+                  <Input placeholder="Ej: Depósito ACME" value={editingStop.name} onChange={e => setEditingStop({...editingStop, name: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Dirección de Entrega (Completa)</Label>
+                  <Input placeholder="Se completa automáticamente al seleccionar" value={editingStop.address} onChange={e => setEditingStop({...editingStop, address: e.target.value})} />
+                </div>
               </div>
             </div>
 
@@ -464,7 +493,7 @@ export default function LoadFormWizard() {
 
                 <div className="p-4 bg-white rounded-xl border space-y-4">
                   <Label className="text-blue-600 font-bold text-[10px] uppercase flex items-center gap-2"><FileText size={14}/> Carga de Remitos</Label>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                     <Input className="h-8 text-xs" placeholder="N° Remito" value={newDoc.number} onChange={e => setNewDoc({...newDoc, number: e.target.value})} />
                     <Input className="h-8 text-xs" placeholder="Despacho (SIM)" value={newDoc.despachoNumber} onChange={e => setNewDoc({...newDoc, despachoNumber: e.target.value})} />
                     <div className="flex items-center gap-2 px-2 bg-slate-50 border rounded h-8">
@@ -478,8 +507,9 @@ export default function LoadFormWizard() {
                        {editingStop.documents.map(doc => (
                          <div key={doc.id} className="flex items-center justify-between p-2 bg-slate-50 rounded border text-[10px] font-bold">
                             <div className="flex gap-2">
-                               <span>Remito: {doc.number}</span>
-                               {doc.hasCot && <Badge className="h-3 text-[7px] bg-green-500">COT OK</Badge>}
+                               <span className="text-slate-700">R: {doc.number}</span>
+                               {doc.hasCot && <Badge className="h-3 text-[7px] bg-green-500 border-none">COT OK</Badge>}
+                               {doc.despachoNumber && <Badge variant="outline" className="h-3 text-[7px] border-blue-200 text-blue-600">SIM: {doc.despachoNumber}</Badge>}
                             </div>
                             <Button variant="ghost" size="icon" className="h-5 w-5 text-red-500" onClick={() => setEditingStop({...editingStop, documents: editingStop.documents?.filter(d => d.id !== doc.id)}) }><Trash2 size={10}/></Button>
                          </div>
@@ -491,9 +521,9 @@ export default function LoadFormWizard() {
             </Card>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
             <Button variant="ghost" onClick={() => setIsStopModalOpen(false)}>Cancelar</Button>
-            <Button className="bg-blue-600" onClick={saveStop}>Guardar Parada</Button>
+            <Button className="bg-blue-600 w-full sm:w-auto" onClick={saveStop}>Guardar Parada en Hoja de Ruta</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
