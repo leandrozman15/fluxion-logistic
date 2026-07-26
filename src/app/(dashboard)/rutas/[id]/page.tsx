@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -20,7 +21,10 @@ import {
   Wallet, Plus, DollarSign, Camera, Fuel, Utensils, Bed, Wrench, Receipt,
   Zap, Satellite, SignalHigh, Loader2, Compass, Gauge, History, 
   Coffee, Moon, Car, Battery, Flame, CloudRain, Construction, FileWarning, HelpCircle,
-  Siren, LifeBuoy, PlayCircle, Edit3, UserCheck, UploadCloud, PauseCircle, PenTool
+  Siren, LifeBuoy, PlayCircle, Edit3, UserCheck, UploadCloud, PauseCircle, PenTool,
+  Anchor,
+  CirclePlay,
+  XCircle
 } from "lucide-react";
 import { Load, Expense, ExpenseCategory, LoadStatus, TrackingPoint } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -127,7 +131,14 @@ export default function RouteDetailPage() {
     } else {
       setGpsActive(false);
     }
-  }, [load?.status]);
+
+    // Alerta sonora/vibración si recibe vía libre (Mock)
+    if (load?.dockEntryAuthorized) {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate([100, 30, 100, 30, 100]);
+      }
+    }
+  }, [load?.status, load?.dockEntryAuthorized]);
 
   const expensesQuery = useMemo(() => {
     if (!db || !id) return null;
@@ -158,7 +169,6 @@ export default function RouteDetailPage() {
       (pos) => {
         const { latitude, longitude, speed } = pos.coords;
         const now = Date.now();
-        
         const UPDATE_INTERVAL = 10000; 
         if (now - lastUpdateRef.current < UPDATE_INTERVAL) return;
 
@@ -321,11 +331,9 @@ export default function RouteDetailPage() {
       };
 
       await addDoc(collection(db, "loads", id as string, "expenses"), expenseObj);
-      
       if (load.assignedTruckId) {
         await addDoc(collection(db, "global_expenses"), expenseObj);
       }
-
       toast({ title: "Gasto Registrado" });
       setIsExpenseOpen(false);
       setExpenseData({ category: 'fuel', amount: 0, description: "", location: "", liters: 0, odometerKm: 0, pricePerLiter: 0, fuelBrand: "" });
@@ -392,6 +400,23 @@ export default function RouteDetailPage() {
            <Button variant="ghost" size="icon" className="text-red-500" onClick={() => setActiveTab('incidents')}><ShieldAlert /></Button>
         </div>
       </div>
+
+      {/* NOTIFICACIÓN DE VÍA LIBRE (Posicionamiento en Boca) */}
+      {load.dockEntryAuthorized && (
+        <div className="mx-2 p-6 bg-green-600 text-white rounded-3xl shadow-xl shadow-green-200 border-4 border-white animate-in zoom-in duration-500 flex flex-col items-center gap-4 text-center">
+           <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center animate-bounce">
+              <CirclePlay size={40} className="text-white" />
+           </div>
+           <div>
+              <p className="text-sm font-black uppercase tracking-widest opacity-80">Vía Libre Activada</p>
+              <h2 className="text-2xl font-black italic">INGRESE A {load.origin.dockName || 'BOCA ASIGNADA'}</h2>
+              <p className="text-xs mt-2 opacity-70">El centro de despacho autoriza su ingreso inmediato.</p>
+           </div>
+           <Button variant="outline" className="bg-white/10 border-white/20 text-white w-full h-12 font-bold" onClick={() => updateDoc(loadRef!, { dockEntryAuthorized: false })}>
+              ENTENDIDO
+           </Button>
+        </div>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-4 bg-slate-100 dark:bg-slate-800 p-1">
@@ -618,8 +643,17 @@ export default function RouteDetailPage() {
                 <div className="w-0.5 h-full bg-slate-100 min-h-[40px]"></div>
               </div>
               <div className="flex-1 space-y-1">
-                <h3 className="font-bold text-sm">Punto de Carga (Origen)</h3>
+                <div className="flex justify-between items-start">
+                   <h3 className="font-bold text-sm">Punto de Carga (Origen)</h3>
+                   {load.origin.dockName && <Badge className="bg-blue-600 text-white text-[9px] uppercase font-black px-2 h-4 animate-pulse"><Anchor size={10} className="mr-1" /> {load.origin.dockName}</Badge>}
+                </div>
                 <p className="text-[11px] text-slate-500">{load.origin.name}</p>
+                {load.dockEntryAuthorized && (
+                   <div className="flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded-lg mt-2 text-green-700">
+                      <CirclePlay size={16} className="animate-pulse shrink-0" />
+                      <p className="text-[10px] font-black uppercase tracking-tighter">Vía Libre: Puede ingresar a {load.origin.dockName}</p>
+                   </div>
+                )}
               </div>
             </div>
 

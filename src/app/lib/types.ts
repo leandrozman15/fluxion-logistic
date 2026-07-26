@@ -409,6 +409,10 @@ export interface Load {
   createdAt: any;
   updatedAt: any;
 
+  // NUEVO: Control de Despacho en Sede
+  dockEntryAuthorized?: boolean;
+  dockEntryMessage?: string;
+
   tracking?: {
     currentLat: number;
     currentLng: number;
@@ -424,8 +428,7 @@ export interface Load {
     alerts: DrivingAlert[];
     lastPauseType?: string;
     pauseStartedAt?: any;
-    lastPauseType?: string;
-    pauseStartedAt?: any;
+    estimatedFuelLiters?: number;
   };
 
   proofOfDelivery?: {

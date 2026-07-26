@@ -1,10 +1,11 @@
+
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy } from "firebase/firestore";
+import { collection, query, orderBy, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { KPICard } from "@/components/dashboard/kpi-card";
 import { 
@@ -39,7 +40,10 @@ import {
   Radio,
   TrendingUp,
   ArrowRightLeft,
-  CalendarDays
+  CalendarDays,
+  Anchor,
+  CirclePlay,
+  XCircle
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -51,6 +55,9 @@ import Link from "next/link";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
 
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
@@ -64,11 +71,18 @@ const Polyline = dynamic(() => import("react-leaflet").then((mod) => mod.Polylin
 export default function MonitorOperativoPage() {
   const db = useFirestore();
   const { tenantId } = useTenant();
+  const { toast } = useToast();
   
   const [mounted, setMounted] = useState(false);
   const [L, setL] = useState<any>(null);
   const [expandedLoadId, setExpandedLoadId] = useState<string | null>(null);
   const [agendaTab, setAgendaTab] = useState<string>("active");
+
+  // Dock assignment state
+  const [isDockDialogOpen, setIsDockDialogOpen] = useState(false);
+  const [selectedLoadForDock, setSelectedLoadForDock] = useState<Load | null>(null);
+  const [selectedDock, setSelectedDock] = useState<string>("");
+  const [isUpdatingDock, setIsUpdatingDock] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -146,29 +160,55 @@ export default function MonitorOperativoPage() {
     if (!loads) return [];
     
     return loads.filter(l => {
-      // Siempre mostrar los que están en ruta o pausa en cualquier vista operativa
       if (l.status === 'on_route' || l.status === 'on_pause') return true;
-      
-      // Filtros por pestaña
       if (agendaTab === 'active') return l.status === 'on_route' || l.status === 'on_pause';
       if (agendaTab === 'today') return l.pickupDate === todayStr && l.status !== 'delivered' && l.status !== 'cancelled';
       if (agendaTab === 'tomorrow') return l.pickupDate === tomorrowStr && l.status !== 'cancelled';
       if (agendaTab === 'week') {
         return l.pickupDate >= todayStr && l.pickupDate <= nextWeekStr && l.status !== 'delivered' && l.status !== 'cancelled';
       }
-      
       return false;
     }).sort((a, b) => {
-      // Prioridad 1: Activos arriba
       if (a.status === 'on_route' && b.status !== 'on_route') return -1;
       if (a.status !== 'on_route' && b.status === 'on_route') return 1;
-      
-      // Prioridad 2: Por fecha y hora
       const dateA = `${a.pickupDate} ${a.pickupTime}`;
       const dateB = `${b.pickupDate} ${b.pickupTime}`;
       return dateA.localeCompare(dateB);
     });
   }, [loads, agendaTab, todayStr, tomorrowStr, nextWeekStr]);
+
+  const handleDockAssignment = async () => {
+    if (!db || !selectedLoadForDock || !selectedDock) return;
+    setIsUpdatingDock(true);
+    try {
+      await updateDoc(doc(db, "loads", selectedLoadForDock.id), {
+        "origin.dockName": selectedDock,
+        "dockEntryAuthorized": true,
+        "dockEntryMessage": `AUTORIZADO: Diríjase a ${selectedDock}`,
+        updatedAt: serverTimestamp()
+      });
+      toast({ title: "Vía Libre Enviada", description: `El chofer ha sido notificado para ingresar a ${selectedDock}.` });
+      setIsDockDialogOpen(false);
+      setSelectedDock("");
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al asignar boca" });
+    } finally {
+      setIsUpdatingDock(false);
+    }
+  };
+
+  const handleRevokeDock = async (load: Load) => {
+    if (!db) return;
+    try {
+      await updateDoc(doc(db, "loads", load.id), {
+        "dockEntryAuthorized": false,
+        updatedAt: serverTimestamp()
+      });
+      toast({ title: "Vía Libre Revocada" });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error" });
+    }
+  };
 
   const truckIcon = L ? L.divIcon({
     className: 'custom-truck-icon',
@@ -195,7 +235,6 @@ export default function MonitorOperativoPage() {
     if (distanceRemaining && (currentSpeed === undefined || currentSpeed < 1)) return "DETENIDO";
     if (!distanceRemaining && currentSpeed && currentSpeed >= 1) return "EN MOVIMIENTO";
     if (!distanceRemaining || !currentSpeed || currentSpeed < 1) return "CALCULANDO...";
-
     const hours = distanceRemaining / currentSpeed;
     const etaDate = addMinutes(new Date(), Math.round(hours * 60));
     return format(etaDate, "HH:mm") + " hs";
@@ -266,6 +305,8 @@ export default function MonitorOperativoPage() {
                const destination = load.outboundStops?.[load.outboundStops.length - 1]?.name || 'S/D';
                const efficiency = calculateEfficiency(load);
                const progress = tracking ? (tracking.distanceTraveledKm / (tracking.distanceTraveledKm + (tracking.distanceRemainingKm || 1))) * 100 : 0;
+
+               const loadHub = hubs?.find(h => h.id === load.origin.id);
 
                return (
                  <Collapsible 
@@ -373,6 +414,29 @@ export default function MonitorOperativoPage() {
                       </div>
 
                       <div className="flex items-center gap-2 mt-4 lg:mt-0 w-full lg:w-auto">
+                        {load.status !== 'delivered' && load.status !== 'cancelled' && (
+                          <div className="flex items-center gap-1">
+                            {load.dockEntryAuthorized ? (
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="text-[10px] font-bold text-green-600 bg-green-50 border-green-200"
+                                onClick={(e) => { e.stopPropagation(); handleRevokeDock(load); }}
+                              >
+                                <CirclePlay className="w-3 h-3 mr-1" /> VÍA LIBRE OK
+                              </Button>
+                            ) : (
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="text-[10px] font-bold text-blue-600"
+                                onClick={(e) => { e.stopPropagation(); setSelectedLoadForDock(load); setIsDockDialogOpen(true); }}
+                              >
+                                <Anchor className="w-3 h-3 mr-1" /> POSICIONAR
+                              </Button>
+                            )}
+                          </div>
+                        )}
                         <Button 
                           variant="ghost" 
                           size="sm" 
@@ -438,7 +502,13 @@ export default function MonitorOperativoPage() {
                                   <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-blue-600 border-2 border-white dark:border-slate-900 shadow-sm"></div>
                                   <div className="space-y-0.5">
                                     <p className="text-[9px] font-black text-slate-400 uppercase">Carga Inicial</p>
-                                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{load.origin.name}</p>
+                                    <div className="flex items-center gap-2">
+                                       <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{load.origin.name}</p>
+                                       {load.origin.dockName && <Badge variant="outline" className="text-[8px] h-4 border-blue-200 text-blue-600 uppercase font-black px-1"><Anchor size={8} className="mr-0.5" /> {load.origin.dockName}</Badge>}
+                                    </div>
+                                    {load.dockEntryAuthorized && (
+                                       <p className="text-[9px] font-black text-green-600 uppercase flex items-center gap-1 mt-1 bg-green-50 px-2 py-0.5 rounded-full w-fit border border-green-100"><CirclePlay size={10}/> Vía libre para ingresar</p>
+                                    )}
                                   </div>
                                </div>
                                {load.outboundStops?.map((stop, idx) => (
@@ -448,7 +518,10 @@ export default function MonitorOperativoPage() {
                                        <div className="flex justify-between items-start">
                                           <div>
                                              <p className="text-[10px] font-black text-blue-600 uppercase">Destino {idx + 1}</p>
-                                             <p className="text-xs font-bold">{stop.name}</p>
+                                             <div className="flex items-center gap-2">
+                                                <p className="text-xs font-bold">{stop.name}</p>
+                                                {stop.dockName && <Badge variant="outline" className="text-[7px] h-3 border-blue-200 text-blue-600 uppercase font-black"><Anchor size={8} className="mr-0.5" /> {stop.dockName}</Badge>}
+                                             </div>
                                           </div>
                                           <Badge className="bg-blue-50 text-blue-600 text-[8px] border-blue-100">{stop.weightKg} Kg</Badge>
                                        </div>
@@ -477,7 +550,10 @@ export default function MonitorOperativoPage() {
                                        <div className="absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full bg-orange-500 border-2 border-white dark:border-slate-900 shadow-sm"></div>
                                        <div className="bg-orange-50/50 dark:bg-orange-950/10 p-3 rounded-lg border border-orange-100 dark:border-orange-900/30 shadow-sm space-y-2">
                                           <div className="flex justify-between items-start">
-                                             <p className="text-xs font-bold text-orange-700 dark:text-orange-400">Recolección: {stop.name}</p>
+                                             <div className="space-y-1">
+                                                <p className="text-xs font-bold text-orange-700 dark:text-orange-400">Recolección: {stop.name}</p>
+                                                {stop.dockName && <Badge variant="outline" className="text-[7px] h-3 border-orange-200 text-orange-700 uppercase font-black"><Anchor size={8} className="mr-0.5" /> {stop.dockName}</Badge>}
+                                             </div>
                                              <Badge className="bg-orange-100 text-orange-700 text-[8px] border-orange-200">{stop.weightKg} Kg</Badge>
                                           </div>
                                           <div className="flex flex-wrap gap-1.5">
@@ -493,7 +569,10 @@ export default function MonitorOperativoPage() {
                                        <div className="absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full bg-slate-900 border-2 border-white shadow-sm"></div>
                                        <div className="bg-slate-900 text-white p-3 rounded-lg space-y-1">
                                           <p className="text-[8px] font-black text-white/50 uppercase">Descarga Final Retorno</p>
-                                          <p className="text-xs font-bold uppercase">{load.returnDestination.name}</p>
+                                          <div className="flex items-center gap-2">
+                                             <p className="text-xs font-bold uppercase">{load.returnDestination.name}</p>
+                                             {load.returnDestination.dockName && <Badge variant="outline" className="text-[7px] h-3 border-slate-700 text-white uppercase font-black"><Anchor size={8} className="mr-0.5" /> {load.returnDestination.dockName}</Badge>}
+                                          </div>
                                        </div>
                                     </div>
                                   )}
@@ -582,6 +661,50 @@ export default function MonitorOperativoPage() {
           </div>
         </div>
       </Card>
+
+      {/* DIÁLOGO DE ASIGNACIÓN DE BOCA / VÍA LIBRE */}
+      <Dialog open={isDockDialogOpen} onOpenChange={setIsDockDialogOpen}>
+         <DialogContent className="max-w-md rounded-2xl">
+            <DialogHeader>
+               <DialogTitle className="flex items-center gap-2"><Anchor className="text-blue-600" /> Autorizar Vía Libre</DialogTitle>
+               <DialogDescription>Indique al chofer en qué boca posicionar el camión para operar.</DialogDescription>
+            </DialogHeader>
+            <div className="py-6 space-y-6">
+               <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400">1. Confirmar Boca de Carga / Descarga</Label>
+                  <Select value={selectedDock} onValueChange={setSelectedDock}>
+                     <SelectTrigger className="bg-slate-50 h-12">
+                        <SelectValue placeholder="Seleccionar Portón" />
+                     </SelectTrigger>
+                     <SelectContent>
+                        {hubs?.find(h => h.id === selectedLoadForDock?.origin.id)?.loadingBays?.map(bay => (
+                          <SelectItem key={bay.id} value={bay.name}>{bay.name}</SelectItem>
+                        ))}
+                        {(!hubs?.find(h => h.id === selectedLoadForDock?.origin.id)?.loadingBays || hubs.find(h => h.id === selectedLoadForDock?.origin.id)?.loadingBays?.length === 0) && (
+                           <SelectItem value="Mesa de Entradas" disabled>Sin bocas definidas</SelectItem>
+                        )}
+                     </SelectContent>
+                  </Select>
+               </div>
+
+               <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-blue-700 uppercase tracking-widest"><Radio className="w-3 h-3 animate-pulse" /> Notificación Chofer</div>
+                  <p className="text-[10px] text-blue-600 leading-relaxed italic">"El chofer recibirá una señal de VÍA LIBRE en su teléfono indicando que puede ingresar inmediatamente a la boca asignada."</p>
+               </div>
+            </div>
+            <DialogFooter>
+               <Button variant="ghost" onClick={() => setIsDockDialogOpen(false)}>CANCELAR</Button>
+               <Button 
+                onClick={handleDockAssignment} 
+                disabled={isUpdatingDock || !selectedDock} 
+                className="bg-green-600 hover:bg-green-700 font-bold min-w-[150px]"
+               >
+                 {isUpdatingDock ? <Loader2 size={16} className="animate-spin mr-2" /> : <CirclePlay size={16} className="mr-2" />}
+                 HABILITAR ENTRADA
+               </Button>
+            </DialogFooter>
+         </DialogContent>
+      </Dialog>
     </div>
   );
 }
