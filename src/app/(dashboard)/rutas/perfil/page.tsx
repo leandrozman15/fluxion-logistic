@@ -123,7 +123,7 @@ export default function DriverSelfProfilePage() {
               <p className="text-2xl font-black italic text-blue-400">{Math.round(stats.totalKm).toLocaleString()}</p>
             </div>
             <div className="space-y-1">
-              <p className="text-[9px] uppercase font-bold text-white/30">Misiones OK</p>
+              <p className="text-[9px] uppercase font-bold text-white/30">Viajes OK</p>
               <p className="text-2xl font-black italic">{stats.totalTrips}</p>
             </div>
           </div>
