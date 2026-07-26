@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
@@ -13,7 +14,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Package, Plus, Search, Scale, 
   Loader2, MoreVertical, Trash2, CheckCircle2, 
-  Clock, AlertTriangle, FileText, Printer, Wallet, Navigation, Edit, Calendar, Truck, User, History
+  Clock, AlertTriangle, FileText, Printer, Wallet, Navigation, Edit, Calendar, Truck, User, History,
+  BarChart3
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -171,7 +173,7 @@ export default function CargasPage() {
                     const driverObj = drivers?.find(d => d.id === load.assignedDriverId);
 
                     return (
-                      <TableRow key={load.id} className="hover:bg-slate-50/50 cursor-pointer" onClick={() => router.push(`/cargas/${load.id}/orden`)}>
+                      <TableRow key={load.id} className="hover:bg-slate-50/50 cursor-pointer" onClick={() => router.push(`/cargas/${load.id}/reporte`)}>
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 shrink-0"><Package size={20} /></div>
@@ -213,13 +215,15 @@ export default function CargasPage() {
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical size={16} /></Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56">
-                              <DropdownMenuLabel>Gestión de Flete</DropdownMenuLabel>
+                            <DropdownMenuContent align="end" className="w-64">
+                              <DropdownMenuLabel>Análisis de Operación</DropdownMenuLabel>
+                              <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/reporte`)} className="font-bold text-blue-600">
+                                <BarChart3 className="w-4 h-4 mr-2" /> Auditoría de Telemetría
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuLabel>Gestión Administrativa</DropdownMenuLabel>
                               <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/editar`)}>
                                 <Edit className="w-4 h-4 mr-2" /> Ver Detalle / Editar
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/editar`)}>
-                                <History className="w-4 h-4 mr-2" /> Reprogramar Viaje
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/orden`)}>
                                 <Printer className="w-4 h-4 mr-2" /> Ver Orden (PDF)
