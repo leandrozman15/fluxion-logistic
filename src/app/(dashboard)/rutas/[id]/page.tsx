@@ -25,7 +25,7 @@ import {
   Anchor,
   CirclePlay,
   XCircle
-} from "lucide-round";
+} from "lucide-react";
 import { Load, Expense, ExpenseCategory, LoadStatus, TrackingPoint } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -242,21 +242,17 @@ export default function RouteDetailPage() {
     if (!loadRef || !load) return;
     setIsUpdating(true);
     try {
-      const initialTracking = load.tracking || {
-        distanceTraveledKm: 0,
-        distanceRemainingKm: 0,
-        currentSpeed: 0,
-        timeOnRouteMinutes: 0,
-        timeStoppedMinutes: 0,
-        maxSpeed: 0,
-        estimatedFuelLiters: 0,
-        history: [],
-        alerts: []
-      };
+      const initialHistory = load.tracking?.history || [];
 
       await updateDoc(loadRef, { 
         status: 'on_route',
-        tracking: initialTracking,
+        "tracking.tripStartedAt": serverTimestamp(),
+        "tracking.distanceTraveledKm": 0,
+        "tracking.timeOnRouteMinutes": 0,
+        "tracking.timeStoppedMinutes": 0,
+        "tracking.maxSpeed": 0,
+        "tracking.estimatedFuelLiters": 0,
+        "tracking.history": initialHistory,
         updatedAt: serverTimestamp() 
       });
       setGpsActive(true);

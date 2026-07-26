@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
@@ -23,7 +24,7 @@ import { Load, Expense, Driver, Truck as TruckType } from "@/app/lib/types";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { formatSafeDate } from "@/lib/utils/date-utils";
+import { formatSafeDate, toSafeDate } from "@/lib/utils/date-utils";
 import dynamic from "next/dynamic";
 
 // Carga dinámica del mapa
@@ -80,27 +81,21 @@ export default function TripReportPage() {
 
     const avgSpeed = countSpeed > 0 ? sumSpeed / countSpeed : 0;
     
-    // Calcular duraciones desde el historial si los contadores están en 0
-    let drivingMinutes = load.tracking.timeOnRouteMinutes || 0;
-    let idleMinutes = load.tracking.timeStoppedMinutes || 0;
+    // Nueva lógica de Duración Total: Desde tripStartedAt hasta confirmedAt o Ahora
+    const start = toSafeDate(load.tracking?.tripStartedAt);
+    const end = load.status === 'delivered' ? toSafeDate(load.proofOfDelivery?.confirmedAt) : new Date();
     
-    if (drivingMinutes === 0 && history.length > 1) {
-      const first = new Date(history[0].timestamp).getTime();
-      const last = new Date(history[history.length - 1].timestamp).getTime();
-      const totalElapsed = (last - first) / (1000 * 60);
-      
-      // Heurística de estimación basada en velocidad histórica si no hay contadores
-      let moving = 0;
-      for (let i = 1; i < history.length; i++) {
-        if (history[i].speed > 5) {
-          const t1 = new Date(history[i-1].timestamp).getTime();
-          const t2 = new Date(history[i].timestamp).getTime();
-          moving += (t2 - t1) / (1000 * 60);
-        }
-      }
-      drivingMinutes = Math.round(moving);
-      idleMinutes = Math.max(0, Math.round(totalElapsed - moving));
+    let totalMinutes = 0;
+    if (start && end) {
+      totalMinutes = (end.getTime() - start.getTime()) / (1000 * 60);
+    } else if (history.length > 1) {
+      const first = toSafeDate(history[0].timestamp);
+      const last = toSafeDate(history[history.length - 1].timestamp);
+      if (first && last) totalMinutes = (last.getTime() - first.getTime()) / (1000 * 60);
     }
+
+    const drivingMinutes = Math.round(load.tracking.timeOnRouteMinutes || 0);
+    const idleMinutes = Math.max(0, Math.round(totalMinutes - drivingMinutes));
 
     const fuelCost = expenses?.filter(e => e.category === 'fuel').reduce((acc, e) => acc + (e.amount || 0), 0) || 0;
     const totalFuel = expenses?.filter(e => e.category === 'fuel').reduce((acc, e) => acc + (e.liters || 0), 0) || 0;
@@ -114,8 +109,9 @@ export default function TripReportPage() {
       fuelCost,
       otherCost,
       totalCost: fuelCost + otherCost,
-      durationMinutes: Math.round(drivingMinutes),
-      idleMinutes: Math.round(idleMinutes)
+      durationMinutes: Math.round(totalMinutes),
+      drivingMinutes,
+      idleMinutes
     };
   }, [load, expenses]);
 
@@ -175,7 +171,7 @@ export default function TripReportPage() {
           <CardContent className="pt-4 flex flex-col items-center text-center gap-1">
             <Timer size={20} className="text-blue-600" />
             <p className="text-[10px] uppercase font-bold text-slate-400">Duración Jornada</p>
-            <p className="text-3xl font-black italic text-slate-800">{stats.durationMinutes + stats.idleMinutes} <span className="text-xs font-normal text-slate-400 uppercase">min</span></p>
+            <p className="text-3xl font-black italic text-slate-800">{stats.durationMinutes} <span className="text-xs font-normal text-slate-400 uppercase">min</span></p>
           </CardContent>
         </Card>
         <Card className="border-none shadow-sm">

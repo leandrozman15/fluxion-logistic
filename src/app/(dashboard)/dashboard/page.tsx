@@ -60,6 +60,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { estimateFuelLiters } from "@/lib/utils/tracking-math";
+import { toSafeDate } from "@/lib/utils/date-utils";
 
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
@@ -324,42 +325,31 @@ export default function MonitorOperativoPage() {
                const efficiency = calculateEfficiency(load);
                const progress = tracking ? (tracking.distanceTraveledKm / (tracking.distanceTraveledKm + (tracking.distanceRemainingKm || 1))) * 100 : (load.status === 'delivered' ? 100 : 0);
 
-               // Cálculo de tiempos reconstruidos si están en 0
+               // Cálculo de tiempos reconstruidos desde tripStartedAt
                const getReconstructedStats = () => {
-                 let driving = tracking?.timeOnRouteMinutes || 0;
-                 let stopped = tracking?.timeStoppedMinutes || 0;
-                 let maxV = tracking?.maxSpeed || 0;
-                 let fuel = tracking?.estimatedFuelLiters || 0;
-                 const history = tracking?.history || [];
+                 const start = toSafeDate(tracking?.tripStartedAt);
+                 const end = load.status === 'delivered' ? toSafeDate(load.proofOfDelivery?.confirmedAt) : new Date();
                  
-                 if (history.length > 1) {
-                   if (driving === 0) {
-                     let movingAcc = 0;
-                     for (let i = 1; i < history.length; i++) {
-                       if (history[i].speed > 5) {
-                         const t1 = new Date(history[i-1].timestamp).getTime();
-                         const t2 = new Date(history[i].timestamp).getTime();
-                         movingAcc += (t2 - t1) / (1000 * 60);
-                       }
-                     }
-                     driving = movingAcc;
-                     const first = new Date(history[0].timestamp).getTime();
-                     const last = new Date(history[history.length - 1].timestamp).getTime();
-                     const total = (last - first) / (1000 * 60);
-                     stopped = Math.max(0, total - movingAcc);
-                   }
-                   if (maxV === 0) {
-                     maxV = Math.max(...history.map(p => p.speed || 0));
-                   }
-                   if (fuel === 0) {
-                     fuel = estimateFuelLiters(tracking?.distanceTraveledKm || 0, truck?.avgConsumption || 32);
+                 let totalMin = 0;
+                 if (start && end) {
+                   totalMin = Math.round((end.getTime() - start.getTime()) / (1000 * 60));
+                 } else if (tracking?.history && tracking.history.length > 1) {
+                   const first = toSafeDate(tracking.history[0].timestamp);
+                   const last = toSafeDate(tracking.history[tracking.history.length - 1].timestamp);
+                   if (first && last) {
+                     totalMin = Math.round((last.getTime() - first.getTime()) / (1000 * 60));
                    }
                  }
+
+                 const driving = Math.round(tracking?.timeOnRouteMinutes || 0);
+                 const stopped = Math.max(0, totalMin - driving);
+
                  return { 
-                   driving: Math.round(driving), 
-                   stopped: Math.round(stopped), 
-                   maxV: Math.round(maxV), 
-                   fuel: fuel.toFixed(1) 
+                   total: totalMin,
+                   driving, 
+                   stopped, 
+                   maxV: Math.round(tracking?.maxSpeed || 0), 
+                   fuel: (tracking?.estimatedFuelLiters || 0).toFixed(1) 
                  };
                };
 
@@ -466,12 +456,15 @@ export default function MonitorOperativoPage() {
                          <div className="space-y-1">
                             <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Tiempo de Jornada</p>
                             <div className="space-y-0.5">
-                               <p className="text-xs font-bold text-blue-600 flex items-center gap-1">
-                                  <Timer size={10} /> {times.driving} min <span className="text-[8px] font-normal opacity-50">Conducción</span>
-                               </p>
-                               <p className="text-[9px] font-bold text-slate-500 flex items-center gap-1">
-                                 <History size={10} /> {times.stopped} min <span className="text-[8px] font-normal opacity-50">Parado</span>
-                               </p>
+                               <p className="text-xs font-black text-slate-800 dark:text-slate-200">{times.total} min <span className="text-[8px] font-normal opacity-50">TOTAL</span></p>
+                               <div className="flex items-center gap-2">
+                                  <p className="text-[10px] font-bold text-blue-600 flex items-center gap-1">
+                                     <Timer size={8} /> {times.driving}m
+                                  </p>
+                                  <p className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
+                                    <History size={8} /> {times.stopped}m
+                                  </p>
+                               </div>
                             </div>
                          </div>
                       </div>
@@ -756,7 +749,7 @@ export default function MonitorOperativoPage() {
                </div>
             </div>
             <DialogFooter>
-               <Button variant="ghost" onClick={() => setIsDockDialogOpen(false)}>CANCELAR</Button>
+               <Button variant="ghost" onClick={() => setIsDockDialogOpen(false)} className="text-slate-500 font-bold">CANCELAR</Button>
                <Button 
                 onClick={handleDockAssignment} 
                 disabled={isUpdatingDock || !selectedDock} 

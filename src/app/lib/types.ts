@@ -414,6 +414,7 @@ export interface Load {
   dockEntryMessage?: string;
 
   tracking?: {
+    tripStartedAt?: any; // Marca de tiempo de inicio real
     currentLat: number;
     currentLng: number;
     currentSpeed: number;
