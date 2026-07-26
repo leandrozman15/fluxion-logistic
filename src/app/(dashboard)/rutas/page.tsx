@@ -22,7 +22,8 @@ import {
   AlertTriangle,
   History,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  User
 } from "lucide-react";
 import { Load, LoadStatus } from "@/app/lib/types";
 import { cn } from "@/lib/utils";
@@ -138,15 +139,22 @@ export default function DriverRoutesPage() {
 
   return (
     <div className="max-w-md mx-auto space-y-6 pb-24 px-2">
-      {/* Header Estilizado */}
-      <div className="flex items-center gap-3 pt-6 px-2">
-        <div className="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden shadow-lg border-2 border-white bg-white">
-           <Image src="/icono.png" alt="App Icon" width={48} height={48} className="object-contain" />
+      {/* Header Estilizado con Botón de Perfil */}
+      <div className="flex items-center justify-between pt-6 px-2">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden shadow-lg border-2 border-white bg-white">
+            <Image src="/icono.png" alt="App Icon" width={48} height={48} className="object-contain" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-black text-slate-900 italic tracking-tighter leading-none">Mis Viajes</h1>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Asistente Digital para Conducción</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-black text-slate-900 italic tracking-tighter leading-none">Mis Viajes</h1>
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Asistente Digital para Conducción</p>
-        </div>
+        <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-white shadow-sm border border-slate-100 text-blue-600" asChild>
+          <Link href="/rutas/perfil">
+            <User size={20} />
+          </Link>
+        </Button>
       </div>
 
       {/* Carrusel de Fechas Rediseñado */}
