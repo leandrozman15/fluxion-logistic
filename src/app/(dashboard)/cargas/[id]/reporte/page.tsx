@@ -1,8 +1,6 @@
-
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
-import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection } from "@/firebase";
 import { doc, collection, query, orderBy } from "firebase/firestore";
@@ -14,7 +12,8 @@ import {
   Fuel, ArrowLeft, Activity, ShieldCheck, 
   DollarSign, Zap, Timer, History, FileText, 
   CheckCircle2, AlertTriangle, Printer, Download,
-  ExternalLink, BarChart3, TrendingUp, User
+  ExternalLink, BarChart3, TrendingUp, User,
+  Loader2
 } from "lucide-react";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, 
@@ -25,6 +24,7 @@ import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { formatSafeDate } from "@/lib/utils/date-utils";
+import dynamic from "next/dynamic";
 
 // Carga dinámica del mapa
 const MapContainer = dynamic(
@@ -63,7 +63,7 @@ export default function TripReportPage() {
   const { data: expenses } = useCollection<Expense>(expensesQuery);
 
   const stats = useMemo(() => {
-    if (!load?.tracking) return { avgSpeed: 0, maxSpeed: 0, totalKm: 0, totalFuel: 0, fuelCost: 0, otherCost: 0 };
+    if (!load?.tracking) return { avgSpeed: 0, maxSpeed: 0, totalKm: 0, totalFuel: 0, fuelCost: 0, otherCost: 0, totalCost: 0 };
     
     const history = load.tracking.history || [];
     const totalKm = load.tracking.distanceTraveledKm || 0;
@@ -321,4 +321,3 @@ export default function TripReportPage() {
     </div>
   );
 }
-
