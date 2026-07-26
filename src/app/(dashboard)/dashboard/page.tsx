@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
@@ -45,7 +44,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Truck, Driver, Load, Hub, Client } from "@/app/lib/types";
-import { isToday, startOfMonth, format, formatDistanceToNow, addMinutes, addDays, isAfter, isBefore, startOfDay, endOfDay } from "date-fns";
+import { isToday, startOfMonth, format, formatDistanceToNow, addMinutes, addDays, isAfter, isBefore, startOfDay, endOfDay, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -69,7 +68,7 @@ export default function MonitorOperativoPage() {
   const [mounted, setMounted] = useState(false);
   const [L, setL] = useState<any>(null);
   const [expandedLoadId, setExpandedLoadId] = useState<string | null>(null);
-  const [agendaTab, setAgendaTab] = useState<string>("today");
+  const [agendaTab, setAgendaTab] = useState<string>("active");
 
   useEffect(() => {
     setMounted(true);
