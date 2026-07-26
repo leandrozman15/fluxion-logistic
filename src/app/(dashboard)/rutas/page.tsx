@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection, useUser } from "@/firebase";
 import { collection, query, where, orderBy, updateDoc, doc, serverTimestamp } from "firebase/firestore";
@@ -20,7 +20,9 @@ import {
   Play,
   CheckCircle2,
   AlertTriangle,
-  History
+  History,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { Load, LoadStatus } from "@/app/lib/types";
 import { cn } from "@/lib/utils";
@@ -34,6 +36,7 @@ export default function DriverRoutesPage() {
   const { user } = useUser();
   const { toast } = useToast();
   const router = useRouter();
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   // 1. Generar rango de fechas para el carrusel (-4 a +4 días)
   const dateRange = useMemo(() => {
@@ -53,13 +56,31 @@ export default function DriverRoutesPage() {
 
   const { data: routes, loading } = useCollection<Load>(routesQuery);
 
-  // 2. Filtrar rutas por la fecha seleccionada en el carrusel
+  // 2. Centrar el carrusel en el día actual al cargar
+  useEffect(() => {
+    if (scrollRef.current) {
+      const todayEl = scrollRef.current.querySelector('[data-today="true"]');
+      if (todayEl) {
+        todayEl.scrollIntoView({ behavior: 'auto', inline: 'center', block: 'nearest' });
+      }
+    }
+  }, [loading]);
+
+  const handleScroll = (direction: 'left' | 'right') => {
+    if (scrollRef.current) {
+      const { scrollLeft, clientWidth } = scrollRef.current;
+      const scrollTo = direction === 'left' ? scrollLeft - 150 : scrollLeft + 150;
+      scrollRef.current.scrollTo({ left: scrollTo, behavior: 'smooth' });
+    }
+  };
+
+  // 3. Filtrar rutas por la fecha seleccionada en el carrusel
   const filteredRoutes = useMemo(() => {
     if (!routes) return [];
     return routes.filter(r => r.pickupDate === selectedDate);
   }, [routes, selectedDate]);
 
-  // 3. Configuración de colores solicitada por el usuario
+  // 4. Configuración de colores solicitada por el usuario
   const getStatusConfig = (status: LoadStatus) => {
     switch (status) {
       case 'delivered': 
@@ -128,38 +149,60 @@ export default function DriverRoutesPage() {
         </div>
       </div>
 
-      {/* Carrusel de Fechas */}
+      {/* Carrusel de Fechas Rediseñado */}
       <div className="space-y-2">
         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Navegar Agenda</p>
-        <div className="flex gap-2 overflow-x-auto pb-4 px-2 no-scrollbar">
-          {dateRange.map((date) => {
-            const dateStr = format(date, "yyyy-MM-dd");
-            const isSelected = selectedDate === dateStr;
-            const isToday = isSameDay(date, new Date());
+        <div className="relative group px-1">
+          {/* Flecha Izquierda */}
+          <button 
+            onClick={() => handleScroll('left')}
+            className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center shadow-md border border-slate-100 text-slate-400 hover:text-blue-600 transition-colors"
+          >
+            <ChevronLeft size={20} />
+          </button>
 
-            return (
-              <button
-                key={dateStr}
-                onClick={() => setSelectedDate(dateStr)}
-                className={cn(
-                  "flex flex-col items-center justify-center min-w-[65px] h-20 rounded-2xl border-2 transition-all shrink-0",
-                  isSelected 
-                    ? "bg-blue-600 border-blue-600 text-white shadow-lg scale-105" 
-                    : "bg-white border-slate-100 text-slate-400"
-                )}
-              >
-                <span className="text-[9px] font-black uppercase mb-1">
-                  {format(date, "EEE", { locale: es })}
-                </span>
-                <span className="text-lg font-black leading-none">
-                  {format(date, "d")}
-                </span>
-                {isToday && (
-                  <div className={cn("w-1 h-1 rounded-full mt-1", isSelected ? "bg-white" : "bg-blue-500")}></div>
-                )}
-              </button>
-            );
-          })}
+          <div 
+            ref={scrollRef}
+            className="flex gap-2 overflow-x-auto pb-4 px-8 no-scrollbar scroll-smooth"
+          >
+            {dateRange.map((date) => {
+              const dateStr = format(date, "yyyy-MM-dd");
+              const isSelected = selectedDate === dateStr;
+              const isToday = isSameDay(date, new Date());
+
+              return (
+                <button
+                  key={dateStr}
+                  data-today={isToday}
+                  onClick={() => setSelectedDate(dateStr)}
+                  className={cn(
+                    "flex flex-col items-center justify-center min-w-[65px] h-20 rounded-2xl border-2 transition-all shrink-0",
+                    isSelected 
+                      ? "bg-blue-600 border-blue-600 text-white shadow-lg scale-105" 
+                      : "bg-white border-slate-100 text-slate-400"
+                  )}
+                >
+                  <span className="text-[9px] font-black uppercase mb-1">
+                    {format(date, "EEE", { locale: es })}
+                  </span>
+                  <span className="text-lg font-black leading-none">
+                    {format(date, "d")}
+                  </span>
+                  {isToday && (
+                    <div className={cn("w-1 h-1 rounded-full mt-1", isSelected ? "bg-white" : "bg-blue-500")}></div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Flecha Derecha */}
+          <button 
+            onClick={() => handleScroll('right')}
+            className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center shadow-md border border-slate-100 text-slate-400 hover:text-blue-600 transition-colors"
+          >
+            <ChevronRight size={20} />
+          </button>
         </div>
       </div>
 
