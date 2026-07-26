@@ -21,12 +21,13 @@ import {
   Wallet, Plus, DollarSign, Camera, Fuel, Utensils, Bed, Wrench, Receipt,
   Zap, Satellite, SignalHigh, Loader2, Compass, Gauge, History, 
   Coffee, Moon, Car, Battery, Flame, CloudRain, Construction, FileWarning, HelpCircle,
-  Siren, LifeBuoy, PlayCircle, Edit3, UserCheck, UploadCloud, PauseCircle
+  Siren, LifeBuoy, PlayCircle, Edit3, UserCheck, UploadCloud, PauseCircle, PenTool
 } from "lucide-react";
 import { Load, Expense, ExpenseCategory, LoadStatus, TrackingPoint } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { calculateDistance } from "@/lib/utils/tracking-math";
+import { SignaturePad } from "@/components/SignaturePad";
 
 // Cargamento dinámico del Mapa
 const MapContainer = dynamic(
@@ -82,6 +83,9 @@ export default function RouteDetailPage() {
   const lastPosRef = useRef<{lat: number, lng: number, timestamp: number} | null>(null);
   const podPhotoInputRef = useRef<HTMLInputElement>(null);
 
+  // Signature States
+  const [activeSignatureType, setActiveSignatureType] = useState<'receiver' | 'driver' | null>(null);
+
   const [expenseData, setExpenseData] = useState<any>({
     category: 'fuel',
     amount: 0,
@@ -103,7 +107,8 @@ export default function RouteDetailPage() {
   const [podData, setPodData] = useState({
     receiverName: "",
     photoUrl: "",
-    signatureUrl: "",
+    receiverSignatureUrl: "",
+    driverSignatureUrl: "",
     notes: ""
   });
 
@@ -480,35 +485,105 @@ export default function RouteDetailPage() {
                             CONFIRMAR ENTREGA
                           </Button>
                         </DialogTrigger>
-                        <DialogContent className="max-w-[95vw] rounded-2xl">
+                        <DialogContent className="max-w-[95vw] max-h-[90vh] overflow-y-auto rounded-3xl">
                           <DialogHeader>
                             <DialogTitle>Prueba de Entrega (POD)</DialogTitle>
                             <DialogDescription>Complete el protocolo para finalizar el flete.</DialogDescription>
                           </DialogHeader>
-                          <div className="space-y-4 py-4">
+                          <div className="space-y-6 py-4">
                             <div className="space-y-2">
-                              <Label>Nombre de quien recibe</Label>
-                              <Input placeholder="Ej: Marcelo Gomez" value={podData.receiverName} onChange={e => setPodData({...podData, receiverName: e.target.value})} />
+                              <Label className="text-[10px] font-bold uppercase text-slate-400">Nombre de quien recibe</Label>
+                              <Input placeholder="Ej: Marcelo Gomez" value={podData.receiverName} onChange={e => setPodData({...podData, receiverName: e.target.value})} className="bg-slate-50" />
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
-                              <Button variant="outline" className={cn("h-24 flex flex-col gap-2 border-dashed border-2", podData.photoUrl ? "border-green-500 bg-green-50" : "")} onClick={() => podPhotoInputRef.current?.click()}>
+
+                            <div className="grid grid-cols-1 gap-3">
+                              <Button variant="outline" className={cn("h-16 flex items-center justify-start px-4 gap-4 border-dashed border-2", podData.photoUrl ? "border-green-500 bg-green-50" : "")} onClick={() => podPhotoInputRef.current?.click()}>
                                 <Camera className={cn("w-6 h-6", podData.photoUrl ? "text-green-600" : "text-slate-400")} />
-                                <span className="text-[10px] font-bold uppercase">{podData.photoUrl ? "Foto Lista" : "Foto Remito"}</span>
+                                <div className="text-left">
+                                  <p className="text-sm font-bold">{podData.photoUrl ? "Foto Lista" : "Tomar Foto Remito"}</p>
+                                  <p className="text-[10px] text-slate-500">Evidencia física de entrega</p>
+                                </div>
                               </Button>
                               <input type="file" accept="image/*" capture="environment" className="hidden" ref={podPhotoInputRef} onChange={onPhotoChange} />
-                              <Button variant="outline" className="h-24 flex flex-col gap-2 border-dashed border-2">
-                                 <Edit3 className="w-6 h-6 text-slate-400" />
-                                 <span className="text-[10px] font-bold uppercase">Firma Digital</span>
-                              </Button>
                             </div>
+
+                            {/* Sección de Firmas Digitales */}
+                            <div className="space-y-4">
+                               <div className="grid grid-cols-1 gap-4">
+                                  {podData.receiverSignatureUrl ? (
+                                    <div className="p-3 bg-green-50 border border-green-100 rounded-xl flex items-center justify-between">
+                                       <div className="flex items-center gap-3">
+                                          <div className="w-12 h-12 bg-white rounded border overflow-hidden">
+                                             <img src={podData.receiverSignatureUrl} alt="Firma Receptor" className="w-full h-full object-contain" />
+                                          </div>
+                                          <p className="text-[10px] font-bold text-green-700 uppercase">Firma Receptor OK</p>
+                                       </div>
+                                       <Button variant="ghost" size="sm" onClick={() => setPodData({...podData, receiverSignatureUrl: ""})}><Edit3 size={14}/></Button>
+                                    </div>
+                                  ) : (
+                                    <Dialog>
+                                      <DialogTrigger asChild>
+                                        <Button variant="outline" className="h-16 flex items-center justify-start px-4 gap-4 border-slate-200">
+                                          <PenTool className="text-blue-600" />
+                                          <div className="text-left">
+                                            <p className="text-sm font-bold">Firma del Receptor</p>
+                                            <p className="text-[10px] text-slate-500">Solicitar rúbrica al cliente</p>
+                                          </div>
+                                        </Button>
+                                      </DialogTrigger>
+                                      <DialogContent className="max-w-[90vw] rounded-2xl p-4">
+                                        <SignaturePad 
+                                          title="Firma del Receptor (Cliente)" 
+                                          onSave={(url) => { setPodData({...podData, receiverSignatureUrl: url}); }} 
+                                        />
+                                      </DialogContent>
+                                    </Dialog>
+                                  )}
+
+                                  {podData.driverSignatureUrl ? (
+                                    <div className="p-3 bg-green-50 border border-green-100 rounded-xl flex items-center justify-between">
+                                       <div className="flex items-center gap-3">
+                                          <div className="w-12 h-12 bg-white rounded border overflow-hidden">
+                                             <img src={podData.driverSignatureUrl} alt="Firma Chofer" className="w-full h-full object-contain" />
+                                          </div>
+                                          <p className="text-[10px] font-bold text-green-700 uppercase">Firma Chofer OK</p>
+                                       </div>
+                                       <Button variant="ghost" size="sm" onClick={() => setPodData({...podData, driverSignatureUrl: ""})}><Edit3 size={14}/></Button>
+                                    </div>
+                                  ) : (
+                                    <Dialog>
+                                      <DialogTrigger asChild>
+                                        <Button variant="outline" className="h-16 flex items-center justify-start px-4 gap-4 border-slate-200">
+                                          <UserCheck className="text-slate-900" />
+                                          <div className="text-left">
+                                            <p className="text-sm font-bold">Firma del Chofer</p>
+                                            <p className="text-[10px] text-slate-500">Su conformidad como transportista</p>
+                                          </div>
+                                        </Button>
+                                      </DialogTrigger>
+                                      <DialogContent className="max-w-[90vw] rounded-2xl p-4">
+                                        <SignaturePad 
+                                          title="Firma del Chofer / Transportista" 
+                                          onSave={(url) => { setPodData({...podData, driverSignatureUrl: url}); }} 
+                                        />
+                                      </DialogContent>
+                                    </Dialog>
+                                  )}
+                               </div>
+                            </div>
+
                             <div className="space-y-2">
-                              <Label>Observaciones de Entrega</Label>
-                              <Textarea placeholder="Novedades..." value={podData.notes} onChange={e => setPodData({...podData, notes: e.target.value})} />
+                              <Label className="text-[10px] font-bold uppercase text-slate-400">Observaciones</Label>
+                              <Textarea placeholder="Ej: Sin novedades, bultos en buen estado..." value={podData.notes} onChange={e => setPodData({...podData, notes: e.target.value})} className="bg-slate-50" />
                             </div>
                           </div>
                           <DialogFooter>
-                            <Button className="w-full h-14 bg-green-600 text-lg font-bold" disabled={!podData.receiverName || isUpdating} onClick={handleConfirmDelivery}>
-                              FINALIZAR MISIÓN
+                            <Button 
+                              className="w-full h-14 bg-green-600 text-lg font-bold shadow-xl" 
+                              disabled={!podData.receiverName || !podData.receiverSignatureUrl || !podData.driverSignatureUrl || isUpdating} 
+                              onClick={handleConfirmDelivery}
+                            >
+                              FINALIZAR MISIÓN Y GUARDAR
                             </Button>
                           </DialogFooter>
                         </DialogContent>

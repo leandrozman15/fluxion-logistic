@@ -413,12 +413,15 @@ export interface Load {
     alerts: DrivingAlert[];
     lastPauseType?: string;
     pauseStartedAt?: any;
+    lastPauseType?: string;
+    pauseStartedAt?: any;
   };
 
   proofOfDelivery?: {
     receiverName: string;
     photoUrl?: string;
-    signatureUrl?: string;
+    receiverSignatureUrl?: string;
+    driverSignatureUrl?: string;
     confirmedAt: any;
     notes?: string;
   };
