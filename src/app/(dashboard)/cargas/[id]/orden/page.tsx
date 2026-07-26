@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useEffect, useState } from "react";
@@ -9,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import Image from "next/image";
 import { 
   Printer, ArrowLeft, Truck, User, MapPin, 
-  Package, Calendar, Loader2, Navigation, FileText, CheckCircle2, Repeat, ClipboardCheck, ShieldCheck
+  Package, Calendar, Loader2, Navigation, FileText, CheckCircle2, Repeat, ClipboardCheck, ShieldCheck, Anchor
 } from "lucide-react";
 import { Load, Driver, Truck as TruckType } from "@/app/lib/types";
 import { QRCodeSVG } from "qrcode.react";
@@ -131,13 +132,21 @@ export default function LoadOrderDocumentPage() {
             
             <div className="space-y-4">
               <div className="p-4 bg-slate-50 border rounded-lg border-slate-200">
-                <div className="flex gap-4">
-                  <div className="w-1.5 h-12 bg-green-500 rounded-full shrink-0"></div>
-                  <div className="space-y-1">
-                    <p className="text-[9px] font-black text-slate-400 uppercase">Punto de Carga (Origen)</p>
-                    <p className="text-sm font-black text-slate-900 uppercase">{load.origin.name}</p>
-                    <p className="text-[11px] text-slate-600">{load.origin.address}</p>
+                <div className="flex justify-between items-start">
+                  <div className="flex gap-4">
+                    <div className="w-1.5 h-12 bg-green-500 rounded-full shrink-0"></div>
+                    <div className="space-y-1">
+                      <p className="text-[9px] font-black text-slate-400 uppercase">Punto de Carga (Origen)</p>
+                      <p className="text-sm font-black text-slate-900 uppercase">{load.origin.name}</p>
+                      <p className="text-[11px] text-slate-600">{load.origin.address}</p>
+                    </div>
                   </div>
+                  {load.origin.dockName && (
+                    <div className="bg-blue-600 text-white p-3 rounded-lg text-center min-w-[100px] shadow-md">
+                       <p className="text-[8px] font-bold uppercase opacity-70">Posicionamiento</p>
+                       <p className="text-xl font-black italic">{load.origin.dockName}</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -147,7 +156,10 @@ export default function LoadOrderDocumentPage() {
                     <div className="absolute -left-6 top-1/2 -translate-y-1/2 w-5 h-5 bg-blue-600 text-white rounded-full flex items-center justify-center text-[10px] font-black shadow-md border-2 border-white">{i+1}</div>
                     <div className="flex justify-between items-start">
                       <div className="space-y-1">
-                        <p className="text-xs font-black uppercase text-slate-900">{stop.name}</p>
+                        <div className="flex items-center gap-2">
+                           <p className="text-xs font-black uppercase text-slate-900">{stop.name}</p>
+                           {stop.dockName && <Badge variant="outline" className="text-[7px] h-3 border-blue-600 text-blue-600 uppercase font-black px-1"><Anchor size={8} className="mr-0.5" /> {stop.dockName}</Badge>}
+                        </div>
                         <p className="text-[10px] text-slate-500 leading-tight">{stop.address}</p>
                       </div>
                       <div className="text-right">

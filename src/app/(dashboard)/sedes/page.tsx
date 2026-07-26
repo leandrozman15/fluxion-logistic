@@ -15,10 +15,10 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { 
   Building2, MapPin, Plus, Phone, Search, 
-  MoreVertical, Trash2, Globe, Loader2, Map as MapIcon, Crosshair, Star, Edit2, Save
+  MoreVertical, Trash2, Globe, Loader2, Map as MapIcon, Crosshair, Star, Edit2, Save, X, Anchor
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Hub, HubType, Country } from "@/app/lib/types";
+import { Hub, HubType, Country, LoadingBay } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 
 const COUNTRIES: Country[] = ["Argentina", "Chile", "Paraguay", "Bolivia", "Uruguay", "Brasil"];
@@ -33,7 +33,8 @@ const INITIAL_FORM_DATA: Partial<Hub> = {
   phone: "",
   isMainBase: false,
   lat: -34.6037,
-  lng: -58.3816
+  lng: -58.3816,
+  loadingBays: []
 };
 
 export default function SedesPage() {
@@ -43,6 +44,7 @@ export default function SedesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [newBayName, setNewBayName] = useState("");
 
   const [formData, setFormData] = useState<Partial<Hub>>(INITIAL_FORM_DATA);
 
@@ -83,15 +85,38 @@ export default function SedesPage() {
 
   const handleOpenEdit = (hub: Hub) => {
     setEditingId(hub.id);
-    setFormData(hub);
+    setFormData({
+      ...hub,
+      loadingBays: hub.loadingBays || []
+    });
     setIsDialogOpen(true);
+  };
+
+  const addBay = () => {
+    if (!newBayName) return;
+    const newBay: LoadingBay = {
+      id: Math.random().toString(36).substring(7),
+      name: newBayName,
+      status: 'active'
+    };
+    setFormData(prev => ({
+      ...prev,
+      loadingBays: [...(prev.loadingBays || []), newBay]
+    }));
+    setNewBayName("");
+  };
+
+  const removeBay = (id: string) => {
+    setFormData(prev => ({
+      ...prev,
+      loadingBays: prev.loadingBays?.filter(b => b.id !== id)
+    }));
   };
 
   const handleSubmitHub = async () => {
     if (!db || !formData.name || !formData.address) return;
     setIsSubmitting(true);
     try {
-      // Si se marca como base principal, desmarcar las otras
       if (formData.isMainBase) {
         const batch = writeBatch(db);
         const snapshot = await getDocs(collection(db, "hubs"));
@@ -104,14 +129,12 @@ export default function SedesPage() {
       }
 
       if (editingId) {
-        // ACTUALIZAR
         await updateDoc(doc(db, "hubs", editingId), {
           ...formData,
           updatedAt: serverTimestamp()
         });
         toast({ title: "Sede Actualizada", description: `Los cambios en ${formData.name} han sido guardados.` });
       } else {
-        // CREAR NUEVA
         await addDoc(collection(db, "hubs"), {
           ...formData,
           createdAt: serverTimestamp()
@@ -145,7 +168,7 @@ export default function SedesPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Red Logística Regional</h1>
-          <p className="text-slate-500 text-sm">Gestión de bases operativas en todo el Cono Sur.</p>
+          <p className="text-slate-500 text-sm">Gestión de bases operativas y bocas de carga.</p>
         </div>
         
         <Button className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100" onClick={handleOpenAdd}>
@@ -173,6 +196,7 @@ export default function SedesPage() {
               <TableHeader>
                 <TableRow className="bg-slate-50/50">
                   <TableHead>Sede / Tipo</TableHead>
+                  <TableHead>Capacidad (Bocas)</TableHead>
                   <TableHead>País / Ubicación</TableHead>
                   <TableHead>Contacto</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
@@ -181,7 +205,7 @@ export default function SedesPage() {
               <TableBody>
                 {filteredHubs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-20 text-slate-400 italic">
+                    <TableCell colSpan={5} className="text-center py-20 text-slate-400 italic">
                       No hay sedes regionales registradas.
                     </TableCell>
                   </TableRow>
@@ -200,6 +224,12 @@ export default function SedesPage() {
                             </div>
                             <Badge variant="outline" className="text-[8px] uppercase">{hub.type}</Badge>
                           </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                           <Anchor size={14} className="text-slate-400" />
+                           <span className="font-bold text-xs">{hub.loadingBays?.length || 0} Bocas habilitadas</span>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -245,14 +275,14 @@ export default function SedesPage() {
       </Card>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingId ? 'Editar Sede Regional' : 'Registrar Nueva Base'}</DialogTitle>
             <DialogDescription>
-              {editingId ? 'Modifique los parámetros de la base operativa.' : 'Establezca un punto de apoyo operativo en su red.'}
+              {editingId ? 'Modifique los parámetros de la base y gestione sus bocas de carga.' : 'Establezca un punto de apoyo operativo en su red.'}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-6 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label>País</Label>
@@ -279,6 +309,33 @@ export default function SedesPage() {
             <div className="grid gap-2">
               <Label htmlFor="name">Nombre de la Sede</Label>
               <Input id="name" placeholder="Ej: Hub Santiago Sur" className="bg-white" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+            </div>
+
+            {/* GESTIÓN DE BOCAS DE CARGA */}
+            <div className="p-4 bg-slate-900 text-white rounded-xl space-y-4 shadow-inner">
+               <div className="flex items-center gap-2 text-blue-400 font-bold uppercase text-[10px] tracking-widest">
+                  <Anchor size={14} /> Gestión de Bocas de Carga / Docks
+               </div>
+               <div className="flex gap-2">
+                  <Input 
+                    placeholder="Identificador (ej: Boca 1)" 
+                    className="bg-white/5 border-white/10 h-9 text-xs" 
+                    value={newBayName} 
+                    onChange={e => setNewBayName(e.target.value)} 
+                  />
+                  <Button size="sm" className="bg-blue-600" onClick={addBay} disabled={!newBayName}><Plus size={14} /></Button>
+               </div>
+               <div className="flex flex-wrap gap-2">
+                  {formData.loadingBays?.map(bay => (
+                    <Badge key={bay.id} className="bg-white/10 border-white/20 text-white pl-3 pr-1 py-1 gap-2 group">
+                       {bay.name}
+                       <button onClick={() => removeBay(bay.id)} className="text-white/40 hover:text-red-400 transition-colors"><X size={12} /></button>
+                    </Badge>
+                  ))}
+                  {(!formData.loadingBays || formData.loadingBays.length === 0) && (
+                    <p className="text-[10px] text-white/40 italic">No hay bocas de carga definidas para esta sede.</p>
+                  )}
+               </div>
             </div>
 
             <div className="flex items-center space-x-2 p-3 bg-blue-50/50 rounded-lg border border-blue-100">

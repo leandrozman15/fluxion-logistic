@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { 
   Package, ArrowLeft, ArrowRight, Save, Loader2, 
   MapPin, Calendar, Clock, DollarSign, Truck, 
-  Info, AlertTriangle, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, LayoutGrid, UserCheck, Edit, TrendingUp, CreditCard
+  Info, AlertTriangle, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, LayoutGrid, UserCheck, Edit, TrendingUp, CreditCard, Anchor
 } from "lucide-react";
 import { Load, Client, Hub, LoadLegStop, LoadDocument, LoadDocType, Truck as TruckType, Driver, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -51,7 +51,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
   const [activeLeg, setActiveLeg] = useState<'outbound' | 'return'>('outbound');
   const [editingStop, setEditingStop] = useState<Partial<LoadLegStop>>({
     id: "", name: "", address: "", province: "Buenos Aires", country: "Argentina", contact: "", phone: "",
-    description: "", weightKg: 0, volumeM3: 0, units: 0, unitType: "Pallet", documents: []
+    description: "", weightKg: 0, volumeM3: 0, units: 0, unitType: "Pallet", documents: [], dockName: ""
   });
 
   // Remito Sub-modal state
@@ -67,8 +67,8 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     pickupTime: "08:00",
     estimatedArrivalDate: format(new Date(), "yyyy-MM-dd"),
     estimatedArrivalTime: "18:00",
-    origin: { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", country: "Argentina", zip: "", instructions: "" },
-    returnDestination: { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", country: "Argentina", zip: "", instructions: "" },
+    origin: { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", country: "Argentina", zip: "", instructions: "", dockName: "" },
+    returnDestination: { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", country: "Argentina", zip: "", instructions: "", dockName: "" },
     outboundStops: [],
     returnStops: [],
     basePrice: 0, 
@@ -144,7 +144,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
         pickupTime: existingLoad.pickupTime || "08:00",
         outboundStops: existingLoad.outboundStops || [],
         returnStops: existingLoad.returnStops || [],
-        returnDestination: existingLoad.returnDestination || { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", country: "Argentina", zip: "", instructions: "" },
+        returnDestination: existingLoad.returnDestination || { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", country: "Argentina", zip: "", instructions: "", dockName: "" },
         budget: existingLoad.budget || { initialAdvance: 0, totalBudget: 0, driverCommission: 0, otherInternalCosts: 0, categories: {} }
       });
     }
@@ -289,6 +289,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
         contact: locData.mainContact?.name || "",
         lat: locData.lat || locData.address?.lat,
         lng: locData.lng || locData.address?.lng,
+        dockName: ""
       }
     }));
   };
@@ -311,6 +312,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
         contact: locData.mainContact?.name || "",
         lat: locData.lat || locData.address?.lat,
         lng: locData.lng || locData.address?.lng,
+        dockName: ""
       }
     }));
   };
@@ -331,6 +333,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
       phone: locData.phone || locData.mainContact?.phone || "",
       lat: locData.lat || locData.address?.lat,
       lng: locData.lng || locData.address?.lng,
+      dockName: ""
     }));
   };
 
@@ -363,7 +366,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
       [field]: [...(prev[field] || []).filter(s => s.id !== stop.id), stop]
     }));
     setIsStopModalOpen(false);
-    setEditingStop({ id: "", name: "", address: "", province: "Buenos Aires", country: "Argentina", contact: "", phone: "", description: "", weightKg: 0, volumeM3: 0, units: 0, unitType: "Pallet", documents: [] });
+    setEditingStop({ id: "", name: "", address: "", province: "Buenos Aires", country: "Argentina", contact: "", phone: "", description: "", weightKg: 0, volumeM3: 0, units: 0, unitType: "Pallet", documents: [], dockName: "" });
   };
 
   const removeStop = (leg: 'outbound' | 'return', id: string) => {
@@ -446,7 +449,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
             <div key={s.id} className="flex flex-col items-center gap-1.5 flex-1 relative">
               <div className={cn(
                 "w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold z-10 transition-all",
-                step > s.id ? "bg-green-500 text-white" : step === s.id ? "bg-blue-600 text-white shadow-md shadow-blue-100" : "bg-slate-50 text-slate-300 border"
+                step > s.id ? "bg-green-50 text-white" : step === s.id ? "bg-blue-600 text-white shadow-md shadow-blue-100" : "bg-slate-50 text-slate-300 border"
               )}>
                 {step > s.id ? <CheckCircle2 size={18} /> : <s.icon size={16} />}
               </div>
@@ -578,10 +581,36 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                 <div className="flex items-center gap-2 text-blue-600 font-bold text-xs uppercase tracking-widest">
                   <div className="w-2 h-2 rounded-full bg-blue-600" /> Punto de Carga Inicial (Origen)
                 </div>
-                <Select onValueChange={handleOriginSelect} value={formData.origin?.id ?? ''}>
-                  <SelectTrigger className="bg-white"><SelectValue placeholder="Seleccionar origen (Sede/Cliente)" /></SelectTrigger>
-                  <SelectContent>{locationsList.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent>
-                </Select>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div className="space-y-2">
+                     <Label className="text-[10px] uppercase font-bold text-slate-400">Seleccionar Ubicación</Label>
+                     <Select onValueChange={handleOriginSelect} value={formData.origin?.id ?? ''}>
+                        <SelectTrigger className="bg-white"><SelectValue placeholder="Sede/Cliente" /></SelectTrigger>
+                        <SelectContent>{locationsList.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent>
+                     </Select>
+                   </div>
+                   
+                   {/* SELECTOR DE BOCA DE CARGA PARA SEDES */}
+                   {formData.origin?.id && hubs?.find(h => h.id === formData.origin?.id) && (
+                     <div className="space-y-2 animate-in fade-in">
+                        <Label className="text-[10px] uppercase font-bold text-blue-600 flex items-center gap-1"><Anchor size={10} /> Boca de Carga Asignada</Label>
+                        <Select value={formData.origin.dockName || ""} onValueChange={v => setFormData({...formData, origin: {...formData.origin!, dockName: v}})}>
+                           <SelectTrigger className="bg-white border-blue-200">
+                              <SelectValue placeholder="Seleccionar Boca" />
+                           </SelectTrigger>
+                           <SelectContent>
+                              {hubs.find(h => h.id === formData.origin?.id)?.loadingBays?.map(bay => (
+                                <SelectItem key={bay.id} value={bay.name}>{bay.name}</SelectItem>
+                              ))}
+                              {(!hubs.find(h => h.id === formData.origin?.id)?.loadingBays || hubs.find(h => h.id === formData.origin?.id)?.loadingBays?.length === 0) && (
+                                <SelectItem value="General" disabled>Sin bocas definidas</SelectItem>
+                              )}
+                           </SelectContent>
+                        </Select>
+                     </div>
+                   )}
+                </div>
+
                 {formData.origin?.name && (
                   <div className="p-3 bg-white border rounded-lg space-y-1">
                     <div className="text-[10px] font-bold text-slate-400 uppercase">Dirección Completa Origen</div>
@@ -595,7 +624,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                     className="bg-blue-600 w-full" 
                     onClick={() => { 
                       setActiveLeg('outbound'); 
-                      setEditingStop({ id: "", name: "", address: "", province: "Buenos Aires", country: "Argentina", contact: "", phone: "", description: "", weightKg: 0, volumeM3: 0, units: 0, unitType: "Pallet", documents: [] }); 
+                      setEditingStop({ id: "", name: "", address: "", province: "Buenos Aires", country: "Argentina", contact: "", phone: "", description: "", weightKg: 0, volumeM3: 0, units: 0, unitType: "Pallet", documents: [], dockName: "" }); 
                       setIsStopModalOpen(true); 
                     }}
                   >
@@ -614,7 +643,10 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                        <div className="flex items-center gap-4">
                           <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 font-bold text-xs shrink-0">{idx + 1}</div>
                           <div>
-                            <p className="font-bold text-sm text-slate-800">{stop.name ?? ''}</p>
+                            <div className="flex items-center gap-2">
+                               <p className="font-bold text-sm text-slate-800">{stop.name ?? ''}</p>
+                               {stop.dockName && <Badge variant="outline" className="text-[8px] h-4 border-blue-200 text-blue-600 uppercase font-black"><Anchor size={8} className="mr-1" /> {stop.dockName}</Badge>}
+                            </div>
                             <p className="text-[10px] text-slate-500 uppercase font-medium leading-tight">{stop.address ?? ''}</p>
                           </div>
                        </div>
@@ -673,7 +705,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                       className="bg-orange-600 w-full" 
                       onClick={() => { 
                         setActiveLeg('return'); 
-                        setEditingStop({ id: "", name: "", address: "", province: "Buenos Aires", country: "Argentina", contact: "", phone: "", description: "", weightKg: 0, volumeM3: 0, units: 0, unitType: "Pallet", documents: [] }); 
+                        setEditingStop({ id: "", name: "", address: "", province: "Buenos Aires", country: "Argentina", contact: "", phone: "", description: "", weightKg: 0, volumeM3: 0, units: 0, unitType: "Pallet", documents: [], dockName: "" }); 
                         setIsStopModalOpen(true); 
                       }}
                     >
@@ -688,7 +720,10 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                            <div className="flex items-center gap-4">
                               <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-600 font-bold text-xs shrink-0">{idx + 1}</div>
                               <div>
-                                <p className="font-bold text-sm text-slate-800">{stop.name ?? ''}</p>
+                                <div className="flex items-center gap-2">
+                                   <p className="font-bold text-sm text-slate-800">{stop.name ?? ''}</p>
+                                   {stop.dockName && <Badge variant="outline" className="text-[8px] h-4 border-orange-200 text-orange-600 uppercase font-black"><Anchor size={8} className="mr-1" /> {stop.dockName}</Badge>}
+                                </div>
                                 <p className="text-[10px] text-slate-500 uppercase font-medium leading-tight">{stop.address ?? ''}</p>
                               </div>
                            </div>
@@ -705,10 +740,31 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                     <div className="flex items-center gap-2 text-orange-600 font-bold text-xs uppercase tracking-widest">
                       <div className="w-2 h-2 rounded-full bg-orange-600" /> Punto de Descarga Final (Retorno)
                     </div>
-                    <Select onValueChange={handleReturnDestSelect} value={formData.returnDestination?.id ?? ''}>
-                      <SelectTrigger className="bg-white border-orange-200"><SelectValue placeholder="Seleccionar destino final (Sede/Cliente)" /></SelectTrigger>
-                      <SelectContent>{locationsList.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent>
-                    </Select>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                       <div className="space-y-2">
+                        <Label className="text-[10px] uppercase font-bold text-slate-400">Seleccionar Ubicación Final</Label>
+                        <Select onValueChange={handleReturnDestSelect} value={formData.returnDestination?.id ?? ''}>
+                           <SelectTrigger className="bg-white border-orange-200"><SelectValue placeholder="Sede/Cliente" /></SelectTrigger>
+                           <SelectContent>{locationsList.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent>
+                        </Select>
+                       </div>
+
+                       {formData.returnDestination?.id && hubs?.find(h => h.id === formData.returnDestination?.id) && (
+                         <div className="space-y-2 animate-in fade-in">
+                            <Label className="text-[10px] uppercase font-bold text-orange-600 flex items-center gap-1"><Anchor size={10} /> Boca de Descarga</Label>
+                            <Select value={formData.returnDestination.dockName || ""} onValueChange={v => setFormData({...formData, returnDestination: {...formData.returnDestination!, dockName: v}})}>
+                               <SelectTrigger className="bg-white border-orange-200">
+                                  <SelectValue placeholder="Seleccionar Boca" />
+                               </SelectTrigger>
+                               <SelectContent>
+                                  {hubs.find(h => h.id === formData.returnDestination?.id)?.loadingBays?.map(bay => (
+                                    <SelectItem key={bay.id} value={bay.name}>{bay.name}</SelectItem>
+                                  ))}
+                               </SelectContent>
+                            </Select>
+                         </div>
+                       )}
+                    </div>
                   </div>
 
                   <div className="pt-6 border-t space-y-4">
@@ -835,7 +891,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                </div>
                <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-3">
                   <Zap className="text-blue-600 mt-1 shrink-0" size={18} />
-                  <p className="text-xs text-blue-700 leading-relaxed">Al confirmar, se generará la hoja de ruta digital para el conductor. Asegúrese de que todos los remitos estén cargados correctamente para evitar demoras en la fiscalización de ruta.</p>
+                  <p className="text-xs text-blue-700 leading-relaxed">Al confirmar, se generará la hoja de ruta digital para el conductor. Asegúrese de que todos los remitos estén cargados correctamente y se haya especificado la boca de carga/descarga en las sedes correspondientes.</p>
                </div>
             </CardContent>
             <CardFooter className="flex justify-end"><Button onClick={handleSubmit} className="bg-green-600 w-full sm:w-auto" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} {loadId ? 'Guardar Cambios' : 'Registrar Operación Completa'}</Button></CardFooter>
@@ -854,12 +910,31 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
 
           <div className="space-y-6 py-4">
             <div className="grid grid-cols-1 gap-4 p-4 bg-slate-50 rounded-xl border border-dashed">
-              <div className="space-y-2">
-                <Label>Seleccionar Ubicación</Label>
-                <Select onValueChange={handleStopLocationSelect} value={editingStop.locationId ?? ''}>
-                  <SelectTrigger className="bg-white"><SelectValue placeholder="Sede o Cliente" /></SelectTrigger>
-                  <SelectContent>{locationsList.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent>
-                </Select>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <div className="space-y-2">
+                  <Label>Seleccionar Ubicación</Label>
+                  <Select onValueChange={handleStopLocationSelect} value={editingStop.locationId ?? ''}>
+                     <SelectTrigger className="bg-white"><SelectValue placeholder="Sede o Cliente" /></SelectTrigger>
+                     <SelectContent>{locationsList.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                 </div>
+                 
+                 {/* BOCA DE CARGA PARA LA PARADA */}
+                 {editingStop.locationId && hubs?.find(h => h.id === editingStop.locationId) && (
+                   <div className="space-y-2 animate-in fade-in">
+                      <Label className="text-[10px] uppercase font-bold text-blue-600 flex items-center gap-1"><Anchor size={10} /> Boca de Carga / Descarga</Label>
+                      <Select value={editingStop.dockName || ""} onValueChange={v => setEditingStop({...editingStop, dockName: v})}>
+                         <SelectTrigger className="bg-white border-blue-200 h-9">
+                            <SelectValue placeholder="Elegir Boca" />
+                         </SelectTrigger>
+                         <SelectContent>
+                            {hubs.find(h => h.id === editingStop.locationId)?.loadingBays?.map(bay => (
+                              <SelectItem key={bay.id} value={bay.name}>{bay.name}</SelectItem>
+                            ))}
+                         </SelectContent>
+                      </Select>
+                   </div>
+                 )}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">

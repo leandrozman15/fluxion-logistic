@@ -83,6 +83,7 @@ export interface LoadLegStop {
   lat?: number;
   lng?: number;
   instructions?: string;
+  dockName?: string;
   
   // Cargo details for THIS specific stop
   description: string;
@@ -198,6 +199,12 @@ export interface Truck {
   costs?: TruckCosts;
 }
 
+export interface LoadingBay {
+  id: string;
+  name: string;
+  status: 'active' | 'maintenance' | 'occupied';
+}
+
 export interface Driver {
   id: string;
   docType: string;
@@ -251,6 +258,7 @@ export interface Hub {
   type: HubType;
   phone: string;
   isMainBase?: boolean;
+  loadingBays?: LoadingBay[];
   createdAt: any;
 }
 
@@ -328,6 +336,7 @@ export interface Load {
     instructions: string;
     lat?: number;
     lng?: number;
+    dockName?: string;
   };
 
   destination?: {
@@ -343,6 +352,7 @@ export interface Load {
     instructions: string;
     lat?: number;
     lng?: number;
+    dockName?: string;
   };
   
   outboundStops: LoadLegStop[];
@@ -361,6 +371,7 @@ export interface Load {
     instructions: string;
     lat?: number;
     lng?: number;
+    dockName?: string;
   };
 
   international?: {
