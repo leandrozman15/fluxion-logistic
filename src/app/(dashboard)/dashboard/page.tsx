@@ -308,8 +308,6 @@ export default function MonitorOperativoPage() {
                const efficiency = calculateEfficiency(load);
                const progress = tracking ? (tracking.distanceTraveledKm / (tracking.distanceTraveledKm + (tracking.distanceRemainingKm || 1))) * 100 : 0;
 
-               const loadHub = hubs?.find(h => h.id === load.origin.id);
-
                return (
                  <Collapsible 
                    key={load.id} 
@@ -619,7 +617,7 @@ export default function MonitorOperativoPage() {
               attribution='&copy; OpenStreetMap contributors'
             />
             
-            {hubIcon && hubs?.map((hub) => (
+            {L && hubs?.map((hub) => (
               <Marker key={hub.id} position={[hub.lat || -34.6, hub.lng || -58.3]} icon={hubIcon(!!hub.isMainBase)}>
                 <Popup>
                   <div className="p-1">
@@ -630,7 +628,7 @@ export default function MonitorOperativoPage() {
               </Marker>
             ))}
 
-            {clientIcon && clients?.filter(c => typeof c.address?.lat === 'number' && typeof c.address?.lng === 'number').map((client) => (
+            {L && clientIcon && clients?.filter(c => typeof c.address?.lat === 'number' && typeof c.address?.lng === 'number').map((client) => (
               <Marker key={client.id} position={[client.address.lat!, client.address.lng!]} icon={clientIcon}>
                 <Popup>
                   <div className="p-1">
@@ -641,7 +639,7 @@ export default function MonitorOperativoPage() {
               </Marker>
             ))}
 
-            {truckIcon && filteredAgenda.filter(l => (l.status === 'on_route' || l.status === 'on_pause') && l.tracking?.currentLat).map((load) => (
+            {L && truckIcon && filteredAgenda.filter(l => (l.status === 'on_route' || l.status === 'on_pause') && l.tracking?.currentLat).map((load) => (
               <Marker key={load.id} position={[load.tracking!.currentLat, load.tracking!.currentLng]} icon={truckIcon}>
                 <Popup>
                   <div className="p-1 font-bold text-sm">
