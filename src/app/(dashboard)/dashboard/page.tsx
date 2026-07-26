@@ -340,13 +340,26 @@ export default function MonitorOperativoPage() {
 
                  const driving = Math.round(tracking?.timeOnRouteMinutes || 0);
                  const stopped = Math.max(0, totalMin - driving);
+                 
+                 // RECONSTRUCCION DE TELEMETRIA SI LOS TOTALES VIENEN EN CERO
+                 let maxV = Math.round(tracking?.maxSpeed || 0);
+                 let fuel = tracking?.estimatedFuelLiters || 0;
+                 
+                 if (maxV === 0 && tracking?.history && tracking.history.length > 0) {
+                   maxV = Math.max(...tracking.history.map(p => p.speed || 0));
+                 }
+                 
+                 if (fuel === 0 && tracking?.distanceTraveledKm) {
+                   // Si no hay combustible pero hay distancia, estimamos: factor 32 L/100km
+                   fuel = (tracking.distanceTraveledKm * 32) / 100;
+                 }
 
                  return { 
                    total: totalMin,
                    driving, 
                    stopped, 
-                   maxV: Math.round(tracking?.maxSpeed || 0), 
-                   fuel: (tracking?.estimatedFuelLiters || 0).toFixed(1) 
+                   maxV, 
+                   fuel: fuel.toFixed(1) 
                  };
                };
 
