@@ -14,6 +14,7 @@ import {
 import { Load, Driver, Truck as TruckType } from "@/app/lib/types";
 import { QRCodeSVG } from "qrcode.react";
 import { format } from "date-fns";
+import { formatSafeDate } from "@/lib/utils/date-utils";
 
 export default function LoadOrderDocumentPage() {
   const { id } = useParams();
@@ -60,15 +61,14 @@ export default function LoadOrderDocumentPage() {
   const totalWeight = (load.outboundStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0) + 
                       (load.returnStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0);
 
-  const totalDocs = (load.outboundStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0) + 
-                    (load.returnStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0);
-
   return (
     <div className="min-h-screen bg-slate-200 py-10 print:bg-white print:py-0">
       <div className="max-w-5xl mx-auto space-y-6 print:space-y-0">
         <div className="flex justify-between items-center print:hidden px-4">
           <Button variant="ghost" onClick={() => router.back()} className="text-slate-600 bg-white shadow-sm border"><ArrowLeft className="mr-2 h-4 w-4" /> Volver al Panel</Button>
-          <Button onClick={() => window.print()} className="bg-blue-600 hover:bg-blue-700 shadow-md"><Printer className="mr-2 h-4 w-4" /> Imprimir Documento (A4)</Button>
+          <div className="flex gap-2">
+             <Button variant="outline" onClick={() => window.print()} className="shadow-md"><Printer className="mr-2 h-4 w-4" /> Imprimir Documento</Button>
+          </div>
         </div>
 
         <div className="bg-white shadow-2xl p-10 print:shadow-none min-h-[297mm] flex flex-col border border-slate-300 print:border-none rounded-sm">
@@ -160,26 +160,60 @@ export default function LoadOrderDocumentPage() {
             </div>
           </div>
 
-          {/* RESUMEN DE OPERACIÓN */}
+          {/* SECCIÓN DE FIRMAS Y CIERRE LEGAL */}
           <div className="mt-auto pt-6 border-t-2 border-slate-100">
-             <div className="flex justify-between items-end gap-10">
-                <div className="flex-1 space-y-10">
-                   <div className="flex gap-16">
-                      <div className="w-48 border-t-2 border-slate-900 pt-2 text-center">
-                         <p className="text-[9px] font-black uppercase italic">Firma Responsable Logística</p>
+             <div className="flex justify-between items-end gap-6">
+                <div className="flex-1">
+                   <div className="grid grid-cols-3 gap-8">
+                      {/* Firma Admin / Logística */}
+                      <div className="flex flex-col items-center">
+                         <div className="w-full h-24 border-b border-slate-300 flex items-end justify-center pb-1">
+                            <p className="text-[8px] text-slate-300 italic">Espacio para sello institucional</p>
+                         </div>
+                         <p className="text-[9px] font-black uppercase mt-2">Responsable Logística</p>
+                         <p className="text-[7px] text-slate-400 uppercase tracking-tighter">Emisión Digital Centralizada</p>
                       </div>
-                      <div className="w-48 border-t-2 border-slate-900 pt-2 text-center">
-                         <p className="text-[9px] font-black uppercase italic">Firma Transportista / Chofer</p>
+
+                      {/* Firma Conductor / Transportista (CAPTURA REAL) */}
+                      <div className="flex flex-col items-center">
+                         <div className="w-full h-24 border-b border-slate-300 flex items-center justify-center overflow-hidden">
+                            {load.proofOfDelivery?.driverSignatureUrl ? (
+                              <img src={load.proofOfDelivery.driverSignatureUrl} alt="Firma Chofer" className="max-h-full object-contain" />
+                            ) : (
+                              <div className="text-[8px] text-slate-200 font-bold border-2 border-dashed border-slate-100 p-4 rounded text-center">Firma Chofer al Cierre</div>
+                            )}
+                         </div>
+                         <p className="text-[9px] font-black uppercase mt-2">Transportista / Chofer</p>
+                         <p className="text-[7px] text-slate-400 uppercase tracking-tighter">{driver ? `${driver.lastName}, ${driver.firstName}` : 'Firma Digital Pendiente'}</p>
+                      </div>
+
+                      {/* Firma Receptor / Cliente (CAPTURA REAL) */}
+                      <div className="flex flex-col items-center">
+                         <div className="w-full h-24 border-b border-slate-300 flex items-center justify-center overflow-hidden">
+                            {load.proofOfDelivery?.receiverSignatureUrl ? (
+                              <img src={load.proofOfDelivery.receiverSignatureUrl} alt="Firma Receptor" className="max-h-full object-contain" />
+                            ) : (
+                              <div className="text-[8px] text-slate-200 font-bold border-2 border-dashed border-slate-100 p-4 rounded text-center">Firma Receptor en Destino</div>
+                            )}
+                         </div>
+                         <p className="text-[9px] font-black uppercase mt-2">Receptor Mercadería</p>
+                         <div className="text-center">
+                            <p className="text-[7px] text-slate-400 uppercase tracking-tighter">{load.proofOfDelivery?.receiverName || 'Aclaración Firma'}</p>
+                            {load.proofOfDelivery?.confirmedAt && (
+                              <p className="text-[6px] text-blue-600 font-bold">VALiDADO: {formatSafeDate(load.proofOfDelivery.confirmedAt)}</p>
+                            )}
+                         </div>
                       </div>
                    </div>
                 </div>
 
-                <div className="text-center space-y-2">
+                {/* QR DE VALIDACIÓN */}
+                <div className="text-center space-y-2 shrink-0">
                    <div className="p-2 border-2 border-slate-900 rounded bg-white">
                       <QRCodeSVG value={confirmationUrl} size={90} level="H" />
                    </div>
                    <div className="space-y-0">
-                    <p className="text-[8px] font-black uppercase tracking-tighter">Seguimiento Digital</p>
+                    <p className="text-[8px] font-black uppercase tracking-tighter">Validación Digital</p>
                     <p className="text-[6px] font-mono opacity-40">{load.id}</p>
                    </div>
                 </div>

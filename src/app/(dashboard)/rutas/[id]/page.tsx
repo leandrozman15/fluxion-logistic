@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -532,6 +531,10 @@ export default function RouteDetailPage() {
                                         </Button>
                                       </DialogTrigger>
                                       <DialogContent className="max-w-[90vw] rounded-2xl p-4">
+                                        <DialogHeader>
+                                          <DialogTitle>Firma del Receptor (Cliente)</DialogTitle>
+                                          <DialogDescription>Solicite al cliente que firme en el recuadro inferior.</DialogDescription>
+                                        </DialogHeader>
                                         <SignaturePad 
                                           title="Firma del Receptor (Cliente)" 
                                           onSave={(url) => { setPodData({...podData, receiverSignatureUrl: url}); }} 
@@ -562,6 +565,10 @@ export default function RouteDetailPage() {
                                         </Button>
                                       </DialogTrigger>
                                       <DialogContent className="max-w-[90vw] rounded-2xl p-4">
+                                        <DialogHeader>
+                                          <DialogTitle>Firma del Chofer / Transportista</DialogTitle>
+                                          <DialogDescription>Firme para validar su cierre de jornada.</DialogDescription>
+                                        </DialogHeader>
                                         <SignaturePad 
                                           title="Firma del Chofer / Transportista" 
                                           onSave={(url) => { setPodData({...podData, driverSignatureUrl: url}); }} 
