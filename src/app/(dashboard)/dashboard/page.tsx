@@ -59,7 +59,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { estimateFuelLiters } from "@/lib/utils/tracking-math";
-import { toSafeDate } from "@/lib/utils/date-utils";
+import { toSafeDate, formatSafeDate } from "@/lib/utils/date-utils";
 
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
@@ -350,7 +350,6 @@ export default function MonitorOperativoPage() {
                  }
                  
                  if (fuel === 0 && tracking?.distanceTraveledKm) {
-                   // Si no hay combustible pero hay distancia, estimamos: factor 32 L/100km
                    fuel = (tracking.distanceTraveledKm * 32) / 100;
                  }
 
@@ -566,11 +565,19 @@ export default function MonitorOperativoPage() {
                             <div className="space-y-3 relative pl-4 border-l-2 border-dashed border-blue-200 dark:border-blue-800">
                                <div className="relative">
                                   <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-blue-600 border-2 border-white dark:border-slate-900 shadow-sm"></div>
-                                  <div className="space-y-0.5">
+                                  <div className={cn(
+                                    "space-y-0.5 p-3 rounded-lg border transition-colors",
+                                    load.status === 'delivered' ? "bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800" : "bg-transparent border-transparent"
+                                  )}>
                                     <p className="text-[9px] font-black text-slate-400 uppercase">Carga Inicial</p>
-                                    <div className="flex items-center gap-2">
-                                       <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{load.origin.name}</p>
-                                       {load.origin.dockName && <Badge variant="outline" className="text-[8px] h-4 border-blue-200 text-blue-600 uppercase font-black px-1"><Anchor size={8} className="mr-0.5" /> {load.origin.dockName}</Badge>}
+                                    <div className="flex items-center justify-between">
+                                       <div className="flex items-center gap-2">
+                                          <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{load.origin.name}</p>
+                                          {load.origin.dockName && <Badge variant="outline" className="text-[7px] h-3 border-blue-200 text-blue-600 uppercase font-black px-1"><Anchor size={8} className="mr-0.5" /> {load.origin.dockName}</Badge>}
+                                       </div>
+                                       {load.status === 'delivered' && (
+                                          <span className="text-[9px] font-bold text-green-600 uppercase italic">Despachado</span>
+                                       )}
                                     </div>
                                     {load.status !== 'delivered' && load.dockEntryAuthorized && (
                                        <p className="text-[9px] font-black text-green-600 uppercase flex items-center gap-1 mt-1 bg-green-50 px-2 py-0.5 rounded-full w-fit border border-green-100"><CirclePlay size={10}/> Vía libre para ingresar</p>
@@ -580,16 +587,31 @@ export default function MonitorOperativoPage() {
                                {load.outboundStops?.map((stop, idx) => (
                                  <div key={stop.id} className="relative pt-2">
                                     <div className="absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full bg-white dark:bg-slate-800 border-2 border-blue-400 shadow-sm"></div>
-                                    <div className="bg-white dark:bg-slate-800/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm space-y-2">
+                                    <div className={cn(
+                                       "p-3 rounded-lg border shadow-sm space-y-2 transition-colors",
+                                       load.status === 'delivered' ? "bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-900/30" : "bg-white dark:bg-slate-800/50 border-slate-200 dark:border-slate-700"
+                                    )}>
                                        <div className="flex justify-between items-start">
                                           <div>
-                                             <p className="text-[10px] font-black text-blue-600 uppercase">Destino {idx + 1}</p>
+                                             <div className="flex items-center gap-2">
+                                                <p className="text-[10px] font-black text-blue-600 uppercase">Destino {idx + 1}</p>
+                                                {load.status === 'delivered' && (
+                                                   <Badge className="bg-green-600 text-white text-[7px] h-3 border-none px-1 uppercase font-black">Entregado</Badge>
+                                                )}
+                                             </div>
                                              <div className="flex items-center gap-2">
                                                 <p className="text-xs font-bold">{stop.name}</p>
                                                 {stop.dockName && <Badge variant="outline" className="text-[7px] h-3 border-blue-200 text-blue-600 uppercase font-black"><Anchor size={8} className="mr-0.5" /> {stop.dockName}</Badge>}
                                              </div>
                                           </div>
-                                          <Badge className="bg-blue-50 text-blue-600 text-[8px] border-blue-100">{stop.weightKg} Kg</Badge>
+                                          <div className="text-right">
+                                             <Badge className="bg-blue-50 text-blue-600 text-[8px] border-blue-100">{stop.weightKg} Kg</Badge>
+                                             {load.status === 'delivered' && load.proofOfDelivery?.confirmedAt && (
+                                                <p className="text-[8px] font-black text-green-600 mt-1 uppercase italic">
+                                                   Hora: {formatSafeDate(load.proofOfDelivery.confirmedAt, "HH:mm")} hs
+                                                </p>
+                                             )}
+                                          </div>
                                        </div>
                                        <div className="flex flex-wrap gap-1.5 pt-1">
                                           {stop.documents?.map(doc => (
