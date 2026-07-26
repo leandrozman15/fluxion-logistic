@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection } from "@/firebase";
-import { collection, serverTimestamp, doc, updateDoc, setDoc, query, orderBy } from "firebase/firestore";
+import { collection, serverTimestamp, doc, updateDoc, setDoc, query, orderBy, where } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,9 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Truck, ArrowLeft, ArrowRight, Save, Loader2, 
   Gauge, Box, Thermometer, Droplets, Anchor, Layers, 
-  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon, LayoutGrid, Users, Building2, User, DollarSign, Activity, TrendingUp, Wrench
+  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon, LayoutGrid, Users, Building2, User, DollarSign, Activity, TrendingUp, Wrench, Fuel
 } from "lucide-react";
-import { Truck as TruckType, Driver, OwnershipType, TruckCosts } from "@/app/lib/types";
+import { Truck as TruckType, Driver, OwnershipType, TruckCosts, Expense } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -112,6 +112,18 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
   , [db]);
 
   const { data: drivers } = useCollection<Driver>(driversQuery);
+
+  // Consulta de gastos reales de combustible para esta unidad
+  const fuelExpensesQuery = useMemo(() => {
+    if (!db || !truckId) return null;
+    return query(
+      collection(db, "global_expenses"), 
+      where("truckId", "==", truckId), 
+      where("category", "==", "fuel")
+    );
+  }, [db, truckId]);
+
+  const { data: fuelExpenses } = useCollection<Expense>(fuelExpensesQuery);
 
   useEffect(() => {
     if (existingTruck) {
@@ -212,7 +224,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
   };
 
   const calculations = useMemo(() => {
-    if (!formData.costs) return { fixedPerKm: 0, oilPerKm: 0, tiresPerKm: 0, totalPerKm: 0 };
+    if (!formData.costs) return { fixedPerKm: 0, oilPerKm: 0, tiresPerKm: 0, fuelPerKm: 0, totalPerKm: 0 };
     
     const costs = formData.costs;
     const kmMensuales = costs.operational.estimatedMonthlyKm || 1;
@@ -223,17 +235,29 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     const oilPerKm = costs.variable.preventiveMaintenance.cost / (costs.variable.preventiveMaintenance.frequencyKm || 1);
     const tiresPerKm = costs.variable.tires.costFullSet / (costs.variable.tires.lifeSpanKm || 1);
     const reservePerKm = costs.variable.unforeseenReservePerKm;
+
+    // Cálculo del Costo de Combustible basado en historial real
+    let fuelPerKm = 0;
+    if (fuelExpenses && fuelExpenses.length > 0) {
+      const validTickets = fuelExpenses.filter(e => !!e.pricePerLiter && e.pricePerLiter > 0);
+      if (validTickets.length > 0) {
+        const avgPrice = validTickets.reduce((acc, e) => acc + (e.pricePerLiter || 0), 0) / validTickets.length;
+        // Formula: Precio x Consumo / 100
+        fuelPerKm = (avgPrice * (formData.avgConsumption || 32)) / 100;
+      }
+    }
     
-    const totalPerKm = fixedPerKm + oilPerKm + tiresPerKm + reservePerKm;
+    const totalPerKm = fixedPerKm + oilPerKm + tiresPerKm + reservePerKm + fuelPerKm;
     
     return {
       fixedPerKm,
       oilPerKm,
       tiresPerKm,
       reservePerKm,
+      fuelPerKm,
       totalPerKm
     };
-  }, [formData.costs]);
+  }, [formData.costs, formData.avgConsumption, fuelExpenses]);
 
   if (loadingExisting && truckId) {
     return (
@@ -274,7 +298,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
             <div key={s.id} className="flex flex-col items-center gap-1.5 flex-1 relative">
               <div className={cn(
                 "w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold z-10 transition-all",
-                step > s.id ? "bg-green-500 text-white" : step === s.id ? "bg-blue-600 text-white shadow-md shadow-blue-100" : "bg-slate-50 text-slate-300 border"
+                step > s.id ? "bg-green-50 text-white" : step === s.id ? "bg-blue-600 text-white shadow-md shadow-blue-100" : "bg-slate-50 text-slate-300 border"
               )}>
                 {step > s.id ? <CheckCircle2 size={18} /> : <s.icon size={16} />}
               </div>
@@ -663,11 +687,17 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                              <span className="text-white/40 uppercase font-bold">Reserva Imprevistos</span>
                              <span className="font-mono font-bold">${calculations.reservePerKm.toFixed(2)}</span>
                           </div>
+                          
+                          {/* COSTO MEDIO DE COMBUSTIBLE REAL */}
+                          <div className="flex justify-between items-center text-xs p-2 bg-blue-500/10 rounded-lg border border-blue-500/20">
+                             <span className="text-blue-400 uppercase font-black flex items-center gap-1"><Fuel size={12} /> Combustible (Promedio Real)</span>
+                             <span className="font-mono font-bold text-blue-300">${calculations.fuelPerKm.toFixed(2)}</span>
+                          </div>
                        </div>
 
                        <div className="p-3 bg-white/5 border border-white/10 rounded-lg">
                           <p className="text-[9px] text-white/50 leading-relaxed italic">
-                            * Este valor NO incluye combustible, el cual se calcula dinámicamente según la ruta y carga.
+                            * El costo de combustible se calcula basándose en el historial de tickets registrados por el chofer y el consumo declarado de la unidad.
                           </p>
                        </div>
                     </CardContent>

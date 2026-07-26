@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -96,9 +95,9 @@ export default function TruckDetailPage() {
     });
   }, [maintenanceHistoryRaw]);
 
-  // Cálculos de Costos Teóricos
+  // Cálculos de Costos Teóricos incluyendo combustible real
   const costCalculation = useMemo(() => {
-    if (!truck?.costs) return { totalPerKm: 0, fixedPerKm: 0 };
+    if (!truck?.costs) return { totalPerKm: 0, fixedPerKm: 0, fuelPerKm: 0 };
     const costs = truck.costs;
     const kmMensuales = costs.operational.estimatedMonthlyKm || 1;
     
@@ -107,15 +106,27 @@ export default function TruckDetailPage() {
     const oilPerKm = costs.variable.preventiveMaintenance.cost / (costs.variable.preventiveMaintenance.frequencyKm || 1);
     const tiresPerKm = costs.variable.tires.costFullSet / (costs.variable.tires.lifeSpanKm || 1);
     const reservePerKm = costs.variable.unforeseenReservePerKm;
+
+    // Cálculo del Costo de Combustible basado en historial real
+    let fuelPerKm = 0;
+    if (fuelExpenses && fuelExpenses.length > 0) {
+      const validTickets = fuelExpenses.filter(e => !!e.pricePerLiter && e.pricePerLiter > 0);
+      if (validTickets.length > 0) {
+        const avgPrice = validTickets.reduce((acc, e) => acc + (e.pricePerLiter || 0), 0) / validTickets.length;
+        // Formula: Precio x Consumo / 100
+        fuelPerKm = (avgPrice * (truck.avgConsumption || 32)) / 100;
+      }
+    }
     
     return {
-      totalPerKm: fixedPerKm + oilPerKm + tiresPerKm + reservePerKm,
+      totalPerKm: fixedPerKm + oilPerKm + tiresPerKm + reservePerKm + fuelPerKm,
       fixedPerKm,
       oilPerKm,
       tiresPerKm,
-      reservePerKm
+      reservePerKm,
+      fuelPerKm
     };
-  }, [truck?.costs]);
+  }, [truck, fuelExpenses]);
 
   useEffect(() => {
     if (truck && !truck.documentation && truckRef) {
@@ -305,12 +316,12 @@ export default function TruckDetailPage() {
                </div>
                <div className="mt-4 pt-4 border-t border-white/5 space-y-2">
                   <div className="flex justify-between text-[10px] font-bold">
-                    <span className="text-white/30 uppercase">Fijos/KM</span>
-                    <span className="text-white/80">${costCalculation.fixedPerKm.toFixed(2)}</span>
+                    <span className="text-white/30 uppercase">Fijos + Variables/KM</span>
+                    <span className="text-white/80">${(costCalculation.fixedPerKm + costCalculation.oilPerKm + costCalculation.tiresPerKm + costCalculation.reservePerKm).toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between text-[10px] font-bold">
-                    <span className="text-white/30 uppercase">Variables/KM</span>
-                    <span className="text-white/80">${(costCalculation.oilPerKm + costCalculation.tiresPerKm + costCalculation.reservePerKm).toFixed(2)}</span>
+                  <div className="flex justify-between text-[10px] font-bold p-1 bg-blue-500/10 rounded">
+                    <span className="text-blue-400 uppercase font-black flex items-center gap-1"><Fuel size={10} /> Combustible/KM (Real)</span>
+                    <span className="text-blue-300 font-bold">${costCalculation.fuelPerKm.toFixed(2)}</span>
                   </div>
                </div>
             </CardContent>
@@ -522,8 +533,8 @@ export default function TruckDetailPage() {
                         </div>
                       </div>
                       <div className="p-3 bg-blue-50 rounded-lg flex justify-between items-center">
-                        <span className="text-[10px] uppercase font-black text-blue-700">KM Mensuales Est.</span>
-                        <span className="text-lg font-black text-blue-900">{truck.costs?.operational.estimatedMonthlyKm.toLocaleString()}</span>
+                        <span className="text-[10px] uppercase font-black text-blue-700">Combustible Real / KM</span>
+                        <span className="text-lg font-black text-blue-900">${costCalculation.fuelPerKm.toFixed(2)}</span>
                       </div>
                    </CardContent>
                  </Card>
