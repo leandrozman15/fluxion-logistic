@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { Sheet, SheetContent } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tooltip,
@@ -159,7 +159,7 @@ SidebarProvider.displayName = "SidebarProvider"
 const Sidebar = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div"> & {
-    side?: "left" | "right"
+    side?: "left" | "right" | undefined
     variant?: "sidebar" | "floating" | "inset"
     collapsible?: "offcanvas" | "icon" | "none"
   }
@@ -206,6 +206,10 @@ const Sidebar = React.forwardRef<
             }
             side={side}
           >
+            <SheetHeader className="sr-only">
+              <SheetTitle>Menú Lateral</SheetTitle>
+              <SheetDescription>Navegación principal del sistema</SheetDescription>
+            </SheetHeader>
             <div className="flex h-full w-full flex-col">{children}</div>
           </SheetContent>
         </Sheet>
@@ -452,7 +456,7 @@ SidebarGroupLabel.displayName = "SidebarGroupLabel"
 const SidebarGroupAction = React.forwardRef<
   HTMLButtonElement,
   React.ComponentProps<"button"> & { asChild?: boolean }
->(({ className, asChild = false, ...props }, ref) => {
+>(({ className, asChild = false, showOnHover = false, ...props }, ref) => {
   const Comp = asChild ? Slot : "button"
 
   return (
@@ -464,6 +468,8 @@ const SidebarGroupAction = React.forwardRef<
         // Increases the hit area of the button on mobile.
         "after:absolute after:-inset-2 after:md:hidden",
         "group-data-[collapsible=icon]:hidden",
+        showOnHover &&
+          "group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 data-[state=open]:opacity-100 peer-data-[active=true]/menu-button:text-sidebar-accent-foreground md:opacity-0",
         className
       )}
       {...props}

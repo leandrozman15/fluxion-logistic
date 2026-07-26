@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { calculateDistance, estimateFuelFactor } from "@/lib/utils/tracking-math";
 import { SignaturePad } from "@/components/SignaturePad";
 import { compressImage } from "@/lib/utils/image-compression";
+import React from 'react';
 
 // Cargamento dinámico del Mapa
 const MapContainer = dynamic(
@@ -845,5 +846,3 @@ export default function RouteDetailPage() {
     </div>
   );
 }
-
-import React from 'react';
