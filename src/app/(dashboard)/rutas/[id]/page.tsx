@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -190,7 +189,6 @@ export default function RouteDetailPage() {
         const currentMax = load.tracking?.maxSpeed || 0;
         const newMax = Math.max(currentMax, calculatedSpeed);
         
-        // Estimación de combustible consumido en este tramo (Litros/100km * Distancia / 100)
         const fuelFactor = estimateFuelFactor(calculatedSpeed);
         const fuelConsumidoEnTramo = (fuelFactor * distanceInc) / 100;
 
@@ -643,7 +641,7 @@ export default function RouteDetailPage() {
             <div className="flex gap-4">
               <div className="flex flex-col items-center">
                 <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2", load.status !== 'pending' && load.status !== 'assigned' ? 'bg-green-50 border-green-500 text-white' : 'bg-white border-slate-200 text-slate-400')}>
-                  {load.status !== 'pending' && load.status !== 'assigned' ? <CheckCircle2 size={16} /> : <Package size={16} />}
+                  {load.status !== 'pending' && load.status !== 'assigned' ? <CheckCircle2 size(16) /> : <Package size={16} />}
                 </div>
                 <div className="w-0.5 h-full bg-slate-100 min-h-[40px]"></div>
               </div>

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
@@ -183,7 +182,6 @@ export default function MonitorOperativoPage() {
       
       return false;
     }).sort((a, b) => {
-      // Priorizar en tránsito arriba
       const isAActive = a.status === 'on_route' || a.status === 'on_pause';
       const isBActive = b.status === 'on_route' || b.status === 'on_pause';
       if (isAActive && !isBActive) return -1;
@@ -325,7 +323,6 @@ export default function MonitorOperativoPage() {
                const efficiency = calculateEfficiency(load);
                const progress = tracking ? (tracking.distanceTraveledKm / (tracking.distanceTraveledKm + (tracking.distanceRemainingKm || 1))) * 100 : (load.status === 'delivered' ? 100 : 0);
 
-               // Cálculo de tiempos reconstruidos desde tripStartedAt
                const getReconstructedStats = () => {
                  const start = toSafeDate(tracking?.tripStartedAt);
                  const end = load.status === 'delivered' ? toSafeDate(load.proofOfDelivery?.confirmedAt) : new Date();
@@ -562,7 +559,7 @@ export default function MonitorOperativoPage() {
                                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{load.origin.name}</p>
                                        {load.origin.dockName && <Badge variant="outline" className="text-[8px] h-4 border-blue-200 text-blue-600 uppercase font-black px-1"><Anchor size={8} className="mr-0.5" /> {load.origin.dockName}</Badge>}
                                     </div>
-                                    {load.dockEntryAuthorized && (
+                                    {load.status !== 'delivered' && load.dockEntryAuthorized && (
                                        <p className="text-[9px] font-black text-green-600 uppercase flex items-center gap-1 mt-1 bg-green-50 px-2 py-0.5 rounded-full w-fit border border-green-100"><CirclePlay size={10}/> Vía libre para ingresar</p>
                                     )}
                                   </div>

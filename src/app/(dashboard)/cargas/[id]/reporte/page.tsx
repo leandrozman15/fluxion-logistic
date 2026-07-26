@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
@@ -81,7 +80,7 @@ export default function TripReportPage() {
 
     const avgSpeed = countSpeed > 0 ? sumSpeed / countSpeed : 0;
     
-    // Nueva lógica de Duración Total: Desde tripStartedAt hasta confirmedAt o Ahora
+    // Lógica de Duración Total: Desde tripStartedAt hasta confirmedAt o Ahora
     const start = toSafeDate(load.tracking?.tripStartedAt);
     const end = load.status === 'delivered' ? toSafeDate(load.proofOfDelivery?.confirmedAt) : new Date();
     
@@ -197,7 +196,7 @@ export default function TripReportPage() {
               <CardTitle className="text-sm flex items-center gap-2">
                 <BarChart3 className="text-blue-600" size={16} /> Perfil de Velocidad en Tiempo Real
               </CardTitle>
-              <CardDescription className="text-xs">Monitoreo de estabilidad y cumplimiento de límites legales.</CardDescription>
+              <CardDescription className="text-xs">Monoreo de estabilidad y cumplimiento de límites legales.</CardDescription>
             </CardHeader>
             <CardContent className="h-[300px] pt-6">
               <ResponsiveContainer width="100%" height="100%">
