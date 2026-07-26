@@ -4,7 +4,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, orderBy, deleteDoc, doc } from "firebase/firestore";
+import { collection, query, orderBy, deleteDoc, doc, where } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { 
   Truck, Plus, Search, MoreHorizontal, Trash2, Edit2, 
-  Gauge, Loader2, FileText, User, Wrench, Calendar, AlertTriangle
+  Gauge, Loader2, FileText, User, Wrench, Calendar, AlertTriangle, DollarSign, TrendingUp
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -23,7 +23,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Truck as TruckType, TruckStatus, Driver, Maintenance } from "@/app/lib/types";
+import { Truck as TruckType, TruckStatus, Driver, Maintenance, Expense } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -42,13 +42,20 @@ export default function FlotaPage() {
     return query(collection(db, "trucks"), orderBy("plate"));
   }, [db]);
 
-  const { data: trucks, loading } = useCollection<TruckType>(trucksQuery);
+  const { data: trucks, loading: trucksLoading } = useCollection<TruckType>(trucksQuery);
 
   const driversQuery = useMemo(() => db ? query(collection(db, "drivers")) : null, [db]);
   const { data: drivers } = useCollection<Driver>(driversQuery);
 
   const maintenanceQuery = useMemo(() => db ? query(collection(db, "maintenance")) : null, [db]);
   const { data: maintenanceRecords } = useCollection<Maintenance>(maintenanceQuery);
+
+  const fuelExpensesQuery = useMemo(() => {
+    if (!db) return null;
+    return query(collection(db, "global_expenses"), where("category", "==", "fuel"));
+  }, [db]);
+
+  const { data: fuelExpenses } = useCollection<Expense>(fuelExpensesQuery);
 
   const filteredTrucks = useMemo(() => {
     if (!trucks) return [];
@@ -98,6 +105,34 @@ export default function FlotaPage() {
     return truckMaintenances[0] || null;
   };
 
+  const calculateTheoreticalCost = (truck: TruckType) => {
+    if (!truck.costs) return 0;
+    const costs = truck.costs;
+    const kmMensuales = costs.operational.estimatedMonthlyKm || 1;
+    
+    // 1. Costo Fijo por KM
+    const sumFixed = Object.values(costs.fixed).reduce((a, b) => a + (b as number), 0);
+    const fixedPerKm = sumFixed / kmMensuales;
+    
+    // 2. Costos Variables por Ciclo
+    const oilPerKm = costs.variable.preventiveMaintenance.cost / (costs.variable.preventiveMaintenance.frequencyKm || 1);
+    const tiresPerKm = costs.variable.tires.costFullSet / (costs.variable.tires.lifeSpanKm || 1);
+    const reservePerKm = costs.variable.unforeseenReservePerKm;
+
+    // 3. Combustible Real Proyectado
+    let fuelPerKm = 0;
+    const truckFuel = fuelExpenses?.filter(e => e.truckId === truck.id);
+    if (truckFuel && truckFuel.length > 0) {
+      const validTickets = truckFuel.filter(e => !!e.pricePerLiter && e.pricePerLiter > 0);
+      if (validTickets.length > 0) {
+        const avgPrice = validTickets.reduce((acc, e) => acc + (e.pricePerLiter || 0), 0) / validTickets.length;
+        fuelPerKm = (avgPrice * (truck.avgConsumption || 32)) / 100;
+      }
+    }
+    
+    return fixedPerKm + oilPerKm + tiresPerKm + reservePerKm + fuelPerKm;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -108,6 +143,38 @@ export default function FlotaPage() {
         <Button className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100" onClick={() => router.push('/flota/nuevo')}>
           <Plus className="w-4 h-4 mr-2" /> Alta de Vehículo Pesado
         </Button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="bg-blue-50 border-blue-100 shadow-none">
+          <CardContent className="pt-4 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600"><Truck size={20} /></div>
+            <div>
+              <p className="text-[10px] uppercase font-bold text-blue-400">Total Unidades</p>
+              <p className="text-xl font-bold text-blue-700">{trucks?.length || 0}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-slate-900 border-none shadow-sm text-white">
+          <CardContent className="pt-4 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400"><TrendingUp size={20} /></div>
+            <div>
+              <p className="text-[10px] uppercase font-bold text-white/40">Costo Medio Flota / KM</p>
+              <p className="text-xl font-bold text-blue-400">
+                ${(trucks?.reduce((acc, t) => acc + calculateTheoreticalCost(t), 0) || 0 / (trucks?.length || 1)).toFixed(2)}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-orange-50 border-orange-100 shadow-none">
+          <CardContent className="pt-4 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600"><Wrench size={20} /></div>
+            <div>
+              <p className="text-[10px] uppercase font-bold text-orange-400">En Taller</p>
+              <p className="text-xl font-bold text-orange-700">{trucks?.filter(t => t.status === 'maintenance').length || 0}</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Card className="border-none shadow-sm overflow-hidden">
@@ -129,17 +196,17 @@ export default function FlotaPage() {
         </div>
 
         <CardContent className="p-0">
-          {loading ? (
+          {trucksLoading ? (
             <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="bg-slate-50/50">
                   <TableHead>Unidad / Marca</TableHead>
                   <TableHead>Titularidad / Chofer</TableHead>
                   <TableHead>Kilometraje</TableHead>
+                  <TableHead>Costo / KM</TableHead>
                   <TableHead>Documentación</TableHead>
-                  <TableHead>Service Programado</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
@@ -152,7 +219,7 @@ export default function FlotaPage() {
                     const docCount = truck.documentation?.length || 0;
                     const validDocs = truck.documentation?.filter(d => d.status === 'valid').length || 0;
                     const isCritical = truck.documentation?.some(d => d.status === 'expired');
-                    const nextService = getNextServiceInfo(truck.id);
+                    const costPerKm = calculateTheoreticalCost(truck);
 
                     return (
                       <TableRow key={truck.id} className="cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => router.push(`/flota/${truck.id}`)}>
@@ -179,29 +246,13 @@ export default function FlotaPage() {
                           </div>
                         </TableCell>
                         <TableCell><div className="flex items-center gap-2"><Gauge size={14} className="text-slate-400" /><span className="font-mono font-bold text-slate-700">{(truck.odometerKm || 0).toLocaleString()} km</span></div></TableCell>
-                        <TableCell><div className="flex items-center gap-2"><Progress value={docCount > 0 ? (validDocs / docCount) * 100 : 0} className="h-1.5 w-16" /><span className={cn("text-[10px] font-bold", isCritical ? "text-red-600" : "text-slate-500")}>{validDocs}/{docCount}</span></div></TableCell>
                         <TableCell>
-                           {nextService ? (
-                             <div className="flex flex-col gap-1">
-                                <div className={cn(
-                                  "flex items-center gap-1 text-[10px] font-bold uppercase",
-                                  nextService.status === 'in_progress' ? "text-orange-600" : "text-blue-600"
-                                )}>
-                                  <Wrench size={10} /> {nextService.type}
-                                </div>
-                                <div className={cn(
-                                  "text-xs font-black flex items-center gap-1",
-                                  isBefore(parseISO(nextService.scheduledDate), new Date()) ? "text-red-600" : 
-                                  differenceInDays(parseISO(nextService.scheduledDate), new Date()) < 7 ? "text-orange-500" : "text-slate-700"
-                                )}>
-                                   <Calendar size={12} /> {format(parseISO(nextService.scheduledDate), "dd/MM/yy")}
-                                   {isBefore(parseISO(nextService.scheduledDate), new Date()) && <AlertTriangle size={10} className="animate-pulse" />}
-                                </div>
-                             </div>
-                           ) : (
-                             <span className="text-[10px] text-slate-300 italic">Sin programar</span>
-                           )}
+                           <div className="flex flex-col">
+                              <span className="text-sm font-black text-blue-600">${costPerKm.toFixed(2)}</span>
+                              <span className="text-[8px] uppercase font-bold text-slate-400 tracking-tighter">Costo Teórico</span>
+                           </div>
                         </TableCell>
+                        <TableCell><div className="flex items-center gap-2"><Progress value={docCount > 0 ? (validDocs / docCount) * 100 : 0} className="h-1.5 w-16" /><span className={cn("text-[10px] font-bold", isCritical ? "text-red-600" : "text-slate-500")}>{validDocs}/{docCount}</span></div></TableCell>
                         <TableCell>{getStatusBadge(truck.status)}</TableCell>
                         <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                           <DropdownMenu>
