@@ -59,6 +59,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { estimateFuelLiters } from "@/lib/utils/tracking-math";
 
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
@@ -324,29 +325,45 @@ export default function MonitorOperativoPage() {
                const progress = tracking ? (tracking.distanceTraveledKm / (tracking.distanceTraveledKm + (tracking.distanceRemainingKm || 1))) * 100 : (load.status === 'delivered' ? 100 : 0);
 
                // Cálculo de tiempos reconstruidos si están en 0
-               const getReconstructedTimes = () => {
+               const getReconstructedStats = () => {
                  let driving = tracking?.timeOnRouteMinutes || 0;
                  let stopped = tracking?.timeStoppedMinutes || 0;
+                 let maxV = tracking?.maxSpeed || 0;
+                 let fuel = tracking?.estimatedFuelLiters || 0;
                  const history = tracking?.history || [];
-                 if (driving === 0 && history.length > 1) {
-                   let movingAcc = 0;
-                   for (let i = 1; i < history.length; i++) {
-                     if (history[i].speed > 5) {
-                       const t1 = new Date(history[i-1].timestamp).getTime();
-                       const t2 = new Date(history[i].timestamp).getTime();
-                       movingAcc += (t2 - t1) / (1000 * 60);
+                 
+                 if (history.length > 1) {
+                   if (driving === 0) {
+                     let movingAcc = 0;
+                     for (let i = 1; i < history.length; i++) {
+                       if (history[i].speed > 5) {
+                         const t1 = new Date(history[i-1].timestamp).getTime();
+                         const t2 = new Date(history[i].timestamp).getTime();
+                         movingAcc += (t2 - t1) / (1000 * 60);
+                       }
                      }
+                     driving = movingAcc;
+                     const first = new Date(history[0].timestamp).getTime();
+                     const last = new Date(history[history.length - 1].timestamp).getTime();
+                     const total = (last - first) / (1000 * 60);
+                     stopped = Math.max(0, total - movingAcc);
                    }
-                   driving = movingAcc;
-                   const first = new Date(history[0].timestamp).getTime();
-                   const last = new Date(history[history.length - 1].timestamp).getTime();
-                   const total = (last - first) / (1000 * 60);
-                   stopped = Math.max(0, total - movingAcc);
+                   if (maxV === 0) {
+                     maxV = Math.max(...history.map(p => p.speed || 0));
+                   }
+                   if (fuel === 0) {
+                     fuel = estimateFuelLiters(tracking?.distanceTraveledKm || 0, truck?.avgConsumption || 32);
+                   }
                  }
-                 return { driving: Math.round(driving), stopped: Math.round(stopped) };
+                 return { 
+                   driving: Math.round(driving), 
+                   stopped: Math.round(stopped), 
+                   maxV: Math.round(maxV), 
+                   fuel: fuel.toFixed(1) 
+                 };
                };
 
-               const times = getReconstructedTimes();
+               const times = getReconstructedStats();
 
                return (
                  <Collapsible 
@@ -512,13 +529,13 @@ export default function MonitorOperativoPage() {
                                 <Card className="bg-white dark:bg-slate-800 shadow-none border-slate-200">
                                   <CardContent className="p-3 text-center">
                                     <p className="text-[8px] font-black text-slate-400 uppercase">Velocidad Máx.</p>
-                                    <p className="text-xl font-black text-blue-600">{tracking?.maxSpeed || 0} <span className="text-[10px] font-normal opacity-50">km/h</span></p>
+                                    <p className="text-xl font-black text-blue-600">{times.maxV} <span className="text-[10px] font-normal opacity-50">km/h</span></p>
                                   </CardContent>
                                 </Card>
                                 <Card className="bg-white dark:bg-slate-800 shadow-none border-slate-200">
                                   <CardContent className="p-3 text-center">
                                     <p className="text-[8px] font-black text-slate-400 uppercase">Combustible Est.</p>
-                                    <p className="text-xl font-black text-green-600">{tracking?.estimatedFuelLiters?.toFixed(1) || 0} <span className="text-[10px] font-normal opacity-50">L</span></p>
+                                    <p className="text-xl font-black text-green-600">{times.fuel} <span className="text-[10px] font-normal opacity-50">L</span></p>
                                   </CardContent>
                                 </Card>
                               </div>
@@ -754,4 +771,3 @@ export default function MonitorOperativoPage() {
     </div>
   );
 }
-

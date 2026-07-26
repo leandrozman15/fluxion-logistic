@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -24,11 +25,11 @@ import {
   Anchor,
   CirclePlay,
   XCircle
-} from "lucide-react";
+} from "lucide-round";
 import { Load, Expense, ExpenseCategory, LoadStatus, TrackingPoint } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { calculateDistance } from "@/lib/utils/tracking-math";
+import { calculateDistance, estimateFuelFactor } from "@/lib/utils/tracking-math";
 import { SignaturePad } from "@/components/SignaturePad";
 
 // Cargamento dinámico del Mapa
@@ -159,7 +160,7 @@ export default function RouteDetailPage() {
   }, [load]);
 
   useEffect(() => {
-    if (!gpsActive || !loadRef || typeof window === 'undefined' || !navigator.geolocation) {
+    if (!gpsActive || !loadRef || !load || typeof window === 'undefined' || !navigator.geolocation) {
       return;
     }
 
@@ -175,17 +176,24 @@ export default function RouteDetailPage() {
         let timeDiffMinutes = (now - (lastPosRef.current?.timestamp || lastUpdateRef.current || now)) / (1000 * 60);
         
         // Evitar saltos irreales de tiempo
-        if (timeDiffMinutes > 15) timeDiffMinutes = 0.16; // Reset if long time gap
+        if (timeDiffMinutes > 15) timeDiffMinutes = 0.16; 
 
         if (lastPosRef.current) {
           distanceInc = calculateDistance(lastPosRef.current.lat, lastPosRef.current.lng, latitude, longitude);
           if (speed === null || speed === 0) {
             const timeDiffHours = (now - lastPosRef.current.timestamp) / (1000 * 3600);
-            calculatedSpeed = distanceInc / timeDiffHours;
+            if (timeDiffHours > 0) calculatedSpeed = distanceInc / timeDiffHours;
           }
         }
 
         const isMoving = calculatedSpeed > 5;
+        const currentMax = load.tracking?.maxSpeed || 0;
+        const newMax = Math.max(currentMax, calculatedSpeed);
+        
+        // Estimación de combustible consumido en este tramo (Litros/100km * Distancia / 100)
+        const fuelFactor = estimateFuelFactor(calculatedSpeed);
+        const fuelConsumidoEnTramo = (fuelFactor * distanceInc) / 100;
+
         const newPoint: TrackingPoint = {
           lat: latitude,
           lng: longitude,
@@ -197,10 +205,12 @@ export default function RouteDetailPage() {
           "tracking.currentLat": latitude,
           "tracking.currentLng": longitude,
           "tracking.currentSpeed": Math.round(calculatedSpeed),
+          "tracking.maxSpeed": Math.round(newMax),
           "tracking.distanceTraveledKm": increment(distanceInc),
           "tracking.distanceRemainingKm": increment(-distanceInc),
           "tracking.timeOnRouteMinutes": increment(isMoving ? timeDiffMinutes : 0),
           "tracking.timeStoppedMinutes": increment(isMoving ? 0 : timeDiffMinutes),
+          "tracking.estimatedFuelLiters": increment(fuelConsumidoEnTramo),
           "tracking.lastUpdateAt": serverTimestamp(),
           "tracking.history": arrayUnion(newPoint),
           updatedAt: serverTimestamp()
@@ -216,7 +226,7 @@ export default function RouteDetailPage() {
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [gpsActive, loadRef]);
+  }, [gpsActive, loadRef, load]);
 
   const openNativeNavigator = () => {
     const lat = displayDestination.lat;
@@ -238,6 +248,8 @@ export default function RouteDetailPage() {
         currentSpeed: 0,
         timeOnRouteMinutes: 0,
         timeStoppedMinutes: 0,
+        maxSpeed: 0,
+        estimatedFuelLiters: 0,
         history: [],
         alerts: []
       };
