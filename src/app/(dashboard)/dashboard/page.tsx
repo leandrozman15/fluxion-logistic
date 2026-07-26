@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
@@ -160,12 +161,15 @@ export default function MonitorOperativoPage() {
     if (!loads) return [];
     
     return loads.filter(l => {
-      if (l.status === 'on_route' || l.status === 'on_pause') return true;
+      const updateDate = l.updatedAt?.seconds ? new Date(l.updatedAt.seconds * 1000) : new Date(l.updatedAt);
+      const isUpdatedToday = isToday(updateDate);
+
       if (agendaTab === 'active') return l.status === 'on_route' || l.status === 'on_pause';
-      if (agendaTab === 'today') return l.pickupDate === todayStr && l.status !== 'delivered' && l.status !== 'cancelled';
+      if (agendaTab === 'finished') return l.status === 'delivered' && isUpdatedToday;
+      if (agendaTab === 'today') return l.pickupDate === todayStr && l.status !== 'cancelled';
       if (agendaTab === 'tomorrow') return l.pickupDate === tomorrowStr && l.status !== 'cancelled';
       if (agendaTab === 'week') {
-        return l.pickupDate >= todayStr && l.pickupDate <= nextWeekStr && l.status !== 'delivered' && l.status !== 'cancelled';
+        return l.pickupDate >= todayStr && l.pickupDate <= nextWeekStr && l.status !== 'cancelled';
       }
       return false;
     }).sort((a, b) => {
@@ -241,7 +245,7 @@ export default function MonitorOperativoPage() {
   };
 
   const calculateEfficiency = (load: Load) => {
-    if (load.status !== 'on_route' && load.status !== 'on_pause') return 100;
+    if (load.status === 'delivered') return 100;
     const alerts = load.tracking?.alerts?.length || 0;
     const base = 100;
     const speedPenalty = (load.tracking?.maxSpeed || 0) > 90 ? 15 : 0;
@@ -291,6 +295,7 @@ export default function MonitorOperativoPage() {
                <TabsList className="bg-white dark:bg-slate-800 border h-9">
                  <TabsTrigger value="active" className="text-[10px] font-bold uppercase">En Curso</TabsTrigger>
                  <TabsTrigger value="today" className="text-[10px] font-bold uppercase">Hoy</TabsTrigger>
+                 <TabsTrigger value="finished" className="text-[10px] font-bold uppercase">Finalizados Hoy</TabsTrigger>
                  <TabsTrigger value="tomorrow" className="text-[10px] font-bold uppercase">Mañana</TabsTrigger>
                  <TabsTrigger value="week" className="text-[10px] font-bold uppercase">Semana</TabsTrigger>
                </TabsList>
@@ -306,7 +311,32 @@ export default function MonitorOperativoPage() {
                const tracking = load.tracking;
                const destination = load.outboundStops?.[load.outboundStops.length - 1]?.name || 'S/D';
                const efficiency = calculateEfficiency(load);
-               const progress = tracking ? (tracking.distanceTraveledKm / (tracking.distanceTraveledKm + (tracking.distanceRemainingKm || 1))) * 100 : 0;
+               const progress = tracking ? (tracking.distanceTraveledKm / (tracking.distanceTraveledKm + (tracking.distanceRemainingKm || 1))) * 100 : (load.status === 'delivered' ? 100 : 0);
+
+               // Cálculo de tiempos reconstruidos si están en 0
+               const getReconstructedTimes = () => {
+                 let driving = tracking?.timeOnRouteMinutes || 0;
+                 let stopped = tracking?.timeStoppedMinutes || 0;
+                 const history = tracking?.history || [];
+                 if (driving === 0 && history.length > 1) {
+                   let movingAcc = 0;
+                   for (let i = 1; i < history.length; i++) {
+                     if (history[i].speed > 5) {
+                       const t1 = new Date(history[i-1].timestamp).getTime();
+                       const t2 = new Date(history[i].timestamp).getTime();
+                       movingAcc += (t2 - t1) / (1000 * 60);
+                     }
+                   }
+                   driving = movingAcc;
+                   const first = new Date(history[0].timestamp).getTime();
+                   const last = new Date(history[history.length - 1].timestamp).getTime();
+                   const total = (last - first) / (1000 * 60);
+                   stopped = Math.max(0, total - movingAcc);
+                 }
+                 return { driving: Math.round(driving), stopped: Math.round(stopped) };
+               };
+
+               const times = getReconstructedTimes();
 
                return (
                  <Collapsible 
@@ -324,10 +354,12 @@ export default function MonitorOperativoPage() {
                            "w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border transition-all shadow-sm",
                            load.status === 'on_route' ? "bg-blue-600 text-white border-blue-400" : 
                            load.status === 'on_pause' ? "bg-orange-50 text-white border-orange-300" :
+                           load.status === 'delivered' ? "bg-green-100 text-green-600 border-green-200" :
                            "bg-white dark:bg-slate-800 text-slate-400 border-slate-200"
                          )}>
                            {load.status === 'on_route' ? <Navigation size={24} className="animate-pulse" /> : 
-                            load.status === 'on_pause' ? <History size={24} /> : <Clock size={24} />}
+                            load.status === 'on_pause' ? <History size={24} /> : 
+                            load.status === 'delivered' ? <CheckCircle2 size={24} /> : <Clock size={24} />}
                          </div>
                          
                          <div className="space-y-1 min-w-0 flex-1">
@@ -347,6 +379,8 @@ export default function MonitorOperativoPage() {
                                    <div className="h-2 w-2 rounded-full bg-orange-500"></div>
                                    <Badge className="text-[8px] bg-orange-500 text-white border-none px-2 h-4 uppercase font-bold">PAUSA: {tracking?.lastPauseType || 'Descanso'}</Badge>
                                 </div>
+                              ) : load.status === 'delivered' ? (
+                                <Badge className="text-[8px] bg-green-600 text-white border-none px-2 h-4 uppercase font-bold">Entregada</Badge>
                               ) : (
                                 <Badge variant="outline" className="text-[8px] uppercase font-black text-slate-400 h-4 border-slate-300">{load.status.replace('_', ' ')}</Badge>
                               )}
@@ -382,6 +416,8 @@ export default function MonitorOperativoPage() {
                                   <p className="text-xs font-black text-green-600 dark:text-green-400 flex items-center gap-1">
                                     <Clock size={10} /> {calculateETA(tracking.distanceRemainingKm, tracking.currentSpeed)}
                                   </p>
+                               ) : load.status === 'delivered' ? (
+                                  <p className="text-xs font-bold text-green-600 italic">Misión Cumplida</p>
                                ) : (
                                   <p className="text-xs font-bold text-slate-400 italic">Programado</p>
                                )}
@@ -404,10 +440,10 @@ export default function MonitorOperativoPage() {
                             <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Tiempo de Jornada</p>
                             <div className="space-y-0.5">
                                <p className="text-xs font-bold text-blue-600 flex items-center gap-1">
-                                  <Timer size={10} /> {tracking?.timeOnRouteMinutes || 0} min <span className="text-[8px] font-normal opacity-50">Conducción</span>
+                                  <Timer size={10} /> {times.driving} min <span className="text-[8px] font-normal opacity-50">Conducción</span>
                                </p>
                                <p className="text-[9px] font-bold text-slate-500 flex items-center gap-1">
-                                 <History size={10} /> {tracking?.timeStoppedMinutes || 0} min <span className="text-[8px] font-normal opacity-50">Parado</span>
+                                 <History size={10} /> {times.stopped} min <span className="text-[8px] font-normal opacity-50">Parado</span>
                                </p>
                             </div>
                          </div>
@@ -457,7 +493,7 @@ export default function MonitorOperativoPage() {
 
                    <CollapsibleContent className="bg-slate-50 dark:bg-slate-900/80 border-t border-slate-200 dark:border-slate-800 p-6 animate-in slide-in-from-top-2">
                       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                         {(load.status === 'on_route' || load.status === 'on_pause') && (
+                         {(load.status === 'on_route' || load.status === 'on_pause' || load.status === 'delivered') && (
                            <div className="space-y-4 lg:border-r pr-6">
                               <h4 className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-2 tracking-widest">
                                  <Zap size={14} /> Telemetría GPS Nativa
@@ -465,8 +501,8 @@ export default function MonitorOperativoPage() {
                               <div className="grid grid-cols-2 gap-4">
                                 <Card className="bg-white dark:bg-slate-800 shadow-none border-slate-200">
                                   <CardContent className="p-3 text-center">
-                                    <p className="text-[8px] font-black text-slate-400 uppercase">Velocidad Actual</p>
-                                    <p className="text-xl font-black text-blue-600">{tracking?.currentSpeed || 0} <span className="text-[10px] font-normal opacity-50">km/h</span></p>
+                                    <p className="text-[8px] font-black text-slate-400 uppercase">Velocidad Máx.</p>
+                                    <p className="text-xl font-black text-blue-600">{tracking?.maxSpeed || 0} <span className="text-[10px] font-normal opacity-50">km/h</span></p>
                                   </CardContent>
                                 </Card>
                                 <Card className="bg-white dark:bg-slate-800 shadow-none border-slate-200">
@@ -478,22 +514,22 @@ export default function MonitorOperativoPage() {
                               </div>
                               <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 space-y-2">
                                 <p className="text-[9px] font-black text-slate-400 uppercase flex justify-between">
-                                  Último Reporte GPS 
-                                  <span>{tracking?.lastUpdateAt ? formatDistanceToNow(tracking.lastUpdateAt.toDate ? tracking.lastUpdateAt.toDate() : new Date(tracking.lastUpdateAt), { addSuffix: true, locale: es }) : 'S/D'}</span>
+                                  Estado Final GPS 
+                                  <span>{tracking?.lastUpdateAt ? formatDistanceToNow(tracking.lastUpdateAt.toDate ? tracking.lastUpdateAt.toDate() : new Date(tracking.lastUpdateAt), { addSuffix: true, locale: es }) : 'Finalizado'}</span>
                                 </p>
                                 <div className="h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                                   <div className="h-full bg-blue-500" style={{ width: `${progress}%` }}></div>
                                 </div>
                                 <Button variant="outline" size="sm" className="w-full text-[10px] font-bold" asChild>
-                                   <Link href={`/tracking/${load.id}`}>
-                                      <Globe size={12} className="mr-1" /> VER MAPA EN VIVO
+                                   <Link href={load.status === 'delivered' ? `/cargas/${load.id}/reporte` : `/tracking/${load.id}`}>
+                                      <Globe size={12} className="mr-1" /> {load.status === 'delivered' ? 'VER REPORTE FINAL' : 'VER MAPA EN VIVO'}
                                    </Link>
                                 </Button>
                               </div>
                            </div>
                          )}
 
-                         <div className={cn("space-y-4", (load.status !== 'on_route' && load.status !== 'on_pause') && "lg:col-span-2")}>
+                         <div className={cn("space-y-4", (load.status !== 'on_route' && load.status !== 'on_pause' && load.status !== 'delivered') && "lg:col-span-2")}>
                             <h4 className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-2 tracking-widest">
                                <Navigation size={14} /> Tramo 1: Hoja de Ruta (Ida)
                             </h4>
