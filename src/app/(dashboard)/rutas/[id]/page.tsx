@@ -405,8 +405,8 @@ export default function RouteDetailPage() {
   if (!load) return <div className="p-10 text-center">Viaje no encontrado.</div>;
 
   return (
-    <div className="max-w-md mx-auto space-y-6 pb-32">
-      <div className="flex items-center justify-between">
+    <div className="max-w-md mx-auto space-y-6 pb-32 px-2">
+      <div className="flex items-center justify-between pt-4">
         <Button variant="ghost" size="icon" onClick={() => router.back()}><ArrowLeft /></Button>
         <div className="text-center">
           <h1 className="font-bold text-lg">Asistente de Viaje</h1>
@@ -435,7 +435,7 @@ export default function RouteDetailPage() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 bg-slate-100 dark:bg-slate-800 p-1">
+        <TabsList className="grid w-full grid-cols-4 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
           <TabsTrigger value="mission" className="text-[10px] uppercase font-bold">Misión</TabsTrigger>
           <TabsTrigger value="time" className="text-[10px] uppercase font-bold">Tiempo</TabsTrigger>
           <TabsTrigger value="incidents" className="text-[10px] uppercase font-bold">Alertas</TabsTrigger>
@@ -443,7 +443,7 @@ export default function RouteDetailPage() {
         </TabsList>
 
         <TabsContent value="mission" className="space-y-6 animate-in fade-in">
-          <Card className="bg-slate-900 text-white border-none overflow-hidden relative">
+          <Card className="bg-slate-900 text-white border-none overflow-hidden relative rounded-3xl">
             <CardContent className="p-6 text-center space-y-4">
               <div className="space-y-1">
                 <p className="text-[10px] uppercase font-bold text-white/50 tracking-widest">Estado Operativo</p>
@@ -451,23 +451,23 @@ export default function RouteDetailPage() {
               </div>
               <div className="flex flex-col gap-2">
                 {(load.status === 'assigned' || load.status === 'pending') && (
-                  <Button className="w-full bg-blue-600 h-14 text-lg font-bold shadow-lg" onClick={handleStartTrip} disabled={isUpdating}>
+                  <Button className="w-full bg-blue-600 h-14 text-lg font-bold shadow-lg rounded-2xl" onClick={handleStartTrip} disabled={isUpdating}>
                     INICIAR VIAJE
                   </Button>
                 )}
                 {load.status === 'on_pause' && (
-                  <Button className="w-full bg-orange-600 h-14 text-lg font-bold shadow-lg flex items-center justify-center gap-2" onClick={handleResumeTrip} disabled={isUpdating}>
+                  <Button className="w-full bg-orange-600 h-14 text-lg font-bold shadow-lg flex items-center justify-center gap-2 rounded-2xl" onClick={handleResumeTrip} disabled={isUpdating}>
                     <PlayCircle size={24} /> REANUDAR VIAJE
                   </Button>
                 )}
                 {load.status === 'on_route' && (
                   <div className="flex flex-col gap-3">
                     <div className="grid grid-cols-2 gap-2">
-                       <div className="p-3 bg-white/5 border border-white/10 rounded-xl">
+                       <div className="p-3 bg-white/5 border border-white/10 rounded-2xl">
                           <p className="text-[9px] uppercase font-bold text-white/40">Velocidad</p>
                           <p className="text-xl font-black">{load.tracking?.currentSpeed || 0} <span className="text-[10px] font-normal opacity-50">km/h</span></p>
                        </div>
-                       <div className="p-3 bg-white/5 border border-white/10 rounded-xl">
+                       <div className="p-3 bg-white/5 border border-white/10 rounded-2xl">
                           <p className="text-[9px] uppercase font-bold text-white/40">Recorrido</p>
                           <p className="text-xl font-black">{load.tracking?.distanceTraveledKm?.toFixed(2) || 0} <span className="text-[10px] font-normal text-slate-400">km</span></p>
                        </div>
@@ -476,35 +476,35 @@ export default function RouteDetailPage() {
                     <div className="flex gap-2">
                       <Dialog open={isPauseDialogOpen} onOpenChange={setIsPauseDialogOpen}>
                         <DialogTrigger asChild>
-                          <Button variant="outline" className="flex-1 h-14 border-orange-500 text-orange-600 font-bold shadow-sm">
-                            <PauseCircle className="mr-2" /> REGISTRAR PARADA
+                          <Button variant="outline" className="flex-1 h-14 border-orange-500 text-orange-600 font-bold shadow-sm rounded-2xl">
+                            <PauseCircle className="mr-2" /> PARAR
                           </Button>
                         </DialogTrigger>
-                        <DialogContent className="max-w-[95vw] rounded-2xl">
+                        <DialogContent className="max-w-[95vw] rounded-3xl">
                           <DialogHeader>
                             <DialogTitle>Registrar Parada</DialogTitle>
                             <DialogDescription>Indique el motivo de la detención actual.</DialogDescription>
                           </DialogHeader>
                           <div className="grid grid-cols-1 gap-3 py-4">
-                            <Button variant="outline" className="h-16 flex items-center justify-start px-6 gap-4" onClick={() => { handleStartPause('COMIDA'); setIsPauseDialogOpen(false); }}>
+                            <Button variant="outline" className="h-16 flex items-center justify-start px-6 gap-4 rounded-2xl" onClick={() => { handleStartPause('COMIDA'); setIsPauseDialogOpen(false); }}>
                               <Utensils className="text-orange-500" />
                               <div className="text-left">
                                 <p className="font-bold text-sm">Comida</p>
                                 <p className="text-[10px] text-slate-500">Parada para almuerzo/cena</p>
                               </div>
                             </Button>
-                            <Button variant="outline" className="h-16 flex items-center justify-start px-6 gap-4" onClick={() => { handleStartPause('DESCANSO'); setIsPauseDialogOpen(false); }}>
+                            <Button variant="outline" className="h-16 flex items-center justify-start px-6 gap-4 rounded-2xl" onClick={() => { handleStartPause('DESCANSO'); setIsPauseDialogOpen(false); }}>
                               <Coffee className="text-blue-500" />
                               <div className="text-left">
                                 <p className="font-bold text-sm">Descanso Técnico</p>
                                 <p className="text-[10px] text-slate-500">Pausa reglamentaria</p>
                               </div>
                             </Button>
-                            <Button variant="outline" className="h-16 flex items-center justify-start px-6 gap-4" onClick={() => { handleStartPause('PERNOCTE'); setIsPauseDialogOpen(false); }}>
-                              <Moon className="text-slate-900" />
+                            <Button variant="outline" className="h-16 flex items-center justify-start px-6 gap-4 rounded-2xl bg-slate-900 text-white" onClick={() => { handleStartPause('PERNOCTE'); setIsPauseDialogOpen(false); }}>
+                              <Moon className="text-blue-400" />
                               <div className="text-left">
                                 <p className="font-bold text-sm">Pernocte</p>
-                                <p className="text-[10px] text-slate-500">Parada para dormir</p>
+                                <p className="text-[10px] text-white/50">Parada para dormir</p>
                               </div>
                             </Button>
                           </div>
@@ -513,8 +513,8 @@ export default function RouteDetailPage() {
 
                       <Dialog open={isPODOpen} onOpenChange={setIsPODOpen}>
                         <DialogTrigger asChild>
-                          <Button className="flex-1 bg-green-600 h-14 font-bold shadow-lg">
-                            CONFIRMAR ENTREGA
+                          <Button className="flex-1 bg-green-600 h-14 font-bold shadow-lg rounded-2xl">
+                            ENTREGAR
                           </Button>
                         </DialogTrigger>
                         <DialogContent className="max-w-[95vw] max-h-[90vh] overflow-y-auto rounded-3xl">
@@ -525,11 +525,11 @@ export default function RouteDetailPage() {
                           <div className="space-y-6 py-4">
                             <div className="space-y-2">
                               <Label className="text-[10px] font-bold uppercase text-slate-400">Nombre de quien recibe</Label>
-                              <Input placeholder="Ej: Marcelo Gomez" value={podData.receiverName} onChange={e => setPodData({...podData, receiverName: e.target.value})} className="bg-slate-50" />
+                              <Input placeholder="Ej: Marcelo Gomez" value={podData.receiverName} onChange={e => setPodData({...podData, receiverName: e.target.value})} className="bg-slate-50 h-12 rounded-xl" />
                             </div>
 
                             <div className="grid grid-cols-1 gap-3">
-                              <Button variant="outline" className={cn("h-16 flex items-center justify-start px-4 gap-4 border-dashed border-2", podData.photoUrl ? "border-green-500 bg-green-50" : "")} onClick={() => podPhotoInputRef.current?.click()}>
+                              <Button variant="outline" className={cn("h-16 flex items-center justify-start px-4 gap-4 border-dashed border-2 rounded-2xl", podData.photoUrl ? "border-green-500 bg-green-50" : "")} onClick={() => podPhotoInputRef.current?.click()}>
                                 {isUpdating ? <Loader2 className="w-6 h-6 animate-spin text-blue-600" /> : <Camera className={cn("w-6 h-6", podData.photoUrl ? "text-green-600" : "text-slate-400")} />}
                                 <div className="text-left">
                                   <p className="text-sm font-bold">{podData.photoUrl ? "Foto Lista" : "Tomar Foto Remito"}</p>
@@ -542,9 +542,9 @@ export default function RouteDetailPage() {
                             <div className="space-y-4">
                                <div className="grid grid-cols-1 gap-4">
                                   {podData.receiverSignatureUrl ? (
-                                    <div className="p-3 bg-green-50 border border-green-100 rounded-xl flex items-center justify-between">
+                                    <div className="p-3 bg-green-50 border border-green-100 rounded-2xl flex items-center justify-between">
                                        <div className="flex items-center gap-3">
-                                          <div className="w-12 h-12 bg-white rounded border overflow-hidden">
+                                          <div className="w-12 h-12 bg-white rounded-xl border overflow-hidden">
                                              <img src={podData.receiverSignatureUrl} alt="Firma Receptor" className="w-full h-full object-contain" />
                                           </div>
                                           <p className="text-[10px] font-bold text-green-700 uppercase">Firma Receptor OK</p>
@@ -554,7 +554,7 @@ export default function RouteDetailPage() {
                                   ) : (
                                     <Dialog>
                                       <DialogTrigger asChild>
-                                        <Button variant="outline" className="h-16 flex items-center justify-start px-4 gap-4 border-slate-200">
+                                        <Button variant="outline" className="h-16 flex items-center justify-start px-4 gap-4 border-slate-200 rounded-2xl">
                                           <PenTool className="text-blue-600" />
                                           <div className="text-left">
                                             <p className="text-sm font-bold">Firma del Receptor</p>
@@ -562,7 +562,7 @@ export default function RouteDetailPage() {
                                           </div>
                                         </Button>
                                       </DialogTrigger>
-                                      <DialogContent className="max-w-[90vw] rounded-2xl p-4">
+                                      <DialogContent className="max-w-[90vw] rounded-3xl p-4">
                                         <DialogHeader>
                                           <DialogTitle>Firma del Receptor (Cliente)</DialogTitle>
                                           <DialogDescription>Solicite al cliente que firme en el recuadro inferior.</DialogDescription>
@@ -576,9 +576,9 @@ export default function RouteDetailPage() {
                                   )}
 
                                   {podData.driverSignatureUrl ? (
-                                    <div className="p-3 bg-green-50 border border-green-100 rounded-xl flex items-center justify-between">
+                                    <div className="p-3 bg-green-50 border border-green-100 rounded-2xl flex items-center justify-between">
                                        <div className="flex items-center gap-3">
-                                          <div className="w-12 h-12 bg-white rounded border overflow-hidden">
+                                          <div className="w-12 h-12 bg-white rounded-xl border overflow-hidden">
                                              <img src={podData.driverSignatureUrl} alt="Firma Chofer" className="w-full h-full object-contain" />
                                           </div>
                                           <p className="text-[10px] font-bold text-green-700 uppercase">Firma Chofer OK</p>
@@ -588,7 +588,7 @@ export default function RouteDetailPage() {
                                   ) : (
                                     <Dialog>
                                       <DialogTrigger asChild>
-                                        <Button variant="outline" className="h-16 flex items-center justify-start px-4 gap-4 border-slate-200">
+                                        <Button variant="outline" className="h-16 flex items-center justify-start px-4 gap-4 border-slate-200 rounded-2xl">
                                           <UserCheck className="text-slate-900" />
                                           <div className="text-left">
                                             <p className="text-sm font-bold">Firma del Chofer</p>
@@ -596,7 +596,7 @@ export default function RouteDetailPage() {
                                           </div>
                                         </Button>
                                       </DialogTrigger>
-                                      <DialogContent className="max-w-[90vw] rounded-2xl p-4">
+                                      <DialogContent className="max-w-[90vw] rounded-3xl p-4">
                                         <DialogHeader>
                                           <DialogTitle>Firma del Chofer / Transportista</DialogTitle>
                                           <DialogDescription>Firme para validar su cierre de jornada.</DialogDescription>
@@ -613,17 +613,17 @@ export default function RouteDetailPage() {
 
                             <div className="space-y-2">
                               <Label className="text-[10px] font-bold uppercase text-slate-400">Observaciones</Label>
-                              <Textarea placeholder="Ej: Sin novedades, bultos en buen estado..." value={podData.notes} onChange={e => setPodData({...podData, notes: e.target.value})} className="bg-slate-50" />
+                              <Textarea placeholder="Ej: Sin novedades, bultos en buen estado..." value={podData.notes} onChange={e => setPodData({...podData, notes: e.target.value})} className="bg-slate-50 rounded-xl min-h-[100px]" />
                             </div>
                           </div>
                           <DialogFooter>
                             <Button 
-                              className="w-full h-14 bg-green-600 text-lg font-bold shadow-xl" 
+                              className="w-full h-14 bg-green-600 text-lg font-bold shadow-xl rounded-2xl" 
                               disabled={!podData.receiverName || !podData.receiverSignatureUrl || !podData.driverSignatureUrl || isUpdating} 
                               onClick={handleConfirmDelivery}
                             >
                               {isUpdating ? <Loader2 className="animate-spin mr-2" /> : null}
-                              FINALIZAR MISIÓN Y GUARDAR
+                              FINALIZAR Y GUARDAR
                             </Button>
                           </DialogFooter>
                         </DialogContent>
@@ -635,7 +635,7 @@ export default function RouteDetailPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-none shadow-sm overflow-hidden h-48 relative">
+          <Card className="border-none shadow-sm overflow-hidden h-48 relative rounded-3xl">
              {typeof window !== 'undefined' && L && (
                <MapContainer 
                  center={[load.tracking?.currentLat || load.origin.lat || -34.6, load.tracking?.currentLng || load.origin.lng || -58.3]} 
@@ -643,7 +643,7 @@ export default function RouteDetailPage() {
                  className="h-full w-full"
                  zoomControl={false}
                >
-                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.getTileUrl" />
+                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                  {load.tracking?.currentLat && (
                    <Marker position={[load.tracking.currentLat, load.tracking.currentLng]} icon={truckIcon} />
                  )}
@@ -654,7 +654,7 @@ export default function RouteDetailPage() {
           <div className="space-y-6 px-2">
             <div className="flex gap-4">
               <div className="flex flex-col items-center">
-                <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2", load.status !== 'pending' && load.status !== 'assigned' ? 'bg-green-50 border-green-500 text-white' : 'bg-white border-slate-200 text-slate-400')}>
+                <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2", load.status !== 'pending' && load.status !== 'assigned' ? 'bg-green-50 border-green-500 text-green-600' : 'bg-white border-slate-200 text-slate-400')}>
                   {load.status !== 'pending' && load.status !== 'assigned' ? <CheckCircle2 size={16} /> : <Package size={16} />}
                 </div>
                 <div className="w-0.5 h-full bg-slate-100 min-h-[40px]"></div>
@@ -676,46 +676,49 @@ export default function RouteDetailPage() {
 
             <div className="flex gap-4">
               <div className="flex flex-col items-center">
-                <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2", load.status === 'delivered' ? 'bg-green-50 border-green-500 text-white' : 'bg-white border-slate-200 text-slate-400')}>
+                <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2", load.status === 'delivered' ? 'bg-green-50 border-green-500 text-green-600' : 'bg-white border-slate-200 text-slate-400')}>
                    <Navigation size={16} />
                 </div>
               </div>
               <div className="flex-1 space-y-1">
                 <h3 className="font-bold text-sm">Destino Final</h3>
                 <p className="text-[11px] text-slate-500">{displayDestination.name}</p>
-                <Button variant="outline" size="sm" className="h-8 w-full text-[10px] font-bold mt-2" onClick={openNativeNavigator}><Compass size={12} className="mr-1" /> Navegar (GPS)</Button>
+                <Button variant="outline" size="sm" className="h-10 w-full text-[10px] font-bold mt-2 rounded-xl" onClick={openNativeNavigator}><Compass size={12} className="mr-1" /> Navegar (GPS)</Button>
               </div>
             </div>
           </div>
         </TabsContent>
 
         <TabsContent value="time" className="space-y-6 animate-in fade-in">
-          <Card className="border-none shadow-sm">
-            <CardHeader className="pb-2"><CardTitle className="text-sm uppercase text-slate-400 font-bold">Tiempo de Conducción</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
+          <Card className="border-none shadow-sm rounded-3xl overflow-hidden">
+            <CardHeader className="pb-2 bg-slate-50 border-b"><CardTitle className="text-xs uppercase text-slate-400 font-black tracking-widest">Tiempo de Conducción</CardTitle></CardHeader>
+            <CardContent className="space-y-4 pt-6">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <p className="text-[9px] uppercase font-bold text-slate-500">Hoy</p>
-                  <p className="text-xl font-bold text-blue-600">{Math.round(load.tracking?.timeOnRouteMinutes || 0)} <span className="text-xs font-normal text-slate-400">min</span></p>
+                  <p className="text-[9px] uppercase font-bold text-slate-500">En Ruta (Movimiento)</p>
+                  <p className="text-xl font-black text-blue-600">{Math.round(load.tracking?.timeOnRouteMinutes || 0)} <span className="text-xs font-normal text-slate-400 uppercase">min</span></p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-[9px] uppercase font-bold text-slate-500">Parado</p>
-                  <p className="text-xl font-bold text-orange-600">{Math.round(load.tracking?.timeStoppedMinutes || 0)} <span className="text-xs font-normal text-slate-400">min</span></p>
+                  <p className="text-[9px] uppercase font-bold text-slate-500">Parado / Pausa</p>
+                  <p className="text-xl font-black text-orange-600">{Math.round(load.tracking?.timeStoppedMinutes || 0)} <span className="text-xs font-normal text-slate-400 uppercase">min</span></p>
                 </div>
               </div>
             </CardContent>
           </Card>
           <div className="px-2 space-y-4">
              {load.status === 'on_pause' ? (
-                <div className="p-6 bg-orange-50 border-2 border-orange-200 rounded-2xl text-center space-y-4">
+                <div className="p-8 bg-orange-50 border-2 border-orange-200 rounded-3xl text-center space-y-4 shadow-lg">
+                   <div className="w-12 h-12 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto">
+                      <PauseCircle size={32} />
+                   </div>
                    <p className="text-sm font-black text-orange-800 uppercase italic">PAUSA ACTIVA: {load.tracking?.lastPauseType}</p>
-                   <Button className="w-full bg-orange-600 h-14 text-lg font-bold" onClick={handleResumeTrip}>REANUDAR</Button>
+                   <Button className="w-full bg-orange-600 h-16 text-lg font-bold rounded-2xl shadow-orange-200 shadow-lg" onClick={handleResumeTrip}>REANUDAR VIAJE</Button>
                 </div>
              ) : (
                <div className="grid grid-cols-2 gap-3">
-                  <Button variant="outline" className="flex flex-col h-16 gap-1" onClick={() => handleStartPause('COMIDA')}><Utensils size={18} /> <span className="text-[10px] font-bold">COMIDA</span></Button>
-                  <Button variant="outline" className="flex flex-col h-16 gap-1" onClick={() => handleStartPause('DESCANSO')}><Coffee size={18} /> <span className="text-[10px] font-bold">DESCANSO</span></Button>
-                  <Button variant="outline" className="flex flex-col h-16 gap-1 col-span-2 bg-slate-900 text-white" onClick={() => handleStartPause('PERNOCTE')}><Moon size={18} /> <span className="text-[10px] font-bold">DORMIR (PERNOCTE)</span></Button>
+                  <Button variant="outline" className="flex flex-col h-20 gap-1 rounded-2xl border-2" onClick={() => handleStartPause('COMIDA')}><Utensils size={20} /> <span className="text-[10px] font-black uppercase">COMIDA</span></Button>
+                  <Button variant="outline" className="flex flex-col h-20 gap-1 rounded-2xl border-2" onClick={() => handleStartPause('DESCANSO')}><Coffee size={20} /> <span className="text-[10px] font-black uppercase">DESCANSO</span></Button>
+                  <Button variant="outline" className="flex flex-col h-20 gap-1 col-span-2 bg-slate-900 text-white rounded-2xl" onClick={() => handleStartPause('PERNOCTE')}><Moon size={20} /> <span className="text-[10px] font-black uppercase">DORMIR (PERNOCTE)</span></Button>
                </div>
              )}
           </div>
@@ -723,26 +726,32 @@ export default function RouteDetailPage() {
 
         <TabsContent value="incidents" className="space-y-6 animate-in fade-in">
            <div className="px-2 space-y-4">
-             <Button variant="destructive" className="w-full h-12 font-bold" onClick={() => window.open('tel:911')}><Siren size={18} className="mr-2" /> LLAMAR 911 (EMERGENCIA)</Button>
+             <Button variant="destructive" className="w-full h-14 font-black text-lg rounded-2xl shadow-xl animate-pulse" onClick={() => window.open('tel:911')}><Siren size={24} className="mr-2" /> LLAMAR EMERGENCIA (911)</Button>
              <div className="grid grid-cols-2 gap-2">
                 {INCIDENT_TYPES.map(type => (
                   <Dialog key={type.id}>
                     <DialogTrigger asChild>
-                      <button className="flex flex-col items-center justify-center p-3 rounded-xl border bg-white gap-2" onClick={() => setSelectedIncidentType(type.id)}>
-                        <div className={cn("w-10 h-10 rounded-full flex items-center justify-center text-white", type.color)}><type.icon size={20} /></div>
-                        <span className="text-[9px] uppercase font-bold text-slate-600 text-center">{type.label}</span>
+                      <button className="flex flex-col items-center justify-center p-4 rounded-2xl border-2 bg-white gap-2 active:bg-slate-50" onClick={() => setSelectedIncidentType(type.id)}>
+                        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center text-white", type.color)}><type.icon size={20} /></div>
+                        <span className="text-[9px] uppercase font-black text-slate-600 text-center tracking-tight">{type.label}</span>
                       </button>
                     </DialogTrigger>
-                    <DialogContent className="max-w-[90vw] rounded-xl">
+                    <DialogContent className="max-w-[95vw] rounded-3xl">
                       <DialogHeader>
                         <DialogTitle>Reportar {type.label}</DialogTitle>
-                        <DialogDescription>Detalle el incidente para recibir asistencia.</DialogDescription>
+                        <DialogDescription>Detalle lo ocurrido para recibir asistencia inmediata.</DialogDescription>
                       </DialogHeader>
                       <div className="space-y-4 py-4">
-                        <Textarea placeholder="Describa lo ocurrido..." value={incidentForm.description} onChange={e => setIncidentForm({...incidentForm, description: e.target.value})} />
-                        <Input placeholder="Lugar de referencia..." value={incidentForm.locationDesc} onChange={e => setIncidentForm({...incidentForm, locationDesc: e.target.value})} />
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-bold uppercase text-slate-400">Descripción</Label>
+                          <Textarea placeholder="Indique qué sucedió..." value={incidentForm.description} onChange={e => setIncidentForm({...incidentForm, description: e.target.value})} className="h-32 rounded-xl" />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-bold uppercase text-slate-400">Ubicación / Ref.</Label>
+                          <Input placeholder="Ej: Autopista km 45" value={incidentForm.locationDesc} onChange={e => setIncidentForm({...incidentForm, locationDesc: e.target.value})} className="h-12 rounded-xl" />
+                        </div>
                       </div>
-                      <DialogFooter><Button className="w-full bg-red-600 h-12 font-bold" onClick={handleReportIncident}>ENVIAR REPORTE</Button></DialogFooter>
+                      <DialogFooter><Button className="w-full bg-red-600 h-14 font-black rounded-2xl" onClick={handleReportIncident}>ENVIAR REPORTE CRÍTICO</Button></DialogFooter>
                     </DialogContent>
                   </Dialog>
                 ))}
@@ -751,74 +760,90 @@ export default function RouteDetailPage() {
         </TabsContent>
 
         <TabsContent value="wallet" className="space-y-6 animate-in fade-in">
-          <Card className="bg-slate-900 text-white border-none shadow-sm">
-            <CardContent className="p-6 flex justify-between items-start">
+          <Card className="bg-slate-900 text-white border-none shadow-xl rounded-3xl overflow-hidden relative">
+            <div className="absolute top-0 right-0 p-6 opacity-10"><DollarSign size={64}/></div>
+            <CardContent className="p-6 flex justify-between items-start relative z-10">
               <div className="space-y-1">
-                <p className="text-[10px] uppercase font-bold text-white/50">Saldo Anticipo</p>
+                <p className="text-[10px] uppercase font-bold text-white/50 tracking-widest">Saldo de Anticipo</p>
                 <h2 className="text-3xl font-black italic">{((load.budget?.initialAdvance || 0) - totalSpent).toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</h2>
+                <p className="text-[9px] text-blue-400 font-bold uppercase">De un total de ${load.budget?.initialAdvance?.toLocaleString()}</p>
               </div>
-              <Wallet className="text-blue-400" />
+              <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
+                <Wallet className="text-blue-400" size={20} />
+              </div>
             </CardContent>
           </Card>
 
           <div className="px-2 space-y-4">
-            <div className="flex justify-between items-center">
-              <h4 className="text-[10px] uppercase font-bold text-slate-400">Gastos Registrados</h4>
+            <div className="flex justify-between items-center px-1">
+              <h4 className="text-[10px] uppercase font-black text-slate-400 tracking-widest">Comprobantes</h4>
               <Dialog open={isExpenseOpen} onOpenChange={setIsExpenseOpen}>
-                <DialogTrigger asChild><Button size="sm" className="bg-blue-600 font-bold text-xs"><Plus size={14} className="mr-1" /> Nuevo Ticket</Button></DialogTrigger>
-                <DialogContent className="max-w-[90vw] rounded-xl overflow-y-auto max-h-[90vh]">
+                <DialogTrigger asChild><Button size="sm" className="bg-blue-600 font-black text-[10px] h-8 rounded-lg uppercase"><Plus size={14} className="mr-1" /> Nuevo Ticket</Button></DialogTrigger>
+                <DialogContent className="max-w-[95vw] rounded-3xl overflow-y-auto max-h-[90vh]">
                   <DialogHeader>
-                    <DialogTitle>Registrar Gasto</DialogTitle>
-                    <DialogDescription>Cargue los datos del comprobante de gasto en ruta.</DialogDescription>
+                    <DialogTitle>Registrar Gasto en Ruta</DialogTitle>
+                    <DialogDescription>Cargue los datos del comprobante para su rendición.</DialogDescription>
                   </DialogHeader>
-                  <div className="space-y-4 py-4">
+                  <div className="space-y-5 py-4">
                     <div className="grid grid-cols-3 gap-2">
                         {EXPENSE_CATEGORIES.map(cat => (
-                          <Button key={cat.id} variant={expenseData.category === cat.id ? 'default' : 'outline'} className="flex flex-col h-16 gap-1 p-1 text-[9px]" onClick={() => setExpenseData({...expenseData, category: cat.id})}>
+                          <Button key={cat.id} variant={expenseData.category === cat.id ? 'default' : 'outline'} className="flex flex-col h-16 gap-1 p-1 text-[9px] rounded-xl border-2" onClick={() => setExpenseData({...expenseData, category: cat.id})}>
                             <cat.icon size={16} />{cat.label}
                           </Button>
                         ))}
                     </div>
                     {expenseData.category === 'fuel' && (
-                      <div className="grid grid-cols-2 gap-4 p-4 bg-blue-50 border rounded-xl">
-                         <div className="space-y-1"><Label className="text-[9px] font-bold uppercase">Odómetro KM</Label><Input type="number" className="h-8 bg-white" value={expenseData.odometerKm || ''} onChange={e => setExpenseData({...expenseData, odometerKm: parseFloat(e.target.value)})} /></div>
-                         <div className="space-y-1"><Label className="text-[9px] font-bold uppercase">Cant. Litros</Label><Input type="number" className="h-8 bg-white" value={expenseData.liters || ''} onChange={e => setExpenseData({...expenseData, liters: parseFloat(e.target.value), amount: (parseFloat(e.target.value) || 0) * (expenseData.pricePerLiter || 0)})} /></div>
-                         <div className="space-y-1"><Label className="text-[9px] font-bold uppercase">Precio/Litro</Label><Input type="number" className="h-8 bg-white" value={expenseData.pricePerLiter || ''} onChange={e => setExpenseData({...expenseData, pricePerLiter: parseFloat(e.target.value), amount: (expenseData.liters || 0) * (parseFloat(e.target.value) || 0)})} /></div>
-                         <div className="space-y-1"><Label className="text-[9px] font-bold uppercase">Bandera (Ref)</Label><Input className="h-8 bg-white" placeholder="Shell, YPF..." value={expenseData.fuelBrand || ''} onChange={e => setExpenseData({...expenseData, fuelBrand: e.target.value})} /></div>
+                      <div className="grid grid-cols-2 gap-3 p-4 bg-blue-50 border-2 border-blue-100 rounded-2xl animate-in slide-in-from-top-2">
+                         <div className="space-y-1"><Label className="text-[9px] font-black uppercase text-blue-700">Odómetro KM</Label><Input type="number" className="h-10 bg-white rounded-lg" value={expenseData.odometerKm || ''} onChange={e => setExpenseData({...expenseData, odometerKm: parseFloat(e.target.value)})} /></div>
+                         <div className="space-y-1"><Label className="text-[9px] font-black uppercase text-blue-700">Cant. Litros</Label><Input type="number" className="h-10 bg-white rounded-lg" value={expenseData.liters || ''} onChange={e => setExpenseData({...expenseData, liters: parseFloat(e.target.value), amount: (parseFloat(e.target.value) || 0) * (expenseData.pricePerLiter || 0)})} /></div>
+                         <div className="space-y-1"><Label className="text-[9px] font-black uppercase text-blue-700">Precio/Litro</Label><Input type="number" className="h-10 bg-white rounded-lg" value={expenseData.pricePerLiter || ''} onChange={e => setExpenseData({...expenseData, pricePerLiter: parseFloat(e.target.value), amount: (expenseData.liters || 0) * (parseFloat(e.target.value) || 0)})} /></div>
+                         <div className="space-y-1"><Label className="text-[9px] font-black uppercase text-blue-700">Bandera (YPF/Shell)</Label><Input className="h-10 bg-white rounded-lg" placeholder="Estación" value={expenseData.fuelBrand || ''} onChange={e => setExpenseData({...expenseData, fuelBrand: e.target.value})} /></div>
                       </div>
                     )}
-                    <div className="space-y-2"><Label>Monto Total ($)</Label><Input type="number" value={expenseData.amount} onChange={e => setExpenseData({...expenseData, amount: parseFloat(e.target.value)})} /></div>
-                    <div className="space-y-2"><Label>Lugar / Punto Ruta</Label><Input placeholder="Ej: Shell km 245" value={expenseData.location} onChange={e => setExpenseData({...expenseData, location: e.target.value})} /></div>
+                    <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-400">Importe Total ($)</Label><Input type="number" className="h-12 rounded-xl text-lg font-bold" value={expenseData.amount} onChange={e => setExpenseData({...expenseData, amount: parseFloat(e.target.value)})} /></div>
+                    <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-400">Lugar / Localidad</Label><Input placeholder="Ej: Shell km 245" className="h-12 rounded-xl" value={expenseData.location} onChange={e => setExpenseData({...expenseData, location: e.target.value})} /></div>
                   </div>
-                  <DialogFooter><Button className="w-full h-12 bg-blue-600 font-bold" onClick={handleAddExpense}>GUARDAR GASTO</Button></DialogFooter>
+                  <DialogFooter><Button className="w-full h-14 bg-blue-600 font-black rounded-2xl shadow-lg" onClick={handleAddExpense}>REGISTRAR COMPROBANTE</Button></DialogFooter>
                 </DialogContent>
               </Dialog>
             </div>
 
             <div className="space-y-3">
               {expenses?.map(exp => (
-                <Card key={exp.id} className="border-none shadow-sm">
-                  <CardContent className="p-3 flex items-center justify-between">
+                <Card key={exp.id} className="border-none shadow-sm rounded-2xl active:bg-slate-50 transition-colors">
+                  <CardContent className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-slate-50 flex items-center justify-center border"><Receipt size={18} /></div>
+                      <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center border shadow-inner">
+                        {EXPENSE_CATEGORIES.find(c => c.id === exp.category)?.icon && <div className="text-slate-400">{React.createElement(EXPENSE_CATEGORIES.find(c => c.id === exp.category)!.icon, { size: 18 })}</div>}
+                      </div>
                       <div>
-                        <div className="font-bold text-sm">${exp.amount?.toLocaleString()}</div>
-                        <div className="text-[9px] text-slate-400 uppercase font-bold">{exp.category === 'fuel' ? `${exp.fuelBrand || ''} - ${exp.location}` : exp.location}</div>
+                        <div className="font-black text-sm text-slate-800">${exp.amount?.toLocaleString()}</div>
+                        <div className="text-[9px] text-slate-400 uppercase font-black tracking-tight">{exp.category === 'fuel' ? `${exp.fuelBrand || ''} - ${exp.location}` : exp.location}</div>
                       </div>
                     </div>
-                    <Badge variant="outline" className="text-[8px] uppercase">{exp.status}</Badge>
+                    <Badge variant="outline" className="text-[8px] uppercase font-black border-slate-200 bg-white">{exp.status}</Badge>
                   </CardContent>
                 </Card>
               ))}
+              {(!expenses || expenses.length === 0) && (
+                <div className="py-10 text-center text-[10px] text-slate-400 uppercase font-bold italic">Sin tickets registrados en este viaje</div>
+              )}
             </div>
           </div>
         </TabsContent>
       </Tabs>
 
       <div className="fixed bottom-6 left-6 right-6 flex gap-3 z-40">
-         <Button variant="outline" className="flex-1 h-14 font-bold shadow-lg bg-white" onClick={() => window.open(`tel:0800-LOGISTICA`)}><LifeBuoy className="mr-2 text-blue-600" /> CENTRAL</Button>
-         <Button className="bg-red-600 flex-1 h-14 font-bold shadow-lg text-white" onClick={() => setActiveTab('incidents')}><Siren className="mr-2" /> SOS</Button>
+         <Button variant="outline" className="flex-1 h-14 font-black shadow-xl bg-white border-2 rounded-2xl" onClick={() => window.open(`tel:0800LOGISTICA`)}><LifeBuoy className="mr-2 text-blue-600" /> CENTRAL</Button>
+         <Button className="bg-red-600 flex-1 h-14 font-black shadow-xl text-white rounded-2xl" onClick={() => setActiveTab('incidents')}><Siren className="mr-2" /> SOS</Button>
       </div>
+
+      <style jsx global>{`
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
     </div>
   );
 }
+
+import React from 'react';
