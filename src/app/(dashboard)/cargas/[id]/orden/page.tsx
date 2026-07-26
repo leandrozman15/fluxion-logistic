@@ -12,7 +12,7 @@ import {
   Printer, ArrowLeft, Truck, User, MapPin, 
   Package, Calendar, Loader2, Navigation, FileText, CheckCircle2, Repeat, ClipboardCheck, ShieldCheck, Anchor
 } from "lucide-react";
-import { Load, Driver, Truck as TruckType } from "@/app/lib/types";
+import { Load, Driver, Truck as TruckType, Tenant } from "@/app/lib/types";
 import { QRCodeSVG } from "qrcode.react";
 import { format } from "date-fns";
 import { formatSafeDate } from "@/lib/utils/date-utils";
@@ -32,6 +32,13 @@ export default function LoadOrderDocumentPage() {
   }, [db, id]);
 
   const { data: load, loading: loadLoading } = useDoc<Load>(loadRef);
+
+  const tenantRef = useMemo(() => {
+    if (!db) return null;
+    return doc(db, "tenants", "default_tenant");
+  }, [db]);
+
+  const { data: tenant } = useDoc<Tenant>(tenantRef);
 
   useEffect(() => {
     async function fetchExtras() {
@@ -62,6 +69,9 @@ export default function LoadOrderDocumentPage() {
   const totalWeight = (load.outboundStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0) + 
                       (load.returnStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0);
 
+  const orgName = tenant?.name || "LOGÍSTICA AR";
+  const logoUrl = tenant?.settings?.logoUrl || "/icono.png";
+
   return (
     <div className="min-h-screen bg-slate-200 py-10 print:bg-white print:py-0">
       <div className="max-w-5xl mx-auto space-y-6 print:space-y-0">
@@ -73,12 +83,14 @@ export default function LoadOrderDocumentPage() {
         </div>
 
         <div className="bg-white shadow-2xl p-10 print:shadow-none min-h-[297mm] flex flex-col border border-slate-300 print:border-none rounded-sm">
-          {/* HEADER PRINCIPAL */}
+          {/* HEADER PRINCIPAL DINÁMICO */}
           <div className="flex justify-between items-start border-b-4 border-slate-900 pb-6 mb-6">
             <div className="space-y-2">
               <div className="flex items-center gap-4 text-blue-600 font-black text-4xl italic tracking-tighter">
-                <Image src="/icono.png" alt="LogísticaAr" width={56} height={56} className="object-contain" />
-                <span>LOGÍSTICA<span className="text-slate-900">AR</span></span>
+                <div className="relative w-14 h-14">
+                  <img src={logoUrl} alt="Logo" className="w-full h-full object-contain" />
+                </div>
+                <span className="uppercase">{orgName}</span>
               </div>
               <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Sistema de Gestión de Flotas Pesadas</p>
             </div>

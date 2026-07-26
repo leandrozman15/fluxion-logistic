@@ -1,3 +1,4 @@
+
 'use client';
 
 import { 
@@ -37,12 +38,15 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
-import { useAuth } from "@/firebase";
+import { useAuth, useFirestore, useDoc } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { useRouter, usePathname } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
+import { useMemo } from "react";
+import { doc } from "firebase/firestore";
+import { Tenant } from "@/app/lib/types";
 
 /**
  * Componente interno que maneja la lógica de cierre automático en móviles.
@@ -50,9 +54,17 @@ import { Button } from "@/components/ui/button";
 function DashboardSidebar() {
   const { setOpenMobile, isMobile } = useSidebar();
   const auth = useAuth();
+  const db = useFirestore();
   const router = useRouter();
   const pathname = usePathname();
   const { toast } = useToast();
+
+  const tenantRef = useMemo(() => {
+    if (!db) return null;
+    return doc(db, "tenants", "default_tenant");
+  }, [db]);
+
+  const { data: tenant } = useDoc<Tenant>(tenantRef);
 
   const adminMenu = [
     { title: "Monitor Operativo", icon: LayoutDashboard, href: "/dashboard" },
@@ -85,14 +97,17 @@ function DashboardSidebar() {
     }
   };
 
+  const logoUrl = tenant?.settings?.logoUrl || "/icono.png";
+  const orgName = tenant?.name || "LogísticaAr";
+
   return (
     <Sidebar variant="sidebar" collapsible="icon" className="transition-all duration-200">
       <SidebarHeader className="h-16 flex items-center px-4 border-b overflow-hidden">
         <Link href="/dashboard" className="flex items-center gap-2 font-bold text-blue-600" onClick={handleLinkClick}>
-          <div className="w-8 h-8 rounded flex items-center justify-center shrink-0 overflow-hidden">
-            <Image src="/icono.png" alt="Logo" width={32} height={32} className="object-contain" />
+          <div className="w-8 h-8 rounded flex items-center justify-center shrink-0 overflow-hidden relative">
+            <img src={logoUrl} alt="Logo" className="w-full h-full object-contain" />
           </div>
-          <span className="group-data-[collapsible=icon]:hidden tracking-tight text-xl truncate">Logística<span className="text-slate-900 dark:text-slate-100">Ar</span></span>
+          <span className="group-data-[collapsible=icon]:hidden tracking-tight text-xl truncate uppercase">{orgName}</span>
         </Link>
       </SidebarHeader>
       <SidebarContent>
@@ -180,6 +195,15 @@ function DashboardSidebar() {
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { theme, setTheme } = useTheme();
+  const db = useFirestore();
+  
+  const tenantRef = useMemo(() => {
+    if (!db) return null;
+    return doc(db, "tenants", "default_tenant");
+  }, [db]);
+
+  const { data: tenant } = useDoc<Tenant>(tenantRef);
+  const logoUrl = tenant?.settings?.logoUrl || "/icono.png";
 
   return (
     <SidebarProvider defaultOpen={false}>
@@ -200,8 +224,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                >
                  {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
                </Button>
-               <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shrink-0 border shadow-sm">
-                 <Image src="/icono.png" alt="User Icon" width={24} height={24} className="object-contain" />
+               <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shrink-0 border shadow-sm relative">
+                 <img src={logoUrl} alt="Logo" className="w-full h-full object-contain" />
                </div>
                <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 hidden lg:block">Operador Central</span>
             </div>

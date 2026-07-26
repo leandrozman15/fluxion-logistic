@@ -45,6 +45,9 @@ export interface TenantSettings {
   dailyEmailLimit?: number;
   defaultTemplateId?: string | null;
   smtpConfig?: any;
+  centralPhone?: string;
+  logoUrl?: string;
+  cuit?: string;
 }
 
 export interface Tenant {

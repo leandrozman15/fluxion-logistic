@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -25,7 +26,7 @@ import {
   CirclePlay,
   XCircle
 } from "lucide-react";
-import { Load, Expense, ExpenseCategory, LoadStatus, TrackingPoint } from "@/app/lib/types";
+import { Load, Expense, ExpenseCategory, LoadStatus, TrackingPoint, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { calculateDistance, estimateFuelFactor } from "@/lib/utils/tracking-math";
@@ -122,6 +123,12 @@ export default function RouteDetailPage() {
   }, [db, id]);
 
   const { data: load, loading } = useDoc<Load>(loadRef);
+
+  // Obtener datos del Tenant para el teléfono central
+  const { data: tenant } = useDoc<Tenant>(useMemo(() => {
+    if (!db) return null;
+    return doc(db, "tenants", "default_tenant"); // O usar el hook useTenant()
+  }, [db]));
 
   useEffect(() => {
     if (load?.status === 'on_route') {
@@ -399,6 +406,8 @@ export default function RouteDetailPage() {
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!load) return <div className="p-10 text-center">Viaje no encontrado.</div>;
+
+  const centralPhone = tenant?.settings?.centralPhone || "0800LOGISTICA";
 
   return (
     <div className="max-w-md mx-auto space-y-6 pb-32 px-2">
@@ -830,7 +839,7 @@ export default function RouteDetailPage() {
       </Tabs>
 
       <div className="fixed bottom-6 left-6 right-6 flex gap-3 z-40">
-         <Button variant="outline" className="flex-1 h-14 font-black shadow-xl bg-white border-2 rounded-2xl" onClick={() => window.open(`tel:0800LOGISTICA`)}><LifeBuoy className="mr-2 text-blue-600" /> CENTRAL</Button>
+         <Button variant="outline" className="flex-1 h-14 font-black shadow-xl bg-white border-2 rounded-2xl" onClick={() => window.open(`tel:${centralPhone}`)}><LifeBuoy className="mr-2 text-blue-600" /> CENTRAL</Button>
          <Button className="bg-red-600 flex-1 h-14 font-black shadow-xl text-white rounded-2xl" onClick={() => setActiveTab('incidents')}><Siren className="mr-2" /> SOS</Button>
       </div>
 
