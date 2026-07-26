@@ -80,7 +80,6 @@ export default function MonitorOperativoPage() {
   const [expandedLoadId, setExpandedLoadId] = useState<string | null>(null);
   const [agendaTab, setAgendaTab] = useState<string>("today");
 
-  // Dock assignment state
   const [isDockDialogOpen, setIsDockDialogOpen] = useState(false);
   const [selectedLoadForDock, setSelectedLoadForDock] = useState<Load | null>(null);
   const [selectedDock, setSelectedDock] = useState<string>("");
@@ -235,7 +234,7 @@ export default function MonitorOperativoPage() {
 
   const hubIcon = (isMain: boolean) => L ? L.divIcon({
     className: 'custom-hub-icon',
-    html: `<div class="${isMain ? 'bg-amber-500' : 'bg-slate-900 dark:bg-slate-800'} text-white p-2 rounded-lg shadow-xl border-2 border-white flex items-center justify-center">${isMain ? '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' : '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/><path d="M3 9h18"/><path d="M3 15h18"/></svg>'}</div>`,
+    html: `<div class="${isMain ? 'bg-amber-500' : 'bg-slate-900 dark:bg-slate-800'} text-white p-2 rounded-lg shadow-xl border-2 border-white flex items-center justify-center">${isMain ? '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' : '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/><path d="M3 9h18"/><path d="M3 15h18"/></svg>'}</div>`,
     iconSize: [36, 36],
     iconAnchor: [18, 18]
   }) : null;
@@ -341,7 +340,6 @@ export default function MonitorOperativoPage() {
                  const driving = Math.round(tracking?.timeOnRouteMinutes || 0);
                  const stopped = Math.max(0, totalMin - driving);
                  
-                 // RECONSTRUCCION DE TELEMETRIA SI LOS TOTALES VIENEN EN CERO
                  let maxV = Math.round(tracking?.maxSpeed || 0);
                  let fuel = tracking?.estimatedFuelLiters || 0;
                  
@@ -705,27 +703,34 @@ export default function MonitorOperativoPage() {
               attribution='&copy; OpenStreetMap contributors'
             />
             
-            {L && hubs?.map((hub) => (
-              <Marker key={hub.id} position={[hub.lat || -34.6, hub.lng || -58.3]} icon={hubIcon(!!hub.isMainBase)}>
-                <Popup>
-                  <div className="p-1">
-                    <div className="font-bold text-sm">{hub.name}</div>
-                    <div className="text-xs text-slate-500">{hub.country} - {hub.city}</div>
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
+            {L && hubIcon && hubs?.map((hub) => {
+              const icon = hubIcon(!!hub.isMainBase);
+              if (!icon) return null;
+              return (
+                <Marker key={hub.id} position={[hub.lat || -34.6, hub.lng || -58.3]} icon={icon}>
+                  <Popup>
+                    <div className="p-1">
+                      <div className="font-bold text-sm">{hub.name}</div>
+                      <div className="text-xs text-slate-500">{hub.country} - {hub.city}</div>
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            })}
 
-            {L && clientIcon && clients?.filter(c => typeof c.address?.lat === 'number' && typeof c.address?.lng === 'number').map((client) => (
-              <Marker key={client.id} position={[client.address.lat!, client.address.lng!]} icon={clientIcon}>
-                <Popup>
-                  <div className="p-1">
-                    <div className="font-bold text-sm text-green-700">{client.name}</div>
-                    <div className="text-xs text-slate-500">{client.address.city}, {client.address.country}</div>
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
+            {L && clientIcon && clients?.filter(c => typeof c.address?.lat === 'number' && typeof c.address?.lng === 'number').map((client) => {
+              const icon = clientIcon;
+              return (
+                <Marker key={client.id} position={[client.address.lat!, client.address.lng!]} icon={icon}>
+                  <Popup>
+                    <div className="p-1">
+                      <div className="font-bold text-sm text-green-700">{client.name}</div>
+                      <div className="text-xs text-slate-500">{client.address.city}, {client.address.country}</div>
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            })}
 
             {L && truckIcon && filteredAgenda.filter(l => (l.status === 'on_route' || l.status === 'on_pause' || l.status === 'incident') && l.tracking?.currentLat).map((load) => (
               <Marker key={load.id} position={[load.tracking!.currentLat, load.tracking!.currentLng]} icon={truckIcon}>
@@ -750,7 +755,6 @@ export default function MonitorOperativoPage() {
         </div>
       </Card>
 
-      {/* DIÁLOGO DE ASIGNACIÓN DE BOCA / VÍA LIBRE */}
       <Dialog open={isDockDialogOpen} onOpenChange={setIsDockDialogOpen}>
          <DialogContent className="max-w-md rounded-2xl">
             <DialogHeader>

@@ -33,7 +33,6 @@ import { SignaturePad } from "@/components/SignaturePad";
 import { compressImage } from "@/lib/utils/image-compression";
 import React from 'react';
 
-// Cargamento dinámico del Mapa
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
   { ssr: false, loading: () => <div className="h-48 w-full bg-slate-100 animate-pulse rounded-xl flex items-center justify-center text-xs text-slate-400">Cargando Mapa...</div> }
@@ -78,11 +77,9 @@ export default function RouteDetailPage() {
   const [isPauseDialogOpen, setIsPauseDialogOpen] = useState(false);
   const [selectedIncidentType, setSelectedIncidentType] = useState<string | null>(null);
   
-  // GPS State
   const [gpsActive, setGpsActive] = useState(false);
   const [L, setL] = useState<any>(null);
   
-  // Throttling State para Pruebas (10 segundos)
   const lastUpdateRef = useRef<number>(0);
   const lastPosRef = useRef<{lat: number, lng: number, timestamp: number} | null>(null);
   const podPhotoInputRef = useRef<HTMLInputElement>(null);
@@ -176,7 +173,6 @@ export default function RouteDetailPage() {
         let calculatedSpeed = (speed || 0) * 3.6;
         let timeDiffMinutes = (now - (lastPosRef.current?.timestamp || lastUpdateRef.current || now)) / (1000 * 60);
         
-        // Evitar saltos irreales de tiempo
         if (timeDiffMinutes > 15) timeDiffMinutes = 0.16; 
 
         if (lastPosRef.current) {
@@ -380,7 +376,6 @@ export default function RouteDetailPage() {
       reader.onload = async (event) => {
         const base64 = event.target?.result as string;
         try {
-          // Comprimir imagen para asegurar que quepa en Firestore (< 1MB)
           const compressed = await compressImage(base64, 1024, 1024, 0.6);
           setPodData({ ...podData, photoUrl: compressed });
           toast({ title: "Foto optimizada", description: "La imagen ha sido procesada correctamente." });
