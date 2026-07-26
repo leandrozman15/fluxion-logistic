@@ -82,9 +82,6 @@ export default function RouteDetailPage() {
   const lastPosRef = useRef<{lat: number, lng: number, timestamp: number} | null>(null);
   const podPhotoInputRef = useRef<HTMLInputElement>(null);
 
-  // Signature States
-  const [activeSignatureType, setActiveSignatureType] = useState<'receiver' | 'driver' | null>(null);
-
   const [expenseData, setExpenseData] = useState<any>({
     category: 'fuel',
     amount: 0,
@@ -124,7 +121,6 @@ export default function RouteDetailPage() {
 
   const { data: load, loading } = useDoc<Load>(loadRef);
 
-  // Sync GPS Active state with DB status
   useEffect(() => {
     if (load?.status === 'on_route') {
       setGpsActive(true);
@@ -153,7 +149,6 @@ export default function RouteDetailPage() {
     return { name: 'S/D', address: '-', lat: -34.6, lng: -58.3 };
   }, [load]);
 
-  // GPS Tracking Logic - 1 actualización cada 10 segundos para pruebas ágiles
   useEffect(() => {
     if (!gpsActive || !loadRef || typeof window === 'undefined' || !navigator.geolocation) {
       return;
@@ -164,7 +159,6 @@ export default function RouteDetailPage() {
         const { latitude, longitude, speed } = pos.coords;
         const now = Date.now();
         
-        // INTERVALO DE PRUEBA: 10 segundos
         const UPDATE_INTERVAL = 10000; 
         if (now - lastUpdateRef.current < UPDATE_INTERVAL) return;
 
@@ -179,10 +173,8 @@ export default function RouteDetailPage() {
           }
         }
 
-        // Sensibilidad máxima para pruebas de caminata (2 metros)
         if (distanceInc < 0.002 && lastUpdateRef.current !== 0) return;
 
-        // Ajustar velocidad mínima detectable para evitar "Calculando" eterno en caminatas
         const finalSpeed = Math.max(calculatedSpeed, 0.5);
 
         const newPoint: TrackingPoint = {
@@ -218,7 +210,7 @@ export default function RouteDetailPage() {
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [gpsActive, loadRef]);
+  }, [gpsActive, loadRef, toast]);
 
   const openNativeNavigator = () => {
     const lat = displayDestination.lat;
@@ -506,7 +498,6 @@ export default function RouteDetailPage() {
                               <input type="file" accept="image/*" capture="environment" className="hidden" ref={podPhotoInputRef} onChange={onPhotoChange} />
                             </div>
 
-                            {/* Sección de Firmas Digitales */}
                             <div className="space-y-4">
                                <div className="grid grid-cols-1 gap-4">
                                   {podData.receiverSignatureUrl ? (
@@ -692,7 +683,10 @@ export default function RouteDetailPage() {
                       </button>
                     </DialogTrigger>
                     <DialogContent className="max-w-[90vw] rounded-xl">
-                      <DialogHeader><DialogTitle>Reportar {type.label}</DialogTitle></DialogHeader>
+                      <DialogHeader>
+                        <DialogTitle>Reportar {type.label}</DialogTitle>
+                        <DialogDescription>Detalle el incidente para recibir asistencia.</DialogDescription>
+                      </DialogHeader>
                       <div className="space-y-4 py-4">
                         <Textarea placeholder="Describa lo ocurrido..." value={incidentForm.description} onChange={e => setIncidentForm({...incidentForm, description: e.target.value})} />
                         <Input placeholder="Lugar de referencia..." value={incidentForm.locationDesc} onChange={e => setIncidentForm({...incidentForm, locationDesc: e.target.value})} />
@@ -722,7 +716,10 @@ export default function RouteDetailPage() {
               <Dialog open={isExpenseOpen} onOpenChange={setIsExpenseOpen}>
                 <DialogTrigger asChild><Button size="sm" className="bg-blue-600 font-bold text-xs"><Plus size={14} className="mr-1" /> Nuevo Ticket</Button></DialogTrigger>
                 <DialogContent className="max-w-[90vw] rounded-xl overflow-y-auto max-h-[90vh]">
-                  <DialogHeader><DialogTitle>Registrar Gasto</DialogTitle></DialogHeader>
+                  <DialogHeader>
+                    <DialogTitle>Registrar Gasto</DialogTitle>
+                    <DialogDescription>Cargue los datos del comprobante de gasto en ruta.</DialogDescription>
+                  </DialogHeader>
                   <div className="space-y-4 py-4">
                     <div className="grid grid-cols-3 gap-2">
                         {EXPENSE_CATEGORIES.map(cat => (
