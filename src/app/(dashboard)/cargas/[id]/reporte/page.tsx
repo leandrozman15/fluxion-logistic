@@ -63,7 +63,7 @@ export default function TripReportPage() {
   const { data: expenses } = useCollection<Expense>(expensesQuery);
 
   const stats = useMemo(() => {
-    if (!load?.tracking) return { avgSpeed: 0, maxSpeed: 0, totalKm: 0, totalFuel: 0, fuelCost: 0, otherCost: 0, totalCost: 0 };
+    if (!load?.tracking) return { avgSpeed: 0, maxSpeed: 0, totalKm: 0, totalFuel: 0, fuelCost: 0, otherCost: 0, totalCost: 0, durationMinutes: 0, drivingMinutes: 0, idleMinutes: 0 };
     
     const history = load.tracking.history || [];
     const totalKm = load.tracking.distanceTraveledKm || 0;
@@ -79,6 +79,29 @@ export default function TripReportPage() {
     });
 
     const avgSpeed = countSpeed > 0 ? sumSpeed / countSpeed : 0;
+    
+    // Calcular duraciones desde el historial si los contadores están en 0
+    let drivingMinutes = load.tracking.timeOnRouteMinutes || 0;
+    let idleMinutes = load.tracking.timeStoppedMinutes || 0;
+    
+    if (drivingMinutes === 0 && history.length > 1) {
+      const first = new Date(history[0].timestamp).getTime();
+      const last = new Date(history[history.length - 1].timestamp).getTime();
+      const totalElapsed = (last - first) / (1000 * 60);
+      
+      // Heurística de estimación basada en velocidad histórica si no hay contadores
+      let moving = 0;
+      for (let i = 1; i < history.length; i++) {
+        if (history[i].speed > 5) {
+          const t1 = new Date(history[i-1].timestamp).getTime();
+          const t2 = new Date(history[i].timestamp).getTime();
+          moving += (t2 - t1) / (1000 * 60);
+        }
+      }
+      drivingMinutes = Math.round(moving);
+      idleMinutes = Math.max(0, Math.round(totalElapsed - moving));
+    }
+
     const fuelCost = expenses?.filter(e => e.category === 'fuel').reduce((acc, e) => acc + (e.amount || 0), 0) || 0;
     const totalFuel = expenses?.filter(e => e.category === 'fuel').reduce((acc, e) => acc + (e.liters || 0), 0) || 0;
     const otherCost = expenses?.filter(e => e.category !== 'fuel').reduce((acc, e) => acc + (e.amount || 0), 0) || 0;
@@ -90,7 +113,9 @@ export default function TripReportPage() {
       totalFuel: totalFuel.toFixed(1),
       fuelCost,
       otherCost,
-      totalCost: fuelCost + otherCost
+      totalCost: fuelCost + otherCost,
+      durationMinutes: Math.round(drivingMinutes),
+      idleMinutes: Math.round(idleMinutes)
     };
   }, [load, expenses]);
 
@@ -150,7 +175,7 @@ export default function TripReportPage() {
           <CardContent className="pt-4 flex flex-col items-center text-center gap-1">
             <Timer size={20} className="text-blue-600" />
             <p className="text-[10px] uppercase font-bold text-slate-400">Duración Jornada</p>
-            <p className="text-3xl font-black italic text-slate-800">{load.tracking?.timeOnRouteMinutes || 0} <span className="text-xs font-normal text-slate-400 uppercase">min</span></p>
+            <p className="text-3xl font-black italic text-slate-800">{stats.durationMinutes + stats.idleMinutes} <span className="text-xs font-normal text-slate-400 uppercase">min</span></p>
           </CardContent>
         </Card>
         <Card className="border-none shadow-sm">

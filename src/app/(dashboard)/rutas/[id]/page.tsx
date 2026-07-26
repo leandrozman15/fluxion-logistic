@@ -131,7 +131,6 @@ export default function RouteDetailPage() {
       setGpsActive(false);
     }
 
-    // Alerta sonora/vibración si recibe vía libre (Mock)
     if (load?.dockEntryAuthorized) {
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
         navigator.vibrate([100, 30, 100, 30, 100]);
@@ -173,6 +172,10 @@ export default function RouteDetailPage() {
 
         let distanceInc = 0;
         let calculatedSpeed = (speed || 0) * 3.6;
+        let timeDiffMinutes = (now - (lastPosRef.current?.timestamp || lastUpdateRef.current || now)) / (1000 * 60);
+        
+        // Evitar saltos irreales de tiempo
+        if (timeDiffMinutes > 15) timeDiffMinutes = 0.16; // Reset if long time gap
 
         if (lastPosRef.current) {
           distanceInc = calculateDistance(lastPosRef.current.lat, lastPosRef.current.lng, latitude, longitude);
@@ -182,23 +185,22 @@ export default function RouteDetailPage() {
           }
         }
 
-        if (distanceInc < 0.002 && lastUpdateRef.current !== 0) return;
-
-        const finalSpeed = Math.max(calculatedSpeed, 0.5);
-
+        const isMoving = calculatedSpeed > 5;
         const newPoint: TrackingPoint = {
           lat: latitude,
           lng: longitude,
-          speed: Math.round(finalSpeed),
+          speed: Math.round(calculatedSpeed),
           timestamp: new Date().toISOString()
         };
 
         updateDoc(loadRef, {
           "tracking.currentLat": latitude,
           "tracking.currentLng": longitude,
-          "tracking.currentSpeed": Math.round(finalSpeed),
+          "tracking.currentSpeed": Math.round(calculatedSpeed),
           "tracking.distanceTraveledKm": increment(distanceInc),
           "tracking.distanceRemainingKm": increment(-distanceInc),
+          "tracking.timeOnRouteMinutes": increment(isMoving ? timeDiffMinutes : 0),
+          "tracking.timeStoppedMinutes": increment(isMoving ? 0 : timeDiffMinutes),
           "tracking.lastUpdateAt": serverTimestamp(),
           "tracking.history": arrayUnion(newPoint),
           updatedAt: serverTimestamp()
@@ -209,17 +211,12 @@ export default function RouteDetailPage() {
       },
       (err) => {
         console.warn("GPS Native Error:", err.message);
-        toast({ 
-          variant: "destructive", 
-          title: "Error de Sensor GPS", 
-          description: "Asegúrate de tener el GPS encendido y haber dado permisos a la aplicación." 
-        });
       },
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [gpsActive, loadRef, toast]);
+  }, [gpsActive, loadRef]);
 
   const openNativeNavigator = () => {
     const lat = displayDestination.lat;
@@ -239,6 +236,8 @@ export default function RouteDetailPage() {
         distanceTraveledKm: 0,
         distanceRemainingKm: 0,
         currentSpeed: 0,
+        timeOnRouteMinutes: 0,
+        timeStoppedMinutes: 0,
         history: [],
         alerts: []
       };
@@ -400,7 +399,6 @@ export default function RouteDetailPage() {
         </div>
       </div>
 
-      {/* NOTIFICACIÓN DE VÍA LIBRE (Posicionamiento en Boca) */}
       {load.dockEntryAuthorized && (
         <div className="mx-2 p-6 bg-green-600 text-white rounded-3xl shadow-xl shadow-green-200 border-4 border-white animate-in zoom-in duration-500 flex flex-col items-center gap-4 text-center">
            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center animate-bounce">
@@ -678,11 +676,11 @@ export default function RouteDetailPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <p className="text-[9px] uppercase font-bold text-slate-500">Hoy</p>
-                  <p className="text-xl font-bold text-blue-600">{load.tracking?.timeOnRouteMinutes || 0} <span className="text-xs font-normal text-slate-400">min</span></p>
+                  <p className="text-xl font-bold text-blue-600">{Math.round(load.tracking?.timeOnRouteMinutes || 0)} <span className="text-xs font-normal text-slate-400">min</span></p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-[9px] uppercase font-bold text-slate-500">Parado</p>
-                  <p className="text-xl font-bold text-orange-600">{load.tracking?.timeStoppedMinutes || 0} <span className="text-xs font-normal text-slate-400">min</span></p>
+                  <p className="text-xl font-bold text-orange-600">{Math.round(load.tracking?.timeStoppedMinutes || 0)} <span className="text-xs font-normal text-slate-400">min</span></p>
                 </div>
               </div>
             </CardContent>
