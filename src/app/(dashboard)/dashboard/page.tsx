@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
@@ -247,6 +246,8 @@ export default function MonitorOperativoPage() {
     const speedPenalty = (load.tracking?.maxSpeed || 0) > 90 ? 15 : 0;
     return Math.max(0, base - (alerts * 10) - speedPenalty);
   };
+
+  if (!mounted) return <div className="h-[80vh] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
     <div className="space-y-6">

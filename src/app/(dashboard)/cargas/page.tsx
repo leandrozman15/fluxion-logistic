@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, orderBy, deleteDoc, doc } from "firebase/firestore";
@@ -35,6 +34,11 @@ export default function CargasPage() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const loadsQuery = useMemo(() => {
     if (!db) return null;
@@ -93,7 +97,17 @@ export default function CargasPage() {
     }
   };
 
-  const loading = loadsLoading;
+  if (!mounted) return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Cargas y Fletes</h1>
+          <p className="text-slate-500 text-sm">Cargando sistema...</p>
+        </div>
+      </div>
+      <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -130,7 +144,7 @@ export default function CargasPage() {
         </div>
 
         <CardContent className="p-0">
-          {loading ? (
+          {loadsLoading ? (
             <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>
           ) : (
             <Table>
