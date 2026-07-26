@@ -20,7 +20,10 @@ import {
   DollarSign,
   ArrowUpRight,
   ArrowDownRight,
-  Truck as TruckIcon
+  Truck as TruckIcon,
+  Scale,
+  Zap,
+  TrendingDown
 } from "lucide-react";
 import { Load, Expense, Maintenance, Truck } from "@/app/lib/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -84,15 +87,17 @@ export default function AnalyticsPage() {
       const truckMaintenance = maintenance?.filter(m => m.truckId === truck.id && m.status === 'completed') || [];
       const maintenanceCost = truckMaintenance.reduce((acc, m) => acc + (m.actualCost || m.estimatedCost || 0), 0);
       
-      // 4. Costos Totales
-      const totalCosts = fuelCost + otherRouteCosts + maintenanceCost;
+      // 4. Costos Fijos Mensuales (Cargados en la ficha técnica)
+      const fixedCosts = truck.costs?.fixed ? Object.values(truck.costs.fixed).reduce((acc, val) => acc + (val as number), 0) : 0;
       
-      // 5. Índice de Eficiencia (IE) = (Facturación - Costos) / Costos * 100
-      // Usamos una base de 1 para evitar división por cero en unidades nuevas
+      // 5. Costos Totales Operativos (Ruta + Taller)
+      const totalVariableCosts = fuelCost + otherRouteCosts + maintenanceCost;
+      const totalCosts = totalVariableCosts + fixedCosts;
+      
+      // 6. Índice de Eficiencia (IE) = (Facturación - Costos) / Costos * 100
       const ie = totalCosts > 0 ? ((revenue - totalCosts) / totalCosts) * 100 : (revenue > 0 ? 100 : 0);
       
-      // 6. Kilómetros y Eficiencia KM
-      const totalKm = truck.odometerKm || 1;
+      // 7. Kilómetros y Eficiencia KM
       const kmEnPeriodo = truckLoads.reduce((acc, l) => acc + (l.tracking?.distanceTraveledKm || 0), 0) || 1;
       
       return {
@@ -101,27 +106,35 @@ export default function AnalyticsPage() {
         revenue,
         fuelCost,
         maintenanceCost,
+        fixedCosts,
         otherCosts: otherRouteCosts,
         totalCosts,
+        totalVariableCosts,
         ie: parseFloat(ie.toFixed(1)),
         margin: revenue - totalCosts,
-        costPerKm: totalCosts / kmEnPeriodo,
-        revenuePerKm: revenue / kmEnPeriodo,
-        trips: truckLoads.length
+        trips: truckLoads.length,
+        kmEnPeriodo
       };
     }).sort((a, b) => b.ie - a.ie);
   }, [trucks, loads, expenses, maintenance]);
+
+  const cheapestTruck = useMemo(() => {
+    if (fleetData.length === 0) return null;
+    return [...fleetData].sort((a, b) => a.fixedCosts - b.fixedCosts)[0];
+  }, [fleetData]);
 
   const globalStats = useMemo(() => {
     const revenue = fleetData.reduce((acc, d) => acc + d.revenue, 0);
     const costs = fleetData.reduce((acc, d) => acc + d.totalCosts, 0);
     const margin = revenue - costs;
     const avgIE = fleetData.length > 0 ? fleetData.reduce((acc, d) => acc + d.ie, 0) / fleetData.length : 0;
+    const totalFixed = fleetData.reduce((acc, d) => acc + d.fixedCosts, 0);
 
     return {
       revenue,
       costs,
       margin,
+      totalFixed,
       marginPercent: revenue > 0 ? (margin / revenue) * 100 : 0,
       avgIE
     };
@@ -153,8 +166,8 @@ export default function AnalyticsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Dashboard de Eficiencia de Flota</h1>
-          <p className="text-muted-foreground text-sm">Análisis de rentabilidad real cruzando facturación, combustible y taller.</p>
+          <h1 className="text-2xl font-bold text-slate-900">Inteligencia de Flota y Costos</h1>
+          <p className="text-muted-foreground text-sm">Análisis de rentabilidad real cruzando facturación, gastos fijos y variables.</p>
         </div>
         <div className="flex items-center gap-2">
           <Select value={range} onValueChange={setRange}>
@@ -171,58 +184,59 @@ export default function AnalyticsPage() {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <KPICard 
-          title="Facturación Total" 
+          title="Facturación Bruta" 
           value={globalStats.revenue.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })} 
           icon={TrendingUp} 
-          description="Fletes finalizados" 
+          description="Fletes entregados" 
         />
         <KPICard 
-          title="Costos Totales" 
-          value={globalStats.costs.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })} 
+          title="Gastos Estructurales" 
+          value={globalStats.totalFixed.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })} 
           icon={Activity} 
-          description="Operación + Mantenimiento" 
+          description="Sueldos, seguros, patentes" 
         />
         <Card className="shadow-none border-none bg-blue-600 text-white">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs uppercase font-bold opacity-70">Margen Bruto (%)</CardTitle>
+            <CardTitle className="text-xs uppercase font-bold opacity-70">Margen Operativo (%)</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-black">{globalStats.marginPercent.toFixed(1)}%</div>
             <p className="text-[10px] mt-1 opacity-80 flex items-center gap-1">
-              <ArrowUpRight size={12} /> {globalStats.margin.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })} de ganancia
+              <ArrowUpRight size={12} /> {globalStats.margin.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })} de ganancia real
             </p>
           </CardContent>
         </Card>
         <Card className="shadow-none border-none bg-slate-900 text-white">
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs uppercase font-bold opacity-70">Índice Eficiencia (IE)</CardTitle>
+            <CardTitle className="text-xs uppercase font-bold opacity-70">Líder en Bajos Costos</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-black text-blue-400">{globalStats.avgIE.toFixed(1)}%</div>
-            <p className="text-[10px] mt-1 opacity-80">Promedio general de la flota</p>
+            <div className="text-2xl font-black text-green-400">{cheapestTruck?.name || 'S/D'}</div>
+            <p className="text-[10px] mt-1 opacity-80 flex items-center gap-1">
+              <TrendingDown size={12} /> ${cheapestTruck?.fixedCosts.toLocaleString()} fijos mensuales
+            </p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="border-none shadow-sm overflow-hidden">
           <CardHeader className="bg-white border-b">
             <div className="flex justify-between items-center">
               <div>
                 <CardTitle className="text-sm font-bold flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4 text-blue-600" /> Facturación vs. Costos por Camión
+                  <BarChart3 className="w-4 h-4 text-blue-600" /> Facturación vs. Costos Totales
                 </CardTitle>
-                <CardDescription className="text-[10px] uppercase font-bold text-slate-400">Comparativa de ingresos y egresos directos</CardDescription>
+                <CardDescription className="text-[10px] uppercase font-bold text-slate-400">Comparativa de ingresos y egresos (Fijos + Variables)</CardDescription>
               </div>
-              <Badge variant="outline" className="bg-slate-50 text-[10px]">VALORES EN ARS</Badge>
             </div>
           </CardHeader>
-          <CardContent className="h-[400px] pt-8">
+          <CardContent className="h-[350px] pt-8">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={fleetData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
                 <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} />
-                <YAxis fontSize={10} axisLine={false} tickLine={false} tickFormatter={(value) => `$${value/1000000}M`} />
+                <YAxis fontSize={10} axisLine={false} tickLine={false} tickFormatter={(value) => `$${value/1000}K`} />
                 <Tooltip 
                   cursor={{fill: '#f1f5f9'}}
                   content={({ active, payload }) => {
@@ -233,10 +247,10 @@ export default function AnalyticsPage() {
                           <p className="font-black text-slate-900 border-b pb-1 uppercase">{data.name}</p>
                           <div className="space-y-1">
                             <p className="text-xs flex justify-between gap-4 font-bold text-green-600">Facturación: <span>${data.revenue.toLocaleString()}</span></p>
-                            <p className="text-xs flex justify-between gap-4 font-bold text-red-600">Costos: <span>${data.totalCosts.toLocaleString()}</span></p>
+                            <p className="text-xs flex justify-between gap-4 font-bold text-red-600">Total Costos: <span>${data.totalCosts.toLocaleString()}</span></p>
                             <div className="pt-1 mt-1 border-t text-[10px] flex justify-between">
-                              <span>EFICIENCIA:</span>
-                              <span className="font-bold">{data.ie}%</span>
+                              <span className="text-slate-400">EFICIENCIA:</span>
+                              <span className="font-bold text-blue-600">{data.ie}%</span>
                             </div>
                           </div>
                         </div>
@@ -253,63 +267,35 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
 
-        <div className="space-y-6">
-          <Card className="border-none shadow-sm bg-white">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs uppercase font-black text-slate-500 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-orange-500" /> Alertas de Desempeño
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {fleetData.filter(d => d.ie < 5).map(lowUnit => (
-                <div key={lowUnit.id} className="p-3 bg-red-50 border border-red-100 rounded-xl space-y-2">
-                   <div className="flex justify-between items-start">
-                      <span className="font-bold text-red-700 text-sm">{lowUnit.name}</span>
-                      <Badge variant="destructive" className="text-[8px] h-4">IE: {lowUnit.ie}%</Badge>
-                   </div>
-                   <p className="text-[10px] text-red-600 leading-relaxed font-medium">
-                     Esta unidad está operando por debajo del punto de equilibrio. El {Math.round((lowUnit.maintenanceCost / lowUnit.totalCosts) * 100)}% de sus costos son de taller.
-                   </p>
-                </div>
-              ))}
-              {fleetData.filter(d => d.ie < 5).length === 0 && (
-                <div className="py-8 text-center space-y-2">
-                   <CheckCircle2 className="w-8 h-8 text-green-500 mx-auto opacity-20" />
-                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Toda la flota en verde</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-900 text-white border-none shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs uppercase font-bold text-blue-400">Eficiencia por KM (Media)</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-               <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                     <p className="text-[9px] text-white/40 uppercase">Costo / KM</p>
-                     <p className="text-lg font-bold">${(globalStats.costs / (fleetData.reduce((acc, d) => acc + d.trips, 0) * 400 || 1)).toFixed(2)}</p>
-                  </div>
-                  <div className="space-y-1">
-                     <p className="text-[9px] text-white/40 uppercase">Margen / KM</p>
-                     <p className="text-lg font-bold text-green-400">${(globalStats.margin / (fleetData.reduce((acc, d) => acc + d.trips, 0) * 400 || 1)).toFixed(2)}</p>
-                  </div>
-               </div>
-               <div className="pt-4 border-t border-white/10">
-                  <div className="flex items-center gap-2 text-[10px] text-white/50 italic leading-relaxed">
-                     <Package size={12} /> Basado en un promedio estimado de 400km por viaje entregado.
-                  </div>
-               </div>
-            </CardContent>
-          </Card>
-        </div>
+        <Card className="border-none shadow-sm overflow-hidden bg-slate-50/50">
+          <CardHeader className="bg-white border-b">
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <Scale className="w-4 h-4 text-orange-600" /> Comparativa de Gastos Fijos
+                </CardTitle>
+                <CardDescription className="text-[10px] uppercase font-bold text-slate-400">Estructura de mantenimiento fijo mensual por camión</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="h-[350px] pt-8">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={[...fleetData].sort((a,b) => a.fixedCosts - b.fixedCosts)} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
+                <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} />
+                <YAxis fontSize={10} axisLine={false} tickLine={false} />
+                <Tooltip />
+                <Bar name="Costos Fijos Mensuales" dataKey="fixedCosts" fill="#f97316" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
       </div>
 
       <Card className="border-none shadow-sm overflow-hidden">
         <CardHeader className="bg-slate-50 border-b">
           <CardTitle className="text-sm font-bold flex items-center gap-2">
-             <TruckIcon className="text-blue-600" size={16} /> Tabla de Eficiencia por Unidad
+             <TruckIcon className="text-blue-600" size={16} /> Auditoría Detallada de Rentabilidad
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -317,10 +303,10 @@ export default function AnalyticsPage() {
             <TableHeader className="bg-slate-50/50">
               <TableRow>
                 <TableHead className="text-[10px] uppercase font-bold">Camión</TableHead>
+                <TableHead className="text-[10px] uppercase font-bold text-right">Fijos/Mes</TableHead>
+                <TableHead className="text-[10px] uppercase font-bold text-right">Ruta (Variables)</TableHead>
+                <TableHead className="text-[10px] uppercase font-bold text-right">Inversión Total</TableHead>
                 <TableHead className="text-[10px] uppercase font-bold text-right">Facturación</TableHead>
-                <TableHead className="text-[10px] uppercase font-bold text-right">Combustible</TableHead>
-                <TableHead className="text-[10px] uppercase font-bold text-right">Mantenimiento</TableHead>
-                <TableHead className="text-[10px] uppercase font-bold text-right">Total Costos</TableHead>
                 <TableHead className="text-[10px] uppercase font-bold text-center">Índice IE</TableHead>
               </TableRow>
             </TableHeader>
@@ -333,10 +319,10 @@ export default function AnalyticsPage() {
                       <span className="text-[9px] text-slate-400 uppercase">{data.trips} fletes finalizados</span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-right font-bold text-green-600">${data.revenue.toLocaleString()}</TableCell>
-                  <TableCell className="text-right text-slate-600">${data.fuelCost.toLocaleString()}</TableCell>
-                  <TableCell className="text-right text-slate-600">${data.maintenanceCost.toLocaleString()}</TableCell>
+                  <TableCell className="text-right text-slate-600 font-medium">${data.fixedCosts.toLocaleString()}</TableCell>
+                  <TableCell className="text-right text-slate-600 font-medium">${data.totalVariableCosts.toLocaleString()}</TableCell>
                   <TableCell className="text-right font-bold text-red-600">${data.totalCosts.toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-bold text-green-600">${data.revenue.toLocaleString()}</TableCell>
                   <TableCell className="text-center">
                     <Badge variant="outline" className={cn("text-[10px] font-black min-w-[70px] justify-center", getIEColor(data.ie))}>
                       {data.ie}% {getIEIndicator(data.ie)}
