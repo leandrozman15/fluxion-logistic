@@ -77,7 +77,7 @@ export default function MonitorOperativoPage() {
   const [mounted, setMounted] = useState(false);
   const [L, setL] = useState<any>(null);
   const [expandedLoadId, setExpandedLoadId] = useState<string | null>(null);
-  const [agendaTab, setAgendaTab] = useState<string>("active");
+  const [agendaTab, setAgendaTab] = useState<string>("today");
 
   // Dock assignment state
   const [isDockDialogOpen, setIsDockDialogOpen] = useState(false);
@@ -163,18 +163,30 @@ export default function MonitorOperativoPage() {
     return loads.filter(l => {
       const updateDate = l.updatedAt?.seconds ? new Date(l.updatedAt.seconds * 1000) : new Date(l.updatedAt);
       const isUpdatedToday = isToday(updateDate);
+      const isActive = l.status === 'on_route' || l.status === 'on_pause' || l.status === 'incident';
 
-      if (agendaTab === 'active') return l.status === 'on_route' || l.status === 'on_pause';
-      if (agendaTab === 'finished') return l.status === 'delivered' && isUpdatedToday;
-      if (agendaTab === 'today') return l.pickupDate === todayStr && l.status !== 'cancelled';
-      if (agendaTab === 'tomorrow') return l.pickupDate === tomorrowStr && l.status !== 'cancelled';
+      if (agendaTab === 'today') {
+        const isScheduledToday = l.pickupDate === todayStr;
+        const isFinishedToday = l.status === 'delivered' && isUpdatedToday;
+        return (isScheduledToday || isActive || isFinishedToday) && l.status !== 'cancelled';
+      }
+      
+      if (agendaTab === 'tomorrow') {
+        return l.pickupDate === tomorrowStr && l.status !== 'cancelled';
+      }
+      
       if (agendaTab === 'week') {
         return l.pickupDate >= todayStr && l.pickupDate <= nextWeekStr && l.status !== 'cancelled';
       }
+      
       return false;
     }).sort((a, b) => {
-      if (a.status === 'on_route' && b.status !== 'on_route') return -1;
-      if (a.status !== 'on_route' && b.status === 'on_route') return 1;
+      // Priorizar en tránsito arriba
+      const isAActive = a.status === 'on_route' || a.status === 'on_pause';
+      const isBActive = b.status === 'on_route' || b.status === 'on_pause';
+      if (isAActive && !isBActive) return -1;
+      if (!isAActive && isBActive) return 1;
+      
       const dateA = `${a.pickupDate} ${a.pickupTime}`;
       const dateB = `${b.pickupDate} ${b.pickupTime}`;
       return dateA.localeCompare(dateB);
@@ -293,9 +305,7 @@ export default function MonitorOperativoPage() {
              
              <Tabs value={agendaTab} onValueChange={setAgendaTab} className="w-full md:w-auto">
                <TabsList className="bg-white dark:bg-slate-800 border h-9">
-                 <TabsTrigger value="active" className="text-[10px] font-bold uppercase">En Curso</TabsTrigger>
-                 <TabsTrigger value="today" className="text-[10px] font-bold uppercase">Hoy</TabsTrigger>
-                 <TabsTrigger value="finished" className="text-[10px] font-bold uppercase">Finalizados Hoy</TabsTrigger>
+                 <TabsTrigger value="today" className="text-[10px] font-bold uppercase">Hoy (Todo)</TabsTrigger>
                  <TabsTrigger value="tomorrow" className="text-[10px] font-bold uppercase">Mañana</TabsTrigger>
                  <TabsTrigger value="week" className="text-[10px] font-bold uppercase">Semana</TabsTrigger>
                </TabsList>
@@ -675,7 +685,7 @@ export default function MonitorOperativoPage() {
               </Marker>
             ))}
 
-            {L && truckIcon && filteredAgenda.filter(l => (l.status === 'on_route' || l.status === 'on_pause') && l.tracking?.currentLat).map((load) => (
+            {L && truckIcon && filteredAgenda.filter(l => (l.status === 'on_route' || l.status === 'on_pause' || l.status === 'incident') && l.tracking?.currentLat).map((load) => (
               <Marker key={load.id} position={[load.tracking!.currentLat, load.tracking!.currentLng]} icon={truckIcon}>
                 <Popup>
                   <div className="p-1 font-bold text-sm">
@@ -744,3 +754,4 @@ export default function MonitorOperativoPage() {
     </div>
   );
 }
+
