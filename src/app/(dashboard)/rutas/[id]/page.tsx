@@ -20,7 +20,7 @@ import {
   Wallet, Plus, DollarSign, Camera, Fuel, Utensils, Bed, Wrench, Receipt,
   Zap, Satellite, SignalHigh, Loader2, Compass, Gauge, History, 
   Coffee, Moon, Car, Battery, Flame, CloudRain, Construction, FileWarning, HelpCircle,
-  Siren, LifeBuoy, PlayCircle, Edit3, UserCheck, UploadCloud, PauseCircle, PenTool,
+  Siren, LifeBuoy, PlayCircle, Edit3, UserCheck, PauseCircle, PenTool,
   Anchor,
   CirclePlay,
   XCircle
@@ -30,6 +30,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { calculateDistance, estimateFuelFactor } from "@/lib/utils/tracking-math";
 import { SignaturePad } from "@/components/SignaturePad";
+import { compressImage } from "@/lib/utils/image-compression";
 
 // Cargamento dinámico del Mapa
 const MapContainer = dynamic(
@@ -315,7 +316,7 @@ export default function RouteDetailPage() {
       setIsPODOpen(false);
       router.push('/rutas');
     } catch (e) {
-      toast({ variant: "destructive", title: "Error" });
+      toast({ variant: "destructive", title: "Error al confirmar entrega", description: "Verifique el tamaño de los adjuntos e intente nuevamente." });
     } finally {
       setIsUpdating(false);
     }
@@ -373,9 +374,21 @@ export default function RouteDetailPage() {
   const onPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setIsUpdating(true);
       const reader = new FileReader();
-      reader.onload = (event) => {
-        setPodData({ ...podData, photoUrl: event.target?.result as string });
+      reader.onload = async (event) => {
+        const base64 = event.target?.result as string;
+        try {
+          // Comprimir imagen para asegurar que quepa en Firestore (< 1MB)
+          const compressed = await compressImage(base64, 1024, 1024, 0.6);
+          setPodData({ ...podData, photoUrl: compressed });
+          toast({ title: "Foto optimizada", description: "La imagen ha sido procesada correctamente." });
+        } catch (err) {
+          console.error("Compression error:", err);
+          setPodData({ ...podData, photoUrl: base64 });
+        } finally {
+          setIsUpdating(false);
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -517,7 +530,7 @@ export default function RouteDetailPage() {
 
                             <div className="grid grid-cols-1 gap-3">
                               <Button variant="outline" className={cn("h-16 flex items-center justify-start px-4 gap-4 border-dashed border-2", podData.photoUrl ? "border-green-500 bg-green-50" : "")} onClick={() => podPhotoInputRef.current?.click()}>
-                                <Camera className={cn("w-6 h-6", podData.photoUrl ? "text-green-600" : "text-slate-400")} />
+                                {isUpdating ? <Loader2 className="w-6 h-6 animate-spin text-blue-600" /> : <Camera className={cn("w-6 h-6", podData.photoUrl ? "text-green-600" : "text-slate-400")} />}
                                 <div className="text-left">
                                   <p className="text-sm font-bold">{podData.photoUrl ? "Foto Lista" : "Tomar Foto Remito"}</p>
                                   <p className="text-[10px] text-slate-500">Evidencia física de entrega</p>
@@ -609,6 +622,7 @@ export default function RouteDetailPage() {
                               disabled={!podData.receiverName || !podData.receiverSignatureUrl || !podData.driverSignatureUrl || isUpdating} 
                               onClick={handleConfirmDelivery}
                             >
+                              {isUpdating ? <Loader2 className="animate-spin mr-2" /> : null}
                               FINALIZAR MISIÓN Y GUARDAR
                             </Button>
                           </DialogFooter>
@@ -629,7 +643,7 @@ export default function RouteDetailPage() {
                  className="h-full w-full"
                  zoomControl={false}
                >
-                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.getTileUrl" />
                  {load.tracking?.currentLat && (
                    <Marker position={[load.tracking.currentLat, load.tracking.currentLng]} icon={truckIcon} />
                  )}
@@ -641,7 +655,7 @@ export default function RouteDetailPage() {
             <div className="flex gap-4">
               <div className="flex flex-col items-center">
                 <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2", load.status !== 'pending' && load.status !== 'assigned' ? 'bg-green-50 border-green-500 text-white' : 'bg-white border-slate-200 text-slate-400')}>
-                  {load.status !== 'pending' && load.status !== 'assigned' ? <CheckCircle2 size(16) /> : <Package size={16} />}
+                  {load.status !== 'pending' && load.status !== 'assigned' ? <CheckCircle2 size={16} /> : <Package size={16} />}
                 </div>
                 <div className="w-0.5 h-full bg-slate-100 min-h-[40px]"></div>
               </div>

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from "react";
@@ -23,6 +22,7 @@ import {
 import { Client, Country } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { compressImage } from "@/lib/utils/image-compression";
 
 interface ClientFormWizardProps {
   clientId?: string;
@@ -133,14 +133,25 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // En un entorno de producción aquí se subiría a Firebase Storage
-      // Por ahora simulamos la carga exitosa
-      toast({ 
-        title: "Foto cargada correctamente", 
-        description: `Archivo: ${file.name} listo para procesar.` 
-      });
-      // Placeholder para la URL de la imagen
-      setFormData(prev => ({ ...prev, facadePhotoUrl: URL.createObjectURL(file) }));
+      setIsSubmitting(true);
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64 = event.target?.result as string;
+        try {
+          // Comprimir y optimizar la foto de fachada para Firestore
+          const compressed = await compressImage(base64, 1024, 1024, 0.6);
+          setFormData(prev => ({ ...prev, facadePhotoUrl: compressed }));
+          toast({ 
+            title: "Foto cargada y optimizada", 
+            description: "La imagen está lista para guardarse." 
+          });
+        } catch (err) {
+          setFormData(prev => ({ ...prev, facadePhotoUrl: base64 }));
+        } finally {
+          setIsSubmitting(false);
+        }
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -205,7 +216,7 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
             <div key={s.id} className="flex flex-col items-center gap-1.5 flex-1 relative">
               <div className={cn(
                 "w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold z-10 transition-all",
-                step > s.id ? "bg-green-500 text-white" : step === s.id ? "bg-blue-600 text-white shadow-md shadow-blue-100" : "bg-slate-50 text-slate-300 border"
+                step > s.id ? "bg-green-50 text-white" : step === s.id ? "bg-blue-600 text-white shadow-md shadow-blue-100" : "bg-slate-50 text-slate-300 border"
               )}>
                 {step > s.id ? <CheckCircle2 size={18} /> : <s.icon size={16} />}
               </div>
@@ -343,7 +354,7 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
                     onChange={handleFileChange} 
                   />
                   <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
-                    {formData.facadePhotoUrl ? <ImageIcon /> : <Camera />}
+                    {isSubmitting ? <Loader2 className="animate-spin" /> : (formData.facadePhotoUrl ? <ImageIcon /> : <Camera />)}
                   </div>
                   <div>
                     <p className="text-xs font-bold text-slate-900 uppercase tracking-tighter">
