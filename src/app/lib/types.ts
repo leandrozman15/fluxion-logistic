@@ -135,6 +135,35 @@ export interface SemiTrailer {
   axles: number;
 }
 
+export interface TruckCosts {
+  // Bloque A: Costos Fijos
+  fixed: {
+    salaryWithSocial: number;
+    insuranceTotal: number;
+    patenteMonthly: number;
+    satelliteGps: number;
+    garageAdmin: number;
+    taxesHabilitations: number;
+    amortization: number;
+  };
+  // Bloque B: Costos Variables
+  variable: {
+    preventiveMaintenance: {
+      cost: number;
+      frequencyKm: number;
+    };
+    tires: {
+      costFullSet: number;
+      lifeSpanKm: number;
+    };
+    unforeseenReservePerKm: number;
+  };
+  // Bloque C: Datos Operativos
+  operational: {
+    estimatedMonthlyKm: number;
+  };
+}
+
 export interface Truck {
   id: string;
   plate: string;
@@ -164,6 +193,9 @@ export interface Truck {
   
   // Datos del acoplado
   semiTrailer?: SemiTrailer;
+  
+  // Estructura de costos
+  costs?: TruckCosts;
 }
 
 export interface Driver {

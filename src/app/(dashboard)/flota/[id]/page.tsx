@@ -18,7 +18,7 @@ import {
   MapPin, Gauge, Box, Info, Download, Trash2, MoreVertical, LayoutGrid, Fuel, DollarSign, Activity, TrendingUp, User, Building2, Briefcase, Edit2,
   Loader2, Eye, Wrench, History, ExternalLink
 } from "lucide-react";
-import { Truck, VehicleDocument, DocStatus, Expense, Driver, Maintenance } from "@/app/lib/types";
+import { Truck, VehicleDocument, DocStatus, Expense, Driver, Maintenance, TruckCosts } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { format, isBefore, addDays, parseISO } from "date-fns";
@@ -95,6 +95,27 @@ export default function TruckDetailPage() {
       return dateB - dateA;
     });
   }, [maintenanceHistoryRaw]);
+
+  // Cálculos de Costos Teóricos
+  const costCalculation = useMemo(() => {
+    if (!truck?.costs) return { totalPerKm: 0, fixedPerKm: 0 };
+    const costs = truck.costs;
+    const kmMensuales = costs.operational.estimatedMonthlyKm || 1;
+    
+    const sumFixed = Object.values(costs.fixed).reduce((a, b) => a + b, 0);
+    const fixedPerKm = sumFixed / kmMensuales;
+    const oilPerKm = costs.variable.preventiveMaintenance.cost / (costs.variable.preventiveMaintenance.frequencyKm || 1);
+    const tiresPerKm = costs.variable.tires.costFullSet / (costs.variable.tires.lifeSpanKm || 1);
+    const reservePerKm = costs.variable.unforeseenReservePerKm;
+    
+    return {
+      totalPerKm: fixedPerKm + oilPerKm + tiresPerKm + reservePerKm,
+      fixedPerKm,
+      oilPerKm,
+      tiresPerKm,
+      reservePerKm
+    };
+  }, [truck?.costs]);
 
   useEffect(() => {
     if (truck && !truck.documentation && truckRef) {
@@ -272,6 +293,29 @@ export default function TruckDetailPage() {
             </CardContent>
           </Card>
 
+          <Card className="bg-slate-900 text-white border-none shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-5"><DollarSign size={80}/></div>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs uppercase font-black text-blue-400 tracking-tighter">Simulación de Costo KM</CardTitle>
+            </CardHeader>
+            <CardContent>
+               <div className="flex items-end gap-2">
+                 <p className="text-4xl font-black italic text-green-400">${costCalculation.totalPerKm.toFixed(2)}</p>
+                 <p className="text-[10px] uppercase font-bold text-white/30 pb-1">Costo Teórico</p>
+               </div>
+               <div className="mt-4 pt-4 border-t border-white/5 space-y-2">
+                  <div className="flex justify-between text-[10px] font-bold">
+                    <span className="text-white/30 uppercase">Fijos/KM</span>
+                    <span className="text-white/80">${costCalculation.fixedPerKm.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-[10px] font-bold">
+                    <span className="text-white/30 uppercase">Variables/KM</span>
+                    <span className="text-white/80">${(costCalculation.oilPerKm + costCalculation.tiresPerKm + costCalculation.reservePerKm).toFixed(2)}</span>
+                  </div>
+               </div>
+            </CardContent>
+          </Card>
+
           <Card className="border-none shadow-sm border-l-4 border-l-blue-600">
             <CardHeader className="pb-2">
               <CardTitle className="text-xs uppercase font-bold text-slate-500 flex items-center gap-2">
@@ -324,6 +368,9 @@ export default function TruckDetailPage() {
               </TabsTrigger>
               <TabsTrigger value="semi" className="flex items-center gap-2">
                 <LayoutGrid size={16} /> Semirremolque
+              </TabsTrigger>
+              <TabsTrigger value="costs" className="flex items-center gap-2">
+                <DollarSign size={16} /> Estructura Costos
               </TabsTrigger>
               <TabsTrigger value="history" className="flex items-center gap-2">
                 <History size={16} /> Historial Técnico
@@ -437,6 +484,50 @@ export default function TruckDetailPage() {
                   </CardContent>
                 </Card>
               ))}
+            </TabsContent>
+
+            <TabsContent value="costs" className="space-y-6 animate-in fade-in">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <Card className="border-none shadow-sm">
+                   <CardHeader className="bg-slate-50 border-b py-3"><CardTitle className="text-xs uppercase font-black text-slate-500">Desglose Gastos Fijos (Mensual)</CardTitle></CardHeader>
+                   <CardContent className="pt-4 space-y-3">
+                      {truck.costs?.fixed && Object.entries(truck.costs.fixed).map(([key, val]) => (
+                        <div key={key} className="flex justify-between items-center text-xs py-1 border-b border-slate-50 last:border-0">
+                           <span className="text-slate-500 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                           <span className="font-bold text-slate-700">${(val as number).toLocaleString()}</span>
+                        </div>
+                      ))}
+                      <div className="pt-3 flex justify-between items-center text-sm font-black border-t-2">
+                         <span className="uppercase">Total Fijo Mensual</span>
+                         <span className="text-blue-600">${Object.values(truck.costs?.fixed || {}).reduce((a, b) => a + (b as number), 0).toLocaleString()}</span>
+                      </div>
+                   </CardContent>
+                 </Card>
+
+                 <Card className="border-none shadow-sm">
+                   <CardHeader className="bg-slate-50 border-b py-3"><CardTitle className="text-xs uppercase font-black text-slate-500">Variables y Operatividad</CardTitle></CardHeader>
+                   <CardContent className="pt-4 space-y-6">
+                      <div className="space-y-2">
+                        <p className="text-[10px] uppercase font-bold text-slate-400">Mantenimiento (Service)</p>
+                        <div className="flex justify-between text-xs">
+                          <span>Último: ${truck.costs?.variable.preventiveMaintenance.cost.toLocaleString()}</span>
+                          <span className="font-bold text-blue-600">Cada {truck.costs?.variable.preventiveMaintenance.frequencyKm.toLocaleString()} KM</span>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-[10px] uppercase font-bold text-slate-400">Neumáticos (Gasto)</p>
+                        <div className="flex justify-between text-xs">
+                          <span>Set Completo: ${truck.costs?.variable.tires.costFullSet.toLocaleString()}</span>
+                          <span className="font-bold text-blue-600">Vida: {truck.costs?.variable.tires.lifeSpanKm.toLocaleString()} KM</span>
+                        </div>
+                      </div>
+                      <div className="p-3 bg-blue-50 rounded-lg flex justify-between items-center">
+                        <span className="text-[10px] uppercase font-black text-blue-700">KM Mensuales Est.</span>
+                        <span className="text-lg font-black text-blue-900">{truck.costs?.operational.estimatedMonthlyKm.toLocaleString()}</span>
+                      </div>
+                   </CardContent>
+                 </Card>
+              </div>
             </TabsContent>
 
             <TabsContent value="history" className="space-y-8 animate-in fade-in">

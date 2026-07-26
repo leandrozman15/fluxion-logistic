@@ -14,9 +14,9 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Truck, ArrowLeft, ArrowRight, Save, Loader2, 
   Gauge, Box, Thermometer, Droplets, Anchor, Layers, 
-  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon, LayoutGrid, Users, Building2, User
+  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon, LayoutGrid, Users, Building2, User, DollarSign, Activity, TrendingUp
 } from "lucide-react";
-import { Truck as TruckType, Driver, OwnershipType } from "@/app/lib/types";
+import { Truck as TruckType, Driver, OwnershipType, TruckCosts } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -53,6 +53,26 @@ const BODY_TYPES = [
   { id: "volquete", label: "Volquete", icon: Anchor },
 ];
 
+const INITIAL_COSTS: TruckCosts = {
+  fixed: {
+    salaryWithSocial: 0,
+    insuranceTotal: 0,
+    patenteMonthly: 0,
+    satelliteGps: 0,
+    garageAdmin: 0,
+    taxesHabilitations: 0,
+    amortization: 0,
+  },
+  variable: {
+    preventiveMaintenance: { cost: 0, frequencyKm: 20000 },
+    tires: { costFullSet: 0, lifeSpanKm: 100000 },
+    unforeseenReservePerKm: 0,
+  },
+  operational: {
+    estimatedMonthlyKm: 10000,
+  }
+};
+
 export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
   const db = useFirestore();
   const router = useRouter();
@@ -78,7 +98,8 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
       year: new Date().getFullYear(),
       type: "plataforma",
       axles: 3
-    }
+    },
+    costs: INITIAL_COSTS
   });
 
   const truckRef = useMemo(() => 
@@ -102,7 +123,8 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
         avatarUrl: existingTruck.avatarUrl || "",
         ownershipType: existingTruck.ownershipType || 'company',
         assignedDriverId: existingTruck.assignedDriverId || "",
-        semiTrailer: existingTruck.semiTrailer || { plate: "", brand: "", model: "", year: new Date().getFullYear(), type: "plataforma", axles: 3 }
+        semiTrailer: existingTruck.semiTrailer || { plate: "", brand: "", model: "", year: new Date().getFullYear(), type: "plataforma", axles: 3 },
+        costs: existingTruck.costs || INITIAL_COSTS
       });
     }
   }, [existingTruck]);
@@ -127,6 +149,19 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
   const handleNumericChange = (field: string, value: string) => {
     const val = value === "" ? 0 : parseFloat(value);
     setFormData(prev => ({ ...prev, [field]: isNaN(val) ? 0 : val }));
+  };
+
+  const handleCostChange = (block: keyof TruckCosts, field: string, value: string, subField?: string) => {
+    const val = value === "" ? 0 : parseFloat(value);
+    setFormData(prev => {
+      const newCosts = { ...prev.costs! };
+      if (subField) {
+        (newCosts[block] as any)[field][subField] = isNaN(val) ? 0 : val;
+      } else {
+        (newCosts[block] as any)[field] = isNaN(val) ? 0 : val;
+      }
+      return { ...prev, costs: newCosts };
+    });
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -174,6 +209,33 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     }
   };
 
+  // Cálculos de Eficiencia Teórica
+  const calculations = useMemo(() => {
+    if (!formData.costs) return { fixedPerKm: 0, oilPerKm: 0, tiresPerKm: 0, totalPerKm: 0 };
+    
+    const costs = formData.costs;
+    const kmMensuales = costs.operational.estimatedMonthlyKm || 1; // evitar division por cero
+    
+    // Bloque A: Fijos
+    const sumFixed = Object.values(costs.fixed).reduce((a, b) => a + b, 0);
+    const fixedPerKm = sumFixed / kmMensuales;
+    
+    // Bloque B: Variables
+    const oilPerKm = costs.variable.preventiveMaintenance.cost / (costs.variable.preventiveMaintenance.frequencyKm || 1);
+    const tiresPerKm = costs.variable.tires.costFullSet / (costs.variable.tires.lifeSpanKm || 1);
+    const reservePerKm = costs.variable.unforeseenReservePerKm;
+    
+    const totalPerKm = fixedPerKm + oilPerKm + tiresPerKm + reservePerKm;
+    
+    return {
+      fixedPerKm,
+      oilPerKm,
+      tiresPerKm,
+      reservePerKm,
+      totalPerKm
+    };
+  }, [formData.costs]);
+
   if (loadingExisting && truckId) {
     return (
       <div className="h-[60vh] flex items-center justify-center">
@@ -192,7 +254,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
           <Button variant="ghost" size="icon" onClick={() => router.back()}><ArrowLeft /></Button>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">{truckId ? 'Editar Unidad' : 'Nueva Unidad de Flota'}</h1>
-            <p className="text-sm text-slate-500">Gestión de especificaciones técnicas y documentación del vehículo.</p>
+            <p className="text-sm text-slate-500">Gestión de especificaciones técnicas, documentación y costos.</p>
           </div>
         </div>
         {formData.plate && (
@@ -207,7 +269,8 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
           {[
             { id: 1, label: "Identificación", icon: Info },
             { id: 2, label: "Especificaciones", icon: Gauge },
-            { id: 3, label: "Ubicación Base", icon: MapPin }
+            { id: 3, label: "Ubicación Base", icon: MapPin },
+            { id: 4, label: "Estructura de Costos", icon: DollarSign }
           ].map((s) => (
             <div key={s.id} className="flex flex-col items-center gap-1.5 flex-1 relative">
               <div className={cn(
@@ -219,7 +282,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
               <span className={cn("text-[9px] uppercase font-bold text-center", step === s.id ? "text-blue-600" : "text-slate-400")}>
                 {s.label}
               </span>
-              {s.id < 3 && <div className={cn("absolute top-4.5 left-1/2 w-full h-[1px] -z-0", step > s.id ? "bg-green-200" : "bg-slate-100")}></div>}
+              {s.id < 4 && <div className={cn("absolute top-4.5 left-1/2 w-full h-[1px] -z-0", step > s.id ? "bg-green-200" : "bg-slate-100")}></div>}
             </div>
           ))}
         </div>
@@ -466,6 +529,158 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
             </CardContent>
           </Card>
         )}
+
+        {step === 4 && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+               <div className="lg:col-span-2 space-y-6">
+                  {/* Bloque A: Fijos */}
+                  <Card className="border-none shadow-sm">
+                    <CardHeader className="bg-slate-50 border-b">
+                      <CardTitle className="text-sm flex items-center gap-2 text-slate-700">
+                        <Activity className="text-blue-600" size={18} /> Bloque A: Costos Fijos Mensuales
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-6">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-slate-400">Sueldo + Cargas Sociales</Label>
+                        <Input type="number" value={formData.costs?.fixed.salaryWithSocial} onChange={e => handleCostChange('fixed', 'salaryWithSocial', e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-slate-400">Seguros (Unidad + RC + Carga)</Label>
+                        <Input type="number" value={formData.costs?.fixed.insuranceTotal} onChange={e => handleCostChange('fixed', 'insuranceTotal', e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-slate-400">Patente (Monto Mensual)</Label>
+                        <Input type="number" value={formData.costs?.fixed.patenteMonthly} onChange={e => handleCostChange('fixed', 'patenteMonthly', e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-slate-400">Satélite / GPS / Rastreo</Label>
+                        <Input type="number" value={formData.costs?.fixed.satelliteGps} onChange={e => handleCostChange('fixed', 'satelliteGps', e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-slate-400">Cochera / Estructura / Admin</Label>
+                        <Input type="number" value={formData.costs?.fixed.garageAdmin} onChange={e => handleCostChange('fixed', 'garageAdmin', e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-slate-400">Habilitaciones (Anual / 12)</Label>
+                        <Input type="number" value={formData.costs?.fixed.taxesHabilitations} onChange={e => handleCostChange('fixed', 'taxesHabilitations', e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase text-slate-400">Amortización / Reserva Reposición</Label>
+                        <Input type="number" value={formData.costs?.fixed.amortization} onChange={e => handleCostChange('fixed', 'amortization', e.target.value)} />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Bloque B: Variables */}
+                  <Card className="border-none shadow-sm">
+                    <CardHeader className="bg-slate-50 border-b">
+                      <CardTitle className="text-sm flex items-center gap-2 text-slate-700">
+                        <TrendingUp className="text-orange-600" size={18} /> Bloque B: Costos Variables por Uso
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-6 pt-6">
+                      <div className="p-4 bg-orange-50/30 rounded-xl border border-orange-100 space-y-4">
+                        <p className="text-[10px] font-black uppercase text-orange-700 flex items-center gap-2"><Wrench size={14}/> Mantenimiento Preventivo (Aceite/Filtros)</p>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <Label className="text-[9px] uppercase">Costo Último Servicio</Label>
+                            <Input className="h-8 bg-white" type="number" value={formData.costs?.variable.preventiveMaintenance.cost} onChange={e => handleCostChange('variable', 'preventiveMaintenance', e.target.value, 'cost')} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[9px] uppercase">Frecuencia (KM)</Label>
+                            <Input className="h-8 bg-white" type="number" value={formData.costs?.variable.preventiveMaintenance.frequencyKm} onChange={e => handleCostChange('variable', 'preventiveMaintenance', e.target.value, 'frequencyKm')} />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="p-4 bg-blue-50/30 rounded-xl border border-blue-100 space-y-4">
+                        <p className="text-[10px] font-black uppercase text-blue-700 flex items-center gap-2"><Box size={14}/> Neumáticos (Juego Completo)</p>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <Label className="text-[9px] uppercase">Costo Total Reposición</Label>
+                            <Input className="h-8 bg-white" type="number" value={formData.costs?.variable.tires.costFullSet} onChange={e => handleCostChange('variable', 'tires', e.target.value, 'costFullSet')} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[9px] uppercase">Vida Útil Est. (KM)</Label>
+                            <Input className="h-8 bg-white" type="number" value={formData.costs?.variable.tires.lifeSpanKm} onChange={e => handleCostChange('variable', 'tires', e.target.value, 'lifeSpanKm')} />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1 p-4 border rounded-xl">
+                        <Label className="text-[10px] font-bold uppercase text-slate-400">Reparaciones Imprevistas (Fondo Reserva / KM)</Label>
+                        <Input type="number" placeholder="Ej: 50" value={formData.costs?.variable.unforeseenReservePerKm} onChange={e => handleCostChange('variable', 'unforeseenReservePerKm', e.target.value)} />
+                      </div>
+                    </CardContent>
+                  </Card>
+               </div>
+
+               <div className="space-y-6">
+                  {/* Bloque C: Operativo */}
+                  <Card className="border-none shadow-sm bg-blue-600 text-white">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-xs uppercase font-bold text-white/70 tracking-widest">Bloque C: Parámetros</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                       <div className="space-y-1">
+                          <Label className="text-[10px] uppercase font-bold text-white/50">Kilómetros Mensuales Estimados</Label>
+                          <Input 
+                            type="number" 
+                            className="bg-white/10 border-white/20 text-white font-black text-2xl h-14"
+                            value={formData.costs?.operational.estimatedMonthlyKm} 
+                            onChange={e => handleCostChange('operational', 'estimatedMonthlyKm', e.target.value)}
+                          />
+                          <p className="text-[9px] italic opacity-60">Puente para unificar gastos fijos por KM.</p>
+                       </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Resultados Unificados */}
+                  <Card className="border-none shadow-xl bg-slate-900 text-white overflow-hidden relative">
+                    <div className="absolute top-0 right-0 p-4 opacity-5"><Layers size={120}/></div>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-black flex items-center gap-2 text-blue-400 uppercase italic">
+                        <Gauge size={20} /> Costo Teórico Final
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-6 relative">
+                       <div className="text-center py-4">
+                          <p className="text-5xl font-black italic text-green-400">${calculations.totalPerKm.toFixed(2)}</p>
+                          <p className="text-[10px] uppercase font-bold text-white/40 tracking-widest mt-1">Por Kilómetro Recorrido</p>
+                       </div>
+
+                       <div className="space-y-3 pt-6 border-t border-white/10">
+                          <div className="flex justify-between items-center text-xs">
+                             <span className="text-white/40 uppercase font-bold">Fijos por KM</span>
+                             <span className="font-mono font-bold">${calculations.fixedPerKm.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs">
+                             <span className="text-white/40 uppercase font-bold">Aceite/Filtros por KM</span>
+                             <span className="font-mono font-bold">${calculations.oilPerKm.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs">
+                             <span className="text-white/40 uppercase font-bold">Neumáticos por KM</span>
+                             <span className="font-mono font-bold">${calculations.tiresPerKm.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs">
+                             <span className="text-white/40 uppercase font-bold">Reserva Imprevistos</span>
+                             <span className="font-mono font-bold">${calculations.reservePerKm.toFixed(2)}</span>
+                          </div>
+                       </div>
+
+                       <div className="p-3 bg-white/5 border border-white/10 rounded-lg">
+                          <p className="text-[9px] text-white/50 leading-relaxed italic">
+                            * Este valor NO incluye combustible, el cual se calcula dinámicamente según la ruta y carga.
+                          </p>
+                       </div>
+                    </CardContent>
+                  </Card>
+               </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center z-50">
@@ -474,7 +689,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
             <ChevronLeft size={16} className="mr-1" /> Volver
           </Button>
           <div className="flex gap-2">
-            {step < 3 ? (
+            {step < 4 ? (
               <Button onClick={handleNext} className="bg-blue-600 min-w-[120px]">
                 Siguiente <ChevronRight size={16} className="ml-1" />
               </Button>
