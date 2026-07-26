@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { 
   Package, ArrowLeft, ArrowRight, Save, Loader2, 
   MapPin, Calendar, Clock, DollarSign, Truck, 
-  Info, AlertTriangle, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, LayoutGrid, UserCheck, Edit
+  Info, AlertTriangle, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, LayoutGrid, UserCheck, Edit, TrendingUp, CreditCard
 } from "lucide-react";
 import { Load, Client, Hub, LoadLegStop, LoadDocument, LoadDocType, Truck as TruckType, Driver, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -61,6 +61,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     orderNumber: "",
     serviceType: 'standard',
     clientName: "",
+    invoiceNumber: "",
     isRoundTrip: false,
     pickupDate: format(new Date(), "yyyy-MM-dd"),
     pickupTime: "08:00",
@@ -73,7 +74,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     basePrice: 0, 
     totalAmount: 0,
     status: "pending",
-    budget: { initialAdvance: 0, totalBudget: 0, categories: {} },
+    budget: { initialAdvance: 0, totalBudget: 0, driverCommission: 0, otherInternalCosts: 0, categories: {} },
     tracking: {
       currentLat: 0,
       currentLng: 0,
@@ -144,6 +145,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
         outboundStops: existingLoad.outboundStops || [],
         returnStops: existingLoad.returnStops || [],
         returnDestination: existingLoad.returnDestination || { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", country: "Argentina", zip: "", instructions: "" },
+        budget: existingLoad.budget || { initialAdvance: 0, totalBudget: 0, driverCommission: 0, otherInternalCosts: 0, categories: {} }
       });
     }
   }, [existingLoad]);
@@ -185,12 +187,10 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     const timeStr = isOutbound ? formData.pickupTime : formData.returnPickupTime;
     const stops = isOutbound ? formData.outboundStops : formData.returnStops;
     
-    // Punto de origen para el tramo actual
     const origin = isOutbound 
       ? formData.origin 
       : (formData.outboundStops?.[formData.outboundStops?.length - 1] || formData.origin);
     
-    // Punto de destino final para el tramo actual
     const destination = isOutbound 
       ? (formData.outboundStops?.[formData.outboundStops?.length - 1]) 
       : (formData.returnDestination);
@@ -202,7 +202,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
 
     const apiKey = tenant?.settings?.mapApiKey;
     
-    // Si no hay API Key configurada, aplicamos fallback manual pero avisando al usuario
     if (!apiKey || tenant?.settings?.mapProvider !== 'google') {
       const startDateTime = parse(`${dateStr} ${timeStr}`, "yyyy-MM-dd HH:mm", new Date());
       const endDateTime = addMinutes(startDateTime, 480); 
@@ -221,7 +220,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
 
     setIsCalculating(true);
     try {
-      // Construcción del itinerario para la API
       const itineraryAddresses = isOutbound 
         ? [origin.address, ...(stops?.map(s => s.address) || [])]
         : [origin.address, ...(stops?.map(s => s.address) || []), destination.address];
@@ -407,6 +405,15 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     return outbound + retour;
   }, [formData]);
 
+  const projectedInternalCosts = useMemo(() => {
+    const advance = formData.budget?.initialAdvance || 0;
+    const commission = formData.budget?.driverCommission || 0;
+    const other = formData.budget?.otherInternalCosts || 0;
+    return advance + commission + other;
+  }, [formData.budget]);
+
+  const projectedMargin = (formData.totalAmount || 0) - projectedInternalCosts;
+
   if (loadId && loadingExisting) return <div className="h-[60vh] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
@@ -582,7 +589,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                   </div>
                 )}
                 
-                {/* BOTÓN MOVIDO AQUÍ SEGÚN SOLICITUD */}
                 <div className="pt-2">
                   <Button 
                     size="sm" 
@@ -621,7 +627,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                 )}
               </div>
 
-              {/* CALCULO DE ETA IDA */}
               <div className="pt-6 border-t space-y-4">
                  <div className="flex items-center gap-2 text-blue-600 font-bold text-xs uppercase">
                     <Clock size={16} /> Cálculo de Llegada Estimada (Ida)
@@ -706,7 +711,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                     </Select>
                   </div>
 
-                  {/* CALCULO DE ETA RETORNO */}
                   <div className="pt-6 border-t space-y-4">
                     <div className="flex items-center gap-2 text-orange-600 font-bold text-xs uppercase">
                         <Clock size={16} /> Cálculo de Llegada Final (Retorno)
@@ -733,15 +737,86 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
         )}
 
         {step === 4 && (
-          <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Aspecto Financiero</CardTitle></CardHeader>
-            <CardContent className="space-y-8">
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="space-y-2"><Label>Precio Base / Flete Total (ARS)</Label><Input type="number" value={formData.totalAmount ?? 0} onChange={e => setFormData({...formData, totalAmount: parseFloat(e.target.value) || 0})} /></div>
-                  <div className="space-y-2"><Label>Anticipo Viáticos Chofer</Label><Input type="number" value={formData.budget?.initialAdvance ?? 0} onChange={e => setFormData({...formData, budget: {...formData.budget!, initialAdvance: parseFloat(e.target.value) || 0}})} /></div>
-               </div>
-            </CardContent>
-          </Card>
+          <div className="space-y-6">
+            <Card className="border-none shadow-sm">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <CreditCard className="text-blue-600" />
+                  <CardTitle>Ingresos y Facturación al Cliente</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label>Total Facturado al Cliente (ARS)</Label>
+                  <div className="relative">
+                    <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                    <Input 
+                      type="number" 
+                      className="pl-9 text-lg font-bold text-green-600"
+                      value={formData.totalAmount ?? 0} 
+                      onChange={e => setFormData({...formData, totalAmount: parseFloat(e.target.value) || 0})} 
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>N° de Factura / Ref. Contable</Label>
+                  <Input 
+                    placeholder="Ej: FAC-A-0001-00004321" 
+                    value={formData.invoiceNumber ?? ''} 
+                    onChange={e => setFormData({...formData, invoiceNumber: e.target.value})} 
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-sm border-l-4 border-l-blue-600">
+              <CardHeader>
+                <div className="flex items-center gap-2 text-blue-600 font-bold">
+                  <TrendingUp size={20} />
+                  <CardTitle>Costos de Operación Interna</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="space-y-2">
+                    <Label className="text-xs uppercase font-bold text-slate-500">Anticipo Viáticos Chofer</Label>
+                    <Input 
+                      type="number" 
+                      value={formData.budget?.initialAdvance ?? 0} 
+                      onChange={e => setFormData({...formData, budget: {...formData.budget!, initialAdvance: parseFloat(e.target.value) || 0}})} 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs uppercase font-bold text-slate-500">Comisión Chofer / Viaje</Label>
+                    <Input 
+                      type="number" 
+                      value={formData.budget?.driverCommission ?? 0} 
+                      onChange={e => setFormData({...formData, budget: {...formData.budget!, driverCommission: parseFloat(e.target.value) || 0}})} 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs uppercase font-bold text-slate-500">Otros Costos Operativos Est.</Label>
+                    <Input 
+                      type="number" 
+                      value={formData.budget?.otherInternalCosts ?? 0} 
+                      onChange={e => setFormData({...formData, budget: {...formData.budget!, otherInternalCosts: parseFloat(e.target.value) || 0}})} 
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-6 border-t flex flex-col sm:flex-row items-center justify-between gap-4">
+                   <div className="text-center sm:text-left">
+                      <p className="text-[10px] uppercase font-black text-slate-400">Total Costos Internos</p>
+                      <p className="text-xl font-bold text-red-600">${projectedInternalCosts.toLocaleString()}</p>
+                   </div>
+                   <div className="text-center sm:text-right p-4 bg-green-50 rounded-xl border border-green-100 min-w-[200px]">
+                      <p className="text-[10px] uppercase font-black text-green-600">Margen Bruto Proyectado</p>
+                      <p className="text-2xl font-black text-green-700">${projectedMargin.toLocaleString()}</p>
+                   </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {step === 5 && (
@@ -754,8 +829,8 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                      <p className="text-3xl font-black italic">{totalWeight.toLocaleString()} <span className="text-sm font-normal opacity-50 uppercase">Kg</span></p>
                   </div>
                   <div className="text-center sm:text-right">
-                     <p className="text-[10px] uppercase font-bold text-white/50 tracking-widest">Total Destinos</p>
-                     <p className="text-3xl font-black">{(formData.outboundStops?.length || 0) + (formData.returnStops?.length || 0)}</p>
+                     <p className="text-[10px] uppercase font-bold text-white/50 tracking-widest">Utilidad Estimada</p>
+                     <p className="text-3xl font-black text-green-400">${projectedMargin.toLocaleString()}</p>
                   </div>
                </div>
                <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-3">
@@ -768,7 +843,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
         )}
       </div>
 
-      {/* Stop Management Modal */}
       <Dialog open={isStopModalOpen} onOpenChange={setIsStopModalOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto rounded-xl">
           <DialogHeader>

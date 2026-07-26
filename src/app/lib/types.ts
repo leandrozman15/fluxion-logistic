@@ -354,9 +354,12 @@ export interface Load {
   budget?: {
     initialAdvance: number;
     totalBudget: number;
+    driverCommission?: number;
+    otherInternalCosts?: number;
     categories: Partial<Record<ExpenseCategory, number>>;
   };
 
+  invoiceNumber?: string;
   basePrice: number;
   totalAmount: number;
   status: LoadStatus;
