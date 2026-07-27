@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, orderBy, deleteDoc, doc } from "firebase/firestore";
+import { collection, query, orderBy, deleteDoc, doc, where } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Driver, DriverStatus, Truck, Load } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
-import { format, parseISO, differenceInDays } from "date-fns";
+import { format, parseISO, differenceInDays, isBefore } from "date-fns";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -217,6 +217,10 @@ export default function ChoferesPage() {
                     const assignedTruck = trucks?.find(t => t.assignedDriverId === driver.id);
                     const tripCount = loads?.filter(l => l.assignedDriverId === driver.id).length || 0;
                     const photoStats = getDocPhotoStats(driver);
+                    
+                    const isLicenseExpired = driver.licenseExpiry && isBefore(parseISO(driver.licenseExpiry), new Date());
+                    const isLintiExpired = driver.hasLinti && driver.lintiExpiry && isBefore(parseISO(driver.lintiExpiry), new Date());
+                    const hasExpiredDocs = isLicenseExpired || isLintiExpired;
 
                     return (
                       <TableRow key={driver.id} className="hover:bg-slate-50 transition-colors">
@@ -227,9 +231,15 @@ export default function ChoferesPage() {
                               <AvatarFallback className="bg-blue-50 text-blue-600 text-xs font-bold">{driver.firstName[0]}{driver.lastName[0]}</AvatarFallback>
                             </Avatar>
                             <div>
-                              <div className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{driver.lastName}, {driver.firstName}</div>
+                              <div className={cn(
+                                "font-bold transition-all",
+                                hasExpiredDocs 
+                                  ? "text-red-600 animate-pulse font-black" 
+                                  : "text-slate-900 group-hover:text-blue-600"
+                              )}>
+                                {driver.lastName}, {driver.firstName}
+                              </div>
                               <div className="text-[10px] text-slate-500 font-mono">DNI: {driver.dni}</div>
-                              {/* INDICADOR DE FOTOS */}
                               <div className="flex items-center gap-1 mt-1">
                                 <Camera size={10} className={cn(photoStats.all ? "text-green-600" : "text-slate-400")} />
                                 <span className={cn("text-[9px] font-black uppercase tracking-tighter", photoStats.all ? "text-green-700" : "text-slate-500")}>
