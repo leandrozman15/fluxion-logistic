@@ -1,4 +1,3 @@
-
 'use client';
 
 import { 
@@ -20,17 +19,12 @@ import {
   Truck, 
   Users, 
   Package, 
-  MapPin, 
-  TrendingUp, 
   Settings, 
   LogOut, 
   LayoutDashboard, 
-  Route, 
-  History, 
   Building2, 
   Briefcase, 
   BarChart3, 
-  Mail,
   Moon,
   Sun,
   Smartphone,

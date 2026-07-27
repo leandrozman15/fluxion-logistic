@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo } from "react";
@@ -8,28 +7,22 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { 
   Zap, 
   Truck, 
-  MapPin, 
-  Package, 
-  ArrowRight, 
-  Loader2, 
   Building2, 
+  Loader2, 
   Navigation, 
-  CheckCircle2, 
-  AlertCircle,
-  Calendar,
-  Layers,
-  Route as RouteIcon
+  Route as RouteIcon,
+  Layers
 } from "lucide-react";
 import { Client, Truck as TruckType, Hub, OptimizedRouteProposal, Load } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { optimizeDistribution } from "@/services/route-optimizer";
-import { format, addDays } from "date-fns";
-import { es } from "date-fns/locale";
-import Link from "next/link";
+import { format } from "date-fns";
 import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils";
 
 export default function DespachoInteligentePage() {
   const db = useFirestore();
@@ -91,13 +84,12 @@ export default function DespachoInteligentePage() {
     setIsSaving(true);
     
     try {
-      // Obtener el último número de orden para continuar la secuencia
       const loadsSnap = await getDocs(query(collection(db, "loads"), orderBy("orderNumber", "desc"), limit(1)));
       let nextSeq = 1;
       if (!loadsSnap.empty) {
         const lastLoad = loadsSnap.docs[0].data() as Load;
         const parts = lastLoad.orderNumber.split("-");
-        nextSeq = parseInt(parts[2]) + 1;
+        nextSeq = parseInt(parts[parts.length - 1]) + 1;
       }
 
       const year = new Date().getFullYear();
@@ -324,7 +316,7 @@ export default function DespachoInteligentePage() {
                <div className="p-6 bg-slate-900 text-white rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6">
                   <div className="flex items-center gap-4">
                      <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center text-blue-400">
-                        <CheckCircle2 size={24} />
+                        <RouteIcon size={24} />
                      </div>
                      <div>
                         <p className="text-lg font-bold italic">Confirmar Plan Maestro</p>
