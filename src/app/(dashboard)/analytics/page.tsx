@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState } from "react";
@@ -88,7 +87,7 @@ const CustomXAxisTick = (props: any) => {
         fontWeight="bold"
         className="uppercase"
       >
-        {truck.brand}
+        {truck.brand} {truck.model}
       </text>
     </g>
   );
