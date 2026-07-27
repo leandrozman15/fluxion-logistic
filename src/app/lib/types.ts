@@ -444,3 +444,12 @@ export interface Load {
     notes?: string;
   };
 }
+
+export interface OptimizedRouteProposal {
+  truckId: string;
+  truckPlate: string;
+  driverId?: string;
+  stops: Client[];
+  totalDistanceKm: number;
+  estimatedDurationMinutes: number;
+}

@@ -34,7 +34,8 @@ import {
   Moon,
   Sun,
   Smartphone,
-  Wrench
+  Wrench,
+  Zap
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -68,6 +69,7 @@ function DashboardSidebar() {
 
   const adminMenu = [
     { title: "Monitor Operativo", icon: LayoutDashboard, href: "/dashboard" },
+    { title: "Despacho Inteligente", icon: Zap, href: "/despacho" },
     { title: "Flota de Camiones", icon: Truck, href: "/flota" },
     { title: "Gestión Choferes", icon: Users, href: "/choferes" },
     { title: "Cartera Clientes", icon: Briefcase, href: "/clientes" },
@@ -173,22 +175,22 @@ function DashboardSidebar() {
                     <Settings />
                     <span>Ajustes del Sistema</span>
                   </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
-      <div className="mt-auto p-2 border-t">
-        <SidebarMenuButton 
-          className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
-          onClick={handleLogout}
-          tooltip="Salir del Sistema"
-        >
-          <LogOut />
-          <span className="group-data-[collapsible=icon]:hidden">Salir</span>
-        </SidebarMenuButton>
-      </div>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
+        <div className="mt-auto p-2 border-t">
+          <SidebarMenuButton 
+            className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+            onClick={handleLogout}
+            tooltip="Salir del Sistema"
+          >
+            <LogOut />
+            <span className="group-data-[collapsible=icon]:hidden">Salir</span>
+          </SidebarMenuButton>
+        </div>
+      </Sidebar>
     </Sidebar>
   );
 }
