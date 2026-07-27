@@ -62,7 +62,7 @@ import { estimateFuelLiters } from "@/lib/utils/tracking-math";
 import { toSafeDate, formatSafeDate } from "@/lib/utils/date-utils";
 
 const MapContainer = dynamic(
-  () => import("react-leaflet").then((mod) => mod.MapContainer),
+  () => import("react-leafet").then((mod) => mod.MapContainer),
   { ssr: false, loading: () => <div className="h-full w-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center"><Loader2 className="animate-spin" /></div> }
 );
 const TileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false });
@@ -324,7 +324,10 @@ export default function MonitorOperativoPage() {
 
                const getReconstructedStats = () => {
                  const start = toSafeDate(tracking?.tripStartedAt);
-                 const end = load.status === 'delivered' ? toSafeDate(load.proofOfDelivery?.confirmedAt) : new Date();
+                 // Si está entregado, fijar el final en confirmedAt. Si no, usar ahora.
+                 const end = load.status === 'delivered' 
+                   ? (toSafeDate(load.proofOfDelivery?.confirmedAt) || toSafeDate(load.updatedAt) || new Date()) 
+                   : new Date();
                  
                  let totalMin = 0;
                  if (start && end) {
@@ -338,23 +341,26 @@ export default function MonitorOperativoPage() {
                  }
 
                  const driving = Math.round(tracking?.timeOnRouteMinutes || 0);
+                 // El tiempo de parada es la diferencia entre el tiempo absoluto de jornada y el tiempo de movimiento real
                  const stopped = Math.max(0, totalMin - driving);
                  
                  let maxV = Math.round(tracking?.maxSpeed || 0);
                  let fuel = tracking?.estimatedFuelLiters || 0;
                  
+                 // Reconstruir velocidad máxima si los campos de resumen están en 0
                  if (maxV === 0 && tracking?.history && tracking.history.length > 0) {
                    maxV = Math.max(...tracking.history.map(p => p.speed || 0));
                  }
                  
+                 // Reconstruir combustible si no se reportó
                  if (fuel === 0 && tracking?.distanceTraveledKm) {
                    fuel = (tracking.distanceTraveledKm * 32) / 100;
                  }
 
                  return { 
-                   total: totalMin,
-                   driving, 
-                   stopped, 
+                   total: Math.max(0, totalMin), // Evitar negativos
+                   driving: Math.min(totalMin, driving), // Driving no puede superar el total
+                   stopped: Math.max(0, totalMin - driving), 
                    maxV, 
                    fuel: fuel.toFixed(1) 
                  };

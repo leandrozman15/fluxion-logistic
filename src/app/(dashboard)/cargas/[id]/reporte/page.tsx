@@ -81,8 +81,11 @@ export default function TripReportPage() {
     const avgSpeed = countSpeed > 0 ? sumSpeed / countSpeed : 0;
     
     // Lógica de Duración Total: Desde tripStartedAt hasta confirmedAt o Ahora
+    // CORRECCIÓN: Si el viaje está entregado, el final es estrictamente confirmedAt
     const start = toSafeDate(load.tracking?.tripStartedAt);
-    const end = load.status === 'delivered' ? toSafeDate(load.proofOfDelivery?.confirmedAt) : new Date();
+    const end = load.status === 'delivered' 
+      ? (toSafeDate(load.proofOfDelivery?.confirmedAt) || toSafeDate(load.updatedAt) || new Date()) 
+      : new Date();
     
     let totalMinutes = 0;
     if (start && end) {
@@ -108,8 +111,8 @@ export default function TripReportPage() {
       fuelCost,
       otherCost,
       totalCost: fuelCost + otherCost,
-      durationMinutes: Math.round(totalMinutes),
-      drivingMinutes,
+      durationMinutes: Math.max(0, Math.round(totalMinutes)),
+      drivingMinutes: Math.min(Math.round(totalMinutes), drivingMinutes),
       idleMinutes
     };
   }, [load, expenses]);
@@ -322,7 +325,7 @@ export default function TripReportPage() {
                         </div>
                         <div className="text-right">
                            <p className="text-xs font-black text-slate-900">${exp.amount?.toLocaleString()}</p>
-                           <Badge variant="outline" className="text-[7px] h-3 bg-white">{exp.status}</Badge>
+                           <Badge variant="outline" className="text-[8px] h-3 bg-white">{exp.status}</Badge>
                         </div>
                      </div>
                    ))}
