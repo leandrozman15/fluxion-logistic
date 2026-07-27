@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, orderBy, serverTimestamp, doc, setDoc, getDocs, limit } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Zap, 
   Truck, 
@@ -15,7 +17,9 @@ import {
   Loader2, 
   Navigation, 
   Route as RouteIcon,
-  Layers
+  Layers,
+  MapPin,
+  ChevronRight
 } from "lucide-react";
 import { Client, Truck as TruckType, Hub, OptimizedRouteProposal, Load } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -31,6 +35,7 @@ export default function DespachoInteligentePage() {
   
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
   const [selectedTrucks, setSelectedTrucks] = useState<string[]>([]);
+  const [selectedHubId, setSelectedHubId] = useState<string>("");
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [proposals, setProposals] = useState<OptimizedRouteProposal[] | null>(null);
@@ -38,13 +43,21 @@ export default function DespachoInteligentePage() {
 
   const clientsQuery = useMemo(() => db ? query(collection(db, "clients"), orderBy("name")) : null, [db]);
   const trucksQuery = useMemo(() => db ? query(collection(db, "trucks"), orderBy("plate")) : null, [db]);
-  const hubsQuery = useMemo(() => db ? query(collection(db, "hubs")) : null, [db]);
+  const hubsQuery = useMemo(() => db ? query(collection(db, "hubs"), orderBy("name")) : null, [db]);
 
   const { data: clients, loading: loadingClients } = useCollection<Client>(clientsQuery);
   const { data: trucks, loading: loadingTrucks } = useCollection<TruckType>(trucksQuery);
-  const { data: hubs } = useCollection<Hub>(hubsQuery);
+  const { data: hubs, loading: loadingHubs } = useCollection<Hub>(hubsQuery);
 
-  const mainHub = useMemo(() => hubs?.find(h => h.isMainBase) || hubs?.[0], [hubs]);
+  // Seleccionar sede principal por defecto
+  useEffect(() => {
+    if (hubs && hubs.length > 0 && !selectedHubId) {
+      const main = hubs.find(h => h.isMainBase);
+      setSelectedHubId(main ? main.id : hubs[0].id);
+    }
+  }, [hubs, selectedHubId]);
+
+  const activeHub = useMemo(() => hubs?.find(h => h.id === selectedHubId), [hubs, selectedHubId]);
 
   const handleToggleClient = (id: string) => {
     setSelectedClients(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
@@ -55,8 +68,8 @@ export default function DespachoInteligentePage() {
   };
 
   const handleRunOptimization = async () => {
-    if (!mainHub) {
-      toast({ variant: "destructive", title: "Error", description: "Debe configurar al menos una sede base en el sistema." });
+    if (!activeHub) {
+      toast({ variant: "destructive", title: "Sede de Origen Requerida", description: "Seleccione una sede para iniciar la ruta." });
       return;
     }
     if (selectedClients.length === 0 || selectedTrucks.length === 0) {
@@ -66,7 +79,7 @@ export default function DespachoInteligentePage() {
 
     setIsOptimizing(true);
     try {
-      // SANITIZACIÓN: Convertimos los objetos complejos de Firebase en objetos planos para la Server Function
+      // Sanitización de datos para Server Action
       const sanitizedClients = clients
         ?.filter(c => selectedClients.includes(c.id))
         .map(c => ({
@@ -96,15 +109,15 @@ export default function DespachoInteligentePage() {
         })) || [];
 
       const sanitizedHub = {
-        id: mainHub.id,
-        name: mainHub.name,
-        address: mainHub.address,
-        lat: mainHub.lat,
-        lng: mainHub.lng,
-        province: mainHub.province,
-        city: mainHub.city,
-        country: mainHub.country,
-        phone: mainHub.phone
+        id: activeHub.id,
+        name: activeHub.name,
+        address: activeHub.address,
+        lat: activeHub.lat,
+        lng: activeHub.lng,
+        province: activeHub.province,
+        city: activeHub.city,
+        country: activeHub.country,
+        phone: activeHub.phone
       };
       
       const result = await optimizeDistribution(
@@ -124,7 +137,7 @@ export default function DespachoInteligentePage() {
   };
 
   const handleConfirmAndCreateLoads = async () => {
-    if (!db || !proposals || !mainHub) return;
+    if (!db || !proposals || !activeHub) return;
     setIsSaving(true);
     
     try {
@@ -160,17 +173,17 @@ export default function DespachoInteligentePage() {
           pickupTime: "08:00",
           isRoundTrip: false,
           origin: {
-            name: mainHub.name,
-            address: mainHub.address,
-            province: mainHub.province,
-            city: mainHub.city,
-            country: mainHub.country,
-            phone: mainHub.phone,
+            name: activeHub.name,
+            address: activeHub.address,
+            province: activeHub.province,
+            city: activeHub.city,
+            country: activeHub.country,
+            phone: activeHub.phone,
             contact: "Despacho",
             zip: "",
             instructions: "",
-            lat: mainHub.lat,
-            lng: mainHub.lng
+            lat: activeHub.lat,
+            lng: activeHub.lng
           },
           outboundStops: prop.stops.map(s => ({
             id: Math.random().toString(36).substring(7),
@@ -219,30 +232,60 @@ export default function DespachoInteligentePage() {
           </h1>
           <p className="text-slate-500 text-sm">Optimización de ruteo y asignación automática de flota.</p>
         </div>
-        <div className="flex items-center gap-3">
-           <Input 
-             type="date" 
-             className="bg-white w-40" 
-             value={planDate} 
-             onChange={e => setPlanDate(e.target.value)} 
-           />
+        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3">
+           <div className="space-y-1 w-full sm:w-auto">
+              <Label className="text-[10px] uppercase font-bold text-slate-400">Fecha de Operación</Label>
+              <Input 
+                type="date" 
+                className="bg-white h-9" 
+                value={planDate} 
+                onChange={e => setPlanDate(e.target.value)} 
+              />
+           </div>
            <Button 
-            className="bg-blue-600 shadow-lg shadow-blue-100" 
+            className="bg-blue-600 shadow-lg shadow-blue-100 h-9" 
             onClick={handleRunOptimization}
             disabled={isOptimizing || selectedClients.length === 0}
            >
              {isOptimizing ? <Loader2 className="animate-spin mr-2" /> : <RouteIcon className="mr-2" />}
-             Optimizar {selectedClients.length} Entregas
+             Optimizar Entregas
            </Button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 space-y-6">
-          <Card className="border-none shadow-sm h-[600px] flex flex-col">
+          <Card className="border-none shadow-sm">
+             <CardHeader className="bg-blue-600 text-white py-4 rounded-t-lg">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <MapPin size={16} /> 1. Sede de Origen
+                </CardTitle>
+             </CardHeader>
+             <CardContent className="pt-4">
+                <Select value={selectedHubId} onValueChange={setSelectedHubId}>
+                   <SelectTrigger className="bg-slate-50">
+                      <SelectValue placeholder="Seleccionar Sede" />
+                   </SelectTrigger>
+                   <SelectContent>
+                      {hubs?.map(hub => (
+                        <SelectItem key={hub.id} value={hub.id}>
+                          {hub.name} {hub.isMainBase ? '(Base HQ)' : ''}
+                        </SelectItem>
+                      ))}
+                   </SelectContent>
+                </Select>
+                {activeHub && (
+                  <div className="mt-2 text-[10px] text-slate-500 italic">
+                     Partida desde: {activeHub.address}, {activeHub.city}
+                  </div>
+                )}
+             </CardContent>
+          </Card>
+
+          <Card className="border-none shadow-sm h-[400px] flex flex-col">
             <CardHeader className="bg-slate-50 border-b py-4">
                <CardTitle className="text-sm flex items-center gap-2">
-                 <Building2 size={16} className="text-blue-600" /> 1. Destinos a Repartir
+                 <Building2 size={16} className="text-blue-600" /> 2. Destinos a Repartir
                </CardTitle>
             </CardHeader>
             <CardContent className="p-0 overflow-y-auto flex-1">
@@ -276,29 +319,35 @@ export default function DespachoInteligentePage() {
           <Card className="border-none shadow-sm">
             <CardHeader className="bg-slate-50 border-b py-4">
                <CardTitle className="text-sm flex items-center gap-2">
-                 <Truck size={16} className="text-blue-600" /> 2. Flota Disponible
+                 <Truck size={16} className="text-blue-600" /> 3. Flota Disponible
                </CardTitle>
             </CardHeader>
             <CardContent className="p-0 max-h-[300px] overflow-y-auto">
                <div className="divide-y divide-slate-100">
                  {loadingTrucks ? (
                    <div className="p-10 text-center"><Loader2 className="animate-spin mx-auto text-slate-300" /></div>
-                 ) : trucks?.filter(t => t.status === 'available').map(truck => (
-                   <div 
-                    key={truck.id} 
-                    className={cn(
-                      "p-3 flex items-center gap-3 transition-colors cursor-pointer hover:bg-slate-50",
-                      selectedTrucks.includes(truck.id) ? "bg-blue-50/50" : ""
-                    )}
-                    onClick={() => handleToggleTruck(truck.id)}
-                   >
-                     <Checkbox checked={selectedTrucks.includes(truck.id)} onCheckedChange={() => handleToggleTruck(truck.id)} />
-                     <div>
-                       <p className="text-sm font-black text-slate-800 font-mono">{truck.plate}</p>
-                       <p className="text-[10px] text-slate-400 uppercase">{truck.brand} {truck.model}</p>
-                     </div>
-                   </div>
-                 ))}
+                 ) : (
+                   trucks?.filter(t => t.status === 'available').length === 0 ? (
+                     <p className="p-10 text-center text-xs text-slate-400 italic">No hay camiones disponibles en este momento.</p>
+                   ) : (
+                     trucks?.filter(t => t.status === 'available').map(truck => (
+                      <div 
+                        key={truck.id} 
+                        className={cn(
+                          "p-3 flex items-center gap-3 transition-colors cursor-pointer hover:bg-slate-50",
+                          selectedTrucks.includes(truck.id) ? "bg-blue-50/50" : ""
+                        )}
+                        onClick={() => handleToggleTruck(truck.id)}
+                      >
+                        <Checkbox checked={selectedTrucks.includes(truck.id)} onCheckedChange={() => handleToggleTruck(truck.id)} />
+                        <div>
+                          <p className="text-sm font-black text-slate-800 font-mono">{truck.plate}</p>
+                          <p className="text-[10px] text-slate-400 uppercase">{truck.brand} {truck.model}</p>
+                        </div>
+                      </div>
+                     ))
+                   )
+                 )}
                </div>
             </CardContent>
           </Card>
@@ -312,7 +361,7 @@ export default function DespachoInteligentePage() {
                </div>
                <div className="space-y-2">
                  <h3 className="text-lg font-bold text-slate-700">Sin Plan de Rutas Activo</h3>
-                 <p className="text-sm text-slate-400 max-w-sm">Seleccione los camiones y los destinos a la izquierda, luego presione <b>"Optimizar Entregas"</b> para que la IA proponga las mejores rutas.</p>
+                 <p className="text-sm text-slate-400 max-w-sm">Seleccione el <b>Origen</b>, los camiones y los destinos, luego presione <b>"Optimizar Entregas"</b>.</p>
                </div>
             </div>
           ) : (
@@ -349,7 +398,7 @@ export default function DespachoInteligentePage() {
                              <div className="space-y-2 relative pl-4 border-l-2 border-dashed border-blue-100">
                                 {prop.stops.map((s, sIdx) => (
                                   <div key={s.id} className="relative">
-                                    <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-blue-600 border-2 border-white shadow-sm"></div>
+                                    <div className="absolute -left-[21px] top-1.5 w-2 h-2 rounded-full bg-blue-600 border-2 border-white shadow-sm"></div>
                                     <div className="text-xs font-bold text-slate-700">{s.name}</div>
                                     <p className="text-[10px] text-slate-400 truncate">{s.address.street} {s.address.number}</p>
                                   </div>
@@ -368,7 +417,7 @@ export default function DespachoInteligentePage() {
                      </div>
                      <div>
                         <p className="text-lg font-bold italic">Confirmar Plan Maestro</p>
-                        <p className="text-xs text-white/50">Se generarán {proposals.filter(p => p.stops.length > 0).length} órdenes de transporte automáticas.</p>
+                        <p className="text-xs text-white/50">Se generarán {proposals.filter(p => p.stops.length > 0).length} órdenes de transporte desde <b>{activeHub?.name}</b>.</p>
                      </div>
                   </div>
                   <Button 
