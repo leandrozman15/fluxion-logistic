@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useMemo } from "react";
-import { useFirestore, useCollection, useDoc } from "@/firebase";
-import { collection, query, orderBy, addDoc, serverTimestamp, doc, setDoc, getDocs, limit } from "firebase/firestore";
+import { useFirestore, useCollection } from "@/firebase";
+import { collection, query, orderBy, serverTimestamp, doc, setDoc, getDocs, limit } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -66,14 +66,58 @@ export default function DespachoInteligentePage() {
 
     setIsOptimizing(true);
     try {
-      const clientsToRoute = clients?.filter(c => selectedClients.includes(c.id)) || [];
-      const trucksToUse = trucks?.filter(t => selectedTrucks.includes(t.id)) || [];
+      // SANITIZACIÓN: Convertimos los objetos complejos de Firebase en objetos planos para la Server Function
+      const sanitizedClients = clients
+        ?.filter(c => selectedClients.includes(c.id))
+        .map(c => ({
+          id: c.id,
+          name: c.name,
+          address: {
+            street: c.address.street,
+            number: c.address.number,
+            city: c.address.city,
+            province: c.address.province,
+            country: c.address.country,
+            lat: c.address.lat,
+            lng: c.address.lng,
+          },
+          mainContact: c.mainContact ? {
+            name: c.mainContact.name,
+            phone: c.mainContact.phone
+          } : undefined
+        })) || [];
+
+      const sanitizedTrucks = trucks
+        ?.filter(t => selectedTrucks.includes(t.id))
+        .map(t => ({
+          id: t.id,
+          plate: t.plate,
+          assignedDriverId: t.assignedDriverId || 'none'
+        })) || [];
+
+      const sanitizedHub = {
+        id: mainHub.id,
+        name: mainHub.name,
+        address: mainHub.address,
+        lat: mainHub.lat,
+        lng: mainHub.lng,
+        province: mainHub.province,
+        city: mainHub.city,
+        country: mainHub.country,
+        phone: mainHub.phone
+      };
       
-      const result = await optimizeDistribution(clientsToRoute, trucksToUse, mainHub);
+      const result = await optimizeDistribution(
+        sanitizedClients as any, 
+        sanitizedTrucks as any, 
+        sanitizedHub as any
+      );
+      
       setProposals(result);
       toast({ title: "Plan de Rutas Generado", description: "La IA ha distribuido los destinos eficientemente." });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Error de Optimización" });
+    } catch (e: any) {
+      console.error("Optimization error:", e);
+      toast({ variant: "destructive", title: "Error de Optimización", description: "Ocurrió un error al procesar los datos." });
     } finally {
       setIsOptimizing(false);
     }
@@ -89,7 +133,10 @@ export default function DespachoInteligentePage() {
       if (!loadsSnap.empty) {
         const lastLoad = loadsSnap.docs[0].data() as Load;
         const parts = lastLoad.orderNumber.split("-");
-        nextSeq = parseInt(parts[parts.length - 1]) + 1;
+        if (parts.length > 0) {
+          const lastNum = parseInt(parts[parts.length - 1]);
+          if (!isNaN(lastNum)) nextSeq = lastNum + 1;
+        }
       }
 
       const year = new Date().getFullYear();
@@ -155,7 +202,8 @@ export default function DespachoInteligentePage() {
 
       toast({ title: "Fletes Creados", description: "Se han generado las órdenes de transporte en el Monitor." });
       router.push('/dashboard');
-    } catch (e) {
+    } catch (e: any) {
+      console.error("Save error:", e);
       toast({ variant: "destructive", title: "Error al guardar rutas" });
     } finally {
       setIsSaving(false);
