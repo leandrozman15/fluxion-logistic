@@ -90,10 +90,9 @@ export default function FlotaPage() {
     }
   };
 
-  const getDriverName = (driverId?: string) => {
-    if (!driverId || driverId === 'none') return "Sin asignar";
-    const d = drivers?.find(dr => dr.id === driverId);
-    return d ? `${d.lastName}, ${d.firstName}` : "Cargando...";
+  const getDriverObj = (driverId?: string) => {
+    if (!driverId || driverId === 'none') return null;
+    return drivers?.find(dr => dr.id === driverId) || null;
   };
 
   const getNextServiceInfo = (truckId: string) => {
@@ -110,16 +109,13 @@ export default function FlotaPage() {
     const costs = truck.costs;
     const kmMensuales = costs.operational.estimatedMonthlyKm || 1;
     
-    // 1. Costo Fijo por KM
     const sumFixed = Object.values(costs.fixed).reduce((a, b) => a + (b as number), 0);
     const fixedPerKm = sumFixed / kmMensuales;
     
-    // 2. Costos Variables por Ciclo
     const oilPerKm = costs.variable.preventiveMaintenance.cost / (costs.variable.preventiveMaintenance.frequencyKm || 1);
     const tiresPerKm = costs.variable.tires.costFullSet / (costs.variable.tires.lifeSpanKm || 1);
     const reservePerKm = costs.variable.unforeseenReservePerKm;
 
-    // 3. Combustible Real Proyectado
     let fuelPerKm = 0;
     const truckFuel = fuelExpenses?.filter(e => e.truckId === truck.id);
     if (truckFuel && truckFuel.length > 0) {
@@ -207,19 +203,22 @@ export default function FlotaPage() {
                   <TableHead>Kilometraje</TableHead>
                   <TableHead>Costo / KM</TableHead>
                   <TableHead>Documentación</TableHead>
+                  <TableHead>Próximo Taller</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredTrucks.length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="text-center py-20 text-slate-400 italic">No hay vehículos registrados.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center py-20 text-slate-400 italic">No hay vehículos registrados.</TableCell></TableRow>
                 ) : (
                   filteredTrucks.map((truck) => {
                     const docCount = truck.documentation?.length || 0;
                     const validDocs = truck.documentation?.filter(d => d.status === 'valid').length || 0;
                     const isCritical = truck.documentation?.some(d => d.status === 'expired');
                     const costPerKm = calculateTheoreticalCost(truck);
+                    const dr = getDriverObj(truck.assignedDriverId);
+                    const nextService = getNextServiceInfo(truck.id);
 
                     return (
                       <TableRow key={truck.id} className="cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => router.push(`/flota/${truck.id}`)}>
@@ -242,7 +241,15 @@ export default function FlotaPage() {
                             ) : (
                               <Badge variant="outline" className="h-4 bg-orange-50 text-[8px] text-orange-700 border-orange-100 uppercase">Tercero</Badge>
                             )}
-                            <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700"><User size={12} className="text-slate-400" />{getDriverName(truck.assignedDriverId)}</div>
+                            <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                              <Avatar className="h-5 w-5 border shadow-sm">
+                                <AvatarImage src={dr?.avatarUrl} className="object-cover" />
+                                <AvatarFallback className="bg-slate-50 text-[8px] text-slate-400">
+                                  {dr?.firstName?.[0] || <User size={10} />}
+                                </AvatarFallback>
+                              </Avatar>
+                              {dr ? `${dr.lastName}, ${dr.firstName}` : "Sin asignar"}
+                            </div>
                           </div>
                         </TableCell>
                         <TableCell><div className="flex items-center gap-2"><Gauge size={14} className="text-slate-400" /><span className="font-mono font-bold text-slate-700">{(truck.odometerKm || 0).toLocaleString()} km</span></div></TableCell>
@@ -253,6 +260,20 @@ export default function FlotaPage() {
                            </div>
                         </TableCell>
                         <TableCell><div className="flex items-center gap-2"><Progress value={docCount > 0 ? (validDocs / docCount) * 100 : 0} className="h-1.5 w-16" /><span className={cn("text-[10px] font-bold", isCritical ? "text-red-600" : "text-slate-500")}>{validDocs}/{docCount}</span></div></TableCell>
+                        <TableCell>
+                          {nextService ? (
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-black text-orange-600 flex items-center gap-1">
+                                <Wrench size={10}/> {format(parseISO(nextService.scheduledDate), "dd/MM")}
+                              </span>
+                              <span className="text-[8px] text-slate-400 uppercase font-bold truncate max-w-[80px]">
+                                {nextService.type === 'preventive' ? 'Preventivo' : 'Correctivo'}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-300 italic">No prog.</span>
+                          )}
+                        </TableCell>
                         <TableCell>{getStatusBadge(truck.status)}</TableCell>
                         <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                           <DropdownMenu>
