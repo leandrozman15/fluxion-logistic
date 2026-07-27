@@ -1,4 +1,3 @@
-
 'use server';
 
 import { Client, Truck, Hub, OptimizedRouteProposal } from "@/app/lib/types";
@@ -13,7 +12,8 @@ import { calculateDistance } from "@/lib/utils/tracking-math";
 export async function optimizeDistribution(
   stops: Client[],
   trucks: Truck[],
-  startHub: Hub
+  startHub: Hub,
+  endHub: Hub
 ): Promise<OptimizedRouteProposal[]> {
   if (stops.length === 0 || trucks.length === 0) return [];
 
@@ -41,7 +41,6 @@ export async function optimizeDistribution(
   });
 
   // Paso 2: Asignación Greedy (Cercanía inmediata)
-  // Agrupamos clientes por cuadrantes o simplemente dividimos el array ordenado
   const batchSize = Math.ceil(stops.length / numVehicles);
   
   for (let i = 0; i < numVehicles; i++) {
@@ -60,11 +59,12 @@ export async function optimizeDistribution(
       currentLng = stop.address.lng!;
     });
 
-    // Vuelta al Hub
-    totalDist += calculateDistance(currentLat, currentLng, startHub.lat, startHub.lng);
+    // Finalización en la Sede de Destino elegida
+    totalDist += calculateDistance(currentLat, currentLng, endHub.lat, endHub.lng);
     
     proposals[i].totalDistanceKm = Math.round(totalDist);
-    proposals[i].estimatedDurationMinutes = Math.round((totalDist / 60) * 60) + (truckStops.length * 20); // 20 min por parada
+    // 20 min por parada + cálculo base de 60km/h
+    proposals[i].estimatedDurationMinutes = Math.round((totalDist / 60) * 60) + (truckStops.length * 20); 
   }
 
   return proposals;

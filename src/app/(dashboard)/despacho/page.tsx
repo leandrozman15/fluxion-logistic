@@ -19,7 +19,10 @@ import {
   Route as RouteIcon,
   Layers,
   MapPin,
-  ChevronRight
+  ChevronRight,
+  ArrowRightLeft,
+  MoveRight,
+  Anchor
 } from "lucide-react";
 import { Client, Truck as TruckType, Hub, OptimizedRouteProposal, Load } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -36,6 +39,7 @@ export default function DespachoInteligentePage() {
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
   const [selectedTrucks, setSelectedTrucks] = useState<string[]>([]);
   const [selectedHubId, setSelectedHubId] = useState<string>("");
+  const [selectedEndHubId, setSelectedEndHubId] = useState<string>("");
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [proposals, setProposals] = useState<OptimizedRouteProposal[] | null>(null);
@@ -54,10 +58,12 @@ export default function DespachoInteligentePage() {
     if (hubs && hubs.length > 0 && !selectedHubId) {
       const main = hubs.find(h => h.isMainBase);
       setSelectedHubId(main ? main.id : hubs[0].id);
+      setSelectedEndHubId(main ? main.id : hubs[0].id);
     }
   }, [hubs, selectedHubId]);
 
   const activeHub = useMemo(() => hubs?.find(h => h.id === selectedHubId), [hubs, selectedHubId]);
+  const endHub = useMemo(() => hubs?.find(h => h.id === selectedEndHubId), [hubs, selectedEndHubId]);
 
   const handleToggleClient = (id: string) => {
     setSelectedClients(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
@@ -68,8 +74,8 @@ export default function DespachoInteligentePage() {
   };
 
   const handleRunOptimization = async () => {
-    if (!activeHub) {
-      toast({ variant: "destructive", title: "Sede de Origen Requerida", description: "Seleccione una sede para iniciar la ruta." });
+    if (!activeHub || !endHub) {
+      toast({ variant: "destructive", title: "Sedes Requeridas", description: "Seleccione origen y destino final para la flota." });
       return;
     }
     if (selectedClients.length === 0 || selectedTrucks.length === 0) {
@@ -108,7 +114,7 @@ export default function DespachoInteligentePage() {
           assignedDriverId: t.assignedDriverId || 'none'
         })) || [];
 
-      const sanitizedHub = {
+      const sanitizedStartHub = {
         id: activeHub.id,
         name: activeHub.name,
         address: activeHub.address,
@@ -119,15 +125,28 @@ export default function DespachoInteligentePage() {
         country: activeHub.country,
         phone: activeHub.phone
       };
+
+      const sanitizedEndHub = {
+        id: endHub.id,
+        name: endHub.name,
+        address: endHub.address,
+        lat: endHub.lat,
+        lng: endHub.lng,
+        province: endHub.province,
+        city: endHub.city,
+        country: endHub.country,
+        phone: endHub.phone
+      };
       
       const result = await optimizeDistribution(
         sanitizedClients as any, 
         sanitizedTrucks as any, 
-        sanitizedHub as any
+        sanitizedStartHub as any,
+        sanitizedEndHub as any
       );
       
       setProposals(result);
-      toast({ title: "Plan de Rutas Generado", description: "La IA ha distribuido los destinos eficientemente." });
+      toast({ title: "Plan de Rutas Generado", description: "La IA ha distribuido los destinos eficientemente considerando el final de ruta." });
     } catch (e: any) {
       console.error("Optimization error:", e);
       toast({ variant: "destructive", title: "Error de Optimización", description: "Ocurrió un error al procesar los datos." });
@@ -137,7 +156,7 @@ export default function DespachoInteligentePage() {
   };
 
   const handleConfirmAndCreateLoads = async () => {
-    if (!db || !proposals || !activeHub) return;
+    if (!db || !proposals || !activeHub || !endHub) return;
     setIsSaving(true);
     
     try {
@@ -171,7 +190,7 @@ export default function DespachoInteligentePage() {
           assignedDriverId: prop.driverId || 'none',
           pickupDate: planDate,
           pickupTime: "08:00",
-          isRoundTrip: false,
+          isRoundTrip: activeHub.id !== endHub.id,
           origin: {
             name: activeHub.name,
             address: activeHub.address,
@@ -184,6 +203,19 @@ export default function DespachoInteligentePage() {
             instructions: "",
             lat: activeHub.lat,
             lng: activeHub.lng
+          },
+          returnDestination: {
+            name: endHub.name,
+            address: endHub.address,
+            province: endHub.province,
+            city: endHub.city,
+            country: endHub.country,
+            phone: endHub.phone,
+            contact: "Base Final",
+            zip: "",
+            instructions: "Fin de Jornada",
+            lat: endHub.lat,
+            lng: endHub.lng
           },
           outboundStops: prop.stops.map(s => ({
             id: Math.random().toString(36).substring(7),
@@ -255,28 +287,53 @@ export default function DespachoInteligentePage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 space-y-6">
-          <Card className="border-none shadow-sm">
-             <CardHeader className="bg-blue-600 text-white py-4 rounded-t-lg">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <MapPin size={16} /> 1. Sede de Origen
+          <Card className="border-none shadow-sm overflow-hidden">
+             <CardHeader className="bg-slate-900 text-white py-4">
+                <CardTitle className="text-xs uppercase font-black tracking-widest flex items-center gap-2">
+                  <MapPin size={16} className="text-blue-400" /> Puntos de Control de Ruta
                 </CardTitle>
              </CardHeader>
-             <CardContent className="pt-4">
-                <Select value={selectedHubId} onValueChange={setSelectedHubId}>
-                   <SelectTrigger className="bg-slate-50">
-                      <SelectValue placeholder="Seleccionar Sede" />
-                   </SelectTrigger>
-                   <SelectContent>
-                      {hubs?.map(hub => (
-                        <SelectItem key={hub.id} value={hub.id}>
-                          {hub.name} {hub.isMainBase ? '(Base HQ)' : ''}
-                        </SelectItem>
-                      ))}
-                   </SelectContent>
-                </Select>
-                {activeHub && (
-                  <div className="mt-2 text-[10px] text-slate-500 italic">
-                     Partida desde: {activeHub.address}, {activeHub.city}
+             <CardContent className="pt-6 space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-bold text-slate-500">1. Sede de Origen (Partida)</Label>
+                  <Select value={selectedHubId} onValueChange={setSelectedHubId}>
+                     <SelectTrigger className="bg-slate-50">
+                        <SelectValue placeholder="Seleccionar Origen" />
+                     </SelectTrigger>
+                     <SelectContent>
+                        {hubs?.map(hub => (
+                          <SelectItem key={hub.id} value={hub.id}>
+                            {hub.name} {hub.isMainBase ? '(HQ)' : ''}
+                          </SelectItem>
+                        ))}
+                     </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-bold text-slate-500">2. Destino Final (Fin de Jornada)</Label>
+                  <Select value={selectedEndHubId} onValueChange={setSelectedEndHubId}>
+                     <SelectTrigger className="bg-slate-50">
+                        <SelectValue placeholder="Seleccionar Destino Final" />
+                     </SelectTrigger>
+                     <SelectContent>
+                        {hubs?.map(hub => (
+                          <SelectItem key={hub.id} value={hub.id}>
+                            {hub.name} {hub.isMainBase ? '(HQ)' : ''}
+                          </SelectItem>
+                        ))}
+                     </SelectContent>
+                  </Select>
+                </div>
+
+                {activeHub && endHub && (
+                  <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl space-y-1">
+                     <div className="flex items-center gap-2 text-[10px] font-bold text-blue-700">
+                        <MoveRight size={12}/> Trayecto Maestro
+                     </div>
+                     <p className="text-[10px] text-blue-600 italic">
+                        {activeHub.name} → Entregas → {endHub.name}
+                     </p>
                   </div>
                 )}
              </CardContent>
@@ -285,7 +342,7 @@ export default function DespachoInteligentePage() {
           <Card className="border-none shadow-sm h-[400px] flex flex-col">
             <CardHeader className="bg-slate-50 border-b py-4">
                <CardTitle className="text-sm flex items-center gap-2">
-                 <Building2 size={16} className="text-blue-600" /> 2. Destinos a Repartir
+                 <Building2 size={16} className="text-blue-600" /> 3. Destinos a Repartir
                </CardTitle>
             </CardHeader>
             <CardContent className="p-0 overflow-y-auto flex-1">
@@ -319,7 +376,7 @@ export default function DespachoInteligentePage() {
           <Card className="border-none shadow-sm">
             <CardHeader className="bg-slate-50 border-b py-4">
                <CardTitle className="text-sm flex items-center gap-2">
-                 <Truck size={16} className="text-blue-600" /> 3. Flota Disponible
+                 <Truck size={16} className="text-blue-600" /> 4. Flota Disponible
                </CardTitle>
             </CardHeader>
             <CardContent className="p-0 max-h-[300px] overflow-y-auto">
@@ -360,8 +417,8 @@ export default function DespachoInteligentePage() {
                   <Layers size={40} />
                </div>
                <div className="space-y-2">
-                 <h3 className="text-lg font-bold text-slate-700">Sin Plan de Rutas Activo</h3>
-                 <p className="text-sm text-slate-400 max-w-sm">Seleccione el <b>Origen</b>, los camiones y los destinos, luego presione <b>"Optimizar Entregas"</b>.</p>
+                 <h3 className="text-lg font-bold text-slate-700">Optimización de Rutas Inteligente</h3>
+                 <p className="text-sm text-slate-400 max-w-sm">Defina <b>Origen y Destino Final</b>, seleccione flota y destinos, luego presione <b>"Optimizar Entregas"</b>.</p>
                </div>
             </div>
           ) : (
@@ -396,6 +453,7 @@ export default function DespachoInteligentePage() {
                           <div className="space-y-2">
                              <p className="text-[10px] font-black uppercase text-slate-400 px-1">Secuencia de Entrega</p>
                              <div className="space-y-2 relative pl-4 border-l-2 border-dashed border-blue-100">
+                                <div className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1"><MapPin size={10}/> Partida: {activeHub?.name}</div>
                                 {prop.stops.map((s, sIdx) => (
                                   <div key={s.id} className="relative">
                                     <div className="absolute -left-[21px] top-1.5 w-2 h-2 rounded-full bg-blue-600 border-2 border-white shadow-sm"></div>
@@ -403,6 +461,7 @@ export default function DespachoInteligentePage() {
                                     <p className="text-[10px] text-slate-400 truncate">{s.address.street} {s.address.number}</p>
                                   </div>
                                 ))}
+                                <div className="text-[9px] font-black text-blue-600 uppercase flex items-center gap-1 pt-1"><Anchor size={10}/> Finalización en: {endHub?.name}</div>
                              </div>
                           </div>
                        </CardContent>
@@ -417,7 +476,7 @@ export default function DespachoInteligentePage() {
                      </div>
                      <div>
                         <p className="text-lg font-bold italic">Confirmar Plan Maestro</p>
-                        <p className="text-xs text-white/50">Se generarán {proposals.filter(p => p.stops.length > 0).length} órdenes de transporte desde <b>{activeHub?.name}</b>.</p>
+                        <p className="text-xs text-white/50">Se generarán {proposals.filter(p => p.stops.length > 0).length} órdenes desde <b>{activeHub?.name}</b> finalizando en <b>{endHub?.name}</b>.</p>
                      </div>
                   </div>
                   <Button 
