@@ -38,7 +38,6 @@ import {
   Zap
 } from "lucide-react";
 import Link from "next/link";
-import Image from "next/image";
 import { useAuth, useFirestore, useDoc } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { useRouter, usePathname } from "next/navigation";
@@ -175,22 +174,22 @@ function DashboardSidebar() {
                     <Settings />
                     <span>Ajustes del Sistema</span>
                   </Link>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        </SidebarContent>
-        <div className="mt-auto p-2 border-t">
-          <SidebarMenuButton 
-            className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
-            onClick={handleLogout}
-            tooltip="Salir del Sistema"
-          >
-            <LogOut />
-            <span className="group-data-[collapsible=icon]:hidden">Salir</span>
-          </SidebarMenuButton>
-        </div>
-      </Sidebar>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+      <div className="mt-auto p-2 border-t">
+        <SidebarMenuButton 
+          className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+          onClick={handleLogout}
+          tooltip="Salir del Sistema"
+        >
+          <LogOut />
+          <span className="group-data-[collapsible=icon]:hidden">Salir</span>
+        </SidebarMenuButton>
+      </div>
     </Sidebar>
   );
 }
