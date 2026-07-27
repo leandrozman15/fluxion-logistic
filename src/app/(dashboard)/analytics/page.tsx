@@ -41,6 +41,59 @@ import {
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
+// Componente para renderizar la foto y datos del camión en el eje X
+const CustomXAxisTick = (props: any) => {
+  const { x, y, payload, data } = props;
+  const truck = data.find((d: any) => d.name === payload.value);
+
+  if (!truck) return null;
+
+  return (
+    <g transform={`translate(${x},${y})`}>
+      {truck.avatar && (
+        <>
+          <defs>
+            <clipPath id={`clip-${truck.id}`}>
+              <rect x="-12" y="5" width="24" height="24" rx="4" />
+            </clipPath>
+          </defs>
+          <image
+            x="-12"
+            y="5"
+            width="24"
+            height="24"
+            href={truck.avatar}
+            preserveAspectRatio="xMidYMid slice"
+            clipPath={`url(#clip-${truck.id})`}
+          />
+        </>
+      )}
+      <text
+        x="0"
+        y={truck.avatar ? 42 : 15}
+        textAnchor="middle"
+        fill="#1e293b"
+        fontSize={10}
+        fontWeight="800"
+        className="font-mono"
+      >
+        {truck.name}
+      </text>
+      <text
+        x="0"
+        y={truck.avatar ? 52 : 25}
+        textAnchor="middle"
+        fill="#94a3b8"
+        fontSize={8}
+        fontWeight="bold"
+        className="uppercase"
+      >
+        {truck.brand}
+      </text>
+    </g>
+  );
+};
+
 export default function AnalyticsPage() {
   const db = useFirestore();
   const [range, setRange] = useState("30");
@@ -103,6 +156,9 @@ export default function AnalyticsPage() {
       return {
         id: truck.id,
         name: truck.plate,
+        brand: truck.brand,
+        model: truck.model,
+        avatar: truck.avatarUrl,
         revenue,
         fuelCost,
         maintenanceCost,
@@ -231,11 +287,11 @@ export default function AnalyticsPage() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="h-[350px] pt-8">
+          <CardContent className="h-[400px] pt-8">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={fleetData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+              <BarChart data={fleetData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
-                <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} />
+                <XAxis dataKey="name" tick={<CustomXAxisTick data={fleetData} />} axisLine={false} tickLine={false} />
                 <YAxis fontSize={10} axisLine={false} tickLine={false} tickFormatter={(value) => `$${value/1000}K`} />
                 <Tooltip 
                   cursor={{fill: '#f1f5f9'}}
@@ -259,7 +315,7 @@ export default function AnalyticsPage() {
                     return null;
                   }}
                 />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', paddingTop: '20px' }} />
+                <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', paddingBottom: '20px' }} />
                 <Bar name="Facturación" dataKey="revenue" fill="#2563eb" radius={[4, 4, 0, 0]} />
                 <Bar name="Costos Totales" dataKey="totalCosts" fill="#e2e8f0" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -278,13 +334,16 @@ export default function AnalyticsPage() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="h-[350px] pt-8">
+          <CardContent className="h-[400px] pt-8">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={[...fleetData].sort((a,b) => a.fixedCosts - b.fixedCosts)} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+              <BarChart data={[...fleetData].sort((a,b) => a.fixedCosts - b.fixedCosts)} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
-                <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} />
-                <YAxis fontSize={10} axisLine={false} tickLine={false} />
-                <Tooltip />
+                <XAxis dataKey="name" tick={<CustomXAxisTick data={fleetData} />} axisLine={false} tickLine={false} />
+                <YAxis fontSize={10} axisLine={false} tickLine={false} tickFormatter={(value) => `$${value/1000}K`} />
+                <Tooltip 
+                   formatter={(value: any) => [`$${value.toLocaleString()}`, "Costo Fijo Mensual"]}
+                   contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}
+                />
                 <Bar name="Costos Fijos Mensuales" dataKey="fixedCosts" fill="#f97316" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
