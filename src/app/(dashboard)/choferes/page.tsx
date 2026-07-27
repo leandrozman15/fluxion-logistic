@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo } from "react";
@@ -12,7 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { 
   Users, UserPlus, Search, Loader2, ShieldCheck, AlertTriangle, 
-  CheckCircle2, MoreVertical, Eye, FileText, Calendar, Truck as TruckIcon, Package
+  CheckCircle2, MoreVertical, Eye, FileText, Calendar, Truck as TruckIcon, Package,
+  Camera,
+  Edit2
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -27,6 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 
 export default function ChoferesPage() {
   const db = useFirestore();
@@ -106,6 +108,24 @@ export default function ChoferesPage() {
     } catch (e) {
       return null;
     }
+  };
+
+  const getDocPhotoStats = (d: Driver) => {
+    const checkList = [
+      { key: 'dni', present: !!d.dniFileUrl },
+      { key: 'dni_back', present: !!d.dniBackFileUrl },
+      { key: 'lic', present: !!d.licenseFileUrl },
+      { key: 'lic_back', present: !!d.licenseBackFileUrl }
+    ];
+    
+    if (d.hasLinti) {
+      checkList.push({ key: 'linti', present: !!d.lintiFileUrl });
+    }
+
+    const count = checkList.filter(item => item.present).length;
+    const total = checkList.length;
+    
+    return { count, total, all: count === total };
   };
 
   return (
@@ -191,11 +211,12 @@ export default function ChoferesPage() {
               </TableHeader>
               <TableBody>
                 {filteredDrivers.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-10 text-slate-400 italic">No se encontraron choferes.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center py-20 text-slate-400 italic">No se encontraron choferes.</TableCell></TableRow>
                 ) : (
                   filteredDrivers.map((driver) => {
                     const assignedTruck = trucks?.find(t => t.assignedDriverId === driver.id);
                     const tripCount = loads?.filter(l => l.assignedDriverId === driver.id).length || 0;
+                    const photoStats = getDocPhotoStats(driver);
 
                     return (
                       <TableRow key={driver.id} className="hover:bg-slate-50 transition-colors">
@@ -208,6 +229,14 @@ export default function ChoferesPage() {
                             <div>
                               <div className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{driver.lastName}, {driver.firstName}</div>
                               <div className="text-[10px] text-slate-500 font-mono">DNI: {driver.dni}</div>
+                              {/* INDICADOR DE FOTOS */}
+                              <div className="flex items-center gap-1 mt-1">
+                                <Camera size={10} className={cn(photoStats.all ? "text-green-600" : "text-slate-400")} />
+                                <span className={cn("text-[9px] font-black uppercase tracking-tighter", photoStats.all ? "text-green-700" : "text-slate-500")}>
+                                  Legajo: {photoStats.count}/{photoStats.total} fotos
+                                </span>
+                                {photoStats.all && <CheckCircle2 size={8} className="text-green-600" />}
+                              </div>
                             </div>
                           </Link>
                         </TableCell>
@@ -271,5 +300,3 @@ export default function ChoferesPage() {
     </div>
   );
 }
-
-import { Edit2 } from "lucide-react";
