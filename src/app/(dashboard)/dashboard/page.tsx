@@ -62,7 +62,7 @@ import { estimateFuelLiters } from "@/lib/utils/tracking-math";
 import { toSafeDate, formatSafeDate } from "@/lib/utils/date-utils";
 
 const MapContainer = dynamic(
-  () => import("react-leafet").then((mod) => mod.MapContainer),
+  () => import("react-leaflet").then((mod) => mod.MapContainer),
   { ssr: false, loading: () => <div className="h-full w-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center"><Loader2 className="animate-spin" /></div> }
 );
 const TileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false });
@@ -263,6 +263,47 @@ export default function MonitorOperativoPage() {
     return Math.max(0, base - (alerts * 10) - speedPenalty);
   };
 
+  const getReconstructedStats = (load: Load) => {
+    const tracking = load.tracking;
+    const start = toSafeDate(tracking?.tripStartedAt);
+    const end = load.status === 'delivered' 
+      ? (toSafeDate(load.proofOfDelivery?.confirmedAt) || toSafeDate(load.updatedAt) || new Date()) 
+      : new Date();
+    
+    let totalMin = 0;
+    if (start && end) {
+      totalMin = Math.round((end.getTime() - start.getTime()) / (1000 * 60));
+    } else if (tracking?.history && tracking.history.length > 1) {
+      const first = toSafeDate(tracking.history[0].timestamp);
+      const last = toSafeDate(tracking.history[tracking.history.length - 1].timestamp);
+      if (first && last) {
+        totalMin = Math.round((last.getTime() - first.getTime()) / (1000 * 60));
+      }
+    }
+
+    const driving = Math.round(tracking?.timeOnRouteMinutes || 0);
+    const stopped = Math.max(0, totalMin - driving);
+    
+    let maxV = Math.round(tracking?.maxSpeed || 0);
+    let fuel = tracking?.estimatedFuelLiters || 0;
+    
+    if (maxV === 0 && tracking?.history && tracking.history.length > 0) {
+      maxV = Math.max(...tracking.history.map(p => p.speed || 0));
+    }
+    
+    if (fuel === 0 && tracking?.distanceTraveledKm) {
+      fuel = (tracking.distanceTraveledKm * 32) / 100;
+    }
+
+    return { 
+      total: Math.max(0, totalMin),
+      driving: Math.min(totalMin, driving),
+      stopped: Math.max(0, totalMin - driving), 
+      maxV, 
+      fuel: fuel.toFixed(1) 
+    };
+  };
+
   if (!mounted) return <div className="h-[80vh] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
@@ -321,52 +362,7 @@ export default function MonitorOperativoPage() {
                const destination = load.outboundStops?.[load.outboundStops.length - 1]?.name || 'S/D';
                const efficiency = calculateEfficiency(load);
                const progress = tracking ? (tracking.distanceTraveledKm / (tracking.distanceTraveledKm + (tracking.distanceRemainingKm || 1))) * 100 : (load.status === 'delivered' ? 100 : 0);
-
-               const getReconstructedStats = () => {
-                 const start = toSafeDate(tracking?.tripStartedAt);
-                 // Si está entregado, fijar el final en confirmedAt. Si no, usar ahora.
-                 const end = load.status === 'delivered' 
-                   ? (toSafeDate(load.proofOfDelivery?.confirmedAt) || toSafeDate(load.updatedAt) || new Date()) 
-                   : new Date();
-                 
-                 let totalMin = 0;
-                 if (start && end) {
-                   totalMin = Math.round((end.getTime() - start.getTime()) / (1000 * 60));
-                 } else if (tracking?.history && tracking.history.length > 1) {
-                   const first = toSafeDate(tracking.history[0].timestamp);
-                   const last = toSafeDate(tracking.history[tracking.history.length - 1].timestamp);
-                   if (first && last) {
-                     totalMin = Math.round((last.getTime() - first.getTime()) / (1000 * 60));
-                   }
-                 }
-
-                 const driving = Math.round(tracking?.timeOnRouteMinutes || 0);
-                 // El tiempo de parada es la diferencia entre el tiempo absoluto de jornada y el tiempo de movimiento real
-                 const stopped = Math.max(0, totalMin - driving);
-                 
-                 let maxV = Math.round(tracking?.maxSpeed || 0);
-                 let fuel = tracking?.estimatedFuelLiters || 0;
-                 
-                 // Reconstruir velocidad máxima si los campos de resumen están en 0
-                 if (maxV === 0 && tracking?.history && tracking.history.length > 0) {
-                   maxV = Math.max(...tracking.history.map(p => p.speed || 0));
-                 }
-                 
-                 // Reconstruir combustible si no se reportó
-                 if (fuel === 0 && tracking?.distanceTraveledKm) {
-                   fuel = (tracking.distanceTraveledKm * 32) / 100;
-                 }
-
-                 return { 
-                   total: Math.max(0, totalMin), // Evitar negativos
-                   driving: Math.min(totalMin, driving), // Driving no puede superar el total
-                   stopped: Math.max(0, totalMin - driving), 
-                   maxV, 
-                   fuel: fuel.toFixed(1) 
-                 };
-               };
-
-               const times = getReconstructedStats();
+               const times = getReconstructedStats(load);
 
                return (
                  <Collapsible 
