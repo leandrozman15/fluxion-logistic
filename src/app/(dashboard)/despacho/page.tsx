@@ -24,7 +24,10 @@ import {
   ArrowRightLeft,
   MoveRight,
   Anchor,
-  Globe
+  Globe,
+  Plus,
+  Trash2,
+  ListOrdered
 } from "lucide-react";
 import { Client, Truck as TruckType, Hub, OptimizedRouteProposal, Load } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -82,11 +85,11 @@ export default function DespachoInteligentePage() {
     iconAnchor: [10, 10]
   }) : null;
 
-  const clientIcon = L ? L.divIcon({
+  const clientIcon = (number: number) => L ? L.divIcon({
     className: 'custom-client-icon',
-    html: `<div class="bg-green-600 text-white p-1 rounded-full shadow-lg border border-white flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z"/><path d="m3 9 2.45-4.9A2 2 0 0 1 7.24 3h10a2 2 0 0 1 1.79 1.1L21 9"/></svg></div>`,
-    iconSize: [18, 18],
-    iconAnchor: [9, 9]
+    html: `<div class="bg-green-600 text-white w-6 h-6 rounded-full shadow-lg border-2 border-white flex items-center justify-center font-bold text-[10px]">${number}</div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12]
   }) : null;
 
   // Seleccionar sede principal por defecto
@@ -274,7 +277,13 @@ export default function DespachoInteligentePage() {
           totalAmount: 0,
           basePrice: 0,
           createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
+          updatedAt: serverTimestamp(),
+          tracking: {
+            currentLat: 0, currentLng: 0, currentSpeed: 0, avgSpeed: 0, maxSpeed: 0,
+            distanceTraveledKm: 0, distanceRemainingKm: prop.totalDistanceKm,
+            timeOnRouteMinutes: 0, timeStoppedMinutes: 0, lastUpdateAt: null,
+            history: [], alerts: []
+          }
         };
 
         await setDoc(newLoadRef, loadData);
@@ -297,7 +306,7 @@ export default function DespachoInteligentePage() {
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
             <Zap className="text-blue-600" /> Despacho Inteligente
           </h1>
-          <p className="text-slate-500 text-sm">Optimización de ruteo y asignación automática de flota.</p>
+          <p className="text-slate-500 text-sm">Optimización de ruteo secuencial y balanceo de flota.</p>
         </div>
         <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3">
            <div className="space-y-1 w-full sm:w-auto">
@@ -310,7 +319,7 @@ export default function DespachoInteligentePage() {
               />
            </div>
            <Button 
-            className="bg-blue-600 shadow-lg shadow-blue-100 h-9 w-full sm:w-auto" 
+            className="bg-blue-600 shadow-lg shadow-blue-100 h-9 w-full sm:w-auto font-bold" 
             onClick={handleRunOptimization}
             disabled={isOptimizing || selectedClients.length === 0}
            >
@@ -420,7 +429,7 @@ export default function DespachoInteligentePage() {
                    <div className="p-10 text-center"><Loader2 className="animate-spin mx-auto text-slate-300" /></div>
                  ) : (
                    trucks?.filter(t => t.status === 'available').length === 0 ? (
-                     <p className="p-10 text-center text-xs text-slate-400 italic">No hay camiones disponibles en este momento.</p>
+                     <p className="p-10 text-center text-xs text-slate-400 italic">No hay camiones disponibles.</p>
                    ) : (
                      trucks?.filter(t => t.status === 'available').map(truck => (
                       <div 
@@ -447,13 +456,13 @@ export default function DespachoInteligentePage() {
 
         <div className="lg:col-span-2">
           {!proposals ? (
-            <div className="h-full min-h-[600px] flex flex-col items-center justify-center text-center space-y-6 bg-white rounded-xl border-2 border-dashed border-slate-200">
+            <div className="h-full min-h-[600px] flex flex-col items-center justify-center text-center space-y-6 bg-white rounded-2xl border-2 border-dashed border-slate-200">
                <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center text-blue-300">
                   <Layers size={40} />
                </div>
                <div className="space-y-2">
-                 <h3 className="text-lg font-bold text-slate-700">Optimización de Rutas Inteligente</h3>
-                 <p className="text-sm text-slate-400 max-w-sm">Defina <b>Origen y Destino Final</b>, seleccione flota y destinos, luego presione <b>"Optimizar Entregas"</b>.</p>
+                 <h3 className="text-lg font-bold text-slate-700 italic">Optimización de Rutas Inteligente</h3>
+                 <p className="text-sm text-slate-400 max-w-sm">Defina Origen y Destino Final, elija flota y destinos, luego presione "Optimizar Entregas".</p>
                </div>
             </div>
           ) : (
@@ -468,32 +477,29 @@ export default function DespachoInteligentePage() {
                     ] : [];
 
                     return (
-                      <Card key={prop.truckId} className="border-none shadow-md overflow-hidden flex flex-col">
-                        <div className="h-2 w-full bg-blue-600"></div>
-                        
+                      <Card key={prop.truckId} className="border-none shadow-xl overflow-hidden flex flex-col rounded-2xl">
                         {/* Mapa de la Ruta Sugerida */}
-                        <div className="h-40 w-full relative bg-slate-100 border-b">
-                           {mounted && routePoints.length > 0 && (
+                        <div className="h-44 w-full relative bg-slate-100 border-b">
+                           {mounted && routePoints.length > 1 && (
                              <MapContainer 
                                center={routePoints[0]} 
                                zoom={6} 
                                className="h-full w-full"
                                zoomControl={false}
-                               dragging={false}
-                               touchZoom={false}
+                               dragging={true}
                                scrollWheelZoom={false}
                              >
                                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                               <Polyline positions={routePoints} color="#2563eb" weight={3} dashArray="5, 10" />
+                               <Polyline positions={routePoints} color="#2563eb" weight={4} dashArray="5, 10" />
                                <Marker position={routePoints[0]} icon={hubIcon(true)} />
-                               {prop.stops.map(s => (
-                                 <Marker key={s.id} position={[s.address.lat!, s.address.lng!]} icon={clientIcon} />
+                               {prop.stops.map((s, sIdx) => (
+                                 <Marker key={s.id} position={[s.address.lat!, s.address.lng!]} icon={clientIcon(sIdx + 1)} />
                                ))}
                                <Marker position={routePoints[routePoints.length - 1]} icon={hubIcon(activeHub?.id === endHub?.id)} />
                              </MapContainer>
                            )}
                            <div className="absolute top-2 right-2 z-[500]">
-                              <Badge className="bg-white/90 text-blue-600 border shadow-sm text-[8px] font-black">VISTA GPS</Badge>
+                              <Badge className="bg-white/90 text-blue-600 border shadow-sm text-[8px] font-black uppercase">Secuencia GPS</Badge>
                            </div>
                         </div>
 
@@ -503,35 +509,35 @@ export default function DespachoInteligentePage() {
                                   <CardTitle className="text-lg font-black font-mono flex items-center gap-2">
                                     <Truck size={18} className="text-blue-600" /> {prop.truckPlate}
                                   </CardTitle>
-                                  <CardDescription className="text-[10px] uppercase font-bold text-slate-400">Ruta Sugerida #{idx + 1}</CardDescription>
+                                  <CardDescription className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">Ruta Propuesta #{idx + 1}</CardDescription>
                               </div>
-                              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-100">{prop.stops.length} Destinos</Badge>
+                              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-100">{prop.stops.length} Paradas</Badge>
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-4 flex-1">
-                            <div className="p-3 bg-slate-50 rounded-xl space-y-2">
-                              <div className="flex justify-between text-xs">
-                                  <span className="text-slate-400 font-bold uppercase tracking-widest text-[9px]">Distancia Est.</span>
-                                  <span className="font-bold text-slate-800">{prop.totalDistanceKm} KM</span>
+                            <div className="p-3 bg-slate-50 rounded-xl grid grid-cols-2 gap-4">
+                              <div className="space-y-0.5">
+                                  <span className="text-slate-400 font-bold uppercase tracking-widest text-[8px]">Recorrido Est.</span>
+                                  <p className="font-black text-slate-800 text-sm">{prop.totalDistanceKm} KM</p>
                               </div>
-                              <div className="flex justify-between text-xs">
-                                  <span className="text-slate-400 font-bold uppercase tracking-widest text-[9px]">Tiempo Jornada</span>
-                                  <span className="font-bold text-slate-800">{prop.estimatedDurationMinutes} min</span>
+                              <div className="space-y-0.5 text-right">
+                                  <span className="text-slate-400 font-bold uppercase tracking-widest text-[8px]">Tiempo Total</span>
+                                  <p className="font-black text-slate-800 text-sm">{prop.estimatedDurationMinutes} min</p>
                               </div>
                             </div>
                             
-                            <div className="space-y-2">
-                              <p className="text-[10px] font-black uppercase text-slate-400 px-1">Secuencia de Entrega</p>
-                              <div className="space-y-2 relative pl-4 border-l-2 border-dashed border-blue-100">
-                                  <div className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1"><MapPin size={10}/> Partida: {activeHub?.name}</div>
+                            <div className="space-y-3">
+                              <p className="text-[9px] font-black uppercase text-slate-400 flex items-center gap-1.5"><ListOrdered size={12}/> Secuencia Lógica de Entrega</p>
+                              <div className="space-y-2 relative pl-4 border-l-2 border-dashed border-blue-100 dark:border-slate-800 ml-1">
+                                  <div className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-slate-300"></div> Salida: {activeHub?.name}</div>
                                   {prop.stops.map((s, sIdx) => (
                                     <div key={s.id} className="relative">
-                                      <div className="absolute -left-[21px] top-1.5 w-2 h-2 rounded-full bg-blue-600 border-2 border-white shadow-sm"></div>
+                                      <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-blue-600 border-2 border-white shadow-sm flex items-center justify-center text-[6px] font-black text-white">{sIdx + 1}</div>
                                       <div className="text-xs font-bold text-slate-700">{s.name}</div>
-                                      <p className="text-[10px] text-slate-400 truncate">{s.address.street} {s.address.number}</p>
+                                      <p className="text-[9px] text-slate-400 truncate">{s.address.city}, {s.address.province}</p>
                                     </div>
                                   ))}
-                                  <div className="text-[9px] font-black text-blue-600 uppercase flex items-center gap-1 pt-1"><Anchor size={10}/> Finalización en: {endHub?.name}</div>
+                                  <div className="text-[10px] font-black text-blue-600 uppercase flex items-center gap-1 pt-1"><div className="w-2 h-2 rounded-full bg-blue-600"></div> Fin en: {endHub?.name}</div>
                               </div>
                             </div>
                         </CardContent>
@@ -540,24 +546,24 @@ export default function DespachoInteligentePage() {
                   })}
                </div>
 
-               <div className="p-6 bg-slate-900 text-white rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6">
+               <div className="p-6 bg-slate-900 text-white rounded-3xl flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl">
                   <div className="flex items-center gap-4">
-                     <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center text-blue-400">
-                        <RouteIcon size={24} />
+                     <div className="w-14 h-14 bg-blue-500/20 rounded-2xl flex items-center justify-center text-blue-400 border border-blue-500/30">
+                        <RouteIcon size={32} />
                      </div>
                      <div>
-                        <p className="text-lg font-bold italic">Confirmar Plan Maestro</p>
-                        <p className="text-xs text-white/50">Se generarán {proposals.filter(p => p.stops.length > 0).length} fletes desde <b>{activeHub?.name}</b> finalizando en <b>{endHub?.name}</b>.</p>
+                        <p className="text-xl font-black italic tracking-tighter">CONFIRMAR PLAN MAESTRO</p>
+                        <p className="text-xs text-white/50">Se generarán {proposals.filter(p => p.stops.length > 0).length} fletes secuenciales para la fecha {planDate}.</p>
                      </div>
                   </div>
                   <Button 
                     size="lg" 
-                    className="bg-green-600 hover:bg-green-700 w-full md:w-auto font-bold h-14 px-8 rounded-xl shadow-xl shadow-green-900/20"
+                    className="bg-green-600 hover:bg-green-700 w-full md:w-auto font-black h-16 px-10 rounded-2xl shadow-xl shadow-green-900/40 text-lg italic"
                     onClick={handleConfirmAndCreateLoads}
                     disabled={isSaving}
                   >
-                    {isSaving ? <Loader2 className="animate-spin mr-2" /> : <Zap size={18} className="mr-2" />}
-                    CONFIRMAR Y CREAR FLETES
+                    {isSaving ? <Loader2 className="animate-spin mr-2" /> : <Zap size={20} className="mr-2" />}
+                    EMITIR ÓRDENES
                   </Button>
                </div>
             </div>
@@ -567,4 +573,3 @@ export default function DespachoInteligentePage() {
     </div>
   );
 }
-

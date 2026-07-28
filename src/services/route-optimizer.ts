@@ -1,4 +1,3 @@
-
 'use server';
 
 import { Client, Truck, Hub, OptimizedRouteProposal } from "@/app/lib/types";
@@ -6,8 +5,8 @@ import { calculateDistance } from "@/lib/utils/tracking-math";
 
 /**
  * @fileOverview Motor de optimización de rutas (VRP - Vehicle Routing Problem).
- * Divide una lista de clientes entre una flota de camiones seleccionada
- * utilizando el algoritmo de Vecino más Cercano para asegurar rutas secuenciales.
+ * Distribuye clientes entre una flota utilizando un algoritmo de Vecino más Cercano balanceado
+ * para asegurar que cada camión siga una secuencia lógica de entregas.
  */
 
 export async function optimizeDistribution(
@@ -18,76 +17,78 @@ export async function optimizeDistribution(
 ): Promise<OptimizedRouteProposal[]> {
   if (stops.length === 0 || trucks.length === 0) return [];
 
+  const unvisited = [...stops];
   const numVehicles = Math.min(trucks.length, stops.length);
+  
+  // Inicializar propuestas
   const proposals: OptimizedRouteProposal[] = trucks.slice(0, numVehicles).map(t => ({
     truckId: t.id,
     truckPlate: t.plate,
-    driverId: t.assignedDriverId,
+    driverId: t.assignedDriverId || 'none',
     stops: [],
     totalDistanceKm: 0,
     estimatedDurationMinutes: 0
   }));
 
-  // 1. Clasificación inicial por cercanía a la base para asignar "zonas" a cada camión
-  // Esto evita que las rutas se crucen demasiado
-  const sortedStops = [...stops].sort((a, b) => {
-    const distA = calculateDistance(startHub.lat, startHub.lng, a.address.lat!, a.address.lng!);
-    const distB = calculateDistance(startHub.lat, startHub.lng, b.address.lat!, b.address.lng!);
-    return distA - distB;
-  });
+  /**
+   * Lógica de Asignación Secuencial (Nearest Neighbor Balanceado):
+   * En lugar de dividir en trozos fijos, recorremos los vehículos y les asignamos
+   * el punto más cercano a su ÚLTIMA ubicación conocida (empezando por la base).
+   */
+  let vehicleIdx = 0;
+  while (unvisited.length > 0) {
+    const currentProp = proposals[vehicleIdx];
+    
+    // Determinar última ubicación del camión (Base o último cliente asignado)
+    const lastLoc = currentProp.stops.length > 0 
+      ? { lat: currentProp.stops[currentProp.stops.length - 1].address.lat!, lng: currentProp.stops[currentProp.stops.length - 1].address.lng! }
+      : { lat: startHub.lat, lng: startHub.lng };
 
-  // 2. Reparto de clientes entre vehículos (Greedy clustering)
-  const batchSize = Math.ceil(stops.length / numVehicles);
-  const clusters: Client[][] = [];
-  for (let i = 0; i < numVehicles; i++) {
-    clusters.push(sortedStops.slice(i * batchSize, (i + 1) * batchSize));
-  }
+    // Buscar el punto más cercano a esa ubicación
+    let closestIdx = -1;
+    let minDistance = Infinity;
 
-  // 3. Optimización de la secuencia dentro de cada cluster (Nearest Neighbor TSP)
-  // "Desde base a punto 1, luego 2, luego 3..."
-  for (let i = 0; i < numVehicles; i++) {
-    const cluster = clusters[i];
-    if (cluster.length === 0) continue;
+    unvisited.forEach((stop, idx) => {
+      const d = calculateDistance(lastLoc.lat, lastLoc.lng, stop.address.lat!, stop.address.lng!);
+      if (d < minDistance) {
+        minDistance = d;
+        closestIdx = idx;
+      }
+    });
 
-    const optimizedSequence: Client[] = [];
-    let unvisited = [...cluster];
-    let currentLat = startHub.lat;
-    let currentLng = startHub.lng;
-    let totalDist = 0;
-
-    while (unvisited.length > 0) {
-      // Buscar el punto más cercano a la ubicación actual
-      let closestIdx = 0;
-      let minDistance = Infinity;
-
-      unvisited.forEach((stop, idx) => {
-        const d = calculateDistance(currentLat, currentLng, stop.address.lat!, stop.address.lng!);
-        if (d < minDistance) {
-          minDistance = d;
-          closestIdx = idx;
-        }
-      });
-
-      const nextStop = unvisited[closestIdx];
-      optimizedSequence.push(nextStop);
-      totalDist += minDistance;
-      
-      // Mover el puntero a la ubicación del cliente actual
-      currentLat = nextStop.address.lat!;
-      currentLng = nextStop.address.lng!;
-      
-      // Quitar de la lista de pendientes
+    if (closestIdx !== -1) {
+      currentProp.stops.push(unvisited[closestIdx]);
       unvisited.splice(closestIdx, 1);
     }
 
-    // El último tramo es hacia la Sede de Destino Final
+    // Pasar al siguiente vehículo (para balancear carga)
+    vehicleIdx = (vehicleIdx + 1) % numVehicles;
+  }
+
+  // 3. Cálculo final de distancias y tiempos por propuesta
+  proposals.forEach(prop => {
+    if (prop.stops.length === 0) return;
+
+    let totalDist = 0;
+    let currentLat = startHub.lat;
+    let currentLng = startHub.lng;
+
+    // Tramo 1 a N (Secuencial)
+    prop.stops.forEach(s => {
+      const d = calculateDistance(currentLat, currentLng, s.address.lat!, s.address.lng!);
+      totalDist += d;
+      currentLat = s.address.lat!;
+      currentLng = s.address.lng!;
+    });
+
+    // Tramo Final a la Sede de Destino
     totalDist += calculateDistance(currentLat, currentLng, endHub.lat, endHub.lng);
 
-    proposals[i].stops = optimizedSequence;
-    proposals[i].totalDistanceKm = Math.round(totalDist);
-    // Cálculo estimado: 60km/h de media + 25 min por parada de descarga/trámite
-    proposals[i].estimatedDurationMinutes = Math.round((totalDist / 60) * 60) + (optimizedSequence.length * 25);
-  }
+    prop.totalDistanceKm = Math.round(totalDist);
+    
+    // Cálculo estimado de tiempo: 60km/h promedio + 30 min por trámite de descarga
+    prop.estimatedDurationMinutes = Math.round((totalDist / 60) * 60) + (prop.stops.length * 30);
+  });
 
   return proposals;
 }
