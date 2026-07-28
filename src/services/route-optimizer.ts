@@ -1,3 +1,4 @@
+
 'use server';
 
 import { Client, Truck, Hub, OptimizedRouteProposal } from "@/app/lib/types";
@@ -6,7 +7,7 @@ import { calculateDistance } from "@/lib/utils/tracking-math";
 /**
  * @fileOverview Motor de optimización de rutas (VRP - Vehicle Routing Problem).
  * Divide una lista de clientes entre una flota de camiones seleccionada
- * minimizando la distancia total recorrida.
+ * utilizando el algoritmo de Vecino más Cercano para asegurar rutas secuenciales.
  */
 
 export async function optimizeDistribution(
@@ -17,9 +18,6 @@ export async function optimizeDistribution(
 ): Promise<OptimizedRouteProposal[]> {
   if (stops.length === 0 || trucks.length === 0) return [];
 
-  // Implementación de K-Means básico para agrupar clientes por cercanía
-  // En producción real, aquí se llamaría a Google Cloud Route Optimization API
-  
   const numVehicles = Math.min(trucks.length, stops.length);
   const proposals: OptimizedRouteProposal[] = trucks.slice(0, numVehicles).map(t => ({
     truckId: t.id,
@@ -30,41 +28,65 @@ export async function optimizeDistribution(
     estimatedDurationMinutes: 0
   }));
 
-  // Paso 1: Inicializar centroides con clientes aleatorios o equidistantes
-  // Por simplicidad en este prototipo, distribuimos equitativamente los clientes
-  // basándonos en su posición relativa al Hub central.
-  
+  // 1. Clasificación inicial por cercanía a la base para asignar "zonas" a cada camión
+  // Esto evita que las rutas se crucen demasiado
   const sortedStops = [...stops].sort((a, b) => {
     const distA = calculateDistance(startHub.lat, startHub.lng, a.address.lat!, a.address.lng!);
     const distB = calculateDistance(startHub.lat, startHub.lng, b.address.lat!, b.address.lng!);
     return distA - distB;
   });
 
-  // Paso 2: Asignación Greedy (Cercanía inmediata)
+  // 2. Reparto de clientes entre vehículos (Greedy clustering)
   const batchSize = Math.ceil(stops.length / numVehicles);
-  
+  const clusters: Client[][] = [];
   for (let i = 0; i < numVehicles; i++) {
-    const truckStops = sortedStops.slice(i * batchSize, (i + 1) * batchSize);
-    proposals[i].stops = truckStops;
-    
-    // Calcular distancia estimada de la ruta para este camión
+    clusters.push(sortedStops.slice(i * batchSize, (i + 1) * batchSize));
+  }
+
+  // 3. Optimización de la secuencia dentro de cada cluster (Nearest Neighbor TSP)
+  // "Desde base a punto 1, luego 2, luego 3..."
+  for (let i = 0; i < numVehicles; i++) {
+    const cluster = clusters[i];
+    if (cluster.length === 0) continue;
+
+    const optimizedSequence: Client[] = [];
+    let unvisited = [...cluster];
     let currentLat = startHub.lat;
     let currentLng = startHub.lng;
     let totalDist = 0;
 
-    truckStops.forEach(stop => {
-      const d = calculateDistance(currentLat, currentLng, stop.address.lat!, stop.address.lng!);
-      totalDist += d;
-      currentLat = stop.address.lat!;
-      currentLng = stop.address.lng!;
-    });
+    while (unvisited.length > 0) {
+      // Buscar el punto más cercano a la ubicación actual
+      let closestIdx = 0;
+      let minDistance = Infinity;
 
-    // Finalización en la Sede de Destino elegida
+      unvisited.forEach((stop, idx) => {
+        const d = calculateDistance(currentLat, currentLng, stop.address.lat!, stop.address.lng!);
+        if (d < minDistance) {
+          minDistance = d;
+          closestIdx = idx;
+        }
+      });
+
+      const nextStop = unvisited[closestIdx];
+      optimizedSequence.push(nextStop);
+      totalDist += minDistance;
+      
+      // Mover el puntero a la ubicación del cliente actual
+      currentLat = nextStop.address.lat!;
+      currentLng = nextStop.address.lng!;
+      
+      // Quitar de la lista de pendientes
+      unvisited.splice(closestIdx, 1);
+    }
+
+    // El último tramo es hacia la Sede de Destino Final
     totalDist += calculateDistance(currentLat, currentLng, endHub.lat, endHub.lng);
-    
+
+    proposals[i].stops = optimizedSequence;
     proposals[i].totalDistanceKm = Math.round(totalDist);
-    // 20 min por parada + cálculo base de 60km/h
-    proposals[i].estimatedDurationMinutes = Math.round((totalDist / 60) * 60) + (truckStops.length * 20); 
+    // Cálculo estimado: 60km/h de media + 25 min por parada de descarga/trámite
+    proposals[i].estimatedDurationMinutes = Math.round((totalDist / 60) * 60) + (optimizedSequence.length * 25);
   }
 
   return proposals;
