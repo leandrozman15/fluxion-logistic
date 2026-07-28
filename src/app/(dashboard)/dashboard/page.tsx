@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
@@ -45,7 +44,9 @@ import {
   CirclePlay,
   XCircle,
   CircleCheck,
-  ListOrdered
+  ListOrdered,
+  Ship,
+  ScanBarcode
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -457,15 +458,21 @@ export default function MonitorOperativoPage() {
                            load.status === 'delivered' ? "bg-green-100 text-green-600 border-green-200" :
                            "bg-white dark:bg-slate-800 text-slate-400 border-slate-200"
                          )}>
-                           {load.status === 'on_route' ? <Navigation size={24} className="animate-pulse" /> : 
+                           {load.serviceType === 'customs' ? <Ship size={24}/> : (load.status === 'on_route' ? <Navigation size={24} className="animate-pulse" /> : 
                             load.status === 'on_pause' ? <History size={24} /> : 
-                            load.status === 'delivered' ? <CheckCircle2 size={24} /> : <Clock size={24} />}
+                            load.status === 'delivered' ? <CheckCircle2 size={24} /> : <Clock size={24} />)}
                          </div>
                          
                          <div className="space-y-1 min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                               <p className="text-base font-black text-slate-900 dark:text-slate-100 tracking-tighter">{load.orderNumber}</p>
                               
+                              {load.international?.containerNumber && (
+                                <Badge variant="secondary" className="bg-blue-900 text-white border-none text-[8px] h-4 font-mono px-2">
+                                  <ScanBarcode size={10} className="mr-1" /> {load.international.containerNumber}
+                                </Badge>
+                              )}
+
                               {load.status === 'on_route' ? (
                                 <div className="flex items-center gap-1.5">
                                    <span className="relative flex h-2 w-2">
@@ -571,41 +578,66 @@ export default function MonitorOperativoPage() {
 
                    <CollapsibleContent className="bg-slate-50 dark:bg-slate-900/80 border-t border-slate-200 dark:border-slate-800 p-6 animate-in slide-in-from-top-2">
                       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                         {(load.status === 'on_route' || load.status === 'on_pause' || load.status === 'delivered') && (
-                           <div className="space-y-4 lg:border-r pr-6">
-                              <h4 className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-2 tracking-widest">
-                                 <Zap size={14} /> Telemetría GPS Nativa
-                              </h4>
-                              <div className="grid grid-cols-2 gap-4">
-                                <Card className="bg-white dark:bg-slate-800 shadow-none border-slate-200">
-                                  <CardContent className="p-3 text-center">
-                                    <p className="text-[8px] font-black text-slate-400 uppercase">Velocidad Máx.</p>
-                                    <p className="text-xl font-black text-blue-600">{times.maxV} <span className="text-[10px] font-normal opacity-50">km/h</span></p>
-                                  </CardContent>
-                                </Card>
-                                <Card className="bg-white dark:bg-slate-800 shadow-none border-slate-200">
-                                  <CardContent className="p-3 text-center">
-                                    <p className="text-[8px] font-black text-slate-400 uppercase">Combustible Est.</p>
-                                    <p className="text-xl font-black text-green-600">{times.fuel} <span className="text-[10px] font-normal opacity-50">L</span></p>
-                                  </CardContent>
-                                </Card>
-                              </div>
-                              <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 space-y-2">
-                                <p className="text-[9px] font-black text-slate-400 uppercase flex justify-between">
-                                  Estado Final GPS 
-                                  <span>{tracking?.lastUpdateAt ? formatDistanceToNow(tracking.lastUpdateAt.toDate ? tracking.lastUpdateAt.toDate() : new Date(tracking.lastUpdateAt), { addSuffix: true, locale: es }) : 'Finalizado'}</span>
-                                </p>
-                                <div className="h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                                  <div className="h-full bg-blue-500" style={{ width: `${progress}%` }}></div>
-                                </div>
-                                <Button variant="outline" size="sm" className="w-full text-[10px] font-bold" asChild>
-                                   <Link href={load.status === 'delivered' ? `/cargas/${load.id}/reporte` : `/tracking/${load.id}`}>
-                                      <Globe size={12} className="mr-1" /> {load.status === 'delivered' ? 'VER REPORTE FINAL' : 'VER MAPA EN VIVO'}
-                                   </Link>
-                                </Button>
-                              </div>
-                           </div>
-                         )}
+                         <div className="space-y-4 lg:border-r pr-6">
+                            <h4 className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-2 tracking-widest">
+                               <Ship size={14} /> Información de Contenedor
+                            </h4>
+                            {load.international?.containerNumber ? (
+                               <div className="space-y-4">
+                                  <div className="grid grid-cols-2 gap-4">
+                                     <Card className="bg-white dark:bg-slate-800 shadow-none border-slate-200">
+                                       <CardContent className="p-3">
+                                          <p className="text-[8px] font-black text-slate-400 uppercase">N° Contenedor</p>
+                                          <p className="text-sm font-black text-blue-600 font-mono uppercase">{load.international.containerNumber}</p>
+                                       </CardContent>
+                                     </Card>
+                                     <Card className="bg-white dark:bg-slate-800 shadow-none border-slate-200">
+                                       <CardContent className="p-3">
+                                          <p className="text-[8px] font-black text-slate-400 uppercase">Precinto</p>
+                                          <p className="text-sm font-black text-slate-700 font-mono">{load.international.sealNumber || 'N/A'}</p>
+                                       </CardContent>
+                                     </Card>
+                                  </div>
+                                  <div className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 space-y-2">
+                                     <div className="flex justify-between items-center text-[9px] font-bold">
+                                        <span className="text-slate-400 uppercase">Terminal/Puerto</span>
+                                        <span className="text-blue-600 uppercase">{load.international.exitCustoms || 'A designar'}</span>
+                                     </div>
+                                     <div className="flex justify-between items-center text-[9px] font-bold">
+                                        <span className="text-slate-400 uppercase">N° MIC/DTA</span>
+                                        <span className="text-slate-900 dark:text-slate-100 font-mono">{load.international.micDtaNumber || 'Pendiente'}</span>
+                                     </div>
+                                  </div>
+                               </div>
+                            ) : (
+                               <div className="p-8 text-center border-2 border-dashed rounded-2xl">
+                                  <ScanBarcode size={24} className="mx-auto text-slate-200 mb-2" />
+                                  <p className="text-[10px] text-slate-400 uppercase font-black">Carga General / No Contenedorizada</p>
+                               </div>
+                            )}
+
+                            {(load.status === 'on_route' || load.status === 'on_pause' || load.status === 'delivered') && (
+                               <div className="pt-4 space-y-4">
+                                  <h4 className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-2 tracking-widest">
+                                     <Zap size={14} /> Telemetría GPS Nativa
+                                  </h4>
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <Card className="bg-white dark:bg-slate-800 shadow-none border-slate-200">
+                                      <CardContent className="p-3 text-center">
+                                        <p className="text-[8px] font-black text-slate-400 uppercase">Velocidad Máx.</p>
+                                        <p className="text-xl font-black text-blue-600">{times.maxV} <span className="text-[10px] font-normal opacity-50">km/h</span></p>
+                                      </CardContent>
+                                    </Card>
+                                    <Card className="bg-white dark:bg-slate-800 shadow-none border-slate-200">
+                                      <CardContent className="p-3 text-center">
+                                        <p className="text-[8px] font-black text-slate-400 uppercase">Combustible Est.</p>
+                                        <p className="text-xl font-black text-green-600">{times.fuel} <span className="text-[10px] font-normal opacity-50">L</span></p>
+                                      </CardContent>
+                                    </Card>
+                                  </div>
+                               </div>
+                            )}
+                         </div>
 
                          <div className={cn("space-y-4", (!isStarted && load.status !== 'delivered') && "lg:col-span-2")}>
                             <h4 className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-2 tracking-widest">
@@ -673,17 +705,6 @@ export default function MonitorOperativoPage() {
                                                 </p>
                                              )}
                                           </div>
-                                       </div>
-                                       <div className="flex flex-wrap gap-1.5 border-t border-slate-100 dark:border-slate-700 pt-2">
-                                          {stop.documents?.map(doc => (
-                                            <div key={doc.id} className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 rounded border border-slate-200 dark:border-slate-600 text-[9px] font-bold">
-                                               <FileText size={10} className="text-slate-500" /> 
-                                               R:{doc.number} {doc.sealNumber && <span className="text-blue-600 ml-1">P:{doc.sealNumber}</span>}
-                                            </div>
-                                          ))}
-                                          {(!stop.documents || stop.documents.length === 0) && (
-                                             <span className="text-[8px] text-slate-400 italic">Sin remitos cargados</span>
-                                          )}
                                        </div>
                                     </div>
                                  </div>

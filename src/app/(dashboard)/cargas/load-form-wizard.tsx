@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { 
   Package, ArrowLeft, ArrowRight, Save, Loader2, 
   MapPin, Calendar, Clock, DollarSign, Truck, 
-  Info, AlertTriangle, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, LayoutGrid, UserCheck, Edit, TrendingUp, CreditCard, Anchor, Scale, ListOrdered, ShieldCheck
+  Info, AlertTriangle, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, LayoutGrid, UserCheck, Edit, TrendingUp, CreditCard, Anchor, Scale, ListOrdered, ShieldCheck, Ship, ScanBarcode
 } from "lucide-react";
 import { Load, Client, Hub, LoadLegStop, LoadDocument, LoadDocType, Truck as TruckType, Driver, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -26,6 +26,7 @@ import { format, addMinutes, parse } from "date-fns";
 const SERVICE_TYPES = [
   { id: 'standard', label: 'Carga General', icon: Package },
   { id: 'FTL', label: 'Carga Completa (FTL)', icon: Truck },
+  { id: 'customs', label: 'Puerto / Contenedor', icon: Ship },
   { id: 'reefer', label: 'Refrigerado', icon: Package },
   { id: 'dangerous', label: 'Carga Peligrosa', icon: AlertTriangle },
 ];
@@ -68,6 +69,25 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     basePrice: 0, 
     totalAmount: 0,
     status: "pending",
+    international: {
+      operationType: 'import',
+      exitCustoms: "",
+      entryCustoms: "",
+      declarationNumber: "",
+      micDtaNumber: "",
+      containerNumber: "",
+      sealNumber: "",
+      transportDocType: 'CP',
+      transportDocNumber: "",
+      fobValueUsd: 0,
+      freightValueUsd: 0,
+      insuranceValueUsd: 0,
+      cifValueUsd: 0,
+      importDutiesUsd: 0,
+      customsIvaUsd: 0,
+      totalCustomsCostsUsd: 0,
+      isMalvinaPresented: false
+    },
     budget: { initialAdvance: 0, totalBudget: 0, driverCommission: 0, otherInternalCosts: 0, categories: {} },
     tracking: {
       currentLat: 0, currentLng: 0, currentSpeed: 0, avgSpeed: 0, maxSpeed: 0,
@@ -79,9 +99,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
 
   const loadRef = useMemo(() => loadId && db ? doc(db, "loads", loadId) : null, [db, loadId]);
   const { data: existingLoad, loading: loadingExisting } = useDoc<Load>(loadRef);
-
-  const tenantRef = useMemo(() => (db && tenantId) ? doc(db, "tenants", tenantId) : null, [db, tenantId]);
-  const { data: tenant } = useDoc<Tenant>(tenantRef);
 
   useEffect(() => {
     async function fetchNextOrderNumber() {
@@ -120,20 +137,21 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
         outboundStops: existingLoad.outboundStops || [],
         returnStops: existingLoad.returnStops || [],
         returnDestination: existingLoad.returnDestination || { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", country: "Argentina", zip: "", instructions: "", dockName: "" },
-        budget: existingLoad.budget || { initialAdvance: 0, totalBudget: 0, driverCommission: 0, otherInternalCosts: 0, categories: {} }
+        budget: existingLoad.budget || { initialAdvance: 0, totalBudget: 0, driverCommission: 0, otherInternalCosts: 0, categories: {} },
+        international: existingLoad.international || formData.international
       });
     }
   }, [existingLoad]);
 
-  const clientsQuery = useMemo(() => db ? query(collection(db, "clients"), orderBy("name")) : null, [db]);
-  const hubsQuery = useMemo(() => db ? query(collection(db, "hubs"), orderBy("name")) : null, [db]);
   const trucksQuery = useMemo(() => db ? query(collection(db, "trucks"), orderBy("plate")) : null, [db]);
   const driversQuery = useMemo(() => db ? query(collection(db, "drivers"), orderBy("lastName")) : null, [db]);
+  const clientsQuery = useMemo(() => db ? query(collection(db, "clients"), orderBy("name")) : null, [db]);
+  const hubsQuery = useMemo(() => db ? query(collection(db, "hubs"), orderBy("name")) : null, [db]);
 
-  const { data: clients } = useCollection<Client>(clientsQuery);
-  const { data: hubs } = useCollection<Hub>(hubsQuery);
   const { data: trucks } = useCollection<TruckType>(trucksQuery);
   const { data: drivers } = useCollection<Driver>(driversQuery);
+  const { data: clients } = useCollection<Client>(clientsQuery);
+  const { data: hubs } = useCollection<Hub>(hubsQuery);
 
   const locationsList = useMemo(() => {
     const list: any[] = [];
@@ -245,12 +263,12 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
       </div>
 
       <div className="bg-white p-4 rounded-3xl border shadow-sm overflow-x-auto">
-        <div className="flex items-center justify-between min-w-[500px]">
+        <div className="flex items-center justify-between min-w-[600px]">
           {[
             { id: 1, label: "Recursos", icon: Truck },
             { id: 2, label: "Hoja Ruta", icon: ListOrdered },
             { id: 3, label: "Retorno", icon: Repeat },
-            { id: 4, label: "Valores", icon: DollarSign },
+            { id: 4, label: "Puerto / Comex", icon: Ship },
             { id: 5, label: "Seguridad", icon: ShieldCheck }
           ].map((s) => (
             <div key={s.id} className="flex flex-col items-center gap-1.5 flex-1 relative">
@@ -272,6 +290,25 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
       <div className="animate-in fade-in duration-300">
         {step === 1 && (
           <div className="space-y-6">
+            <Card className="border-none shadow-sm">
+               <CardHeader><CardTitle>Tipo de Operación</CardTitle></CardHeader>
+               <CardContent className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  {SERVICE_TYPES.map(type => (
+                    <button 
+                      key={type.id}
+                      onClick={() => setFormData({...formData, serviceType: type.id as any})}
+                      className={cn(
+                        "p-4 border-2 rounded-2xl flex flex-col items-center gap-2 transition-all",
+                        formData.serviceType === type.id ? "bg-blue-600 text-white border-blue-600 shadow-lg" : "bg-white text-slate-400 border-slate-100 hover:border-blue-200"
+                      )}
+                    >
+                      <type.icon size={24} />
+                      <span className="text-[10px] font-black uppercase text-center leading-tight">{type.label}</span>
+                    </button>
+                  ))}
+               </CardContent>
+            </Card>
+
             <Card className={cn(
               "border-none shadow-xl transition-all duration-300",
               isWeightLimitExceeded ? "bg-red-600 text-white" : "bg-slate-900 text-white"
@@ -361,6 +398,57 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                 </div>
               </div>
             </CardContent>
+          </Card>
+        )}
+
+        {step === 4 && (
+          <Card className="border-none shadow-sm">
+             <CardHeader>
+               <CardTitle className="flex items-center gap-2"><Ship className="text-blue-600" /> Operativa Aduanera / Puerto</CardTitle>
+               <CardDescription>Cargue los datos del contenedor y documentación de exportación/importación.</CardDescription>
+             </CardHeader>
+             <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                   <div className="space-y-2">
+                      <Label className="flex items-center gap-2"><ScanBarcode size={14} className="text-blue-500" /> N° de Contenedor</Label>
+                      <Input placeholder="Ej: MEDU 123456-7" value={formData.international?.containerNumber || ''} onChange={e => setFormData({...formData, international: {...formData.international!, containerNumber: e.target.value.toUpperCase()}})} />
+                   </div>
+                   <div className="space-y-2">
+                      <Label>N° de Precinto</Label>
+                      <Input placeholder="Ej: 009876" value={formData.international?.sealNumber || ''} onChange={e => setFormData({...formData, international: {...formData.international!, sealNumber: e.target.value}})} />
+                   </div>
+                   <div className="space-y-2">
+                      <Label>Terminal / Puerto</Label>
+                      <Input placeholder="Ej: Terminal 4 - Puerto Buenos Aires" value={formData.international?.exitCustoms || ''} onChange={e => setFormData({...formData, international: {...formData.international!, exitCustoms: e.target.value}})} />
+                   </div>
+                   <div className="space-y-2">
+                      <Label>N° de MIC / DTA / CRT</Label>
+                      <Input placeholder="Doc. Transporte Internacional" value={formData.international?.micDtaNumber || ''} onChange={e => setFormData({...formData, international: {...formData.international!, micDtaNumber: e.target.value.toUpperCase()}})} />
+                   </div>
+                </div>
+                <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
+                   <div className="flex items-center gap-2 text-xs font-bold text-blue-700 uppercase mb-2">
+                      <FileText size={14} /> Control de Manifiesto
+                   </div>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase font-bold text-slate-400">N° Operación Aduana</Label>
+                        <Input className="bg-white" value={formData.international?.declarationNumber || ''} onChange={e => setFormData({...formData, international: {...formData.international!, declarationNumber: e.target.value}})} />
+                      </div>
+                      <div className="space-y-1">
+                         <Label className="text-[10px] uppercase font-bold text-slate-400">Tipo de Documento</Label>
+                         <Select value={formData.international?.transportDocType || 'CP'} onValueChange={(v: any) => setFormData({...formData, international: {...formData.international!, transportDocType: v}})}>
+                            <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                               <SelectItem value="CP">Carta de Porte</SelectItem>
+                               <SelectItem value="BL">Bill of Lading (BL)</SelectItem>
+                               <SelectItem value="CRT">CRT Internacional</SelectItem>
+                            </SelectContent>
+                         </Select>
+                      </div>
+                   </div>
+                </div>
+             </CardContent>
           </Card>
         )}
 

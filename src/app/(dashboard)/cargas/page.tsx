@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
@@ -15,7 +14,7 @@ import {
   Package, Plus, Search, Scale, 
   Loader2, MoreVertical, Trash2, CheckCircle2, 
   Clock, AlertTriangle, FileText, Printer, Wallet, Navigation, Edit, Calendar, Truck, User, History,
-  BarChart3
+  BarChart3, Ship, ScanBarcode
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -67,7 +66,8 @@ export default function CargasPage() {
       const search = searchTerm.toLowerCase();
       const matchesSearch = 
         (l.orderNumber || "").toLowerCase().includes(search) ||
-        (l.outboundStops?.[0]?.name || "").toLowerCase().includes(search);
+        (l.outboundStops?.[0]?.name || "").toLowerCase().includes(search) ||
+        (l.international?.containerNumber || "").toLowerCase().includes(search);
       const matchesStatus = statusFilter === "all" || l.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
@@ -116,7 +116,7 @@ export default function CargasPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Cargas y Fletes</h1>
-          <p className="text-slate-500 text-sm">Gestión de pedidos multi-destino y seguimiento.</p>
+          <p className="text-slate-500 text-sm">Gestión de pedidos multi-destino y seguimiento de contenedores.</p>
         </div>
         <Button className="bg-blue-600 shadow-lg shadow-blue-100" onClick={() => router.push('/cargas/nuevo')}>
           <Plus className="w-4 h-4 mr-2" /> Nueva Operación / Flete
@@ -129,7 +129,7 @@ export default function CargasPage() {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
             <Input 
               type="search" 
-              placeholder="Buscar por N° Orden o destino..." 
+              placeholder="Buscar por N° Orden, contenedor o destino..." 
               className="bg-white pl-8"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
@@ -154,7 +154,7 @@ export default function CargasPage() {
                 <TableRow>
                   <TableHead>N° Orden / Carga</TableHead>
                   <TableHead>Itinerario y Recursos</TableHead>
-                  <TableHead>Carga / Docs</TableHead>
+                  <TableHead>Contenedor / Docs</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
@@ -166,7 +166,7 @@ export default function CargasPage() {
                   filteredLoads.map((load) => {
                     const totalStops = (load.outboundStops?.length || 0) + (load.returnStops?.length || 0);
                     const totalWeight = (load.outboundStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0) + (load.returnStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0);
-                    const totalDocs = (load.outboundStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0) + (load.returnStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0);
+                    const totalDocs = (load.outboundStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0) + (load.returnStops?.reduce((acc, s) => acc + (load.returnStops?.length || 0), 0) || 0);
                     const firstDest = load.outboundStops?.[0]?.name || "Sin destinos";
                     
                     const truckObj = trucks?.find(t => t.id === load.assignedTruckId);
@@ -176,7 +176,9 @@ export default function CargasPage() {
                       <TableRow key={load.id} className="hover:bg-slate-50/50 cursor-pointer" onClick={() => router.push(`/cargas/${load.id}/reporte`)}>
                         <TableCell>
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 shrink-0"><Package size={20} /></div>
+                            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+                               {load.serviceType === 'customs' ? <Ship size={20}/> : <Package size={20} />}
+                            </div>
                             <div className="min-w-0">
                               <div className="font-bold text-slate-900">{load.orderNumber}</div>
                               <div className="text-[10px] text-slate-500 uppercase font-bold truncate max-w-[150px]">{firstDest}</div>
@@ -205,8 +207,16 @@ export default function CargasPage() {
                         </TableCell>
                         <TableCell>
                           <div className="space-y-1">
-                            <div className="flex items-center gap-1 text-[10px] font-black text-slate-600"><Scale size={10} /> {totalWeight.toLocaleString()} Kg</div>
-                            <Badge variant="secondary" className="text-[9px] h-4 bg-slate-100"><FileText size={10} className="mr-1" /> {totalDocs} Documentos</Badge>
+                            {load.international?.containerNumber ? (
+                               <Badge variant="secondary" className="bg-blue-900 text-white border-none font-mono text-[9px] h-5 gap-1.5 px-2">
+                                  <ScanBarcode size={10} /> {load.international.containerNumber}
+                               </Badge>
+                            ) : (
+                               <div className="flex items-center gap-1 text-[10px] font-black text-slate-600"><Scale size={10} /> {totalWeight.toLocaleString()} Kg</div>
+                            )}
+                            <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-bold">
+                               <FileText size={10} /> {totalDocs} DOCUMENTOS
+                            </div>
                           </div>
                         </TableCell>
                         <TableCell>{getStatusBadge(load.status)}</TableCell>
