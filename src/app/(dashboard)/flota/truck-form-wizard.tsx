@@ -186,6 +186,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
       const updatedCosts = JSON.parse(JSON.stringify(currentCosts));
       
       if (subField) {
+        if (!updatedCosts[block][field]) updatedCosts[block][field] = {};
         updatedCosts[block][field][subField] = isNaN(val) ? 0 : val;
       } else {
         updatedCosts[block][field] = isNaN(val) ? 0 : val;
@@ -249,9 +250,9 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     const sumFixed = Object.values(costs.fixed).reduce((a, b) => a + (b as number), 0);
     const fixedPerKm = sumFixed / kmMensuales;
     
-    const oilPerKm = costs.variable.preventiveMaintenance.cost / (costs.variable.preventiveMaintenance.frequencyKm || 1);
-    const tiresPerKm = costs.variable.tires.costFullSet / (costs.variable.tires.lifeSpanKm || 1);
-    const reservePerKm = costs.variable.unforeseenReservePerKm;
+    const oilPerKm = (costs.variable.preventiveMaintenance?.cost || 0) / (costs.variable.preventiveMaintenance?.frequencyKm || 1);
+    const tiresPerKm = (costs.variable.tires?.costFullSet || 0) / (costs.variable.tires?.lifeSpanKm || 1);
+    const reservePerKm = costs.variable.unforeseenReservePerKm || 0;
 
     let fuelPerKm = 0;
     if (fuelExpenses && fuelExpenses.length > 0) {
@@ -644,6 +645,10 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                       <Input type="number" value={formData.costs?.fixed.garageAdmin || ''} onChange={e => handleCostChange('fixed', 'garageAdmin', e.target.value)} />
                     </div>
                     <div className="space-y-1">
+                      <Label className="text-[10px] uppercase font-bold text-slate-400">Impuestos y Habilitaciones</Label>
+                      <Input type="number" value={formData.costs?.fixed.taxesHabilitations || ''} onChange={e => handleCostChange('fixed', 'taxesHabilitations', e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
                       <Label className="text-[10px] uppercase font-bold text-slate-400">Amortización / Reserva</Label>
                       <Input type="number" value={formData.costs?.fixed.amortization || ''} onChange={e => handleCostChange('fixed', 'amortization', e.target.value)} />
                     </div>
@@ -664,11 +669,11 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                        <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1">
                             <Label className="text-[10px] uppercase font-bold text-slate-400">Costo del Service</Label>
-                            <Input type="number" value={formData.costs?.variable.preventiveMaintenance.cost || ''} onChange={e => handleCostChange('variable', 'preventiveMaintenance', e.target.value, 'cost')} />
+                            <Input type="number" value={formData.costs?.variable.preventiveMaintenance?.cost || ''} onChange={e => handleCostChange('variable', 'preventiveMaintenance', e.target.value, 'cost')} />
                           </div>
                           <div className="space-y-1">
                             <Label className="text-[10px] uppercase font-bold text-slate-400">Frecuencia (KM)</Label>
-                            <Input type="number" value={formData.costs?.variable.preventiveMaintenance.frequencyKm || ''} onChange={e => handleCostChange('variable', 'preventiveMaintenance', e.target.value, 'frequencyKm')} />
+                            <Input type="number" value={formData.costs?.variable.preventiveMaintenance?.frequencyKm || ''} onChange={e => handleCostChange('variable', 'preventiveMaintenance', e.target.value, 'frequencyKm')} />
                           </div>
                        </div>
                     </div>
@@ -678,11 +683,11 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                        <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1">
                             <Label className="text-[10px] uppercase font-bold text-slate-400">Costo Total Set</Label>
-                            <Input type="number" value={formData.costs?.variable.tires.costFullSet || ''} onChange={e => handleCostChange('variable', 'tires', e.target.value, 'costFullSet')} />
+                            <Input type="number" value={formData.costs?.variable.tires?.costFullSet || ''} onChange={e => handleCostChange('variable', 'tires', e.target.value, 'costFullSet')} />
                           </div>
                           <div className="space-y-1">
                             <Label className="text-[10px] uppercase font-bold text-slate-400">Vida Útil (KM)</Label>
-                            <Input type="number" value={formData.costs?.variable.tires.lifeSpanKm || ''} onChange={e => handleCostChange('variable', 'tires', e.target.value, 'lifeSpanKm')} />
+                            <Input type="number" value={formData.costs?.variable.tires?.lifeSpanKm || ''} onChange={e => handleCostChange('variable', 'tires', e.target.value, 'lifeSpanKm')} />
                           </div>
                        </div>
                     </div>
@@ -719,7 +724,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
 
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center z-50">
         <div className="max-w-4xl w-full flex justify-between items-center px-4">
-          <Button variant="ghost" onClick={() => step > 1 ? setStep(step - 1) : router.back()} disabled={isSubmitting}>
+          <Button variant="ghost" onClick={handleBack} disabled={step === 1 || isSubmitting}>
             <ChevronLeft size={16} className="mr-1" /> Volver
           </Button>
           <div className="flex gap-2">
