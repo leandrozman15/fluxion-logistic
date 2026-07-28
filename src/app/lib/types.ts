@@ -142,6 +142,16 @@ export interface SemiTrailer {
   axles: number;
 }
 
+export interface BitrenConfig {
+  type: 'type_a' | 'type_b'; // A: 22.40m, B: 30.25m
+  firstSemiPlate: string;
+  secondSemiPlate: string;
+  totalAxles: number;
+  brand: string;
+  model: string;
+  year: number;
+}
+
 export interface TruckCosts {
   // Bloque A: Costos Fijos
   fixed: {
@@ -198,8 +208,10 @@ export interface Truck {
   createdAt: any;
   updatedAt: any;
   
-  // Datos del acoplado
+  // Equipamiento de arrastre
+  haulingType: 'standard' | 'bitren';
   semiTrailer?: SemiTrailer;
+  bitren?: BitrenConfig;
   
   // Estructura de costos
   costs?: TruckCosts;

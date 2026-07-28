@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from "react";
@@ -13,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Truck, ArrowLeft, ArrowRight, Save, Loader2, 
   Gauge, Box, Thermometer, Droplets, Anchor, Layers, 
-  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon, LayoutGrid, Users, Building2, User, DollarSign, Activity, TrendingUp, Wrench, Fuel
+  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon, LayoutGrid, Users, Building2, User, DollarSign, Activity, TrendingUp, Wrench, Fuel, InfoIcon
 } from "lucide-react";
 import { Truck as TruckType, Driver, OwnershipType, TruckCosts, Expense } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -88,6 +89,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     grossWeight: 0, fuelType: "Diesel", tankLiters: 0, odometerKm: 0,
     avgConsumption: 32, status: "available",
     ownershipType: 'company',
+    haulingType: 'standard',
     location: { city: "", province: "Buenos Aires", country: "Argentina", lat: 0, lng: 0 },
     avatarUrl: "",
     semiTrailer: {
@@ -97,6 +99,15 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
       year: new Date().getFullYear(),
       type: "plataforma",
       axles: 3
+    },
+    bitren: {
+      type: 'type_a',
+      firstSemiPlate: "",
+      secondSemiPlate: "",
+      totalAxles: 9,
+      brand: "",
+      model: "",
+      year: new Date().getFullYear()
     },
     costs: INITIAL_COSTS
   });
@@ -113,7 +124,6 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
 
   const { data: drivers } = useCollection<Driver>(driversQuery);
 
-  // Consulta de gastos reales de combustible para esta unidad
   const fuelExpensesQuery = useMemo(() => {
     if (!db || !truckId) return null;
     return query(
@@ -133,8 +143,10 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
         odometerKm: existingTruck.odometerKm || 0,
         avatarUrl: existingTruck.avatarUrl || "",
         ownershipType: existingTruck.ownershipType || 'company',
+        haulingType: existingTruck.haulingType || 'standard',
         assignedDriverId: existingTruck.assignedDriverId || "",
         semiTrailer: existingTruck.semiTrailer || { plate: "", brand: "", model: "", year: new Date().getFullYear(), type: "plataforma", axles: 3 },
+        bitren: existingTruck.bitren || { type: 'type_a', firstSemiPlate: "", secondSemiPlate: "", totalAxles: 9, brand: "", model: "", year: new Date().getFullYear() },
         costs: existingTruck.costs || INITIAL_COSTS
       });
     }
@@ -236,27 +248,18 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     const tiresPerKm = costs.variable.tires.costFullSet / (costs.variable.tires.lifeSpanKm || 1);
     const reservePerKm = costs.variable.unforeseenReservePerKm;
 
-    // Cálculo del Costo de Combustible basado en historial real
     let fuelPerKm = 0;
     if (fuelExpenses && fuelExpenses.length > 0) {
       const validTickets = fuelExpenses.filter(e => !!e.pricePerLiter && e.pricePerLiter > 0);
       if (validTickets.length > 0) {
         const avgPrice = validTickets.reduce((acc, e) => acc + (e.pricePerLiter || 0), 0) / validTickets.length;
-        // Formula: Precio x Consumo / 100
         fuelPerKm = (avgPrice * (formData.avgConsumption || 32)) / 100;
       }
     }
     
     const totalPerKm = fixedPerKm + oilPerKm + tiresPerKm + reservePerKm + fuelPerKm;
     
-    return {
-      fixedPerKm,
-      oilPerKm,
-      tiresPerKm,
-      reservePerKm,
-      fuelPerKm,
-      totalPerKm
-    };
+    return { fixedPerKm, oilPerKm, tiresPerKm, reservePerKm, fuelPerKm, totalPerKm };
   }, [formData.costs, formData.avgConsumption, fuelExpenses]);
 
   if (loadingExisting && truckId) {
@@ -291,9 +294,9 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
         <div className="flex items-center justify-between">
           {[
             { id: 1, label: "Identificación", icon: Info },
-            { id: 2, label: "Especificaciones", icon: Gauge },
-            { id: 3, label: "Ubicación Base", icon: MapPin },
-            { id: 4, label: "Estructura de Costos", icon: DollarSign }
+            { id: 2, label: "Arrastre", icon: Truck },
+            { id: 3, label: "Ubicación", icon: MapPin },
+            { id: 4, label: "Costos", icon: DollarSign }
           ].map((s) => (
             <div key={s.id} className="flex flex-col items-center gap-1.5 flex-1 relative">
               <div className={cn(
@@ -324,10 +327,6 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                       <Truck size={48} />
                     </AvatarFallback>
                   </Avatar>
-                  <div className="text-center space-y-1">
-                    <p className="text-xs font-bold uppercase text-slate-600">Foto de la Unidad</p>
-                    <p className="text-[10px] text-slate-400">Identificación visual para el panel</p>
-                  </div>
                   <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
                   <Button variant="outline" type="button" size="sm" onClick={() => fileInputRef.current?.click()} className="bg-white" disabled={isProcessingAvatar}>
                     {isProcessingAvatar ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Camera size={14} className="mr-2" />} 
@@ -344,12 +343,10 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                   <div className="space-y-2">
                     <Label>Titularidad del Vehículo</Label>
                     <Select value={formData.ownershipType} onValueChange={(v: OwnershipType) => setFormData({...formData, ownershipType: v})}>
-                      <SelectTrigger className="bg-white">
-                        <SelectValue />
-                      </SelectTrigger>
+                      <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="company"><div className="flex items-center gap-2"><Building2 size={14} className="text-blue-600"/> Propio (Empresa)</div></SelectItem>
-                        <SelectItem value="third_party"><div className="flex items-center gap-2"><User size={14} className="text-orange-600"/> Tercero (Chofer / Propietario)</div></SelectItem>
+                        <SelectItem value="company">Propio (Empresa)</SelectItem>
+                        <SelectItem value="third_party">Tercero (Chofer / Propietario)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -357,9 +354,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                   <div className="space-y-2">
                     <Label>Chofer Asignado</Label>
                     <Select value={formData.assignedDriverId} onValueChange={v => setFormData({...formData, assignedDriverId: v})}>
-                      <SelectTrigger className="bg-white">
-                        <SelectValue placeholder="Seleccionar chofer" />
-                      </SelectTrigger>
+                      <SelectTrigger className="bg-white"><SelectValue placeholder="Seleccionar chofer" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">Sin asignar</SelectItem>
                         {drivers?.map(d => (
@@ -398,120 +393,100 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
         {step === 2 && (
           <div className="space-y-6">
             <Card className="border-none shadow-sm">
-              <CardHeader><CardTitle>Unidad Tractora</CardTitle></CardHeader>
-              <CardContent className="space-y-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="p-6 bg-slate-900 text-white rounded-2xl space-y-6">
-                    <div className="flex items-center gap-2 text-blue-400 font-bold uppercase text-[10px] tracking-widest">
-                      <Gauge size={16}/> Estado del Odómetro
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-white/50 text-[10px] uppercase">Kilometraje Actual (KM)</Label>
-                      <Input 
-                        type="number" 
-                        className="bg-white/5 border-white/10 text-white font-mono text-2xl h-14"
-                        value={formData.odometerKm ?? 0} 
-                        onChange={e => handleNumericChange('odometerKm', e.target.value)} 
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-white/50 text-[10px] uppercase">Consumo Objetivo (L/100km)</Label>
-                      <Input 
-                        type="number" 
-                        className="bg-white/5 border-white/10 text-white"
-                        value={formData.avgConsumption ?? 32} 
-                        onChange={e => handleNumericChange('avgConsumption', e.target.value)} 
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <Label>Tipo de Carrocería (Camión)</Label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {BODY_TYPES.map(type => (
-                        <button 
-                          key={type.id} 
-                          type="button"
-                          className={cn(
-                            "flex flex-col items-center justify-center gap-2 p-4 rounded-xl border transition-all text-center",
-                            formData.bodyType === type.id ? "bg-blue-600 text-white border-blue-600 shadow-lg" : "bg-white text-slate-500 border-slate-200 hover:border-blue-300"
-                          )}
-                          onClick={() => setFormData({...formData, bodyType: type.id})}
-                        >
-                          <type.icon size={20} />
-                          <span className="text-[10px] uppercase font-black">{type.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-none shadow-sm border-l-4 border-l-blue-600">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <LayoutGrid size={20} className="text-blue-600" /> Semirremolque / Acoplado
-                </CardTitle>
-                <CardDescription>Registre los datos del equipo de arrastre asignado.</CardDescription>
+                <CardTitle>Configuración de Arrastre</CardTitle>
+                <CardDescription>Defina si la unidad opera con semirremolque standard o en modo Bitrén.</CardDescription>
               </CardHeader>
-              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Patente Semirremolque</Label>
-                    <Input 
-                      placeholder="N° de Patente" 
-                      value={formData.semiTrailer?.plate ?? ''} 
-                      onChange={e => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, plate: e.target.value.toUpperCase()}})} 
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Marca Acoplado</Label>
-                      <Select 
-                        value={formData.semiTrailer?.brand} 
-                        onValueChange={v => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, brand: v}})}
-                      >
-                        <SelectTrigger><SelectValue placeholder="Marca" /></SelectTrigger>
-                        <SelectContent>
-                          {SEMI_BRANDS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Año</Label>
-                      <Input 
-                        type="number" 
-                        value={formData.semiTrailer?.year ?? 0} 
-                        onChange={e => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, year: parseInt(e.target.value) || 0}})} 
-                      />
-                    </div>
-                  </div>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <button 
+                    type="button"
+                    className={cn(
+                      "flex flex-col items-center justify-center gap-2 p-6 rounded-2xl border-2 transition-all",
+                      formData.haulingType === 'standard' ? "bg-blue-600 text-white border-blue-600 shadow-lg" : "bg-white text-slate-500 border-slate-100"
+                    )}
+                    onClick={() => setFormData({...formData, haulingType: 'standard'})}
+                  >
+                    <Layers size={32} />
+                    <span className="font-black uppercase text-xs">Semirremolque Standard</span>
+                  </button>
+                  <button 
+                    type="button"
+                    className={cn(
+                      "flex flex-col items-center justify-center gap-2 p-6 rounded-2xl border-2 transition-all",
+                      formData.haulingType === 'bitren' ? "bg-blue-600 text-white border-blue-600 shadow-lg" : "bg-white text-slate-500 border-slate-100"
+                    )}
+                    onClick={() => setFormData({...formData, haulingType: 'bitren'})}
+                  >
+                    <div className="flex gap-1"><Layers size={24} /><Layers size={24} /></div>
+                    <span className="font-black uppercase text-xs">Unidad Bitrén</span>
+                  </button>
                 </div>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Tipo de Batea / Equipo</Label>
-                    <Select 
-                      value={formData.semiTrailer?.type} 
-                      onValueChange={v => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, type: v}})}
-                    >
-                      <SelectTrigger><SelectValue placeholder="Seleccionar tipo" /></SelectTrigger>
-                      <SelectContent>
-                        {BODY_TYPES.map(bt => <SelectItem key={bt.id} value={bt.id}>{bt.label}</SelectItem>)}
-                        <SelectItem value="sider">Sider / Cortina</SelectItem>
-                        <SelectItem value="jaula">Ganadero / Jaula</SelectItem>
-                      </SelectContent>
-                    </Select>
+
+                {formData.haulingType === 'standard' ? (
+                  <div className="p-6 bg-slate-50 rounded-2xl space-y-4 animate-in fade-in">
+                    <h3 className="text-sm font-bold flex items-center gap-2"><LayoutGrid size={16}/> Datos Semirremolque</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase font-bold">Patente Semi</Label>
+                        <Input className="bg-white" value={formData.semiTrailer?.plate} onChange={e => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, plate: e.target.value.toUpperCase()}})} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase font-bold">Marca</Label>
+                        <Select value={formData.semiTrailer?.brand} onValueChange={v => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, brand: v}})}>
+                          <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                          <SelectContent>{SEMI_BRANDS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase font-bold">Ejes</Label>
+                        <Input className="bg-white" type="number" value={formData.semiTrailer?.axles} onChange={e => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, axles: parseInt(e.target.value) || 0}})} />
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Cantidad de Ejes</Label>
-                    <Input 
-                      type="number" 
-                      value={formData.semiTrailer?.axles ?? 3} 
-                      onChange={e => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, axles: parseInt(e.target.value) || 0}})} 
-                    />
+                ) : (
+                  <div className="p-6 bg-blue-50 border border-blue-100 rounded-2xl space-y-6 animate-in fade-in">
+                    <div className="flex justify-between items-start">
+                       <h3 className="text-sm font-bold flex items-center gap-2 text-blue-800"><Zap size={16}/> Configuración Bitrén (Res. 1196/2025)</h3>
+                       <Badge className="bg-blue-600 text-[10px]">Alta Capacidad</Badge>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                       <div className="space-y-1">
+                          <Label className="text-[10px] uppercase font-bold text-blue-600">Tipo de Bitrén</Label>
+                          <Select value={formData.bitren?.type} onValueChange={(v: any) => setFormData({...formData, bitren: {...formData.bitren!, type: v}})}>
+                             <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                             <SelectContent>
+                                <SelectItem value="type_a">Tipo A (hasta 22,40m / 60tn)</SelectItem>
+                                <SelectItem value="type_b">Tipo B (hasta 30,25m / 75tn)</SelectItem>
+                             </SelectContent>
+                          </Select>
+                       </div>
+                       <div className="space-y-1">
+                          <Label className="text-[10px] uppercase font-bold text-blue-600">Cantidad de Ejes Totales</Label>
+                          <Input className="bg-white" type="number" value={formData.bitren?.totalAxles} onChange={e => setFormData({...formData, bitren: {...formData.bitren!, totalAxles: parseInt(e.target.value) || 0}})} />
+                       </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                       <div className="space-y-1 p-3 bg-white rounded-xl border">
+                          <Label className="text-[9px] uppercase font-black text-slate-400">Patente 1er Semi (Enganche Tractor)</Label>
+                          <Input className="h-8 font-mono font-bold" value={formData.bitren?.firstSemiPlate} onChange={e => setFormData({...formData, bitren: {...formData.bitren!, firstSemiPlate: e.target.value.toUpperCase()}})} />
+                       </div>
+                       <div className="space-y-1 p-3 bg-white rounded-xl border">
+                          <Label className="text-[9px] uppercase font-black text-slate-400">Patente 2do Semi (Enganche Final)</Label>
+                          <Input className="h-8 font-mono font-bold" value={formData.bitren?.secondSemiPlate} onChange={e => setFormData({...formData, bitren: {...formData.bitren!, secondSemiPlate: e.target.value.toUpperCase()}})} />
+                       </div>
+                    </div>
+
+                    <div className="flex gap-2 p-3 bg-white/50 rounded-lg">
+                       <InfoIcon size={14} className="text-blue-500 shrink-0 mt-0.5" />
+                       <p className="text-[10px] text-blue-700 leading-relaxed italic">
+                         Nota: El Bitrén se registra como una unidad completa. Asegure que la configuración de ejes permita alcanzar el PBTC declarado.
+                       </p>
+                    </div>
                   </div>
-                </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -519,34 +494,45 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
 
         {step === 3 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Ubicación y Estado Operativo</CardTitle></CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <CardHeader><CardTitle>Ubicación y Estado del Odómetro</CardTitle></CardHeader>
+            <CardContent className="space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="p-6 bg-slate-900 text-white rounded-2xl space-y-6">
+                  <div className="space-y-2">
+                    <Label className="text-white/50 text-[10px] uppercase">Kilometraje Actual (KM)</Label>
+                    <Input 
+                      type="number" 
+                      className="bg-white/5 border-white/10 text-white font-mono text-2xl h-14"
+                      value={formData.odometerKm ?? 0} 
+                      onChange={e => handleNumericChange('odometerKm', e.target.value)} 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-white/50 text-[10px] uppercase">Consumo Objetivo (L/100km)</Label>
+                    <Input 
+                      type="number" 
+                      className="bg-white/5 border-white/10 text-white"
+                      value={formData.avgConsumption ?? 32} 
+                      onChange={e => handleNumericChange('avgConsumption', e.target.value)} 
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>Provincia Base</Label>
                     <Select value={formData.location?.province} onValueChange={v => setFormData({...formData, location: {...formData.location!, province: v, country: "Argentina"}})}>
-                      <SelectTrigger className="bg-white"><SelectValue placeholder="Seleccionar provincia" /></SelectTrigger>
-                      <SelectContent>
-                        {PROVINCIAS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                      </SelectContent>
+                      <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                      <SelectContent>{PROVINCIAS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
                     <Label>Localidad</Label>
-                    <Input className="bg-white" value={formData.location?.city ?? ''} onChange={e => setFormData({...formData, location: {...formData.location!, city: e.target.value}})} />
+                    <Input value={formData.location?.city ?? ''} onChange={e => setFormData({...formData, location: {...formData.location!, city: e.target.value}})} />
                   </div>
                   <Button variant="outline" type="button" className="w-full text-xs" onClick={handleGetLocation}>
-                    <Crosshair size={14} className="mr-2" /> Capturar GPS de la Base
+                    <Crosshair size={14} className="mr-2" /> Capturar GPS Base
                   </Button>
-                </div>
-                <div className="space-y-4">
-                   <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl space-y-2">
-                      <p className="text-xs font-bold text-blue-700 flex items-center gap-2"><Info size={14} /> Sincronización Automática</p>
-                      <p className="text-[10px] text-blue-600 leading-relaxed">
-                        Al guardar, el sistema validará el estado de la VTV y Seguro. Asegúrese de que el odómetro sea el reflejado en el último ticket de combustible para un cálculo de eficiencia preciso.
-                      </p>
-                   </div>
                 </div>
               </div>
             </CardContent>
@@ -555,155 +541,42 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
 
         {step === 4 && (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-               <div className="lg:col-span-2 space-y-6">
-                  <Card className="border-none shadow-sm">
-                    <CardHeader className="bg-slate-50 border-b">
-                      <CardTitle className="text-sm flex items-center gap-2 text-slate-700">
-                        <Activity className="text-blue-600" size={18} /> Bloque A: Costos Fijos Mensuales
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-6">
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase text-slate-400">Sueldo + Cargas Sociales</Label>
-                        <Input type="number" value={formData.costs?.fixed.salaryWithSocial || ''} onChange={e => handleCostChange('fixed', 'salaryWithSocial', e.target.value)} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase text-slate-400">Seguros (Unidad + RC + Carga)</Label>
-                        <Input type="number" value={formData.costs?.fixed.insuranceTotal || ''} onChange={e => handleCostChange('fixed', 'insuranceTotal', e.target.value)} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase text-slate-400">Patente (Monto Mensual)</Label>
-                        <Input type="number" value={formData.costs?.fixed.patenteMonthly || ''} onChange={e => handleCostChange('fixed', 'patenteMonthly', e.target.value)} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase text-slate-400">Satélite / GPS / Rastreo</Label>
-                        <Input type="number" value={formData.costs?.fixed.satelliteGps || ''} onChange={e => handleCostChange('fixed', 'satelliteGps', e.target.value)} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase text-slate-400">Cochera / Estructura / Admin</Label>
-                        <Input type="number" value={formData.costs?.fixed.garageAdmin || ''} onChange={e => handleCostChange('fixed', 'garageAdmin', e.target.value)} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase text-slate-400">Habilitaciones (Anual / 12)</Label>
-                        <Input type="number" value={formData.costs?.fixed.taxesHabilitations || ''} onChange={e => handleCostChange('fixed', 'taxesHabilitations', e.target.value)} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase text-slate-400">Amortización / Reserva Reposición</Label>
-                        <Input type="number" value={formData.costs?.fixed.amortization || ''} onChange={e => handleCostChange('fixed', 'amortization', e.target.value)} />
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-none shadow-sm">
-                    <CardHeader className="bg-slate-50 border-b">
-                      <CardTitle className="text-sm flex items-center gap-2 text-slate-700">
-                        <TrendingUp className="text-orange-600" size={18} /> Bloque B: Costos Variables por Uso
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-6 pt-6">
-                      <div className="p-4 bg-orange-50/30 rounded-xl border border-orange-100 space-y-4">
-                        <p className="text-[10px] font-black uppercase text-orange-700 flex items-center gap-2"><Wrench size={14}/> Mantenimiento Preventivo (Aceite/Filtros)</p>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                            <Label className="text-[9px] uppercase">Costo Último Servicio</Label>
-                            <Input className="bg-white" type="number" value={formData.costs?.variable.preventiveMaintenance.cost || ''} onChange={e => handleCostChange('variable', 'preventiveMaintenance', e.target.value, 'cost')} />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[9px] uppercase">Frecuencia (KM)</Label>
-                            <Input className="bg-white" type="number" value={formData.costs?.variable.preventiveMaintenance.frequencyKm || ''} onChange={e => handleCostChange('variable', 'preventiveMaintenance', e.target.value, 'frequencyKm')} />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="p-4 bg-blue-50/30 rounded-xl border border-blue-100 space-y-4">
-                        <p className="text-[10px] font-black uppercase text-blue-700 flex items-center gap-2"><Box size={14}/> Neumáticos (Juego Completo)</p>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                            <Label className="text-[9px] uppercase">Costo Total Reposición</Label>
-                            <Input className="bg-white" type="number" value={formData.costs?.variable.tires.costFullSet || ''} onChange={e => handleCostChange('variable', 'tires', e.target.value, 'costFullSet')} />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[9px] uppercase">Vida Útil Est. (KM)</Label>
-                            <Input className="bg-white" type="number" value={formData.costs?.variable.tires.lifeSpanKm || ''} onChange={e => handleCostChange('variable', 'tires', e.target.value, 'lifeSpanKm')} />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-1 p-4 border rounded-xl">
-                        <Label className="text-[10px] font-bold uppercase text-slate-400">Reparaciones Imprevistas (Fondo Reserva / KM)</Label>
-                        <Input type="number" placeholder="Ej: 50" value={formData.costs?.variable.unforeseenReservePerKm || ''} onChange={e => handleCostChange('variable', 'unforeseenReservePerKm', e.target.value)} />
-                      </div>
-                    </CardContent>
-                  </Card>
-               </div>
-
-               <div className="space-y-6">
-                  <Card className="border-none shadow-sm bg-blue-600 text-white">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-xs uppercase font-bold text-white/70 tracking-widest">Bloque C: Parámetros</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                       <div className="space-y-1">
-                          <Label className="text-[10px] uppercase font-bold text-white/50">Kilómetros Mensuales Estimados</Label>
-                          <Input 
-                            type="number" 
-                            className="bg-white/10 border-white/20 text-white font-black text-2xl h-14"
-                            value={formData.costs?.operational.estimatedMonthlyKm || ''} 
-                            onChange={e => handleCostChange('operational', 'estimatedMonthlyKm', e.target.value)}
-                          />
-                          <p className="text-[9px] italic opacity-60">Puente para unificar gastos fijos por KM.</p>
-                       </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-none shadow-xl bg-slate-900 text-white overflow-hidden relative">
-                    <div className="absolute top-0 right-0 p-4 opacity-5"><Layers size={120}/></div>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-black flex items-center gap-2 text-blue-400 uppercase italic">
-                        <Gauge size={20} /> Costo Teórico Final
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-6 relative">
-                       <div className="text-center py-4">
-                          <p className="text-5xl font-black italic text-green-400">${calculations.totalPerKm.toFixed(2)}</p>
-                          <p className="text-[10px] uppercase font-bold text-white/40 tracking-widest mt-1">Por Kilómetro Recorrido</p>
-                       </div>
-
-                       <div className="space-y-3 pt-6 border-t border-white/10">
-                          <div className="flex justify-between items-center text-xs">
-                             <span className="text-white/40 uppercase font-bold">Fijos por KM</span>
-                             <span className="font-mono font-bold">${calculations.fixedPerKm.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between items-center text-xs">
-                             <span className="text-white/40 uppercase font-bold">Aceite/Filtros por KM</span>
-                             <span className="font-mono font-bold">${calculations.oilPerKm.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between items-center text-xs">
-                             <span className="text-white/40 uppercase font-bold">Neumáticos por KM</span>
-                             <span className="font-mono font-bold">${calculations.tiresPerKm.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between items-center text-xs">
-                             <span className="text-white/40 uppercase font-bold">Reserva Imprevistos</span>
-                             <span className="font-mono font-bold">${calculations.reservePerKm.toFixed(2)}</span>
-                          </div>
-                          
-                          {/* COSTO MEDIO DE COMBUSTIBLE REAL */}
-                          <div className="flex justify-between items-center text-xs p-2 bg-blue-500/10 rounded-lg border border-blue-500/20">
-                             <span className="text-blue-400 uppercase font-black flex items-center gap-1"><Fuel size={12} /> Combustible (Promedio Real)</span>
-                             <span className="font-mono font-bold text-blue-300">${calculations.fuelPerKm.toFixed(2)}</span>
-                          </div>
-                       </div>
-
-                       <div className="p-3 bg-white/5 border border-white/10 rounded-lg">
-                          <p className="text-[9px] text-white/50 leading-relaxed italic">
-                            * El costo de combustible se calcula basándose en el historial de tickets registrados por el chofer y el consumo declarado de la unidad.
-                          </p>
-                       </div>
-                    </CardContent>
-                  </Card>
-               </div>
-            </div>
+            <Card className="border-none shadow-xl bg-slate-900 text-white overflow-hidden relative">
+              <div className="absolute top-0 right-0 p-4 opacity-5"><Layers size={120}/></div>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-black flex items-center gap-2 text-blue-400 uppercase italic">
+                  <Gauge size={20} /> Costo Teórico Final
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6 relative">
+                 <div className="text-center py-4">
+                    <p className="text-5xl font-black italic text-green-400">${calculations.totalPerKm.toFixed(2)}</p>
+                    <p className="text-[10px] uppercase font-bold text-white/40 tracking-widest mt-1">Por Kilómetro Recorrido</p>
+                 </div>
+                 <div className="p-3 bg-white/5 border border-white/10 rounded-lg">
+                    <p className="text-[9px] text-white/50 leading-relaxed italic">
+                      * El costo incluye fijos (seguros, patentes, sueldos) y variables (combustible real, neumáticos, service).
+                    </p>
+                 </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="border-none shadow-sm">
+              <CardHeader className="bg-slate-50 border-b">
+                <CardTitle className="text-sm">Parámetros de Cálculo</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6">
+                 <div className="space-y-1">
+                    <Label className="text-[10px] uppercase font-bold text-slate-400">Kilómetros Mensuales Estimados</Label>
+                    <Input 
+                      type="number" 
+                      className="bg-white"
+                      value={formData.costs?.operational.estimatedMonthlyKm || ''} 
+                      onChange={e => handleCostChange('operational', 'estimatedMonthlyKm', e.target.value)}
+                    />
+                 </div>
+              </CardContent>
+            </Card>
           </div>
         )}
       </div>

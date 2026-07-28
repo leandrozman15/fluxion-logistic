@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -15,7 +16,7 @@ import {
   Truck as TruckIcon, FileText, Calendar, AlertTriangle, 
   CheckCircle2, Clock, Upload, ArrowLeft, ShieldCheck, 
   MapPin, Gauge, Box, Info, Download, Trash2, MoreVertical, LayoutGrid, Fuel, DollarSign, Activity, TrendingUp, User, Building2, Briefcase, Edit2,
-  Loader2, Eye, Wrench, History, ExternalLink
+  Loader2, Eye, Wrench, History, ExternalLink, Zap
 } from "lucide-react";
 import { Truck, VehicleDocument, DocStatus, Expense, Driver, Maintenance, TruckCosts } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -95,7 +96,6 @@ export default function TruckDetailPage() {
     });
   }, [maintenanceHistoryRaw]);
 
-  // Cálculos de Costos Teóricos incluyendo combustible real
   const costCalculation = useMemo(() => {
     if (!truck?.costs) return { totalPerKm: 0, fixedPerKm: 0, fuelPerKm: 0 };
     const costs = truck.costs;
@@ -107,24 +107,18 @@ export default function TruckDetailPage() {
     const tiresPerKm = costs.variable.tires.costFullSet / (costs.variable.tires.lifeSpanKm || 1);
     const reservePerKm = costs.variable.unforeseenReservePerKm;
 
-    // Cálculo del Costo de Combustible basado en historial real
     let fuelPerKm = 0;
     if (fuelExpenses && fuelExpenses.length > 0) {
       const validTickets = fuelExpenses.filter(e => !!e.pricePerLiter && e.pricePerLiter > 0);
       if (validTickets.length > 0) {
         const avgPrice = validTickets.reduce((acc, e) => acc + (e.pricePerLiter || 0), 0) / validTickets.length;
-        // Formula: Precio x Consumo / 100
         fuelPerKm = (avgPrice * (truck.avgConsumption || 32)) / 100;
       }
     }
     
     return {
       totalPerKm: fixedPerKm + oilPerKm + tiresPerKm + reservePerKm + fuelPerKm,
-      fixedPerKm,
-      oilPerKm,
-      tiresPerKm,
-      reservePerKm,
-      fuelPerKm
+      fixedPerKm, oilPerKm, tiresPerKm, reservePerKm, fuelPerKm
     };
   }, [truck, fuelExpenses]);
 
@@ -164,29 +158,21 @@ export default function TruckDetailPage() {
 
   const handleUpdateDocDate = async (docId: string, date: string) => {
     if (!truck || !truckRef) return;
-    
     const now = new Date();
     const expiryDate = parseISO(date);
     let status: DocStatus = 'valid';
-    
-    if (isBefore(expiryDate, now)) {
-      status = 'expired';
-    } else if (isBefore(expiryDate, addDays(now, 30))) {
-      status = 'warning';
-    }
+    if (isBefore(expiryDate, now)) status = 'expired';
+    else if (isBefore(expiryDate, addDays(now, 30))) status = 'warning';
 
     const updatedDocs = truck.documentation.map(d => 
       d.id === docId ? { ...d, expiryDate: date, status } : d
     );
 
     try {
-      await updateDoc(truckRef, { 
-        documentation: updatedDocs,
-        updatedAt: serverTimestamp()
-      });
+      await updateDoc(truckRef, { documentation: updatedDocs, updatedAt: serverTimestamp() });
       toast({ title: "Vencimiento actualizado" });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al actualizar" });
+      toast({ variant: "destructive", title: "Error" });
     }
   };
 
@@ -203,21 +189,14 @@ export default function TruckDetailPage() {
     const reader = new FileReader();
     reader.onload = async (event) => {
       const base64 = event.target?.result as string;
-      
       let finalData = base64;
-      if (file.type.startsWith('image/')) {
-        finalData = await compressImage(base64);
-      }
-
-      const updatedDocs = truck.documentation.map(d => 
-        d.id === activeUploadId ? { ...d, fileUrl: finalData } : d
-      );
-      
+      if (file.type.startsWith('image/')) finalData = await compressImage(base64);
+      const updatedDocs = truck.documentation.map(d => d.id === activeUploadId ? { ...d, fileUrl: finalData } : d);
       try {
         await updateDoc(truckRef, { documentation: updatedDocs });
-        toast({ title: "Documento adjuntado y optimizado" });
+        toast({ title: "Documento adjuntado" });
       } catch (err) {
-        toast({ variant: "destructive", title: "Error al subir" });
+        toast({ variant: "destructive", title: "Error" });
       } finally {
         setIsProcessing(false);
       }
@@ -228,33 +207,27 @@ export default function TruckDetailPage() {
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!truck) return <div className="p-10 text-center">Vehículo no encontrado.</div>;
 
-  const docProgress = truck.documentation ? 
-    (truck.documentation.filter(d => d.status === 'valid').length / truck.documentation.length) * 100 : 0;
-
+  const docProgress = truck.documentation ? (truck.documentation.filter(d => d.status === 'valid').length / truck.documentation.length) * 100 : 0;
   const totalFuelCost = fuelExpenses?.reduce((acc, exp) => acc + (exp.amount || 0), 0) || 0;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => router.back()}>
-            <ArrowLeft />
-          </Button>
+          <Button variant="ghost" size="icon" onClick={() => router.back()}><ArrowLeft /></Button>
           <div className="flex items-center gap-4">
             <Avatar className="w-16 h-16 border-2 border-white shadow-md rounded-xl">
               <AvatarImage src={truck.avatarUrl || undefined} className="object-cover" />
-              <AvatarFallback className="bg-blue-50 text-blue-600 rounded-xl">
-                <TruckIcon size={32} />
-              </AvatarFallback>
+              <AvatarFallback className="bg-blue-50 text-blue-600 rounded-xl"><TruckIcon size={32} /></AvatarFallback>
             </Avatar>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-bold text-slate-900">{truck.plate}</h1>
-                <Badge variant="outline" className={cn(
-                  "uppercase text-[10px]",
-                  truck.ownershipType === 'company' ? "bg-blue-50 text-blue-700 border-blue-100" : "bg-orange-50 text-orange-700 border-orange-100"
-                )}>
-                  {truck.ownershipType === 'company' ? 'Propiedad Empresa' : 'Tercero / Chofer'}
+                <Badge variant="outline" className="uppercase text-[10px] bg-blue-50 text-blue-700 border-blue-100">
+                  {truck.ownershipType === 'company' ? 'Propiedad Empresa' : 'Tercero'}
+                </Badge>
+                <Badge className={cn("text-[9px] uppercase font-black", truck.haulingType === 'bitren' ? "bg-amber-500" : "bg-slate-500")}>
+                   {truck.haulingType === 'bitren' ? 'Configuración Bitrén' : 'Standard'}
                 </Badge>
               </div>
               <p className="text-sm text-slate-500 flex items-center gap-1">
@@ -284,13 +257,10 @@ export default function TruckDetailPage() {
               <div className="space-y-2">
                 <div className="flex justify-between items-center text-xs">
                   <span className="font-bold text-slate-500 uppercase">Cumplimiento Legal</span>
-                  <span className={cn("font-bold", docProgress === 100 ? "text-green-600" : "text-blue-600")}>
-                    {Math.round(docProgress)}%
-                  </span>
+                  <span className="font-bold text-blue-600">{Math.round(docProgress)}%</span>
                 </div>
                 <Progress value={docProgress} className="h-2 bg-slate-100" />
               </div>
-
               <div className="grid grid-cols-2 gap-4 pt-4 border-t">
                  <div className="space-y-1">
                     <p className="text-[10px] uppercase font-bold text-slate-400">Consumo Avg.</p>
@@ -306,108 +276,105 @@ export default function TruckDetailPage() {
 
           <Card className="bg-slate-900 text-white border-none shadow-xl relative overflow-hidden">
             <div className="absolute top-0 right-0 p-4 opacity-5"><DollarSign size={80}/></div>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs uppercase font-black text-blue-400 tracking-tighter">Simulación de Costo KM</CardTitle>
-            </CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="text-xs uppercase font-black text-blue-400 tracking-tighter">Costo por KM (Estimado)</CardTitle></CardHeader>
             <CardContent>
                <div className="flex items-end gap-2">
                  <p className="text-4xl font-black italic text-green-400">${costCalculation.totalPerKm.toFixed(2)}</p>
-                 <p className="text-[10px] uppercase font-bold text-white/30 pb-1">Costo Teórico</p>
-               </div>
-               <div className="mt-4 pt-4 border-t border-white/5 space-y-2">
-                  <div className="flex justify-between text-[10px] font-bold">
-                    <span className="text-white/30 uppercase">Fijos + Variables/KM</span>
-                    <span className="text-white/80">${(costCalculation.fixedPerKm + costCalculation.oilPerKm + costCalculation.tiresPerKm + costCalculation.reservePerKm).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-[10px] font-bold p-1 bg-blue-500/10 rounded">
-                    <span className="text-blue-400 uppercase font-black flex items-center gap-1"><Fuel size={10} /> Combustible/KM (Real)</span>
-                    <span className="text-blue-300 font-bold">${costCalculation.fuelPerKm.toFixed(2)}</span>
-                  </div>
+                 <p className="text-[10px] uppercase font-bold text-white/30 pb-1">Costo Real</p>
                </div>
             </CardContent>
           </Card>
 
           <Card className="border-none shadow-sm border-l-4 border-l-blue-600">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs uppercase font-bold text-slate-500 flex items-center gap-2">
-                <User size={14} className="text-blue-600" /> Chofer Designado
-              </CardTitle>
-            </CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="text-xs uppercase font-bold text-slate-500 flex items-center gap-2"><User size={14} className="text-blue-600" /> Chofer Designado</CardTitle></CardHeader>
             <CardContent>
-              {loadingDriver ? (
-                <div className="flex items-center gap-2 text-xs text-slate-400">
-                  <Loader2 className="w-3 h-3 animate-spin" /> Cargando chofer...
-                </div>
-              ) : assignedDriver ? (
+              {loadingDriver ? <Loader2 className="w-4 h-4 animate-spin" /> : assignedDriver ? (
                 <div className="flex items-center gap-3">
                   <Avatar className="h-10 w-10 border shadow-sm">
-                    <AvatarImage src={assignedDriver.avatarUrl || undefined} className="object-cover" />
-                    <AvatarFallback className="text-[10px] font-bold">
-                      {assignedDriver.firstName?.[0]}{assignedDriver.lastName?.[0]}
-                    </AvatarFallback>
+                    <AvatarImage src={assignedDriver.avatarUrl} />
+                    <AvatarFallback>{assignedDriver.lastName[0]}</AvatarFallback>
                   </Avatar>
                   <div>
                     <p className="text-sm font-bold text-slate-900">{assignedDriver.lastName}, {assignedDriver.firstName}</p>
                     <p className="text-[10px] text-slate-500 uppercase font-bold">LIC: {assignedDriver.licenseNumber}</p>
                   </div>
                 </div>
-              ) : (
-                <div className="text-xs italic text-slate-400 py-2">Sin chofer asignado a esta unidad.</div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="bg-blue-600 text-white border-none shadow-md overflow-hidden relative">
-            <div className="absolute top-0 right-0 p-4 opacity-10"><TrendingUp size={64}/></div>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs uppercase text-white/70 font-bold">Inversión en Combustible</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-black italic">
-                ${totalFuelCost.toLocaleString('es-AR')}
-              </div>
-              <p className="text-[10px] text-white/50 mt-1 uppercase font-bold tracking-widest">Total Acumulado 2025</p>
+              ) : <div className="text-xs italic text-slate-400">Sin chofer asignado.</div>}
             </CardContent>
           </Card>
         </div>
 
         <div className="lg:col-span-2">
-          <Tabs defaultValue="tractor" className="space-y-6">
+          <Tabs defaultValue="equipment" className="space-y-6">
             <TabsList className="bg-white p-1 border shadow-sm">
-              <TabsTrigger value="tractor" className="flex items-center gap-2">
-                <TruckIcon size={16} /> Unidad Tractora
-              </TabsTrigger>
-              <TabsTrigger value="semi" className="flex items-center gap-2">
-                <LayoutGrid size={16} /> Semirremolque
-              </TabsTrigger>
-              <TabsTrigger value="costs" className="flex items-center gap-2">
-                <DollarSign size={16} /> Estructura Costos
-              </TabsTrigger>
-              <TabsTrigger value="history" className="flex items-center gap-2">
-                <History size={16} /> Historial Técnico
-              </TabsTrigger>
+              <TabsTrigger value="equipment" className="flex items-center gap-2"><TruckIcon size={16} /> Equipo</TabsTrigger>
+              <TabsTrigger value="docs" className="flex items-center gap-2"><FileText size={16} /> Documentos</TabsTrigger>
+              <TabsTrigger value="costs" className="flex items-center gap-2"><DollarSign size={16} /> Costos</TabsTrigger>
+              <TabsTrigger value="history" className="flex items-center gap-2"><History size={16} /> Historial</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="tractor" className="space-y-4 animate-in fade-in">
-              <div className="p-4 bg-slate-50 border rounded-xl mb-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-                 <div className="space-y-0.5">
-                    <p className="text-[10px] uppercase font-bold text-slate-400">Marca/Modelo</p>
-                    <p className="text-sm font-bold text-slate-700">{truck.brand} {truck.model}</p>
-                 </div>
-                 <div className="space-y-0.5">
-                    <p className="text-[10px] uppercase font-bold text-slate-400">Patente</p>
-                    <p className="text-sm font-mono font-bold text-blue-600">{truck.plate}</p>
-                 </div>
-                 <div className="space-y-0.5">
-                    <p className="text-[10px] uppercase font-bold text-slate-400">Carrocería</p>
-                    <p className="text-sm font-bold text-slate-700 capitalize">{truck.bodyType}</p>
-                 </div>
-                 <div className="space-y-0.5">
-                    <p className="text-[10px] uppercase font-bold text-slate-400">Ejes</p>
-                    <p className="text-sm font-bold text-slate-700">{truck.axles}</p>
-                 </div>
-              </div>
-              {truck.documentation?.filter(d => d.category === 'unit').map((doc) => (
+            <TabsContent value="equipment" className="space-y-6 animate-in fade-in">
+               <Card className="border-none shadow-sm bg-slate-50">
+                  <CardHeader className="py-4 border-b bg-white"><CardTitle className="text-sm">Especificaciones Técnicas</CardTitle></CardHeader>
+                  <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-6 pt-6">
+                     <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Unidad</p><p className="text-sm font-bold">{truck.brand} {truck.model}</p></div>
+                     <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Patente Tractor</p><p className="text-sm font-mono font-bold text-blue-600">{truck.plate}</p></div>
+                     <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Ejes Tractor</p><p className="text-sm font-bold">{truck.axles}</p></div>
+                     <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Carga Útil Est.</p><p className="text-sm font-bold">{truck.capacityKg.toLocaleString()} KG</p></div>
+                  </CardContent>
+               </Card>
+
+               {truck.haulingType === 'bitren' && truck.bitren ? (
+                 <Card className="border-blue-100 bg-blue-50/50 shadow-md">
+                   <CardHeader className="py-4 border-b border-blue-100 bg-white">
+                      <div className="flex justify-between items-center">
+                        <CardTitle className="text-sm flex items-center gap-2 text-blue-800"><Zap size={16}/> Configuración Bitrén</CardTitle>
+                        <Badge className="bg-blue-600 uppercase text-[8px] font-black italic">Res. 1196/2025</Badge>
+                      </div>
+                   </CardHeader>
+                   <CardContent className="space-y-6 pt-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                         <div className="p-3 bg-white rounded-xl border border-blue-100 shadow-sm">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">1er Semirremolque</p>
+                            <p className="text-lg font-mono font-black text-blue-600">{truck.bitren.firstSemiPlate}</p>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Conexión Plato Tractor</p>
+                         </div>
+                         <div className="p-3 bg-white rounded-xl border border-blue-100 shadow-sm">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">2do Semirremolque</p>
+                            <p className="text-lg font-mono font-black text-blue-600">{truck.bitren.secondSemiPlate}</p>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Conexión 5ta Rueda Central</p>
+                         </div>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-6 border-t border-blue-100 pt-4">
+                         <div className="space-y-1">
+                            <p className="text-[10px] uppercase font-bold text-blue-400">Tipo de Bitrén</p>
+                            <p className="text-xs font-black uppercase text-blue-800">{truck.bitren.type === 'type_a' ? 'Tipo A (22,40m)' : 'Tipo B (30,25m)'}</p>
+                         </div>
+                         <div className="space-y-1">
+                            <p className="text-[10px] uppercase font-bold text-blue-400">Ejes Totales</p>
+                            <p className="text-xs font-black text-blue-800">{truck.bitren.totalAxles} Ejes</p>
+                         </div>
+                         <div className="space-y-1">
+                            <p className="text-[10px] uppercase font-bold text-blue-400">PBTC Máx.</p>
+                            <p className="text-xs font-black text-blue-800">{truck.bitren.type === 'type_a' ? '60 Toneladas' : '75 Toneladas'}</p>
+                         </div>
+                      </div>
+                   </CardContent>
+                 </Card>
+               ) : (
+                 <Card className="border-slate-100 bg-slate-50/50 shadow-sm">
+                    <CardHeader className="py-4 border-b bg-white"><CardTitle className="text-sm">Semirremolque Standard</CardTitle></CardHeader>
+                    <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-6 pt-6">
+                       <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Patente Semi</p><p className="text-lg font-mono font-bold text-slate-700">{truck.semiTrailer?.plate || 'S/D'}</p></div>
+                       <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Marca/Modelo</p><p className="text-sm font-bold text-slate-700">{truck.semiTrailer?.brand} {truck.semiTrailer?.model}</p></div>
+                       <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Tipo Batea</p><Badge variant="outline" className="uppercase text-[9px]">{truck.semiTrailer?.type}</Badge></div>
+                    </CardContent>
+                 </Card>
+               )}
+            </TabsContent>
+
+            <TabsContent value="docs" className="space-y-4 animate-in fade-in">
+              {truck.documentation?.map((doc) => (
                 <Card key={doc.id} className={cn("border shadow-none", doc.status === 'expired' ? "border-red-200 bg-red-50/20" : "")}>
                   <CardContent className="p-4 flex items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
@@ -418,78 +385,10 @@ export default function TruckDetailPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                       <input 
-                         type="date" 
-                         className="text-xs font-bold bg-transparent outline-none" 
-                         value={doc.expiryDate || ""}
-                         onChange={(e) => handleUpdateDocDate(doc.id, e.target.value)}
-                       />
+                       <input type="date" className="text-xs font-bold bg-transparent outline-none" value={doc.expiryDate || ""} onChange={(e) => handleUpdateDocDate(doc.id, e.target.value)} />
                        <div className="flex gap-1">
-                        {doc.fileUrl && (
-                          <Button variant="outline" size="icon" className="h-8 w-8 text-green-600" onClick={() => setViewerUrl(doc.fileUrl!)}>
-                            <Eye size={14} />
-                          </Button>
-                        )}
-                        <Button variant="outline" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleUploadClick(doc.id)} disabled={isProcessing}>
-                          {isProcessing && activeUploadId === doc.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload size={14}/>}
-                        </Button>
-                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </TabsContent>
-
-            <TabsContent value="semi" className="space-y-4 animate-in fade-in">
-              <Card className="bg-blue-50/30 border-blue-100 shadow-none mb-6">
-                <CardHeader className="py-4">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <LayoutGrid size={16} className="text-blue-600" /> Especificaciones del Acoplado
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                  <div className="space-y-1">
-                    <p className="text-[10px] uppercase font-bold text-slate-400">Patente Semi</p>
-                    <p className="text-lg font-mono font-bold text-blue-700">{truck.semiTrailer?.plate || 'SIN ASIGNAR'}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] uppercase font-bold text-slate-400">Marca / Modelo</p>
-                    <p className="text-sm font-bold text-slate-700">{truck.semiTrailer?.brand || '-'} {truck.semiTrailer?.model || '-'}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] uppercase font-bold text-slate-400">Tipo de Batea</p>
-                    <Badge variant="secondary" className="uppercase text-[9px]">{truck.semiTrailer?.type || 'No def.'}</Badge>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <h4 className="text-[10px] uppercase font-bold text-slate-400 tracking-widest px-1">Documentación del Semirremolque</h4>
-              {truck.documentation?.filter(d => d.category === 'semi').map((doc) => (
-                <Card key={doc.id} className="border shadow-none">
-                  <CardContent className="p-4 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      {getStatusIcon(doc.status)}
-                      <div>
-                        <h4 className="font-bold text-sm text-slate-800">{doc.name}</h4>
-                        <p className="text-[9px] text-slate-500">{doc.description}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                       <input 
-                         type="date" 
-                         className="text-xs font-bold bg-transparent outline-none" 
-                         value={doc.expiryDate || ""}
-                         onChange={(e) => handleUpdateDocDate(doc.id, e.target.value)}
-                       />
-                       <div className="flex gap-1">
-                        {doc.fileUrl && (
-                          <Button variant="outline" size="icon" className="h-8 w-8 text-green-600" onClick={() => setViewerUrl(doc.fileUrl!)}>
-                            <Eye size={14} />
-                          </Button>
-                        )}
-                        <Button variant="outline" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleUploadClick(doc.id)} disabled={isProcessing}>
-                          {isProcessing && activeUploadId === doc.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload size={14}/>}
-                        </Button>
+                        {doc.fileUrl && <Button variant="outline" size="icon" className="h-8 w-8 text-green-600" onClick={() => setViewerUrl(doc.fileUrl!)}><Eye size={14} /></Button>}
+                        <Button variant="outline" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleUploadClick(doc.id)} disabled={isProcessing}>{isProcessing && activeUploadId === doc.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload size={14}/>}</Button>
                        </div>
                     </div>
                   </CardContent>
@@ -499,201 +398,22 @@ export default function TruckDetailPage() {
 
             <TabsContent value="costs" className="space-y-6 animate-in fade-in">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                 <Card className="border-none shadow-sm">
-                   <CardHeader className="bg-slate-50 border-b py-3"><CardTitle className="text-xs uppercase font-black text-slate-500">Desglose Gastos Fijos (Mensual)</CardTitle></CardHeader>
-                   <CardContent className="pt-4 space-y-3">
-                      {truck.costs?.fixed && Object.entries(truck.costs.fixed).map(([key, val]) => (
-                        <div key={key} className="flex justify-between items-center text-xs py-1 border-b border-slate-50 last:border-0">
-                           <span className="text-slate-500 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                           <span className="font-bold text-slate-700">${(val as number).toLocaleString()}</span>
-                        </div>
-                      ))}
-                      <div className="pt-3 flex justify-between items-center text-sm font-black border-t-2">
-                         <span className="uppercase">Total Fijo Mensual</span>
-                         <span className="text-blue-600">${Object.values(truck.costs?.fixed || {}).reduce((a, b) => a + (b as number), 0).toLocaleString()}</span>
-                      </div>
-                   </CardContent>
-                 </Card>
-
-                 <Card className="border-none shadow-sm">
-                   <CardHeader className="bg-slate-50 border-b py-3"><CardTitle className="text-xs uppercase font-black text-slate-500">Variables y Operatividad</CardTitle></CardHeader>
-                   <CardContent className="pt-4 space-y-6">
-                      <div className="space-y-2">
-                        <p className="text-[10px] uppercase font-bold text-slate-400">Mantenimiento (Service)</p>
-                        <div className="flex justify-between text-xs">
-                          <span>Último: ${truck.costs?.variable.preventiveMaintenance.cost.toLocaleString()}</span>
-                          <span className="font-bold text-blue-600">Cada {truck.costs?.variable.preventiveMaintenance.frequencyKm.toLocaleString()} KM</span>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <p className="text-[10px] uppercase font-bold text-slate-400">Neumáticos (Gasto)</p>
-                        <div className="flex justify-between text-xs">
-                          <span>Set Completo: ${truck.costs?.variable.tires.costFullSet.toLocaleString()}</span>
-                          <span className="font-bold text-blue-600">Vida: {truck.costs?.variable.tires.lifeSpanKm.toLocaleString()} KM</span>
-                        </div>
-                      </div>
-                      <div className="p-3 bg-blue-50 rounded-lg flex justify-between items-center">
-                        <span className="text-[10px] uppercase font-black text-blue-700">Combustible Real / KM</span>
-                        <span className="text-lg font-black text-blue-900">${costCalculation.fuelPerKm.toFixed(2)}</span>
-                      </div>
-                   </CardContent>
-                 </Card>
+                 <Card className="border-none shadow-sm"><CardHeader className="bg-slate-50 border-b py-3"><CardTitle className="text-xs uppercase font-black text-slate-500">Gastos Fijos Mensuales</CardTitle></CardHeader><CardContent className="pt-4 space-y-2">{truck.costs?.fixed && Object.entries(truck.costs.fixed).map(([k,v]) => (<div key={k} className="flex justify-between text-xs border-b border-slate-50 py-1"><span className="text-slate-500 capitalize">{k.replace(/([A-Z])/g, ' $1')}</span><span className="font-bold">${(v as number).toLocaleString()}</span></div>))}</CardContent></Card>
+                 <Card className="border-none shadow-sm bg-slate-900 text-white"><CardHeader><CardTitle className="text-xs uppercase font-bold text-blue-400">Análisis de Operatividad</CardTitle></CardHeader><CardContent className="space-y-4"><div className="flex justify-between items-center text-xs"><span>KM Mensuales Est.</span><span className="font-bold">{truck.costs?.operational.estimatedMonthlyKm.toLocaleString()} KM</span></div><div className="p-3 bg-blue-500/10 rounded-lg flex justify-between items-center text-sm font-black"><span className="text-blue-400">COSTO KM TEÓRICO</span><span className="text-green-400">${costCalculation.totalPerKm.toFixed(2)}</span></div></CardContent></Card>
               </div>
             </TabsContent>
 
-            <TabsContent value="history" className="space-y-8 animate-in fade-in">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between px-1">
-                   <h3 className="text-sm font-bold flex items-center gap-2"><Fuel className="text-blue-600" /> Histórico de Cargas de Combustible</h3>
-                   <Badge variant="outline" className="text-[10px]">{fuelExpenses?.length || 0} Registros</Badge>
-                </div>
-                <Card className="border-none shadow-sm overflow-hidden">
-                  <Table>
-                    <TableHeader className="bg-slate-50">
-                      <TableRow>
-                        <TableHead className="text-[10px] uppercase">Fecha / Lugar</TableHead>
-                        <TableHead className="text-[10px] uppercase">Carga (Litros)</TableHead>
-                        <TableHead className="text-[10px] uppercase">Odómetro</TableHead>
-                        <TableHead className="text-[10px] uppercase">Costo Total</TableHead>
-                        <TableHead className="text-right text-[10px] uppercase">Ref.</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(!fuelExpenses || fuelExpenses.length === 0) ? (
-                        <TableRow><TableCell colSpan={5} className="text-center py-10 text-slate-400 italic text-xs">Sin registros de combustible.</TableCell></TableRow>
-                      ) : (
-                        fuelExpenses.map(exp => (
-                          <TableRow key={exp.id}>
-                            <TableCell>
-                              <div className="font-bold text-xs">{exp.createdAt?.toDate ? format(exp.createdAt.toDate(), "dd/MM/yyyy HH:mm") : "Reciente"}</div>
-                              <div className="text-[9px] text-slate-500 uppercase">{exp.fuelBrand || 'S/D'} - {exp.location}</div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="text-xs font-bold text-blue-600">{exp.liters || 0} L</div>
-                              <div className="text-[9px] text-slate-400">${exp.pricePerLiter || 0} / L</div>
-                            </TableCell>
-                            <TableCell className="font-mono text-xs font-bold">{(exp.odometerKm || 0).toLocaleString()} km</TableCell>
-                            <TableCell className="font-bold text-slate-700">${exp.amount?.toLocaleString()}</TableCell>
-                            <TableCell className="text-right"><Button variant="ghost" size="icon" className="h-6 w-6"><FileText size={12}/></Button></TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </Card>
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between px-1">
-                   <h3 className="text-sm font-bold flex items-center gap-2"><Wrench className="text-orange-600" /> Historial de Reparaciones y Taller</h3>
-                   <Badge variant="outline" className="text-[10px]">{maintenanceHistory?.length || 0} Intervenciones</Badge>
-                </div>
-                <Card className="border-none shadow-sm overflow-hidden">
-                  <Table>
-                    <TableHeader className="bg-slate-50">
-                      <TableRow>
-                        <TableHead className="text-[10px] uppercase">OT N° / Fecha</TableHead>
-                        <TableHead className="text-[10px] uppercase">Tipo de Trabajo</TableHead>
-                        <TableHead className="text-[10px] uppercase">Taller</TableHead>
-                        <TableHead className="text-[10px] uppercase">Costo Real</TableHead>
-                        <TableHead className="text-[10px] uppercase">Estado</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(!maintenanceHistory || maintenanceHistory.length === 0) ? (
-                        <TableRow><TableCell colSpan={5} className="text-center py-10 text-slate-400 italic text-xs">Sin registros de mantenimiento.</TableCell></TableRow>
-                      ) : (
-                        maintenanceHistory.map(record => (
-                          <TableRow key={record.id}>
-                            <TableCell>
-                              <div className="font-bold text-xs text-blue-600">{record.orderNumber || 'S/OT'}</div>
-                              <div className="text-[9px] text-slate-400">{format(parseISO(record.scheduledDate), "dd/MM/yyyy")}</div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="text-xs font-bold capitalize">{record.type}</div>
-                              <p className="text-[9px] text-slate-500 line-clamp-1">{record.description}</p>
-                            </TableCell>
-                            <TableCell className="text-xs">{record.workshopName || '-'}</TableCell>
-                            <TableCell className="font-bold text-slate-700">${(record.actualCost || record.estimatedCost || 0).toLocaleString()}</TableCell>
-                            <TableCell>
-                               <Badge variant="outline" className={cn(
-                                 "text-[8px] uppercase font-bold",
-                                 record.status === 'completed' ? "bg-green-50 text-green-700" : "bg-orange-50 text-orange-700"
-                               )}>{record.status}</Badge>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </Card>
-              </div>
+            <TabsContent value="history" className="space-y-6 animate-in fade-in">
+               <div className="space-y-4"><h3 className="text-sm font-bold flex items-center gap-2"><Fuel className="text-blue-600" /> Cargas de Combustible</h3><Table><TableHeader className="bg-slate-50"><TableRow><TableHead className="text-[10px] uppercase">Fecha</TableHead><TableHead className="text-[10px] uppercase">Litros</TableHead><TableHead className="text-[10px] uppercase">Costo</TableHead><TableHead className="text-[10px] uppercase">Lugar</TableHead></TableRow></TableHeader><TableBody>{fuelExpenses?.map(exp => (<TableRow key={exp.id}><TableCell className="text-xs">{exp.createdAt?.toDate ? format(exp.createdAt.toDate(), "dd/MM/yy") : '-'}</TableCell><TableCell className="text-xs font-bold">{exp.liters} L</TableCell><TableCell className="text-xs font-bold text-green-700">${exp.amount.toLocaleString()}</TableCell><TableCell className="text-[10px] text-slate-500 uppercase">{exp.location}</TableCell></TableRow>))}</TableBody></Table></div>
             </TabsContent>
           </Tabs>
         </div>
       </div>
-
-      {/* Hidden file input for uploads */}
       <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={onFileChange} />
-
-      {/* Document Viewer Modal */}
       <Dialog open={!!viewerUrl} onOpenChange={(o) => !o && setViewerUrl(null)}>
         <DialogContent className="max-w-4xl h-[80vh] flex flex-col rounded-xl overflow-hidden p-0 gap-0">
-          <DialogHeader className="p-4 border-b bg-slate-50">
-            <DialogTitle className="text-sm flex items-center gap-2">
-              <FileText size={18} className="text-blue-600" /> Expediente de Unidad Pesada
-            </DialogTitle>
-          </DialogHeader>
-          
-          <div className="flex-1 bg-slate-100 flex items-center justify-center overflow-hidden relative">
-            {viewerUrl ? (
-              <>
-                {viewerUrl.startsWith('data:application/pdf') ? (
-                  <iframe 
-                    src={viewerUrl} 
-                    className="w-full h-full border-none" 
-                    title="Visor PDF"
-                  />
-                ) : (
-                  <div className="w-full h-full p-4 flex items-center justify-center">
-                    <img 
-                      src={viewerUrl} 
-                      className="max-w-full max-h-full object-contain shadow-2xl rounded-sm border bg-white" 
-                      alt="Documentación Técnica" 
-                    />
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="flex flex-col items-center gap-2 text-slate-400">
-                <Loader2 className="animate-spin" />
-                <p className="text-xs font-bold uppercase">Cargando archivo...</p>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter className="p-4 border-t bg-slate-50 flex flex-row justify-between items-center">
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Seguridad y Cumplimiento Logístico</p>
-            <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="h-8 text-[10px] font-bold" 
-                onClick={() => setViewerUrl(null)}
-              >
-                CERRAR
-              </Button>
-              {viewerUrl && (
-                <Button 
-                  size="sm" 
-                  className="h-8 text-[10px] font-bold bg-blue-600" 
-                  onClick={() => window.open(viewerUrl, "_blank")}
-                >
-                  <ExternalLink size={12} className="mr-1" /> ABRIR EN PANTALLA COMPLETA
-                </Button>
-              )}
-            </div>
-          </DialogFooter>
+          <div className="flex-1 bg-slate-100 flex items-center justify-center overflow-hidden relative">{viewerUrl && (viewerUrl.startsWith('data:application/pdf') ? <iframe src={viewerUrl} className="w-full h-full border-none" /> : <img src={viewerUrl} className="max-w-full max-h-full object-contain" />)}</div>
+          <DialogFooter className="p-4 border-t bg-slate-50"><Button variant="outline" size="sm" onClick={() => setViewerUrl(null)}>CERRAR</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
