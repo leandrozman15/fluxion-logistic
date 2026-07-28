@@ -95,6 +95,9 @@ export interface LoadLegStop {
   units: number;
   unitType: string;
   documents: LoadDocument[];
+
+  // Tracking
+  deliveredAt?: any;
 }
 
 export interface Expense {
