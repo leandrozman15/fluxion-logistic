@@ -190,73 +190,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     }));
   };
 
-  const handleCalculateArrival = async (isOutbound: boolean) => {
-    const dateStr = isOutbound ? formData.pickupDate : formData.returnPickupDate;
-    const timeStr = isOutbound ? formData.pickupTime : formData.returnPickupTime;
-    const stops = isOutbound ? formData.outboundStops : formData.returnStops;
-    
-    const origin = isOutbound 
-      ? formData.origin 
-      : (formData.outboundStops?.[formData.outboundStops?.length - 1] || formData.origin);
-    
-    const destination = isOutbound 
-      ? (formData.outboundStops?.[formData.outboundStops?.length - 1]) 
-      : (formData.returnDestination);
-
-    if (!dateStr || !timeStr || !origin?.address || !destination?.address) {
-      toast({ variant: "destructive", title: "Datos incompletos", description: "Asegúrese de cargar salida y al menos un punto de destino." });
-      return;
-    }
-
-    const apiKey = tenant?.settings?.mapApiKey;
-    
-    if (!apiKey || tenant?.settings?.mapProvider !== 'google') {
-      const startDateTime = parse(`${dateStr} ${timeStr}`, "yyyy-MM-dd HH:mm", new Date());
-      const endDateTime = addMinutes(startDateTime, 480); 
-      if (isOutbound) {
-        setFormData(prev => ({ ...prev, estimatedArrivalDate: format(endDateTime, "yyyy-MM-dd"), estimatedArrivalTime: format(endDateTime, "HH:mm") }));
-      } else {
-        setFormData(prev => ({ ...prev, returnEstimatedArrivalDate: format(endDateTime, "yyyy-MM-dd"), returnEstimatedArrivalTime: format(endDateTime, "HH:mm") }));
-      }
-      return;
-    }
-
-    setIsCalculating(true);
-    try {
-      const itineraryAddresses = isOutbound 
-        ? [origin.address, ...(stops?.map(s => s.address) || [])]
-        : [origin.address, ...(stops?.map(s => s.address) || []), destination.address];
-
-      const result = await calculateRouteDetails(itineraryAddresses, apiKey);
-
-      if (result) {
-        const startDateTime = parse(`${dateStr} ${timeStr}`, "yyyy-MM-dd HH:mm", new Date());
-        const totalMinutes = result.durationMinutes + (stops?.length || 0) * 30;
-        const endDateTime = addMinutes(startDateTime, totalMinutes); 
-        
-        if (isOutbound) {
-          setFormData(prev => ({ 
-            ...prev, 
-            estimatedArrivalDate: format(endDateTime, "yyyy-MM-dd"), 
-            estimatedArrivalTime: format(endDateTime, "HH:mm"),
-            tracking: {
-              ...(prev.tracking || {} as any),
-              distanceRemainingKm: result.distanceKm,
-              distanceTraveledKm: 0
-            }
-          }));
-        } else {
-          setFormData(prev => ({ ...prev, returnEstimatedArrivalDate: format(endDateTime, "yyyy-MM-dd"), returnEstimatedArrivalTime: format(endDateTime, "HH:mm") }));
-        }
-        toast({ title: "Google Maps: Éxito", description: `Ruta de ${result.distanceKm} km calculada.` });
-      }
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Error en cálculo Real", description: e.message });
-    } finally {
-      setIsCalculating(false);
-    }
-  };
-
   const handleOriginSelect = (id: string) => {
     const selection = locationsList.find(l => l.id === id);
     if (!selection) return;
@@ -280,23 +213,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     }));
   };
 
-  const addRemitoToStop = () => {
-    if (!newDoc.number) return;
-    const docObj: LoadDocument = {
-      id: Math.random().toString(36).substring(7),
-      type: newDoc.type as LoadDocType,
-      number: newDoc.number,
-      hasCot: newDoc.hasCot,
-      cotNumber: newDoc.cotNumber,
-      despachoNumber: newDoc.despachoNumber,
-      sealNumber: newDoc.sealNumber,
-      uploadedAt: new Date().toISOString(),
-      leg: activeLeg
-    };
-    setEditingStop(prev => ({ ...prev, documents: [...(prev.documents || []), docObj] }));
-    setNewDoc({ type: 'remito', number: '', hasCot: false, cotNumber: '', despachoNumber: '', sealNumber: '' });
-  };
-
   const saveStop = () => {
     if (!editingStop.name || !editingStop.address) {
       toast({ variant: "destructive", title: "Faltan datos", description: "El destino y la dirección son obligatorios." });
@@ -305,16 +221,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     const stop = { ...editingStop, id: editingStop.id || Math.random().toString(36).substring(7) } as LoadLegStop;
     const field = activeLeg === 'outbound' ? 'outboundStops' : 'returnStops';
     
-    // Validar si al agregar esta parada se excede el peso de la unidad ya seleccionada
-    const newTotalWeight = currentTotalWeight + (stop.weightKg || 0);
-    if (selectedTruck && newTotalWeight > (selectedTruck.capacityKg || 0)) {
-       toast({ 
-         variant: "destructive", 
-         title: "Sobrepeso Crítico", 
-         description: "Esta parada excede la capacidad máxima del camión asignado." 
-       });
-    }
-
     setFormData(prev => ({
       ...prev,
       [field]: [...(prev[field] || []).filter(s => s.id !== stop.id), stop]
@@ -405,7 +311,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
       <div className="animate-in fade-in duration-300">
         {step === 1 && (
           <div className="space-y-6">
-            {/* PANEL DE CONTROL DE PESO EN TIEMPO REAL */}
             <Card className={cn(
               "border-none shadow-xl transition-all duration-300",
               isWeightLimitExceeded ? "bg-red-600 text-white" : "bg-slate-900 text-white"
@@ -427,9 +332,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                        <p className={cn("text-2xl font-black italic", isWeightLimitExceeded ? "text-white underline decoration-wavy" : "text-green-400")}>
                          {selectedTruck.capacityKg.toLocaleString()} KG
                        </p>
-                       {isWeightLimitExceeded && (
-                         <Badge className="bg-white text-red-600 font-black animate-bounce">EXCESO: {(currentTotalWeight - selectedTruck.capacityKg).toLocaleString()} KG</Badge>
-                       )}
                     </div>
                   ) : (
                     <div className="text-slate-400 text-xs italic">Seleccione una unidad para validar pesos.</div>
@@ -441,22 +343,16 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
               <CardHeader><CardTitle>Recursos Asignados</CardTitle></CardHeader>
               <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label>Unidad Tractora (Vía Libre Balanza)</Label>
+                  <Label>Unidad Tractora</Label>
                   <Select value={formData.assignedTruckId ?? ''} onValueChange={handleTruckSelect}>
                     <SelectTrigger className="bg-white h-12"><SelectValue placeholder="Elegir Camión" /></SelectTrigger>
                     <SelectContent>
                       {trucks?.map(t => (
-                        <SelectItem key={t.id} value={t.id}>
-                          <div className="flex flex-col">
-                            <span className="font-bold">{t.plate}</span>
-                            <span className="text-[10px] opacity-60">Capacidad: {t.capacityKg}kg | {t.brand} {t.model}</span>
-                          </div>
-                        </SelectItem>
+                        <SelectItem key={t.id} value={t.id}>{t.plate} ({t.capacityKg}kg cap.)</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-
                 <div className="space-y-2">
                   <Label>Chofer Profesional</Label>
                   <Select value={formData.assignedDriverId ?? ''} onValueChange={v => setFormData({...formData, assignedDriverId: v})}>
@@ -492,49 +388,20 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                     <Plus size={14} className="mr-1" /> AGREGAR DESTINO
                   </Button>
                 </div>
-                
-                {formData.outboundStops?.length === 0 ? (
-                  <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed text-xs text-slate-400 italic">No hay paradas cargadas.</div>
-                ) : (
-                  <div className="space-y-3">
-                    {formData.outboundStops?.map((stop, idx) => (
-                      <div key={stop.id} className="p-4 bg-white border rounded-2xl shadow-sm flex items-center justify-between">
-                         <div className="flex items-center gap-4">
-                            <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs">{idx + 1}</div>
-                            <div>
-                               <p className="font-bold text-sm">{stop.name}</p>
-                               <p className="text-[10px] text-slate-400">{stop.weightKg.toLocaleString()} KG • {stop.address}</p>
-                            </div>
-                         </div>
-                         <Button variant="ghost" size="icon" className="text-red-500" onClick={() => removeStop('outbound', stop.id)}><Trash2 size={16} /></Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <div className="space-y-3">
+                  {formData.outboundStops?.map((stop, idx) => (
+                    <div key={stop.id} className="p-4 bg-white border rounded-2xl shadow-sm flex items-center justify-between">
+                       <div className="flex items-center gap-4">
+                          <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs">{idx + 1}</div>
+                          <div><p className="font-bold text-sm">{stop.name}</p><p className="text-[10px] text-slate-400">{stop.weightKg} KG • {stop.address}</p></div>
+                       </div>
+                       <Button variant="ghost" size="icon" className="text-red-500" onClick={() => removeStop('outbound', stop.id)}><Trash2 size={16} /></Button>
+                    </div>
+                  ))}
+                </div>
               </div>
             </CardContent>
           </Card>
-        )}
-
-        {step === 4 && (
-          <div className="space-y-6">
-            <Card className="border-none shadow-sm">
-              <CardHeader><CardTitle>Ingresos y Facturación</CardTitle></CardHeader>
-              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label>Facturación Total al Cliente (ARS)</Label>
-                  <div className="relative">
-                    <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                    <Input type="number" className="pl-9 h-12 text-lg font-bold text-green-600" value={formData.totalAmount ?? 0} onChange={e => setFormData({...formData, totalAmount: parseFloat(e.target.value) || 0})} />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Anticipo Viáticos Chofer</Label>
-                  <Input type="number" className="h-12" value={formData.budget?.initialAdvance ?? 0} onChange={e => setFormData({...formData, budget: {...formData.budget!, initialAdvance: parseFloat(e.target.value) || 0}})} />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
         )}
 
         {step === 5 && (
@@ -556,11 +423,11 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                          {selectedTruck && (
                            <>
                             <div className="flex justify-between items-center border-t pt-4">
-                                <span className="text-xs font-bold text-slate-500">Capacidad Permitida:</span>
+                                <span className="text-xs font-bold text-slate-500">Capacidad Máxima:</span>
                                 <span className="text-lg font-black text-green-600">{selectedTruck.capacityKg.toLocaleString()} KG</span>
                             </div>
                             <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-                               <div className={cn("h-full transition-all", isWeightLimitExceeded ? "bg-red-500" : "bg-blue-500")} style={{ width: `${Math.min(100, (currentTotalWeight / selectedTruck.capacityKg) * 100)}%` }}></div>
+                               <div className={cn("h-full", isWeightLimitExceeded ? "bg-red-500" : "bg-blue-500")} style={{ width: `${Math.min(100, (currentTotalWeight / selectedTruck.capacityKg) * 100)}%` }}></div>
                             </div>
                            </>
                          )}
@@ -568,46 +435,27 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                    </div>
 
                    <div className="space-y-4">
-                      <p className="text-[10px] font-black uppercase text-slate-400">Estado de Recursos</p>
+                      <p className="text-[10px] font-black uppercase text-slate-400">Recursos</p>
                       <div className="p-6 bg-slate-50 rounded-3xl border space-y-4">
-                         <div className="flex items-center gap-3">
-                            <Truck className="text-blue-600" />
-                            <div>
-                               <p className="text-xs font-black uppercase">{selectedTruck?.plate || 'SIN UNIDAD'}</p>
-                               <p className="text-[10px] text-slate-400">{selectedTruck?.brand} {selectedTruck?.model}</p>
-                            </div>
-                         </div>
-                         <div className="flex items-center gap-3 border-t pt-4">
-                            <UserCheck className="text-blue-600" />
-                            <div>
-                               <p className="text-xs font-black uppercase">{drivers?.find(d => d.id === formData.assignedDriverId)?.lastName || 'SIN CONDUCTOR'}</p>
-                               <p className="text-[10px] text-slate-400">Habilitación VIGENTE</p>
-                            </div>
-                         </div>
+                         <div className="flex items-center gap-3"><Truck className="text-blue-600" /><div><p className="text-xs font-black uppercase">{selectedTruck?.plate || 'SIN UNIDAD'}</p></div></div>
+                         <div className="flex items-center gap-3 border-t pt-4"><UserCheck className="text-blue-600" /><div><p className="text-xs font-black uppercase">Personal Asignado</p></div></div>
                       </div>
                    </div>
                 </div>
 
                 {isWeightLimitExceeded && (
-                  <div className="p-6 bg-red-50 border-2 border-red-200 rounded-3xl flex items-start gap-4 animate-in zoom-in-95">
-                     <AlertTriangle className="text-red-600 shrink-0 mt-1" size={24} />
+                  <div className="p-6 bg-red-50 border-2 border-red-200 rounded-3xl flex items-start gap-4">
+                     <AlertTriangle className="text-red-600 shrink-0" size={24} />
                      <div className="space-y-1">
                         <h4 className="text-red-700 font-black uppercase text-sm italic">ALERTA: SOBREPESO DETECTADO</h4>
-                        <p className="text-xs text-red-600 leading-relaxed font-bold">
-                          La carga actual excede el límite técnico de la unidad. El despacho ha sido bloqueado por seguridad vial y para evitar multas de balanza. Por favor, asigne una unidad de mayor capacidad o reduzca el peso de los remitos.
-                        </p>
+                        <p className="text-xs text-red-600 leading-relaxed font-bold">La carga actual excede el límite técnico de la unidad. El despacho ha sido bloqueado por seguridad.</p>
                      </div>
                   </div>
                 )}
              </CardContent>
              <CardFooter className="bg-slate-50 p-6 border-t flex justify-end">
-                <Button 
-                  onClick={handleSubmit} 
-                  className={cn("h-14 px-10 rounded-2xl font-black text-lg shadow-xl", isWeightLimitExceeded ? "bg-slate-300 cursor-not-allowed" : "bg-green-600 hover:bg-green-700")}
-                  disabled={isSubmitting || isWeightLimitExceeded}
-                >
-                  {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />}
-                  CONFIRMAR Y EMITIR
+                <Button onClick={handleSubmit} className={cn("h-14 px-10 rounded-2xl font-black text-lg", isWeightLimitExceeded ? "bg-slate-300" : "bg-green-600")} disabled={isSubmitting || isWeightLimitExceeded}>
+                  {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} EMITIR ORDEN
                 </Button>
              </CardFooter>
           </Card>
@@ -616,9 +464,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
 
       <Dialog open={isStopModalOpen} onOpenChange={setIsStopModalOpen}>
         <DialogContent className="max-w-3xl rounded-3xl">
-          <DialogHeader>
-            <DialogTitle>Nueva Parada en Ruta</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Nueva Parada en Ruta</DialogTitle></DialogHeader>
           <div className="space-y-6 py-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                <div className="space-y-2">
@@ -626,24 +472,16 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                   <Select onValueChange={v => {
                     const sel = locationsList.find(l => l.id === v);
                     if (sel) setEditingStop({...editingStop, name: sel.data.name, address: sel.data.address?.street ? `${sel.data.address.street} ${sel.data.address.number}, ${sel.data.address.city}` : sel.data.address});
-                  }}>
-                     <SelectTrigger><SelectValue placeholder="Destino" /></SelectTrigger>
-                     <SelectContent>{locationsList.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent>
-                  </Select>
+                  }}><SelectTrigger><SelectValue placeholder="Destino" /></SelectTrigger><SelectContent>{locationsList.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent></Select>
                </div>
                <div className="space-y-2">
-                  <Label>Peso de la Carga (KG)</Label>
+                  <Label>Peso Carga (KG)</Label>
                   <Input type="number" value={editingStop.weightKg} onChange={e => setEditingStop({...editingStop, weightKg: parseFloat(e.target.value) || 0})} />
                </div>
             </div>
-            <div className="space-y-2">
-              <Label>Dirección Final</Label>
-              <Input value={editingStop.address} onChange={e => setEditingStop({...editingStop, address: e.target.value})} />
-            </div>
+            <div className="space-y-2"><Label>Dirección Final</Label><Input value={editingStop.address} onChange={e => setEditingStop({...editingStop, address: e.target.value})} /></div>
           </div>
-          <DialogFooter>
-            <Button onClick={saveStop} className="bg-blue-600 rounded-xl h-12 font-bold px-8">ASIGNAR PARADA</Button>
-          </DialogFooter>
+          <DialogFooter><Button onClick={saveStop} className="bg-blue-600 rounded-xl">ASIGNAR PARADA</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -652,17 +490,11 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
           <Button variant="ghost" onClick={() => setStep(prev => prev - 1)} disabled={step === 1 || isSubmitting}>
              <ChevronLeft className="mr-1" size={16} /> VOLVER
           </Button>
-          <div className="flex gap-2">
-            {step < 5 ? (
-              <Button onClick={() => setStep(prev => prev + 1)} className="bg-blue-600 min-w-[120px] font-bold">
-                 SIGUIENTE <ChevronRight size={16} />
-              </Button>
-            ) : (
-              <Button onClick={handleSubmit} className="bg-green-600 min-w-[120px] font-bold" disabled={isSubmitting || isWeightLimitExceeded}>
-                 EMITIR ORDEN <Save size={16} className="ml-2" />
-              </Button>
-            )}
-          </div>
+          {step < 5 ? (
+            <Button onClick={() => setStep(prev => prev + 1)} className="bg-blue-600">SIGUIENTE <ChevronRight size={16} /></Button>
+          ) : (
+            <Button onClick={handleSubmit} className="bg-green-600" disabled={isSubmitting || isWeightLimitExceeded}>EMITIR ORDEN <Save size={16} className="ml-2" /></Button>
+          )}
         </div>
       </div>
     </div>
