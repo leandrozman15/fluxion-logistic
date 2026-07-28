@@ -714,7 +714,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                         <p className="text-[9px] text-slate-400 italic">Dato vital para prorratear costos fijos sobre el kilometraje.</p>
                     </div>
                   </CardContent>
-                </Card>
+                </div>
               </div>
             </div>
           </div>
@@ -724,7 +724,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center z-50">
         <div className="max-w-4xl w-full flex justify-between items-center px-4">
           <Button variant="ghost" onClick={handleBack} disabled={step === 1 || isSubmitting}>
-            <ChevronLeft size={16} invention-mr-1 /> Volver
+            <ChevronLeft size={16} className="mr-1" /> Volver
           </Button>
           <div className="flex gap-2">
             {step < 4 ? (
@@ -733,7 +733,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
               </Button>
             ) : (
               <Button onClick={handleSubmit} className="bg-green-600 min-w-[150px] font-bold" disabled={isSubmitting || isProcessingAvatar}>
-                {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save size={16} className="mr-2" />}
+                {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" size={16} />}
                 {truckId ? 'GUARDAR CAMBIOS' : 'HABILITAR UNIDAD'}
               </Button>
             )}
