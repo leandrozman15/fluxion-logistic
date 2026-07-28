@@ -582,42 +582,40 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
 
         {step === 4 && (
           <div className="space-y-6">
-            {/* Resumen Superior */}
             <Card className="border-none shadow-xl bg-slate-900 text-white overflow-hidden relative rounded-3xl">
-              <div className="absolute top-0 right-0 p-4 opacity-5"><Layers size={120}/></div>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-black flex items-center gap-2 text-blue-400 uppercase italic">
-                  <Gauge size={20} /> Análisis de Costos Proyectados
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6 relative">
-                 <div className="text-center py-4">
-                    <p className="text-5xl font-black italic text-green-400">${calculations.totalPerKm.toFixed(2)}</p>
-                    <p className="text-[10px] uppercase font-bold text-white/40 tracking-widest mt-1">Costo Teórico Total por Kilómetro</p>
-                 </div>
-                 <div className="p-4 bg-white/5 border border-white/10 rounded-2xl grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div>
-                      <p className="text-[8px] text-white/40 uppercase font-black">Fijos (KM)</p>
-                      <p className="text-xs font-bold text-blue-300">${calculations.fixedPerKm.toFixed(2)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[8px] text-white/40 uppercase font-black">Mantenimiento (KM)</p>
-                      <p className="text-xs font-bold text-orange-300">${calculations.oilPerKm.toFixed(2)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[8px] text-white/40 uppercase font-black">Neumáticos (KM)</p>
-                      <p className="text-xs font-bold text-purple-300">${calculations.tiresPerKm.toFixed(2)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[8px] text-white/40 uppercase font-black">Combustible (KM)</p>
-                      <p className="text-xs font-bold text-green-300">${calculations.fuelPerKm.toFixed(2)}</p>
-                    </div>
-                 </div>
-              </CardContent>
+               <div className="absolute top-0 right-0 p-4 opacity-5"><Layers size={120}/></div>
+               <CardHeader className="pb-2">
+                 <CardTitle className="text-sm font-black flex items-center gap-2 text-blue-400 uppercase italic">
+                   <Gauge size={20} /> Análisis de Costos Proyectados
+                 </CardTitle>
+               </CardHeader>
+               <CardContent className="space-y-6 relative">
+                  <div className="text-center py-4">
+                     <p className="text-5xl font-black italic text-green-400">${calculations.totalPerKm.toFixed(2)}</p>
+                     <p className="text-[10px] uppercase font-bold text-white/40 tracking-widest mt-1">Costo Teórico Total por Kilómetro</p>
+                  </div>
+                  <div className="p-4 bg-white/5 border border-white/10 rounded-2xl grid grid-cols-2 md:grid-cols-4 gap-4">
+                     <div>
+                       <p className="text-[8px] text-white/40 uppercase font-black">Fijos (KM)</p>
+                       <p className="text-xs font-bold text-blue-300">${calculations.fixedPerKm.toFixed(2)}</p>
+                     </div>
+                     <div>
+                       <p className="text-[8px] text-white/40 uppercase font-black">Mantenimiento (KM)</p>
+                       <p className="text-xs font-bold text-orange-300">${calculations.oilPerKm.toFixed(2)}</p>
+                     </div>
+                     <div>
+                       <p className="text-[8px] text-white/40 uppercase font-black">Neumáticos (KM)</p>
+                       <p className="text-xs font-bold text-purple-300">${calculations.tiresPerKm.toFixed(2)}</p>
+                     </div>
+                     <div>
+                       <p className="text-[8px] text-white/40 uppercase font-black">Combustible (KM)</p>
+                       <p className="text-xs font-bold text-green-300">${calculations.fuelPerKm.toFixed(2)}</p>
+                     </div>
+                  </div>
+               </CardContent>
             </Card>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Costos Fijos */}
               <Card className="border-none shadow-sm rounded-3xl overflow-hidden">
                 <CardHeader className="bg-slate-50 border-b py-4">
                   <CardTitle className="text-sm flex items-center gap-2 text-slate-700">
@@ -654,7 +652,6 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                 </CardContent>
               </Card>
 
-              {/* Costos Variables y Operativos */}
               <div className="space-y-6">
                 <Card className="border-none shadow-sm rounded-3xl overflow-hidden">
                   <CardHeader className="bg-slate-50 border-b py-4">
@@ -714,7 +711,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                         <p className="text-[9px] text-slate-400 italic">Dato vital para prorratear costos fijos sobre el kilometraje.</p>
                     </div>
                   </CardContent>
-                </div>
+                </Card>
               </div>
             </div>
           </div>
