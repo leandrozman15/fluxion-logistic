@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   ArrowLeft, MapPin, Phone, MessageSquare, CheckCircle2, 
   Truck, Package, FileText, ShieldAlert, Clock, 
@@ -619,7 +620,7 @@ export default function RouteDetailPage() {
                               <div className="grid grid-cols-2 gap-4">
                                  <div className="space-y-1">
                                     <Label className="text-[10px] font-bold text-blue-800">Precio x Litro</Label>
-                                    <Input type="number" className="bg-white h-10 rounded-xl" value={expenseData.pricePerLiter} onChange={e => setExpenseData({...expenseData, pricePerLiter: parseFloat(e.target.value) || 0})} />
+                                    <Input type="number" className="bg-white h-10 rounded-xl" value={expenseData.pricePerLiter} onChange={e => setExpenseData({...expenseData, liters: parseFloat(e.target.value) || 0})} />
                                  </div>
                                  <div className="space-y-1">
                                     <Label className="text-[10px] font-bold text-blue-800">Marca / Bandera</Label>

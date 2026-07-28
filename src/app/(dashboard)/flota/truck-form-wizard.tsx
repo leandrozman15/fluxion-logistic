@@ -421,14 +421,16 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
           <Button variant="ghost" onClick={handleBack} disabled={step === 1 || isSubmitting}>
              <ChevronLeft size={16} className="mr-1" /> VOLVER
           </Button>
-          {step < 4 ? (
-            <Button onClick={handleNext} className="bg-blue-600">SIGUIENTE <ChevronRight size={16} className="ml-1" /></Button>
-          ) : (
-            <Button onClick={handleSubmit} className="bg-green-600" disabled={isSubmitting}>
-              {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" size={16} />}
-              {truckId ? 'GUARDAR CAMBIOS' : 'HABILITAR UNIDAD'}
-            </Button>
-          )}
+          <div className="flex gap-2">
+            {step < 4 ? (
+              <Button onClick={handleNext} className="bg-blue-600">SIGUIENTE <ChevronRight size={16} className="ml-1" /></Button>
+            ) : (
+              <Button onClick={handleSubmit} className="bg-green-600" disabled={isSubmitting}>
+                {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" size={16} />}
+                {truckId ? 'GUARDAR CAMBIOS' : 'HABILITAR UNIDAD'}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>

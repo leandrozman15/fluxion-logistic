@@ -338,7 +338,7 @@ export default function MonitorOperativoPage() {
             <>
               <div className={cn(
                 "w-3 h-3 rounded-full shrink-0 transition-all",
-                lastDeliveredIdx >= 0 ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-slate-200"
+                lastDeliveredIdx >= 0 ? "bg-green-50 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-slate-200"
               )} />
               
               <ArrowRight 
