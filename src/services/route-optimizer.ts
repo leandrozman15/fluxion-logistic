@@ -4,9 +4,10 @@ import { Client, Truck, Hub, OptimizedRouteProposal } from "@/app/lib/types";
 import { calculateDistance } from "@/lib/utils/tracking-math";
 
 /**
- * @fileOverview Motor de optimización de rutas con Heurística de Barrido Geográfico.
- * Implementa una estrategia de "Semilla Lejana": identifica los destinos más extremos
- * y agrupa las paradas cercanas a ellos para cubrir corredores lógicos (ej. Rosario-Córdoba).
+ * @fileOverview Motor de optimización de rutas con Heurística de Barrido Geográfico y Asignación por Eficiencia.
+ * 1. Agrupa paradas por corredores lógicos.
+ * 2. Secuencia las entregas para minimizar km.
+ * 3. ASIGNACIÓN EFICIENTE: Cruza el consumo del camión con el largo de la ruta.
  */
 
 export async function optimizeDistribution(
@@ -21,25 +22,13 @@ export async function optimizeDistribution(
   const numVehicles = Math.min(trucks.length, stops.length);
   const targetsPerTruck = Math.ceil(unvisited.length / numVehicles);
   
-  const proposals: OptimizedRouteProposal[] = trucks.slice(0, numVehicles).map(t => ({
-    truckId: t.id,
-    truckPlate: t.plate,
-    driverId: t.assignedDriverId || 'none',
-    stops: [],
-    totalDistanceKm: 0,
-    estimatedDurationMinutes: 0
-  }));
+  // 1. Crear grupos de paradas (Clusters geográficos)
+  const clusters: Client[][] = [];
 
-  /**
-   * ESTRATEGIA: Regionalización por Extremos
-   * 1. Buscamos el punto más lejano a la base que no haya sido visitado.
-   * 2. Lo usamos como "ancla" para un camión.
-   * 3. Llenamos ese camión con las paradas más cercanas a esa ancla.
-   */
   for (let i = 0; i < numVehicles && unvisited.length > 0; i++) {
-    const currentProp = proposals[i];
+    const currentGroup: Client[] = [];
     
-    // Encontrar la parada más lejana a la base (define la región/corredor)
+    // Encontrar la parada más lejana a la base (define la región/ancla)
     let furthestIdx = -1;
     let maxDistFromBase = -1;
 
@@ -53,20 +42,17 @@ export async function optimizeDistribution(
 
     if (furthestIdx !== -1) {
       const anchorStop = unvisited[furthestIdx];
-      currentProp.stops.push(anchorStop);
+      currentGroup.push(anchorStop);
       unvisited.splice(furthestIdx, 1);
 
-      // Llenar el resto del camión con puntos cercanos al ANCLA (no a la base)
-      // Esto asegura que Rosario y Córdoba (cercanos entre sí) se queden juntos
-      while (currentProp.stops.length < targetsPerTruck && unvisited.length > 0) {
+      // Llenar el grupo con paradas cercanas al ANCLA
+      while (currentGroup.length < targetsPerTruck && unvisited.length > 0) {
         let closestToAnchorIdx = -1;
         let minDistanceToAnchor = Infinity;
-        
-        // Referencia: el último punto agregado a esta propuesta
-        const lastStop = currentProp.stops[currentProp.stops.length - 1];
+        const lastAdded = currentGroup[currentGroup.length - 1];
 
         unvisited.forEach((s, idx) => {
-          const d = calculateDistance(lastStop.address.lat!, lastStop.address.lng!, s.address.lat!, s.address.lng!);
+          const d = calculateDistance(lastAdded.address.lat!, lastAdded.address.lng!, s.address.lat!, s.address.lng!);
           if (d < minDistanceToAnchor) {
             minDistanceToAnchor = d;
             closestToAnchorIdx = idx;
@@ -74,23 +60,20 @@ export async function optimizeDistribution(
         });
 
         if (closestToAnchorIdx !== -1) {
-          currentProp.stops.push(unvisited[closestToAnchorIdx]);
+          currentGroup.push(unvisited[closestToAnchorIdx]);
           unvisited.splice(closestToAnchorIdx, 1);
         }
       }
+      clusters.push(currentGroup);
     }
   }
 
-  // 3. Post-procesamiento: Secuenciación y Cálculo Final
-  proposals.forEach(prop => {
-    if (prop.stops.length === 0) return;
-
-    // Re-ordenar las paradas de la propuesta para que sean óptimas desde la base
-    // (Orden de entrega: Base -> Cerca -> Lejos -> Retorno)
+  // 2. Secuenciar cada cluster y calcular su distancia total
+  const routePlans = clusters.map(group => {
     const orderedStops: Client[] = [];
     let currentLat = startHub.lat;
     let currentLng = startHub.lng;
-    const pool = [...prop.stops];
+    const pool = [...group];
 
     while (pool.length > 0) {
       let nextIdx = -1;
@@ -108,25 +91,44 @@ export async function optimizeDistribution(
       currentLng = selected.address.lng!;
     }
 
-    prop.stops = orderedStops;
-
-    // Totales
+    // Calcular distancia total (Ida + Paradas + Retorno)
     let totalDist = 0;
     let cursorLat = startHub.lat;
     let cursorLng = startHub.lng;
 
-    prop.stops.forEach(s => {
+    orderedStops.forEach(s => {
       totalDist += calculateDistance(cursorLat, cursorLng, s.address.lat!, s.address.lng!);
       cursorLat = s.address.lat!;
       cursorLng = s.address.lng!;
     });
-
-    // Retorno a base final
     totalDist += calculateDistance(cursorLat, cursorLng, endHub.lat, endHub.lng);
 
-    prop.totalDistanceKm = Math.round(totalDist);
-    prop.estimatedDurationMinutes = Math.round((totalDist / 60) * 60) + (prop.stops.length * 30);
+    return {
+      stops: orderedStops,
+      distance: Math.round(totalDist),
+      duration: Math.round((totalDist / 60) * 60) + (orderedStops.length * 30)
+    };
   });
 
-  return proposals;
+  // 3. ASIGNACIÓN POR EFICIENCIA
+  // Ordenar Planes de Ruta por distancia (DESC: más largo primero)
+  const sortedPlans = [...routePlans].sort((a, b) => b.distance - a.distance);
+  
+  // Ordenar Camiones por consumo (ASC: menos gasta primero)
+  const sortedTrucks = [...trucks].sort((a, b) => (a.avgConsumption || 32) - (b.avgConsumption || 32));
+
+  // Combinar: Camión económico -> Ruta larga
+  const finalProposals: OptimizedRouteProposal[] = sortedPlans.map((plan, idx) => {
+    const assignedTruck = sortedTrucks[idx] || sortedTrucks[0]; // Fallback si hay desajuste
+    return {
+      truckId: assignedTruck.id,
+      truckPlate: assignedTruck.plate,
+      driverId: assignedTruck.assignedDriverId || 'none',
+      stops: plan.stops,
+      totalDistanceKm: plan.distance,
+      estimatedDurationMinutes: plan.duration
+    };
+  });
+
+  return finalProposals;
 }

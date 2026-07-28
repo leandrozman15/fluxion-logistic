@@ -149,7 +149,8 @@ export default function DespachoInteligentePage() {
         .map(t => ({
           id: t.id,
           plate: t.plate,
-          assignedDriverId: t.assignedDriverId || 'none'
+          assignedDriverId: t.assignedDriverId || 'none',
+          avgConsumption: t.avgConsumption || 32
         })) || [];
 
       const sanitizedStartHub = {
@@ -184,7 +185,7 @@ export default function DespachoInteligentePage() {
       );
       
       setProposals(result);
-      toast({ title: "Plan de Rutas Generado", description: "La IA ha distribuido los destinos eficientemente considerando el final de ruta." });
+      toast({ title: "Plan de Rutas Generado", description: "La IA ha asignado los camiones más eficientes a las rutas más largas." });
     } catch (e: any) {
       console.error("Optimization error:", e);
       toast({ variant: "destructive", title: "Error de Optimización", description: "Ocurrió un error al procesar los datos." });
@@ -306,7 +307,7 @@ export default function DespachoInteligentePage() {
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
             <Zap className="text-blue-600" /> Despacho Inteligente
           </h1>
-          <p className="text-slate-500 text-sm">Optimización de ruteo secuencial y balanceo de flota.</p>
+          <p className="text-slate-500 text-sm">Optimización de ruteo secuencial y balanceo de flota por eficiencia.</p>
         </div>
         <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3">
            <div className="space-y-1 w-full sm:w-auto">
@@ -443,7 +444,10 @@ export default function DespachoInteligentePage() {
                         <Checkbox checked={selectedTrucks.includes(truck.id)} onCheckedChange={() => handleToggleTruck(truck.id)} />
                         <div>
                           <p className="text-sm font-black text-slate-800 font-mono">{truck.plate}</p>
-                          <p className="text-[10px] text-slate-400 uppercase">{truck.brand} {truck.model}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-[10px] text-slate-400 uppercase">{truck.brand} {truck.model}</p>
+                            <Badge variant="outline" className="text-[8px] h-3 bg-blue-50 text-blue-600">{truck.avgConsumption} L/100</Badge>
+                          </div>
                         </div>
                       </div>
                      ))
@@ -462,7 +466,7 @@ export default function DespachoInteligentePage() {
                </div>
                <div className="space-y-2">
                  <h3 className="text-lg font-bold text-slate-700 italic">Optimización de Rutas Inteligente</h3>
-                 <p className="text-sm text-slate-400 max-w-sm">Defina Origen y Destino Final, elija flota y destinos, luego presione "Optimizar Entregas".</p>
+                 <p className="text-sm text-slate-400 max-w-sm">Defina Origen y Destino Final, elija flota y destinos, luego presione "Optimizar Entregas". El sistema asignará camiones por eficiencia de consumo.</p>
                </div>
             </div>
           ) : (

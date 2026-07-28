@@ -274,7 +274,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
             <div key={s.id} className="flex flex-col items-center gap-1.5 flex-1 relative">
               <div className={cn(
                 "w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold z-10 transition-all",
-                step > s.id ? "bg-green-500 text-white border-green-600 shadow-sm" : step === s.id ? "bg-blue-600 text-white shadow-md shadow-blue-100" : "bg-slate-50 text-slate-300 border"
+                step > s.id ? "bg-green-50 text-white border-green-600 shadow-sm" : step === s.id ? "bg-blue-600 text-white shadow-md shadow-blue-100" : "bg-slate-50 text-slate-300 border"
               )}>
                 {step > s.id ? <CheckCircle2 size={18} /> : <s.icon size={16} />}
               </div>
