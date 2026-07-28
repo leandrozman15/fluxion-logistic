@@ -44,7 +44,8 @@ import {
   Anchor,
   CirclePlay,
   XCircle,
-  CircleCheck
+  CircleCheck,
+  ListOrdered
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -285,15 +286,11 @@ export default function MonitorOperativoPage() {
     };
   };
 
-  /**
-   * Componente interno para mostrar la línea de estado visual de la ruta
-   */
   const RouteStatusLine = ({ load }: { load: Load }) => {
     const isStarted = load.status !== 'pending' && load.status !== 'assigned';
     const isFinished = load.status === 'delivered';
     const stops = load.outboundStops || [];
     
-    // Encontrar la última parada entregada
     const lastDeliveredIdx = stops.reduce((acc, s, idx) => s.deliveredAt ? idx : acc, -1);
     const nextStopIdx = lastDeliveredIdx + 1;
     const isReturnPhase = isStarted && !isFinished && lastDeliveredIdx === stops.length - 1;
@@ -301,7 +298,6 @@ export default function MonitorOperativoPage() {
     return (
       <div className="space-y-1.5 min-w-0">
         <div className="flex items-center gap-1.5 overflow-hidden">
-          {/* Origen (Base) */}
           <div className={cn(
             "w-3 h-3 rounded-full shrink-0 flex items-center justify-center transition-all",
             !isStarted ? "bg-red-500" : "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"
@@ -309,7 +305,6 @@ export default function MonitorOperativoPage() {
             <div className="w-1 h-1 bg-white rounded-full"></div>
           </div>
           
-          {/* Flecha a P1 */}
           <ArrowRight 
             size={12} 
             className={cn(
@@ -319,7 +314,6 @@ export default function MonitorOperativoPage() {
             )} 
           />
 
-          {/* Destino (Si hay paradas) */}
           {stops.length > 0 && (
             <>
               <div className={cn(
@@ -340,7 +334,6 @@ export default function MonitorOperativoPage() {
             </>
           )}
 
-          {/* Destino Final (Cierre) */}
           <div className={cn(
             "w-3 h-3 rounded-full shrink-0 transition-all",
             isFinished ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-slate-200"
@@ -354,7 +347,6 @@ export default function MonitorOperativoPage() {
           </span>
         </div>
 
-        {/* ETA GPS Dinámico */}
         {(load.status === 'on_route' || load.status === 'on_pause') && load.tracking && (
           <div className="flex items-center gap-1.5 text-[10px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/20 w-fit px-2.5 py-0.5 rounded-full border border-blue-100 dark:border-blue-800">
              <Zap size={10} className="animate-pulse fill-current" /> 
@@ -444,6 +436,7 @@ export default function MonitorOperativoPage() {
                const efficiency = calculateEfficiency(load);
                const progress = tracking ? (tracking.distanceTraveledKm / (tracking.distanceTraveledKm + (tracking.distanceRemainingKm || 1))) * 100 : (load.status === 'delivered' ? 100 : 0);
                const times = getReconstructedStats(load);
+               const isStarted = load.status !== 'pending' && load.status !== 'assigned';
 
                return (
                  <Collapsible 
@@ -498,8 +491,6 @@ export default function MonitorOperativoPage() {
                                 </Badge>
                               )}
                             </div>
-                            
-                            {/* NUEVA LÍNEA DE ESTADO VISUAL DE RUTA */}
                             <RouteStatusLine load={load} />
                          </div>
                       </div>
@@ -616,68 +607,83 @@ export default function MonitorOperativoPage() {
                            </div>
                          )}
 
-                         <div className={cn("space-y-4", (load.status !== 'on_route' && load.status !== 'on_pause' && load.status !== 'delivered') && "lg:col-span-2")}>
+                         <div className={cn("space-y-4", (!isStarted && load.status !== 'delivered') && "lg:col-span-2")}>
                             <h4 className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-2 tracking-widest">
                                <Navigation size={14} /> Tramo 1: Hoja de Ruta (Ida)
                             </h4>
                             <div className="space-y-3 relative pl-4 border-l-2 border-dashed border-blue-200 dark:border-blue-800">
                                <div className="relative">
-                                  <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-blue-600 border-2 border-white dark:border-slate-900 shadow-sm"></div>
                                   <div className={cn(
-                                    "space-y-0.5 p-3 rounded-lg border transition-colors",
-                                    load.status === 'delivered' ? "bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800" : "bg-transparent border-transparent"
+                                    "absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-900 shadow-sm",
+                                    isStarted || load.status === 'delivered' ? "bg-green-600" : "bg-blue-600"
+                                  )}></div>
+                                  <div className={cn(
+                                    "space-y-1 p-3 rounded-xl border transition-all",
+                                    isStarted || load.status === 'delivered' ? "bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800" : "bg-white dark:bg-slate-800 border-slate-200"
                                   )}>
-                                    <p className="text-[9px] font-black text-slate-400 uppercase">Carga Inicial</p>
-                                    <div className="flex items-center justify-between">
-                                       <div className="flex items-center gap-2">
-                                          <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{load.origin.name}</p>
-                                          {load.origin.dockName && <Badge variant="outline" className="text-[7px] h-3 border-blue-200 text-blue-600 uppercase font-black px-1"><Anchor size={8} className="mr-0.5" /> {load.origin.dockName}</Badge>}
+                                    <div className="flex justify-between items-start">
+                                       <div>
+                                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Carga Inicial / Despacho</p>
+                                          <p className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase">{load.origin.name}</p>
                                        </div>
-                                       {load.status === 'delivered' && (
-                                          <span className="text-[9px] font-bold text-green-600 uppercase italic">Despachado</span>
+                                       {(isStarted || load.status === 'delivered') && (
+                                          <Badge className="bg-green-600 text-white text-[7px] border-none px-2 h-4 uppercase font-black">Salió Base</Badge>
                                        )}
                                     </div>
-                                    {load.status !== 'delivered' && load.dockEntryAuthorized && (
-                                       <p className="text-[9px] font-black text-green-600 uppercase flex items-center gap-1 mt-1 bg-green-50 px-2 py-0.5 rounded-full w-fit border border-green-100"><CirclePlay size={10}/> Vía libre para ingresar</p>
-                                    )}
+                                    <div className="flex items-center gap-3 pt-1">
+                                       {load.origin.dockName && (
+                                          <div className="flex items-center gap-1 text-[9px] font-bold text-blue-600">
+                                             <Anchor size={10} /> {load.origin.dockName}
+                                          </div>
+                                       )}
+                                       {load.dockEntryAuthorized && (
+                                          <p className="text-[9px] font-black text-green-600 uppercase flex items-center gap-1 bg-green-100 px-2 py-0.5 rounded-full w-fit">
+                                             <CirclePlay size={10}/> Vía libre ok
+                                          </p>
+                                       )}
+                                    </div>
                                   </div>
                                </div>
                                {load.outboundStops?.map((stop, idx) => (
                                  <div key={stop.id} className="relative pt-2">
-                                    <div className="absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full bg-white dark:bg-slate-800 border-2 border-blue-400 shadow-sm"></div>
                                     <div className={cn(
-                                       "p-3 rounded-lg border shadow-sm space-y-2 transition-colors",
-                                       load.status === 'delivered' ? "bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-900/30" : "bg-white dark:bg-slate-800/50 border-slate-200 dark:border-slate-700"
+                                       "absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm",
+                                       stop.deliveredAt ? "bg-green-600" : "bg-white dark:bg-slate-800 border-blue-400"
+                                    )}></div>
+                                    <div className={cn(
+                                       "p-4 rounded-xl border shadow-sm space-y-3 transition-all",
+                                       stop.deliveredAt ? "bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-900/30" : "bg-white dark:bg-slate-800/50 border-slate-200 dark:border-slate-700"
                                     )}>
                                        <div className="flex justify-between items-start">
-                                          <div>
+                                          <div className="min-w-0 flex-1">
                                              <div className="flex items-center gap-2">
-                                                <p className="text-[10px] font-black text-blue-600 uppercase">Destino {idx + 1}</p>
-                                                {load.status === 'delivered' && (
-                                                   <Badge className="bg-green-600 text-white text-[7px] h-3 border-none px-1 uppercase font-black">Entregado</Badge>
+                                                <p className="text-[9px] font-black text-blue-600 uppercase tracking-tighter">Parada {idx + 1}</p>
+                                                {stop.deliveredAt && (
+                                                   <Badge className="bg-green-600 text-white text-[7px] h-3 border-none px-1 uppercase font-black">Confirmada</Badge>
                                                 )}
                                              </div>
-                                             <div className="flex items-center gap-2">
-                                                <p className="text-xs font-bold">{stop.name}</p>
-                                                {stop.dockName && <Badge variant="outline" className="text-[7px] h-3 border-blue-200 text-blue-600 uppercase font-black"><Anchor size={8} className="mr-0.5" /> {stop.dockName}</Badge>}
-                                             </div>
+                                             <p className="text-xs font-black text-slate-800 dark:text-slate-100 truncate uppercase mt-0.5">{stop.name}</p>
+                                             <p className="text-[9px] text-slate-500 truncate">{stop.address}</p>
                                           </div>
-                                          <div className="text-right">
-                                             <Badge className="bg-blue-50 text-blue-600 text-[8px] border-blue-100">{stop.weightKg} Kg</Badge>
-                                             {load.status === 'delivered' && load.proofOfDelivery?.confirmedAt && (
+                                          <div className="text-right shrink-0">
+                                             <Badge className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[8px] border-none font-black">{stop.weightKg} KG</Badge>
+                                             {stop.deliveredAt && (
                                                 <p className="text-[8px] font-black text-green-600 mt-1 uppercase italic">
-                                                   Hora: {formatSafeDate(load.proofOfDelivery.confirmedAt, "HH:mm")} hs
+                                                   OK: {formatSafeDate(stop.deliveredAt, "HH:mm")} hs
                                                 </p>
                                              )}
                                           </div>
                                        </div>
-                                       <div className="flex flex-wrap gap-1.5 pt-1">
+                                       <div className="flex flex-wrap gap-1.5 border-t border-slate-100 dark:border-slate-700 pt-2">
                                           {stop.documents?.map(doc => (
                                             <div key={doc.id} className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 rounded border border-slate-200 dark:border-slate-600 text-[9px] font-bold">
                                                <FileText size={10} className="text-slate-500" /> 
-                                               {doc.number} {doc.sealNumber && <span className="text-blue-600 ml-1">P:{doc.sealNumber}</span>}
+                                               R:{doc.number} {doc.sealNumber && <span className="text-blue-600 ml-1">P:{doc.sealNumber}</span>}
                                             </div>
                                           ))}
+                                          {(!stop.documents || stop.documents.length === 0) && (
+                                             <span className="text-[8px] text-slate-400 italic">Sin remitos cargados</span>
+                                          )}
                                        </div>
                                     </div>
                                  </div>
@@ -693,40 +699,45 @@ export default function MonitorOperativoPage() {
                                <div className="space-y-3 relative pl-4 border-l-2 border-dashed border-orange-200 dark:border-orange-800">
                                   {load.returnStops?.map((stop) => (
                                     <div key={stop.id} className="relative pt-2">
-                                       <div className="absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full bg-orange-500 border-2 border-white dark:border-slate-900 shadow-sm"></div>
-                                       <div className="bg-orange-50/50 dark:bg-orange-950/10 p-3 rounded-lg border border-orange-100 dark:border-orange-900/30 shadow-sm space-y-2">
+                                       <div className={cn(
+                                          "absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm",
+                                          stop.deliveredAt ? "bg-green-600" : "bg-orange-500"
+                                       )}></div>
+                                       <div className="bg-orange-50/50 dark:bg-orange-950/10 p-4 rounded-xl border border-orange-100 dark:border-orange-900/30 shadow-sm space-y-2">
                                           <div className="flex justify-between items-start">
-                                             <div className="space-y-1">
-                                                <p className="text-xs font-bold text-orange-700 dark:text-orange-400">Recolección: {stop.name}</p>
-                                                {stop.dockName && <Badge variant="outline" className="text-[7px] h-3 border-orange-200 text-orange-700 uppercase font-black"><Anchor size={8} className="mr-0.5" /> {stop.dockName}</Badge>}
+                                             <div className="space-y-0.5">
+                                                <p className="text-[9px] font-black text-orange-600 uppercase">Recolección Retorno</p>
+                                                <p className="text-xs font-bold text-orange-700 dark:text-orange-400 uppercase">{stop.name}</p>
                                              </div>
-                                             <Badge className="bg-orange-100 text-orange-700 text-[8px] border-orange-200">{stop.weightKg} Kg</Badge>
-                                          </div>
-                                          <div className="flex flex-wrap gap-1.5">
-                                            {stop.documents?.map(doc => (
-                                              <Badge key={doc.id} variant="outline" className="text-[9px] border-orange-200 text-orange-600">R:{doc.number}</Badge>
-                                            ))}
+                                             <Badge className="bg-orange-100 text-orange-700 text-[8px] border-orange-200 font-black">{stop.weightKg} KG</Badge>
                                           </div>
                                        </div>
                                     </div>
                                   ))}
                                   {load.returnDestination?.name && (
                                     <div className="relative pt-2">
-                                       <div className="absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full bg-slate-900 border-2 border-white shadow-sm"></div>
-                                       <div className="bg-slate-900 text-white p-3 rounded-lg space-y-1">
-                                          <p className="text-[8px] font-black text-white/50 uppercase">Descarga Final Retorno</p>
+                                       <div className={cn(
+                                          "absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm",
+                                          load.status === 'delivered' ? "bg-green-600" : "bg-slate-900"
+                                       )}></div>
+                                       <div className="bg-slate-900 text-white p-4 rounded-xl space-y-2 shadow-xl">
+                                          <div className="flex justify-between items-center">
+                                             <p className="text-[8px] font-black text-white/50 uppercase tracking-widest">Fin de Jornada</p>
+                                             {load.status === 'delivered' && <Badge className="bg-green-600 text-[7px] border-none h-3 uppercase">Cerrado</Badge>}
+                                          </div>
                                           <div className="flex items-center gap-2">
                                              <p className="text-xs font-bold uppercase">{load.returnDestination.name}</p>
-                                             {load.returnDestination.dockName && <Badge variant="outline" className="text-[7px] h-3 border-slate-700 text-white uppercase font-black"><Anchor size={8} className="mr-0.5" /> {load.returnDestination.dockName}</Badge>}
+                                             {load.returnDestination.dockName && <Badge variant="outline" className="text-[7px] h-3 border-slate-700 text-white uppercase font-black px-1"><Anchor size={8} className="mr-0.5" /> {load.returnDestination.dockName}</Badge>}
                                           </div>
                                        </div>
                                     </div>
                                   )}
                                </div>
                             ) : (
-                               <div className="h-24 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl bg-white/30 dark:bg-slate-900/30 text-slate-300">
+                               <div className="h-32 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-white/30 dark:bg-slate-900/30 text-slate-300">
                                   <Repeat size={24} className="opacity-20 mb-2" />
-                                  <p className="text-[10px] font-bold uppercase italic">Flete de solo ida</p>
+                                  <p className="text-[10px] font-black uppercase italic tracking-widest">Flete Directo (Solo Ida)</p>
+                                  <p className="text-[8px] text-slate-400 mt-1 uppercase">No requiere retorno de mercadería</p>
                                </div>
                             )}
                          </div>
@@ -860,4 +871,3 @@ export default function MonitorOperativoPage() {
     </div>
   );
 }
-
