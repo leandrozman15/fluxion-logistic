@@ -91,6 +91,9 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     }
   }, [formData.grossCombinedWeightKg, formData.unladenWeightKg]);
 
+  const handleBack = () => setStep(prev => Math.max(1, prev - 1));
+  const handleNext = () => setStep(prev => Math.min(4, prev + 1));
+
   const handleCostChange = (block: keyof TruckCosts, field: string, value: string, subField?: string) => {
     const val = value === "" ? 0 : parseFloat(value);
     setFormData(prev => {
@@ -149,7 +152,6 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     }
   };
 
-  // Calculadora de Costos Dinámica para el Preview del Paso 4
   const calculatedKmCost = useMemo(() => {
     const c = formData.costs || INITIAL_COSTS;
     const fixedTotal = Object.values(c.fixed).reduce((a, b) => a + b, 0);
@@ -421,7 +423,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
           <div className="flex gap-2">
             {step < 4 ? (
               <Button onClick={handleNext} className="bg-blue-600">
-                Siguiente <ChevronRight className="ml-2" size={16} />
+                Siguiente <ArrowRight className="ml-2" size={16} />
               </Button>
             ) : (
               <Button onClick={handleSubmit} className="bg-blue-600" disabled={isSubmitting}>
