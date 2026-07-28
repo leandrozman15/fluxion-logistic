@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { 
   Package, ArrowLeft, ArrowRight, Save, Loader2, 
   MapPin, Calendar, Clock, DollarSign, Truck, 
-  Info, AlertTriangle, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, LayoutGrid, UserCheck, Edit, TrendingUp, CreditCard, Anchor, Scale, ListOrdered
+  Info, AlertTriangle, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, LayoutGrid, UserCheck, Edit, TrendingUp, CreditCard, Anchor, Scale, ListOrdered, ShieldCheck
 } from "lucide-react";
 import { Load, Client, Hub, LoadLegStop, LoadDocument, LoadDocType, Truck as TruckType, Driver, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -650,7 +650,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center z-50">
         <div className="max-w-5xl w-full flex justify-between items-center px-4">
           <Button variant="ghost" onClick={() => setStep(prev => prev - 1)} disabled={step === 1 || isSubmitting}>
-             <ChevronLeft size={16} /> VOLVER
+             <ChevronLeft className="mr-1" size={16} /> VOLVER
           </Button>
           <div className="flex gap-2">
             {step < 5 ? (
