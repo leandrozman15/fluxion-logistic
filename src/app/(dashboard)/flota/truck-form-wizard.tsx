@@ -155,12 +155,12 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
 
   const calculatedKmCost = useMemo(() => {
     const c = formData.costs || INITIAL_COSTS;
-    const fixedTotal = Object.values(c.fixed).reduce((a, b) => a + b, 0);
+    const fixedTotal = Object.values(c.fixed).reduce((a, b) => a + (b as number), 0);
     const monthlyKm = c.operational.estimatedMonthlyKm || 1;
     
     const fixedPerKm = fixedTotal / monthlyKm;
-    const variablePerKm = (c.variable.preventiveMaintenance.cost / c.variable.preventiveMaintenance.frequencyKm) +
-                          (c.variable.tires.costFullSet / c.variable.tires.lifeSpanKm) +
+    const variablePerKm = (c.variable.preventiveMaintenance.cost / (c.variable.preventiveMaintenance.frequencyKm || 1)) +
+                          (c.variable.tires.costFullSet / (c.variable.tires.lifeSpanKm || 1)) +
                           c.variable.unforeseenReservePerKm;
     
     return {
