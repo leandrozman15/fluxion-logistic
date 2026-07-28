@@ -57,6 +57,23 @@ export default function DriverRoutesPage() {
 
   const { data: routes, loading } = useCollection<Load>(routesQuery);
 
+  // Mapeo de estados por fecha para el carrusel
+  const dateStatusMap = useMemo(() => {
+    if (!routes) return {};
+    const map: Record<string, { hasTrips: boolean; allDelivered: boolean }> = {};
+    
+    routes.forEach(r => {
+      const d = r.pickupDate;
+      if (!map[d]) {
+        map[d] = { hasTrips: true, allDelivered: true };
+      }
+      if (r.status !== 'delivered') {
+        map[d].allDelivered = false;
+      }
+    });
+    return map;
+  }, [routes]);
+
   // 2. Centrar el carrusel en el día actual al cargar
   useEffect(() => {
     if (scrollRef.current) {
@@ -81,7 +98,7 @@ export default function DriverRoutesPage() {
     return routes.filter(r => r.pickupDate === selectedDate);
   }, [routes, selectedDate]);
 
-  // 4. Configuración de colores solicitada por el usuario
+  // 4. Configuración de colores para las tarjetas de flete
   const getStatusConfig = (status: LoadStatus) => {
     switch (status) {
       case 'delivered': 
@@ -157,11 +174,10 @@ export default function DriverRoutesPage() {
         </Button>
       </div>
 
-      {/* Carrusel de Fechas Rediseñado */}
+      {/* Carrusel de Fechas con Lógica de Colores de Estado */}
       <div className="space-y-2">
         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Navegar Agenda</p>
         <div className="relative group px-1">
-          {/* Flecha Izquierda */}
           <button 
             onClick={() => handleScroll('left')}
             className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center shadow-md border border-slate-100 text-slate-400 hover:text-blue-600 transition-colors"
@@ -177,6 +193,20 @@ export default function DriverRoutesPage() {
               const dateStr = format(date, "yyyy-MM-dd");
               const isSelected = selectedDate === dateStr;
               const isToday = isSameDay(date, new Date());
+              const status = dateStatusMap[dateStr];
+              
+              // Lógica de colores según el requerimiento del usuario
+              let boxStyles = "bg-white border-slate-100 text-slate-300"; // Gris (Sin viajes)
+              
+              if (isToday) {
+                boxStyles = "bg-blue-600 border-blue-600 text-white shadow-blue-200"; // Azul (Hoy)
+              } else if (status?.hasTrips) {
+                if (status.allDelivered) {
+                  boxStyles = "bg-green-600 border-green-600 text-white shadow-green-100"; // Verde (Cumplido)
+                } else {
+                  boxStyles = "bg-orange-500 border-orange-500 text-white shadow-orange-100"; // Naranja (Asignado)
+                }
+              }
 
               return (
                 <button
@@ -185,26 +215,27 @@ export default function DriverRoutesPage() {
                   onClick={() => setSelectedDate(dateStr)}
                   className={cn(
                     "flex flex-col items-center justify-center min-w-[65px] h-20 rounded-2xl border-2 transition-all shrink-0",
-                    isSelected 
-                      ? "bg-blue-600 border-blue-600 text-white shadow-lg scale-105" 
-                      : "bg-white border-slate-100 text-slate-400"
+                    boxStyles,
+                    isSelected && "scale-110 shadow-lg ring-2 ring-offset-2 ring-blue-100 z-10"
                   )}
                 >
-                  <span className="text-[9px] font-black uppercase mb-1">
+                  <span className={cn(
+                    "text-[9px] font-black uppercase mb-1",
+                    isToday || status?.hasTrips ? "text-white/70" : "text-slate-400"
+                  )}>
                     {format(date, "EEE", { locale: es })}
                   </span>
                   <span className="text-lg font-black leading-none">
                     {format(date, "d")}
                   </span>
-                  {isToday && (
-                    <div className={cn("w-1 h-1 rounded-full mt-1", isSelected ? "bg-white" : "bg-blue-500")}></div>
+                  {isToday && !isSelected && (
+                    <div className="w-1.5 h-1.5 rounded-full bg-white mt-1"></div>
                   )}
                 </button>
               );
             })}
           </div>
 
-          {/* Flecha Derecha */}
           <button 
             onClick={() => handleScroll('right')}
             className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center shadow-md border border-slate-100 text-slate-400 hover:text-blue-600 transition-colors"
