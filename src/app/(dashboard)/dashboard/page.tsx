@@ -189,7 +189,7 @@ export default function MonitorOperativoPage() {
       const isAActive = a.status === 'on_route' || a.status === 'on_pause';
       const isBActive = b.status === 'on_route' || b.status === 'on_pause';
       if (isAActive && !isBActive) return -1;
-      if (!isAActive && isBActive) return 1;
+      if (!isAActive && b.status !== 'on_route') return 1;
       
       const dateA = `${a.pickupDate} ${a.pickupTime}`;
       const dateB = `${b.pickupDate} ${b.pickupTime}`;
@@ -944,7 +944,7 @@ export default function MonitorOperativoPage() {
                         {hubs?.find(h => h.id === selectedLoadForDock?.origin.id)?.loadingBays?.map(bay => (
                           <SelectItem key={bay.id} value={bay.name}>{bay.name}</SelectItem>
                         ))}
-                        {(!hubs?.find(h => h.id === selectedLoadForDock?.origin.id)?.loadingBays || hubs.find(h => h.id === selectedLoadForDock?.origin.id)?.loadingBays?.length === 0) && (
+                        {(!hubs?.find(h => h.id === selectedLoadForDock?.origin.id)?.loadingBays || (hubs.find(h => h.id === selectedLoadForDock?.origin.id)?.loadingBays?.length || 0) === 0) && (
                            <SelectItem value="Mesa de Entradas" disabled>Sin bocas definidas</SelectItem>
                         )}
                      </SelectContent>

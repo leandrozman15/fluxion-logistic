@@ -419,20 +419,16 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center z-50">
         <div className="max-w-4xl w-full flex justify-between items-center px-4">
           <Button variant="ghost" onClick={handleBack} disabled={step === 1 || isSubmitting}>
-            <ChevronLeft size={16} className="mr-1" /> Volver
+             <ChevronLeft size={16} className="mr-1" /> VOLVER
           </Button>
-          <div className="flex gap-2">
-            {step < 4 ? (
-              <Button onClick={handleNext} className="bg-blue-600">
-                Siguiente <ArrowRight className="ml-2" size={16} />
-              </Button>
-            ) : (
-              <Button onClick={handleSubmit} className="bg-blue-600" disabled={isSubmitting || isProcessingAvatar}>
-                {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" size={16} />}
-                {truckId ? 'Guardar Cambios' : 'Habilitar Unidad'}
-              </Button>
-            )}
-          </div>
+          {step < 4 ? (
+            <Button onClick={handleNext} className="bg-blue-600">SIGUIENTE <ChevronRight size={16} className="ml-1" /></Button>
+          ) : (
+            <Button onClick={handleSubmit} className="bg-green-600" disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" size={16} />}
+              {truckId ? 'GUARDAR CAMBIOS' : 'HABILITAR UNIDAD'}
+            </Button>
+          )}
         </div>
       </div>
     </div>
