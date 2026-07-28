@@ -715,7 +715,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                         <p className="text-[9px] text-slate-400 italic">Dato vital para prorratear costos fijos sobre el kilometraje.</p>
                     </div>
                   </CardContent>
-                </Card>
+                </div>
               </div>
             </div>
           </div>
