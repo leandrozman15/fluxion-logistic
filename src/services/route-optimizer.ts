@@ -4,9 +4,9 @@ import { Client, Truck, Hub, OptimizedRouteProposal } from "@/app/lib/types";
 import { calculateDistance } from "@/lib/utils/tracking-math";
 
 /**
- * @fileOverview Motor de optimización de rutas mejorado (Heurística de Clustering + Vecino Cercano).
- * Distribuye clientes agrupándolos por regiones geográficas para evitar que los camiones
- * se crucen o realicen trayectos ineficientes de largo alcance.
+ * @fileOverview Motor de optimización de rutas con Heurística de Barrido Geográfico.
+ * Implementa una estrategia de "Semilla Lejana": identifica los destinos más extremos
+ * y agrupa las paradas cercanas a ellos para cubrir corredores lógicos (ej. Rosario-Córdoba).
  */
 
 export async function optimizeDistribution(
@@ -21,7 +21,6 @@ export async function optimizeDistribution(
   const numVehicles = Math.min(trucks.length, stops.length);
   const targetsPerTruck = Math.ceil(unvisited.length / numVehicles);
   
-  // Inicializar propuestas
   const proposals: OptimizedRouteProposal[] = trucks.slice(0, numVehicles).map(t => ({
     truckId: t.id,
     truckPlate: t.plate,
@@ -32,96 +31,100 @@ export async function optimizeDistribution(
   }));
 
   /**
-   * NUEVA LÓGICA: Llenado por Bloques (Clustering Greedy)
-   * En lugar de repartir 1 a 1 (round-robin), permitimos que cada camión 
-   * complete su 'cuota' de paradas cercanas entre sí.
+   * ESTRATEGIA: Regionalización por Extremos
+   * 1. Buscamos el punto más lejano a la base que no haya sido visitado.
+   * 2. Lo usamos como "ancla" para un camión.
+   * 3. Llenamos ese camión con las paradas más cercanas a esa ancla.
    */
-  for (let i = 0; i < numVehicles; i++) {
+  for (let i = 0; i < numVehicles && unvisited.length > 0; i++) {
     const currentProp = proposals[i];
-    let currentLat = startHub.lat;
-    let currentLng = startHub.lng;
+    
+    // Encontrar la parada más lejana a la base (define la región/corredor)
+    let furthestIdx = -1;
+    let maxDistFromBase = -1;
 
-    // Cada camión intenta tomar sus paradas más cercanas consecutivamente
-    for (let j = 0; j < targetsPerTruck && unvisited.length > 0; j++) {
-      let closestIdx = -1;
-      let minDistance = Infinity;
+    unvisited.forEach((s, idx) => {
+      const d = calculateDistance(startHub.lat, startHub.lng, s.address.lat!, s.address.lng!);
+      if (d > maxDistFromBase) {
+        maxDistFromBase = d;
+        furthestIdx = idx;
+      }
+    });
 
-      unvisited.forEach((stop, idx) => {
-        const d = calculateDistance(currentLat, currentLng, stop.address.lat!, stop.address.lng!);
-        if (d < minDistance) {
-          minDistance = d;
-          closestIdx = idx;
+    if (furthestIdx !== -1) {
+      const anchorStop = unvisited[furthestIdx];
+      currentProp.stops.push(anchorStop);
+      unvisited.splice(furthestIdx, 1);
+
+      // Llenar el resto del camión con puntos cercanos al ANCLA (no a la base)
+      // Esto asegura que Rosario y Córdoba (cercanos entre sí) se queden juntos
+      while (currentProp.stops.length < targetsPerTruck && unvisited.length > 0) {
+        let closestToAnchorIdx = -1;
+        let minDistanceToAnchor = Infinity;
+        
+        // Referencia: el último punto agregado a esta propuesta
+        const lastStop = currentProp.stops[currentProp.stops.length - 1];
+
+        unvisited.forEach((s, idx) => {
+          const d = calculateDistance(lastStop.address.lat!, lastStop.address.lng!, s.address.lat!, s.address.lng!);
+          if (d < minDistanceToAnchor) {
+            minDistanceToAnchor = d;
+            closestToAnchorIdx = idx;
+          }
+        });
+
+        if (closestToAnchorIdx !== -1) {
+          currentProp.stops.push(unvisited[closestToAnchorIdx]);
+          unvisited.splice(closestToAnchorIdx, 1);
         }
-      });
-
-      if (closestIdx !== -1) {
-        const selectedStop = unvisited[closestIdx];
-        currentProp.stops.push(selectedStop);
-        
-        // Actualizar posición de referencia al punto recién agregado
-        currentLat = selectedStop.address.lat!;
-        currentLng = selectedStop.address.lng!;
-        
-        // Remover de la lista global de pendientes
-        unvisited.splice(closestIdx, 1);
       }
     }
   }
 
-  // Si sobraron paradas por redondeo, se las damos al último camión
-  if (unvisited.length > 0) {
-    const lastProp = proposals[numVehicles - 1];
-    let lastLat = lastProp.stops.length > 0 
-      ? lastProp.stops[lastProp.stops.length - 1].address.lat! 
-      : startHub.lat;
-    let lastLng = lastProp.stops.length > 0 
-      ? lastProp.stops[lastProp.stops.length - 1].address.lng! 
-      : startHub.lng;
-
-    while (unvisited.length > 0) {
-      let closestIdx = -1;
-      let minDistance = Infinity;
-
-      unvisited.forEach((stop, idx) => {
-        const d = calculateDistance(lastLat, lastLat, stop.address.lat!, stop.address.lng!);
-        if (d < minDistance) {
-          minDistance = d;
-          closestIdx = idx;
-        }
-      });
-
-      if (closestIdx !== -1) {
-        const stop = unvisited[closestIdx];
-        lastProp.stops.push(stop);
-        lastLat = stop.address.lat!;
-        lastLng = stop.address.lng!;
-        unvisited.splice(closestIdx, 1);
-      }
-    }
-  }
-
-  // 3. Cálculo final de distancias y tiempos por propuesta
+  // 3. Post-procesamiento: Secuenciación y Cálculo Final
   proposals.forEach(prop => {
     if (prop.stops.length === 0) return;
 
-    let totalDist = 0;
+    // Re-ordenar las paradas de la propuesta para que sean óptimas desde la base
+    // (Orden de entrega: Base -> Cerca -> Lejos -> Retorno)
+    const orderedStops: Client[] = [];
     let currentLat = startHub.lat;
     let currentLng = startHub.lng;
+    const pool = [...prop.stops];
 
-    // Trayecto secuencial optimizado
+    while (pool.length > 0) {
+      let nextIdx = -1;
+      let minDist = Infinity;
+      pool.forEach((s, idx) => {
+        const d = calculateDistance(currentLat, currentLng, s.address.lat!, s.address.lng!);
+        if (d < minDist) {
+          minDist = d;
+          nextIdx = idx;
+        }
+      });
+      const selected = pool.splice(nextIdx, 1)[0];
+      orderedStops.push(selected);
+      currentLat = selected.address.lat!;
+      currentLng = selected.address.lng!;
+    }
+
+    prop.stops = orderedStops;
+
+    // Totales
+    let totalDist = 0;
+    let cursorLat = startHub.lat;
+    let cursorLng = startHub.lng;
+
     prop.stops.forEach(s => {
-      const d = calculateDistance(currentLat, currentLng, s.address.lat!, s.address.lng!);
-      totalDist += d;
-      currentLat = s.address.lat!;
-      currentLng = s.address.lng!;
+      totalDist += calculateDistance(cursorLat, cursorLng, s.address.lat!, s.address.lng!);
+      cursorLat = s.address.lat!;
+      cursorLng = s.address.lng!;
     });
 
-    // Tramo Final de retorno a la Sede de Destino
-    totalDist += calculateDistance(currentLat, currentLng, endHub.lat, endHub.lng);
+    // Retorno a base final
+    totalDist += calculateDistance(cursorLat, cursorLng, endHub.lat, endHub.lng);
 
     prop.totalDistanceKm = Math.round(totalDist);
-    
-    // Cálculo estimado: 60km/h promedio + 30 min por trámite de descarga en cada punto
     prop.estimatedDurationMinutes = Math.round((totalDist / 60) * 60) + (prop.stops.length * 30);
   });
 

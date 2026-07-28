@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection } from "@/firebase";
-import { collection, serverTimestamp, doc, updateDoc, setDoc, query, orderBy, where } from "firebase/firestore";
+import { collection, serverTimestamp, doc, updateDoc, setDoc, query, orderBy } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,9 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Truck, ArrowLeft, ArrowRight, Save, Loader2, 
   Gauge, Box, Anchor, Layers, 
-  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon, LayoutGrid, Building2, User, DollarSign, Activity, TrendingUp, Zap, Scale, Trash2, Plus, UserCheck
+  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon, LayoutGrid, Building2, User, DollarSign, Activity, TrendingUp, Zap, Scale, Trash2, Plus, UserCheck, X
 } from "lucide-react";
-import { Truck as TruckType, Driver, OwnershipType, TruckCosts, Expense } from "@/app/lib/types";
+import { Truck as TruckType, Driver, OwnershipType, TruckCosts } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -24,15 +24,6 @@ import { compressImage } from "@/lib/utils/image-compression";
 interface TruckFormWizardProps {
   truckId?: string;
 }
-
-const BRANDS = {
-  "Scania": ["R450", "R500", "G410", "P320", "S500"],
-  "Volvo": ["FH540", "FMX460", "FH420", "FM330"],
-  "Mercedes-Benz": ["Actros 2651", "Axor 2544", "Atego 1722"],
-  "Iveco": ["Stralis Hi-Way", "Trakker", "Tector 170E28"],
-  "Volkswagen": ["Constellation 19.330", "Delivery 9.170"],
-  "Otro": ["Personalizado"]
-};
 
 const INITIAL_COSTS: TruckCosts = {
   fixed: {
@@ -61,7 +52,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isProcessingAvatar, setIsProcessingAvatar] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<Partial<TruckType>>({
     plate: "", chassis: "", brand: "", model: "", year: new Date().getFullYear(),
@@ -100,11 +91,6 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     }
   }, [formData.grossCombinedWeightKg, formData.unladenWeightKg]);
 
-  const handleNumericChange = (field: string, value: string) => {
-    const val = value === "" ? 0 : parseFloat(value);
-    setFormData(prev => ({ ...prev, [field]: isNaN(val) ? 0 : val }));
-  };
-
   const handleCostChange = (block: keyof TruckCosts, field: string, value: string, subField?: string) => {
     const val = value === "" ? 0 : parseFloat(value);
     setFormData(prev => {
@@ -114,6 +100,33 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
       else updatedCosts[block][field] = isNaN(val) ? 0 : val;
       return { ...prev, costs: updatedCosts };
     });
+  };
+
+  const onAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setIsProcessingAvatar(true);
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64 = event.target?.result as string;
+        const compressed = await compressImage(base64);
+        setFormData(prev => ({ ...prev, avatarUrl: compressed }));
+        setIsProcessingAvatar(false);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAddCompanion = (id: string) => {
+    if (id === 'none') return;
+    const current = formData.assignedCompanionIds || [];
+    if (!current.includes(id)) {
+      setFormData({ ...formData, assignedCompanionIds: [...current, id] });
+    }
+  };
+
+  const removeCompanion = (id: string) => {
+    setFormData({ ...formData, assignedCompanionIds: (formData.assignedCompanionIds || []).filter(cid => cid !== id) });
   };
 
   const handleSubmit = async () => {
@@ -126,7 +139,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
       } else {
         const newRef = doc(collection(db, "trucks"));
         await setDoc(newRef, { ...formData, id: newRef.id, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-        toast({ title: "Alta de Unidad Exitosa" });
+        toast({ title: "Alta Exitosa" });
       }
       router.push('/flota');
     } catch (e) {
@@ -143,7 +156,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => router.back()}><ArrowLeft /></Button>
-          <div><h1 className="text-2xl font-bold">Gestión de Unidad</h1></div>
+          <h1 className="text-2xl font-bold">Ficha de Unidad</h1>
         </div>
       </div>
 
@@ -155,7 +168,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
             { id: 4, label: "Costos", icon: DollarSign }
           ].map(s => (
             <div key={s.id} className={cn("flex flex-col items-center gap-1 flex-1", step === s.id ? "text-blue-600" : "text-slate-400")}>
-               <div className={cn("w-8 h-8 rounded-full flex items-center justify-center border", step >= s.id ? "bg-blue-600 text-white border-blue-600" : "bg-white")}>
+               <div className={cn("w-8 h-8 rounded-full flex items-center justify-center border", step >= s.id ? "bg-blue-600 text-white border-blue-600 shadow-sm" : "bg-white")}>
                  {step > s.id ? <CheckCircle2 size={16} /> : <s.icon size={16} />}
                </div>
                <span className="text-[9px] font-bold uppercase">{s.label}</span>
@@ -165,30 +178,116 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
 
       <div className="animate-in fade-in duration-300">
         {step === 1 && (
-          <Card><CardHeader><CardTitle>Datos Básicos</CardTitle></CardHeader><CardContent className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>Patente</Label><Input value={formData.plate} onChange={e => setFormData({...formData, plate: e.target.value.toUpperCase()})} /></div><div className="space-y-2"><Label>Chofer</Label><Select value={formData.assignedDriverId || 'none'} onValueChange={v => setFormData({...formData, assignedDriverId: v})}><SelectTrigger><SelectValue placeholder="Elegir" /></SelectTrigger><SelectContent><SelectItem value="none">Sin asignar</SelectItem>{driversOnly.map(d => <SelectItem key={d.id} value={d.id}>{d.lastName}, {d.firstName}</SelectItem>)}</SelectContent></Select></div></CardContent></Card>
+          <div className="space-y-6">
+            <Card>
+              <CardHeader><CardTitle>Identificación del Vehículo</CardTitle></CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex flex-col items-center justify-center p-6 bg-slate-50 border-2 border-dashed rounded-2xl space-y-4">
+                  <Avatar className="w-24 h-24 border-2 border-white shadow-md rounded-xl">
+                    <AvatarImage src={formData.avatarUrl} className="object-cover" />
+                    <AvatarFallback className="bg-blue-50 text-blue-600 rounded-xl"><Truck size={40} /></AvatarFallback>
+                  </Avatar>
+                  <input type="file" ref={avatarInputRef} className="hidden" accept="image/*" onChange={onAvatarChange} />
+                  <Button variant="outline" size="sm" onClick={() => avatarInputRef.current?.click()} disabled={isProcessingAvatar}>
+                    {isProcessingAvatar ? <Loader2 className="animate-spin w-4 h-4" /> : <Camera size={14} className="mr-2" />} SUBIR FOTO
+                  </Button>
+                </div>
+                <div className="space-y-4">
+                  <div className="space-y-1"><Label>Patente / Dominio</Label><Input value={formData.plate} onChange={e => setFormData({...formData, plate: e.target.value.toUpperCase()})} /></div>
+                  <div className="space-y-1"><Label>Marca / Modelo</Label><Input value={formData.brand} onChange={e => setFormData({...formData, brand: e.target.value})} /></div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader><CardTitle className="text-sm flex items-center gap-2"><UserCheck className="text-blue-600" /> Personal de Cabina</CardTitle></CardHeader>
+              <CardContent className="space-y-6">
+                 <div className="space-y-2">
+                    <Label>Chofer Profesional (Tractor)</Label>
+                    <Select value={formData.assignedDriverId || 'none'} onValueChange={v => setFormData({...formData, assignedDriverId: v})}>
+                       <SelectTrigger><SelectValue placeholder="Elegir Chofer" /></SelectTrigger>
+                       <SelectContent>
+                          <SelectItem value="none">Sin asignar</SelectItem>
+                          {driversOnly.map(d => <SelectItem key={d.id} value={d.id}>{d.lastName}, {d.firstName}</SelectItem>)}
+                       </SelectContent>
+                    </Select>
+                 </div>
+                 <div className="space-y-3">
+                    <Label>Acompañantes / Ayudantes</Label>
+                    <Select onValueChange={handleAddCompanion}>
+                       <SelectTrigger><SelectValue placeholder="Agregar Acompañante..." /></SelectTrigger>
+                       <SelectContent>
+                          {companionsOnly.map(d => <SelectItem key={d.id} value={d.id}>{d.lastName}, {d.firstName}</SelectItem>)}
+                       </SelectContent>
+                    </Select>
+                    <div className="flex flex-wrap gap-2 pt-2">
+                       {formData.assignedCompanionIds?.map(cid => {
+                         const dr = companionsOnly.find(c => c.id === cid);
+                         return (
+                           <Badge key={cid} variant="secondary" className="pl-2 pr-1 py-1 gap-2 bg-blue-50 text-blue-700 border-blue-100">
+                             {dr ? `${dr.lastName}, ${dr.firstName[0]}.` : cid}
+                             <button onClick={() => removeCompanion(cid)} className="hover:text-red-500"><X size={12} /></button>
+                           </Badge>
+                         );
+                       })}
+                    </div>
+                 </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {step === 2 && (
-          <Card><CardHeader><CardTitle>Configuración Arrastre</CardTitle></CardHeader><CardContent className="space-y-4">
-             <div className="grid grid-cols-2 gap-4">
-                <Button variant={formData.haulingType === 'standard' ? 'default' : 'outline'} onClick={() => setFormData({...formData, haulingType: 'standard', grossCombinedWeightKg: 45000})}>Standard (45tn)</Button>
-                <Button variant={formData.haulingType === 'bitren' ? 'default' : 'outline'} onClick={() => setFormData({...formData, haulingType: 'bitren', grossCombinedWeightKg: 60000})}>Bitrén (60/75tn)</Button>
-             </div>
-             {formData.haulingType === 'bitren' && (
-                <div className="p-4 bg-blue-50 rounded-xl space-y-4">
-                   <h3 className="text-xs font-bold flex items-center gap-2 text-blue-700"><Zap size={14}/> Configuración Bitrén</h3>
-                   <div className="grid grid-cols-2 gap-4"><Input placeholder="Patente 1er Semi" value={formData.bitren?.firstSemiPlate} onChange={e => setFormData({...formData, bitren: {...(formData.bitren || {} as any), firstSemiPlate: e.target.value.toUpperCase()}})} /><Input placeholder="Patente 2do Semi" value={formData.bitren?.secondSemiPlate} onChange={e => setFormData({...formData, bitren: {...(formData.bitren || {} as any), secondSemiPlate: e.target.value.toUpperCase()}})} /></div>
+          <Card>
+            <CardHeader><CardTitle>Configuración de Arrastre</CardTitle></CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <button 
+                  className={cn("p-6 border-2 rounded-2xl flex flex-col items-center gap-2 transition-all", formData.haulingType === 'standard' ? "bg-blue-600 text-white border-blue-600 shadow-lg" : "bg-white text-slate-400 border-slate-100")}
+                  onClick={() => setFormData({...formData, haulingType: 'standard', grossCombinedWeightKg: 45000})}
+                >
+                  <Truck size={32} />
+                  <span className="font-black text-[10px] uppercase">Standard (45 TN)</span>
+                </button>
+                <button 
+                  className={cn("p-6 border-2 rounded-2xl flex flex-col items-center gap-2 transition-all", formData.haulingType === 'bitren' ? "bg-blue-600 text-white border-blue-600 shadow-lg" : "bg-white text-slate-400 border-slate-100")}
+                  onClick={() => setFormData({...formData, haulingType: 'bitren', grossCombinedWeightKg: 60000})}
+                >
+                  <Zap size={32} />
+                  <span className="font-black text-[10px] uppercase">Bitrén (60/75 TN)</span>
+                </button>
+              </div>
+              {formData.haulingType === 'bitren' && (
+                <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl space-y-4 animate-in fade-in">
+                  <h3 className="text-sm font-bold flex items-center gap-2 text-blue-800"><Zap size={16}/> Configuración Bitrén (Res. 1196/2025)</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input placeholder="Patente 1er Semi" value={formData.bitren?.firstSemiPlate} onChange={e => setFormData({...formData, bitren: {...(formData.bitren || {} as any), firstSemiPlate: e.target.value.toUpperCase()}})} />
+                    <Input placeholder="Patente 2do Semi" value={formData.bitren?.secondSemiPlate} onChange={e => setFormData({...formData, bitren: {...(formData.bitren || {} as any), secondSemiPlate: e.target.value.toUpperCase()}})} />
+                  </div>
                 </div>
-             )}
-          </CardContent></Card>
+              )}
+            </CardContent>
+          </Card>
         )}
 
         {step === 3 && (
-          <Card><CardHeader><CardTitle>Balance de Pesos Legal</CardTitle></CardHeader><CardContent className="grid grid-cols-2 gap-6">
-             <div className="space-y-2"><Label>PBTC Máx (kg)</Label><Input type="number" value={formData.grossCombinedWeightKg} onChange={e => handleNumericChange('grossCombinedWeightKg', e.target.value)} /></div>
-             <div className="space-y-2"><Label>Tara (kg)</Label><Input type="number" value={formData.unladenWeightKg} onChange={e => handleNumericChange('unladenWeightKg', e.target.value)} /></div>
-             <div className="col-span-2 p-4 bg-green-50 border border-green-100 rounded-xl"><p className="text-xs font-bold text-green-700 uppercase">Carga Útil Habilitada: {(formData.capacityKg || 0).toLocaleString()} KG</p></div>
-          </CardContent></Card>
+          <Card>
+            <CardHeader><CardTitle>Balance Legal de Pesos (Argentina)</CardTitle></CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-1">
+                 <Label className="text-xs uppercase font-bold text-slate-400">PBTC Máx (kg)</Label>
+                 <Input type="number" value={formData.grossCombinedWeightKg} onChange={e => setFormData({...formData, grossCombinedWeightKg: parseFloat(e.target.value) || 0})} />
+              </div>
+              <div className="space-y-1">
+                 <Label className="text-xs uppercase font-bold text-slate-400">Tara Real (kg)</Label>
+                 <Input type="number" value={formData.unladenWeightKg} onChange={e => setFormData({...formData, unladenWeightKg: parseFloat(e.target.value) || 0})} />
+              </div>
+              <div className="md:col-span-2 p-6 bg-green-50 border border-green-100 rounded-3xl text-center">
+                 <p className="text-[10px] uppercase font-black text-green-700 tracking-widest mb-1">Capacidad de Carga Útil</p>
+                 <p className="text-4xl font-black italic text-green-600">{(formData.capacityKg || 0).toLocaleString()} <span className="text-sm font-normal opacity-50 uppercase">kg</span></p>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {step === 4 && (
@@ -258,8 +357,16 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
 
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center z-50">
         <div className="max-w-4xl w-full flex justify-between items-center px-4">
-          <Button variant="ghost" onClick={() => setStep(step - 1)} disabled={step === 1 || isSubmitting}><ChevronLeft className="mr-1" size={16} /> Volver</Button>
-          {step < 4 ? <Button onClick={() => setStep(step + 1)}>Siguiente <ChevronRight className="ml-1" size={16} /></Button> : <Button onClick={handleSubmit} className="bg-green-600" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} GUARDAR</Button>}
+          <Button variant="ghost" onClick={() => setStep(prev => prev - 1)} disabled={step === 1 || isSubmitting}>
+             <ChevronLeft size={16} className="mr-1" /> VOLVER
+          </Button>
+          {step < 4 ? (
+            <Button onClick={() => setStep(prev => prev + 1)} className="bg-blue-600">SIGUIENTE <ChevronRight size={16} className="ml-1" /></Button>
+          ) : (
+            <Button onClick={handleSubmit} className="bg-green-600 shadow-lg" disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} GUARDAR CAMBIOS
+            </Button>
+          )}
         </div>
       </div>
     </div>
