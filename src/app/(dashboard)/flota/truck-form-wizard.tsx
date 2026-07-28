@@ -545,7 +545,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
 
                 <div className="space-y-6">
                   <div className="p-4 bg-slate-50 border rounded-2xl space-y-4">
-                     <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                         <Gauge size={14}/> Telemetría y GPS Base
                      </p>
                      <div className="space-y-2">
