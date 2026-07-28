@@ -46,7 +46,8 @@ import {
   CircleCheck,
   ListOrdered,
   Ship,
-  ScanBarcode
+  ScanBarcode,
+  MoveRight
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -62,7 +63,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { estimateFuelLiters } from "@/lib/utils/tracking-math";
+import { calculateDistance, estimateFuelLiters } from "@/lib/utils/tracking-math";
 import { toSafeDate, formatSafeDate } from "@/lib/utils/date-utils";
 
 const MapContainer = dynamic(
@@ -287,6 +288,24 @@ export default function MonitorOperativoPage() {
     };
   };
 
+  const getPlannedTotalKm = (load: Load) => {
+    if (!load.origin.lat || !load.origin.lng) return 0;
+    let total = 0;
+    let cursor = { lat: load.origin.lat, lng: load.origin.lng };
+
+    load.outboundStops.forEach(s => {
+      if (s.lat && s.lng) {
+        total += calculateDistance(cursor.lat, cursor.lng, s.lat, s.lng);
+        cursor = { lat: s.lat, lng: s.lng };
+      }
+    });
+
+    if (load.isRoundTrip && load.returnDestination?.lat) {
+      total += calculateDistance(cursor.lat, cursor.lng, load.returnDestination.lat, load.returnDestination.lng);
+    }
+    return Math.round(total);
+  };
+
   const RouteStatusLine = ({ load }: { load: Load }) => {
     const isStarted = load.status !== 'pending' && load.status !== 'assigned';
     const isFinished = load.status === 'delivered';
@@ -438,6 +457,7 @@ export default function MonitorOperativoPage() {
                const progress = tracking ? (tracking.distanceTraveledKm / (tracking.distanceTraveledKm + (tracking.distanceRemainingKm || 1))) * 100 : (load.status === 'delivered' ? 100 : 0);
                const times = getReconstructedStats(load);
                const isStarted = load.status !== 'pending' && load.status !== 'assigned';
+               const totalPlannedKm = getPlannedTotalKm(load);
 
                return (
                  <Collapsible 
@@ -616,6 +636,23 @@ export default function MonitorOperativoPage() {
                                </div>
                             )}
 
+                            <div className="pt-4 space-y-4">
+                               <h4 className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-2 tracking-widest">
+                                  <Navigation size={14} /> Recorrido del Viaje
+                               </h4>
+                               <Card className="bg-white dark:bg-slate-800 shadow-none border-slate-200">
+                                  <CardContent className="p-3 flex justify-between items-center">
+                                     <div>
+                                        <p className="text-[8px] font-black text-slate-400 uppercase">Recorrido Total Previsto</p>
+                                        <p className="text-xl font-black text-slate-900 dark:text-slate-100 italic">{totalPlannedKm} <span className="text-[10px] font-normal opacity-50 uppercase">km</span></p>
+                                     </div>
+                                     <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex items-center justify-center text-blue-600">
+                                        <RouteIcon size={20} />
+                                     </div>
+                                  </CardContent>
+                               </Card>
+                            </div>
+
                             {(load.status === 'on_route' || load.status === 'on_pause' || load.status === 'delivered') && (
                                <div className="pt-4 space-y-4">
                                   <h4 className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-2 tracking-widest">
@@ -676,39 +713,53 @@ export default function MonitorOperativoPage() {
                                     </div>
                                   </div>
                                </div>
-                               {load.outboundStops?.map((stop, idx) => (
-                                 <div key={stop.id} className="relative pt-2">
-                                    <div className={cn(
-                                       "absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm",
-                                       stop.deliveredAt ? "bg-green-600" : "bg-white dark:bg-slate-800 border-blue-400"
-                                    )}></div>
-                                    <div className={cn(
-                                       "p-4 rounded-xl border shadow-sm space-y-3 transition-all",
-                                       stop.deliveredAt ? "bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-900/30" : "bg-white dark:bg-slate-800/50 border-slate-200 dark:border-slate-700"
-                                    )}>
-                                       <div className="flex justify-between items-start">
-                                          <div className="min-w-0 flex-1">
-                                             <div className="flex items-center gap-2">
-                                                <p className="text-[9px] font-black text-blue-600 uppercase tracking-tighter">Parada {idx + 1}</p>
-                                                {stop.deliveredAt && (
-                                                   <Badge className="bg-green-600 text-white text-[7px] h-3 border-none px-1 uppercase font-black">Confirmada</Badge>
-                                                )}
-                                             </div>
-                                             <p className="text-xs font-black text-slate-800 dark:text-slate-100 truncate uppercase mt-0.5">{stop.name}</p>
-                                             <p className="text-[9px] text-slate-500 truncate">{stop.address}</p>
-                                          </div>
-                                          <div className="text-right shrink-0">
-                                             <Badge className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[8px] border-none font-black">{stop.weightKg} KG</Badge>
-                                             {stop.deliveredAt && (
-                                                <p className="text-[8px] font-black text-green-600 mt-1 uppercase italic">
-                                                   OK: {formatSafeDate(stop.deliveredAt, "HH:mm")} hs
-                                                </p>
-                                             )}
-                                          </div>
-                                       </div>
-                                    </div>
-                                 </div>
-                               ))}
+                               {load.outboundStops?.map((stop, idx) => {
+                                 const prevPoint = idx === 0 ? load.origin : load.outboundStops[idx - 1];
+                                 const distanceToPrevious = (stop.lat && stop.lng && prevPoint.lat && prevPoint.lng) 
+                                   ? Math.round(calculateDistance(prevPoint.lat, prevPoint.lng, stop.lat, stop.lng))
+                                   : 0;
+
+                                 return (
+                                   <div key={stop.id} className="relative pt-2">
+                                      <div className={cn(
+                                         "absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm",
+                                         stop.deliveredAt ? "bg-green-600" : "bg-white dark:bg-slate-800 border-blue-400"
+                                      )}></div>
+                                      
+                                      <div className="flex items-center gap-2 mb-1">
+                                         <Badge variant="secondary" className="bg-blue-50 text-blue-700 text-[8px] h-3 px-1.5 flex items-center gap-1">
+                                            <MoveRight size={8}/> {distanceToPrevious} KM
+                                         </Badge>
+                                      </div>
+
+                                      <div className={cn(
+                                         "p-4 rounded-xl border shadow-sm space-y-3 transition-all",
+                                         stop.deliveredAt ? "bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-900/30" : "bg-white dark:bg-slate-800/50 border-slate-200 dark:border-slate-700"
+                                      )}>
+                                         <div className="flex justify-between items-start">
+                                            <div className="min-w-0 flex-1">
+                                               <div className="flex items-center gap-2">
+                                                  <p className="text-[9px] font-black text-blue-600 uppercase tracking-tighter">Parada {idx + 1}</p>
+                                                  {stop.deliveredAt && (
+                                                     <Badge className="bg-green-600 text-white text-[7px] h-3 border-none px-1 uppercase font-black">Confirmada</Badge>
+                                                  )}
+                                               </div>
+                                               <p className="text-xs font-black text-slate-800 dark:text-slate-100 truncate uppercase mt-0.5">{stop.name}</p>
+                                               <p className="text-[9px] text-slate-500 truncate">{stop.address}</p>
+                                            </div>
+                                            <div className="text-right shrink-0">
+                                               <Badge className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[8px] border-none font-black">{stop.weightKg} KG</Badge>
+                                               {stop.deliveredAt && (
+                                                  <p className="text-[8px] font-black text-green-600 mt-1 uppercase italic">
+                                                     OK: {formatSafeDate(stop.deliveredAt, "HH:mm")} hs
+                                                  </p>
+                                               )}
+                                            </div>
+                                         </div>
+                                      </div>
+                                   </div>
+                                 );
+                               })}
                             </div>
                          </div>
 
@@ -718,29 +769,58 @@ export default function MonitorOperativoPage() {
                             </h4>
                             {load.isRoundTrip ? (
                                <div className="space-y-3 relative pl-4 border-l-2 border-dashed border-orange-200 dark:border-orange-800">
-                                  {load.returnStops?.map((stop) => (
-                                    <div key={stop.id} className="relative pt-2">
-                                       <div className={cn(
-                                          "absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm",
-                                          stop.deliveredAt ? "bg-green-600" : "bg-orange-500"
-                                       )}></div>
-                                       <div className="bg-orange-50/50 dark:bg-orange-950/10 p-4 rounded-xl border border-orange-100 dark:border-orange-900/30 shadow-sm space-y-2">
-                                          <div className="flex justify-between items-start">
-                                             <div className="space-y-0.5">
-                                                <p className="text-[9px] font-black text-orange-600 uppercase">Recolección Retorno</p>
-                                                <p className="text-xs font-bold text-orange-700 dark:text-orange-400 uppercase">{stop.name}</p>
-                                             </div>
-                                             <Badge className="bg-orange-100 text-orange-700 text-[8px] border-orange-200 font-black">{stop.weightKg} KG</Badge>
-                                          </div>
-                                       </div>
-                                    </div>
-                                  ))}
+                                  {load.returnStops?.map((stop, rIdx) => {
+                                    const prev = rIdx === 0 
+                                      ? (load.outboundStops.length > 0 ? load.outboundStops[load.outboundStops.length - 1] : load.origin)
+                                      : load.returnStops[rIdx - 1];
+                                    
+                                    const d = (stop.lat && stop.lng && prev.lat && prev.lng) 
+                                      ? Math.round(calculateDistance(prev.lat, prev.lng, stop.lat, stop.lng))
+                                      : 0;
+
+                                    return (
+                                      <div key={stop.id} className="relative pt-2">
+                                         <div className={cn(
+                                            "absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm",
+                                            stop.deliveredAt ? "bg-green-600" : "bg-orange-500"
+                                         )}></div>
+                                         <div className="flex items-center gap-2 mb-1">
+                                            <Badge variant="secondary" className="bg-orange-50 text-orange-700 text-[8px] h-3 px-1.5 flex items-center gap-1">
+                                               <MoveRight size={8}/> {d} KM
+                                            </Badge>
+                                         </div>
+                                         <div className="bg-orange-50/50 dark:bg-orange-950/10 p-4 rounded-xl border border-orange-100 dark:border-orange-900/30 shadow-sm space-y-2">
+                                            <div className="flex justify-between items-start">
+                                               <div className="space-y-0.5">
+                                                  <p className="text-[9px] font-black text-orange-600 uppercase">Recolección Retorno</p>
+                                                  <p className="text-xs font-bold text-orange-700 dark:text-orange-400 uppercase">{stop.name}</p>
+                                               </div>
+                                               <Badge className="bg-orange-100 text-orange-700 text-[8px] border-orange-200 font-black">{stop.weightKg} KG</Badge>
+                                            </div>
+                                         </div>
+                                      </div>
+                                    );
+                                  })}
                                   {load.returnDestination?.name && (
                                     <div className="relative pt-2">
                                        <div className={cn(
                                           "absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm",
                                           load.status === 'delivered' ? "bg-green-600" : "bg-slate-900"
                                        )}></div>
+                                       
+                                       {load.outboundStops.length > 0 && (
+                                         <div className="flex items-center gap-2 mb-1">
+                                            <Badge variant="secondary" className="bg-slate-100 text-slate-700 text-[8px] h-3 px-1.5 flex items-center gap-1">
+                                               <MoveRight size={8}/> {Math.round(calculateDistance(
+                                                 load.outboundStops[load.outboundStops.length - 1].lat!, 
+                                                 load.outboundStops[load.outboundStops.length - 1].lng!, 
+                                                 load.returnDestination.lat!, 
+                                                 load.returnDestination.lng!
+                                               ))} KM (Tramo Final)
+                                            </Badge>
+                                         </div>
+                                       )}
+
                                        <div className="bg-slate-900 text-white p-4 rounded-xl space-y-2 shadow-xl">
                                           <div className="flex justify-between items-center">
                                              <p className="text-[8px] font-black text-white/50 uppercase tracking-widest">Fin de Jornada</p>
