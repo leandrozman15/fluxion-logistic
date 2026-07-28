@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
@@ -42,7 +43,8 @@ import {
   CalendarDays,
   Anchor,
   CirclePlay,
-  XCircle
+  XCircle,
+  CircleCheck
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -225,27 +227,6 @@ export default function MonitorOperativoPage() {
     }
   };
 
-  const truckIcon = L ? L.divIcon({
-    className: 'custom-truck-icon',
-    html: `<div class="bg-blue-600 text-white p-2 rounded-full shadow-lg border-2 border-white"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9V4"/><path d="M19 18h2a1 1 0 0 0 1-1v-4.24a2 2 0 0 0-.81-1.6l-3.19-2.39A2 2 0 0 0 17 8.17V18Z"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg></div>`,
-    iconSize: [32, 32],
-    iconAnchor: [16, 16]
-  }) : null;
-
-  const hubIcon = (isMain: boolean) => L ? L.divIcon({
-    className: 'custom-hub-icon',
-    html: `<div class="${isMain ? 'bg-amber-500' : 'bg-slate-900 dark:bg-slate-800'} text-white p-2 rounded-lg shadow-xl border-2 border-white flex items-center justify-center">${isMain ? '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' : '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/><path d="M3 9h18"/><path d="M3 15h18"/></svg>'}</div>`,
-    iconSize: [36, 36],
-    iconAnchor: [18, 18]
-  }) : null;
-
-  const clientIcon = L ? L.divIcon({
-    className: 'custom-client-icon',
-    html: `<div class="bg-green-600 text-white p-1.5 rounded-full shadow-lg border-2 border-white"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z"/><path d="m3 9 2.45-4.9A2 2 0 0 1 7.24 3h10a2 2 0 0 1 1.79 1.1L21 9"/></svg></div>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14]
-  }) : null;
-
   const calculateETA = (distanceRemaining: number | undefined, currentSpeed: number | undefined) => {
     if (distanceRemaining && (currentSpeed === undefined || currentSpeed < 1)) return "DETENIDO";
     if (!distanceRemaining && currentSpeed && currentSpeed >= 1) return "EN MOVIMIENTO";
@@ -304,6 +285,107 @@ export default function MonitorOperativoPage() {
     };
   };
 
+  /**
+   * Componente interno para mostrar la línea de estado visual de la ruta
+   */
+  const RouteStatusLine = ({ load }: { load: Load }) => {
+    const isStarted = load.status !== 'pending' && load.status !== 'assigned';
+    const isFinished = load.status === 'delivered';
+    const stops = load.outboundStops || [];
+    
+    // Encontrar la última parada entregada
+    const lastDeliveredIdx = stops.reduce((acc, s, idx) => s.deliveredAt ? idx : acc, -1);
+    const nextStopIdx = lastDeliveredIdx + 1;
+    const isReturnPhase = isStarted && !isFinished && lastDeliveredIdx === stops.length - 1;
+
+    return (
+      <div className="space-y-1.5 min-w-0">
+        <div className="flex items-center gap-1.5 overflow-hidden">
+          {/* Origen (Base) */}
+          <div className={cn(
+            "w-3 h-3 rounded-full shrink-0 flex items-center justify-center transition-all",
+            !isStarted ? "bg-red-500" : "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"
+          )}>
+            <div className="w-1 h-1 bg-white rounded-full"></div>
+          </div>
+          
+          {/* Flecha a P1 */}
+          <ArrowRight 
+            size={12} 
+            className={cn(
+              "shrink-0",
+              !isStarted ? "text-slate-200" : 
+              (lastDeliveredIdx >= 0 || isFinished) ? "text-green-500" : "text-blue-500 animate-pulse"
+            )} 
+          />
+
+          {/* Destino (Si hay paradas) */}
+          {stops.length > 0 && (
+            <>
+              <div className={cn(
+                "w-3 h-3 rounded-full shrink-0 transition-all",
+                lastDeliveredIdx >= 0 ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-slate-200"
+              )} />
+              
+              <ArrowRight 
+                size={12} 
+                className={cn(
+                  "shrink-0",
+                  !isStarted ? "text-slate-200" :
+                  isFinished ? "text-green-500" : 
+                  isReturnPhase ? "text-blue-500 animate-pulse" : 
+                  lastDeliveredIdx >= 0 ? "text-blue-400" : "text-slate-300"
+                )} 
+              />
+            </>
+          )}
+
+          {/* Destino Final (Cierre) */}
+          <div className={cn(
+            "w-3 h-3 rounded-full shrink-0 transition-all",
+            isFinished ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-slate-200"
+          )} />
+
+          <span className="text-[10px] font-black text-slate-500 uppercase tracking-tighter truncate ml-1">
+            {isFinished ? `Finalizado en ${load.returnDestination?.name || 'Base'}` : 
+             !isStarted ? `Sede: ${load.origin.name}` :
+             isReturnPhase ? `Retorno a Base` :
+             `A: ${stops[nextStopIdx]?.name || 'Destino'}`}
+          </span>
+        </div>
+
+        {/* ETA GPS Dinámico */}
+        {(load.status === 'on_route' || load.status === 'on_pause') && load.tracking && (
+          <div className="flex items-center gap-1.5 text-[10px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/20 w-fit px-2.5 py-0.5 rounded-full border border-blue-100 dark:border-blue-800">
+             <Zap size={10} className="animate-pulse fill-current" /> 
+             ETA GPS: {calculateETA(load.tracking.distanceRemainingKm, load.tracking.currentSpeed)}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const hubIcon = (isMain: boolean) => L ? L.divIcon({
+    className: 'custom-hub-icon',
+    html: `<div class="${isMain ? 'bg-amber-500' : 'bg-slate-900 dark:bg-slate-800'} text-white p-2 rounded-lg shadow-xl border-2 border-white flex items-center justify-center">${isMain ? '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' : '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/><path d="M3 9h18"/><path d="M3 15h18"/></svg>'}</div>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18]
+  }) : null;
+
+  const truckIcon = L ? L.divIcon({
+    className: 'custom-truck-icon',
+    html: `<div class="bg-blue-600 text-white p-2 rounded-full shadow-lg border-2 border-white"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9V4"/><path d="M19 18h2a1 1 0 0 0 1-1v-4.24a2 2 0 0 0-.81-1.6l-3.19-2.39A2 2 0 0 0 17 8.17V18Z"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg></div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16]
+  }) : null;
+
+  const clientIcon = L ? L.divIcon({
+    className: 'custom-client-icon',
+    html: `<div class="bg-green-600 text-white p-1.5 rounded-full shadow-lg border-2 border-white"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z"/><path d="m3 9 2.45-4.9A2 2 0 0 1 7.24 3h10a2 2 0 0 1 1.79 1.1L21 9"/></svg></div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14]
+  }) : null;
+
   if (!mounted) return <div className="h-[80vh] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
@@ -359,7 +441,6 @@ export default function MonitorOperativoPage() {
                const truck = trucks?.find(t => t.id === load.assignedTruckId);
                const isExpanded = expandedLoadId === load.id;
                const tracking = load.tracking;
-               const destination = load.outboundStops?.[load.outboundStops.length - 1]?.name || 'S/D';
                const efficiency = calculateEfficiency(load);
                const progress = tracking ? (tracking.distanceTraveledKm / (tracking.distanceTraveledKm + (tracking.distanceRemainingKm || 1))) * 100 : (load.status === 'delivered' ? 100 : 0);
                const times = getReconstructedStats(load);
@@ -417,9 +498,9 @@ export default function MonitorOperativoPage() {
                                 </Badge>
                               )}
                             </div>
-                            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-tight truncate">
-                               <Building2 size={12} className="text-blue-500" /> {load.origin.name} <ArrowRight size={10} className="text-slate-300" /> {destination}
-                            </div>
+                            
+                            {/* NUEVA LÍNEA DE ESTADO VISUAL DE RUTA */}
+                            <RouteStatusLine load={load} />
                          </div>
                       </div>
 
@@ -436,18 +517,10 @@ export default function MonitorOperativoPage() {
                             </div>
                          </div>
                          <div className="space-y-1">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">ETA (Llegada Est.)</p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Salida Programada</p>
                             <div className="space-y-0.5">
-                               {(load.status === 'on_route' || load.status === 'on_pause') && tracking ? (
-                                  <p className="text-xs font-black text-green-600 dark:text-green-400 flex items-center gap-1">
-                                    <Clock size={10} /> {calculateETA(tracking.distanceRemainingKm, tracking.currentSpeed)}
-                                  </p>
-                               ) : load.status === 'delivered' ? (
-                                  <p className="text-xs font-bold text-green-600 italic">Misión Cumplida</p>
-                               ) : (
-                                  <p className="text-xs font-bold text-slate-400 italic">Programado</p>
-                               )}
-                               <p className="text-[9px] font-bold text-slate-400 uppercase">Salida: {load.pickupTime}hs</p>
+                               <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{load.pickupTime} hs</p>
+                               <p className="text-[9px] font-bold text-slate-400 uppercase">{load.serviceType}</p>
                             </div>
                          </div>
                          
@@ -787,3 +860,4 @@ export default function MonitorOperativoPage() {
     </div>
   );
 }
+
