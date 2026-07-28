@@ -423,7 +423,7 @@ export default function MonitorOperativoPage() {
                          </div>
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-3 flex-[2] w-full lg:w-auto mt-4 lg:mt-0 border-t lg:border-t-0 pt-4 lg:pt-0">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-8 gap-y-3 flex-[2] w-full lg:w-auto mt-4 lg:mt-0 border-t lg:border-t-0 pt-4 lg:pt-0">
                          <div className="space-y-1">
                             <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Personal y Unidad</p>
                             <div className="space-y-0.5">
@@ -459,21 +459,6 @@ export default function MonitorOperativoPage() {
                                   <span className={cn("text-xs font-black", efficiency > 80 ? "text-green-600" : "text-orange-600")}>{efficiency}%</span>
                                </div>
                                <Progress value={progress} className="h-1 w-20 bg-slate-100" />
-                            </div>
-                         </div>
-
-                         <div className="space-y-1">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Tiempo de Jornada</p>
-                            <div className="space-y-0.5">
-                               <p className="text-xs font-black text-slate-800 dark:text-slate-200">{times.total} min <span className="text-[8px] font-normal opacity-50">TOTAL</span></p>
-                               <div className="flex items-center gap-2">
-                                  <p className="text-[10px] font-bold text-blue-600 flex items-center gap-1">
-                                     <Timer size={8} /> {times.driving}m
-                                  </p>
-                                  <p className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
-                                    <History size={8} /> {times.stopped}m
-                                  </p>
-                               </div>
                             </div>
                          </div>
                       </div>

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -268,6 +267,63 @@ export default function RouteDetailPage() {
     }
   };
 
+  const handleReportIncident = async () => {
+    if (!loadRef || !selectedIncidentType) return;
+    try {
+      await addDoc(collection(db, "tenants", "default_tenant", "events"), {
+        type: 'incident_reported',
+        prospectId: id,
+        companyName: load?.clientName,
+        actorUid: user?.uid,
+        createdAt: serverTimestamp(),
+        metadata: {
+          incidentType: selectedIncidentType,
+          ...incidentForm,
+          orderNumber: load?.orderNumber
+        }
+      });
+
+      await updateDoc(loadRef, { status: 'incident' });
+      toast({ variant: "destructive", title: "Incidencia Reportada", description: "La central ha sido notificada." });
+      setIsIncidentOpen(false);
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error" });
+    }
+  };
+
+  const handleAddExpense = async () => {
+    if (!db || !id || !user) return;
+    setIsUpdating(true);
+    try {
+      const expRef = collection(db, "loads", id as string, "expenses");
+      await addDoc(expRef, {
+        ...expenseData,
+        driverId: user.uid,
+        loadId: id,
+        status: 'registered',
+        createdAt: serverTimestamp()
+      });
+
+      // También registrar en gastos globales para analíticas
+      await addDoc(collection(db, "global_expenses"), {
+        ...expenseData,
+        truckId: load?.assignedTruckId,
+        driverId: user.uid,
+        loadId: id,
+        status: 'registered',
+        createdAt: serverTimestamp()
+      });
+
+      toast({ title: "Gasto Registrado" });
+      setIsExpenseOpen(false);
+      setExpenseData({ category: 'fuel', amount: 0, description: "", location: "", liters: 0, odometerKm: 0, pricePerLiter: 0, fuelBrand: "" });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error" });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const onPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -321,9 +377,8 @@ export default function RouteDetailPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 bg-slate-100 p-1 rounded-xl">
+        <TabsList className="grid w-full grid-cols-3 bg-slate-100 p-1 rounded-xl">
           <TabsTrigger value="mission" className="text-[10px] uppercase font-bold">Misión</TabsTrigger>
-          <TabsTrigger value="time" className="text-[10px] uppercase font-bold">Tiempo</TabsTrigger>
           <TabsTrigger value="incidents" className="text-[10px] uppercase font-bold">Alertas</TabsTrigger>
           <TabsTrigger value="wallet" className="text-[10px] uppercase font-bold">Gastos</TabsTrigger>
         </TabsList>
@@ -391,7 +446,6 @@ export default function RouteDetailPage() {
             </CardContent>
           </Card>
 
-          {/* MAPA DINÁMICO CON RECORRIDO COMPLETO */}
           <Card className="border-none shadow-sm h-64 relative rounded-3xl overflow-hidden">
              {L && (
                <MapContainer 
@@ -400,20 +454,16 @@ export default function RouteDetailPage() {
                >
                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                  
-                 {/* LÍNEA DE RUTA PLANIFICADA */}
                  {routeLinePoints.length > 1 && (
                     <Polyline positions={routeLinePoints} color="#2563eb" weight={3} dashArray="5, 10" opacity={0.6} />
                  )}
 
-                 {/* MARCADOR DE ORIGEN */}
                  <Marker position={[load.origin.lat!, load.origin.lng!]} icon={pointIcon('bg-slate-900')} />
                  
-                 {/* MARCADORES DE PARADAS */}
                  {load.outboundStops.map((stop, idx) => (
                     <Marker key={stop.id} position={[stop.lat!, stop.lng!]} icon={pointIcon(stop.deliveredAt ? 'bg-green-600' : 'bg-blue-600', idx + 1)} />
                  ))}
 
-                 {/* MARCADOR CAMIÓN ACTUAL */}
                  {load.tracking?.currentLat && (
                     <Marker position={[load.tracking.currentLat, load.tracking.currentLng]} icon={truckIcon} />
                  )}
@@ -426,7 +476,6 @@ export default function RouteDetailPage() {
              </div>
           </Card>
 
-          {/* LISTA DE ITINERARIO */}
           <div className="space-y-4 px-2">
              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                 <ListOrdered size={14} /> Itinerario de Viaje ({load.outboundStops.length} puntos)
@@ -468,26 +517,7 @@ export default function RouteDetailPage() {
              </div>
           </div>
         </TabsContent>
-
-        <TabsContent value="time" className="space-y-6 animate-in fade-in">
-          <Card className="border-none shadow-sm rounded-3xl overflow-hidden">
-            <CardHeader className="pb-2 bg-slate-50 border-b"><CardTitle className="text-xs uppercase text-slate-400 font-black tracking-widest">Tiempo de Conducción</CardTitle></CardHeader>
-            <CardContent className="space-y-4 pt-6 text-center">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <p className="text-[9px] uppercase font-bold text-slate-500">En Ruta (Movimiento)</p>
-                  <p className="text-2xl font-black text-blue-600">{Math.round(load.tracking?.timeOnRouteMinutes || 0)} <span className="text-xs font-normal text-slate-400 uppercase">min</span></p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-[9px] uppercase font-bold text-slate-500">Parado / Pausa</p>
-                  <p className="text-2xl font-black text-orange-600">{Math.round(load.tracking?.timeStoppedMinutes || 0)} <span className="text-xs font-normal text-slate-400 uppercase">min</span></p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
         
-        {/* Los demás Tabs (incidents, wallet) se mantienen igual ya que funcionan bien */}
         <TabsContent value="incidents" className="space-y-6 animate-in fade-in">
            <div className="px-2 space-y-4">
              <Button variant="destructive" className="w-full h-14 font-black text-lg rounded-2xl shadow-xl animate-pulse" onClick={() => window.open('tel:911')}><Siren size={24} className="mr-2" /> LLAMAR EMERGENCIA (911)</Button>
@@ -536,7 +566,114 @@ export default function RouteDetailPage() {
               </div>
             </CardContent>
           </Card>
-          {/* ... resto del contenido de wallet ... */}
+
+          <div className="space-y-4 px-2">
+             <div className="flex justify-between items-center">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tickets Registrados</p>
+                <Dialog open={isExpenseOpen} onOpenChange={setIsExpenseOpen}>
+                   <DialogTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold border-blue-200 text-blue-600 rounded-full bg-white"><Plus size={14} className="mr-1" /> NUEVO TICKET</Button>
+                   </DialogTrigger>
+                   <DialogContent className="max-w-[95vw] rounded-3xl">
+                      <DialogHeader>
+                         <DialogTitle>Registrar Gasto en Ruta</DialogTitle>
+                         <DialogDescription>Cargue el ticket o factura para su rendición.</DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                         <div className="space-y-2">
+                            <Label className="text-[10px] font-bold uppercase text-slate-400">Categoría</Label>
+                            <div className="grid grid-cols-3 gap-2">
+                               {EXPENSE_CATEGORIES.map(cat => (
+                                 <button key={cat.id} className={cn("flex flex-col items-center justify-center p-3 rounded-xl border transition-all", expenseData.category === cat.id ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-500 border-slate-100")} onClick={() => setExpenseData({...expenseData, category: cat.id})}>
+                                    <cat.icon size={18} />
+                                    <span className="text-[8px] font-bold mt-1 uppercase">{cat.label}</span>
+                                 </button>
+                               ))}
+                            </div>
+                         </div>
+                         
+                         <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                               <Label className="text-[10px] font-bold uppercase text-slate-400">Monto Total</Label>
+                               <Input type="number" className="h-12 rounded-xl" value={expenseData.amount} onChange={e => setExpenseData({...expenseData, amount: parseFloat(e.target.value) || 0})} />
+                            </div>
+                            <div className="space-y-1">
+                               <Label className="text-[10px] font-bold uppercase text-slate-400">Lugar / Ciudad</Label>
+                               <Input placeholder="Ej: YPF Pacheco" className="h-12 rounded-xl" value={expenseData.location} onChange={e => setExpenseData({...expenseData, location: e.target.value})} />
+                            </div>
+                         </div>
+
+                         {expenseData.category === 'fuel' && (
+                           <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 space-y-4">
+                              <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-2"><Fuel size={14}/> Datos de Combustible</p>
+                              <div className="grid grid-cols-2 gap-4">
+                                 <div className="space-y-1">
+                                    <Label className="text-[10px] font-bold text-blue-800">Litros Cargados</Label>
+                                    <Input type="number" className="bg-white h-10 rounded-xl" value={expenseData.liters} onChange={e => setExpenseData({...expenseData, liters: parseFloat(e.target.value) || 0})} />
+                                 </div>
+                                 <div className="space-y-1">
+                                    <Label className="text-[10px] font-bold text-blue-800">Odómetro (KM)</Label>
+                                    <Input type="number" className="bg-white h-10 rounded-xl" value={expenseData.odometerKm} onChange={e => setExpenseData({...expenseData, odometerKm: parseFloat(e.target.value) || 0})} />
+                                 </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                 <div className="space-y-1">
+                                    <Label className="text-[10px] font-bold text-blue-800">Precio x Litro</Label>
+                                    <Input type="number" className="bg-white h-10 rounded-xl" value={expenseData.pricePerLiter} onChange={e => setExpenseData({...expenseData, pricePerLiter: parseFloat(e.target.value) || 0})} />
+                                 </div>
+                                 <div className="space-y-1">
+                                    <Label className="text-[10px] font-bold text-blue-800">Marca / Bandera</Label>
+                                    <Select value={expenseData.fuelBrand} onValueChange={v => setExpenseData({...expenseData, fuelBrand: v})}>
+                                       <SelectTrigger className="bg-white h-10 rounded-xl"><SelectValue placeholder="Elegir..." /></SelectTrigger>
+                                       <SelectContent>
+                                          {['YPF', 'Shell', 'Axion', 'Puma', 'Otro'].map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                                       </SelectContent>
+                                    </Select>
+                                 </div>
+                              </div>
+                           </div>
+                         )}
+
+                         <div className="space-y-1">
+                            <Label className="text-[10px] font-bold uppercase text-slate-400">Nota / Comentario</Label>
+                            <Input placeholder="Opcional" className="h-10 rounded-xl" value={expenseData.description} onChange={e => setExpenseData({...expenseData, description: e.target.value})} />
+                         </div>
+                      </div>
+                      <DialogFooter>
+                         <Button className="w-full h-14 bg-blue-600 text-lg font-bold shadow-xl rounded-2xl" disabled={!expenseData.amount || isUpdating} onClick={handleAddExpense}>
+                            {isUpdating ? <Loader2 className="animate-spin mr-2" /> : <DollarSign className="mr-1" />} REGISTRAR GASTO
+                         </Button>
+                      </DialogFooter>
+                   </DialogContent>
+                </Dialog>
+             </div>
+
+             <div className="space-y-2">
+                {expenses?.length === 0 ? (
+                  <p className="text-center py-10 text-xs text-slate-400 italic">No has registrado gastos en este viaje.</p>
+                ) : (
+                  expenses?.map(exp => (
+                    <Card key={exp.id} className="border-none shadow-sm rounded-2xl">
+                      <CardContent className="p-3 flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                           <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 border">
+                              {EXPENSE_CATEGORIES.find(c => c.id === exp.category)?.icon && React.createElement(EXPENSE_CATEGORIES.find(c => c.id === exp.category)!.icon, { size: 16 })}
+                           </div>
+                           <div>
+                              <p className="text-[11px] font-bold text-slate-800 capitalize">{exp.category}</p>
+                              <p className="text-[9px] text-slate-400">{exp.location}</p>
+                           </div>
+                        </div>
+                        <div className="text-right">
+                           <p className="text-xs font-black text-slate-900">${exp.amount.toLocaleString()}</p>
+                           <Badge variant="outline" className="text-[7px] h-3 uppercase font-bold opacity-60">{exp.status}</Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+             </div>
+          </div>
         </TabsContent>
       </Tabs>
 
