@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from "react";
@@ -14,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Truck, ArrowLeft, ArrowRight, Save, Loader2, 
   Gauge, Box, Thermometer, Droplets, Anchor, Layers, 
-  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon, LayoutGrid, Users, Building2, User, DollarSign, Activity, TrendingUp, Wrench, Fuel, InfoIcon, Scale
+  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon, LayoutGrid, Users, Building2, User, DollarSign, Activity, TrendingUp, Wrench, Fuel, InfoIcon, Scale, Zap
 } from "lucide-react";
 import { Truck as TruckType, Driver, OwnershipType, TruckCosts, Expense } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
