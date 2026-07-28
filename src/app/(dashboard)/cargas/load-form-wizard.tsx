@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { 
   Package, ArrowLeft, ArrowRight, Save, Loader2, 
@@ -507,6 +508,19 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
         )}
       </div>
 
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center z-50">
+        <div className="max-w-5xl w-full flex justify-between items-center px-4">
+          <Button variant="ghost" onClick={() => setStep(prev => prev - 1)} disabled={step === 1 || isSubmitting}>
+             <ChevronLeft className="mr-1" size={16} /> VOLVER
+          </Button>
+          {step < 5 ? (
+            <Button onClick={() => setStep(prev => prev + 1)} className="bg-blue-600">SIGUIENTE <ChevronRight size={16} /></Button>
+          ) : (
+            <Button onClick={handleSubmit} className="bg-green-600" disabled={isSubmitting || isWeightLimitExceeded}>EMITIR ORDEN <Save size={16} className="ml-2" /></Button>
+          )}
+        </div>
+      </div>
+
       <Dialog open={isStopModalOpen} onOpenChange={setIsStopModalOpen}>
         <DialogContent className="max-w-2xl rounded-3xl">
           <DialogHeader><DialogTitle>Nueva Parada de Entrega</DialogTitle></DialogHeader>
@@ -532,19 +546,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
           <DialogFooter><Button onClick={saveStop} className="bg-blue-600 w-full rounded-xl">ASIGNAR A RUTA</Button></DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center z-50">
-        <div className="max-w-5xl w-full flex justify-between items-center px-4">
-          <Button variant="ghost" onClick={() => setStep(prev => prev - 1)} disabled={step === 1 || isSubmitting}>
-             <ChevronLeft className="mr-1" size={16} /> VOLVER
-          </Button>
-          {step < 5 ? (
-            <Button onClick={() => setStep(prev => prev + 1)} className="bg-blue-600">SIGUIENTE <ChevronRight size={16} /></Button>
-          ) : (
-            <Button onClick={handleSubmit} className="bg-green-600" disabled={isSubmitting || isWeightLimitExceeded}>EMITIR ORDEN <Save size={16} className="ml-2" /></Button>
-          )}
-        </div>
-      </div>
     </div>
   );
 }

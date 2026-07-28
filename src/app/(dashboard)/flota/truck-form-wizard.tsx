@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { 
   Truck, ArrowLeft, ArrowRight, Save, Loader2, 
   Gauge, Box, Anchor, Layers, 
@@ -426,7 +427,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                 Siguiente <ArrowRight className="ml-2" size={16} />
               </Button>
             ) : (
-              <Button onClick={handleSubmit} className="bg-blue-600" disabled={isSubmitting}>
+              <Button onClick={handleSubmit} className="bg-blue-600" disabled={isSubmitting || isProcessingAvatar}>
                 {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" size={16} />}
                 {truckId ? 'Guardar Cambios' : 'Habilitar Unidad'}
               </Button>
