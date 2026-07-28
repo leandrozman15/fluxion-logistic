@@ -719,7 +719,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
 
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center z-50">
         <div className="max-w-4xl w-full flex justify-between items-center px-4">
-          <Button variant="ghost" onClick={handleBack} disabled={step === 1 || isSubmitting}>
+          <Button variant="ghost" onClick={() => step > 1 ? setStep(step - 1) : router.back()} disabled={isSubmitting}>
             <ChevronLeft size={16} className="mr-1" /> Volver
           </Button>
           <div className="flex gap-2">
