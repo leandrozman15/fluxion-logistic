@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from "react";
@@ -13,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Truck, ArrowLeft, ArrowRight, Save, Loader2, 
   Gauge, Box, Anchor, Layers, 
-  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon, LayoutGrid, Building2, User, DollarSign, Activity, TrendingUp, Zap, Scale
+  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon, LayoutGrid, Building2, User, DollarSign, Activity, TrendingUp, Zap, Scale, Trash2, Plus, UserCheck
 } from "lucide-react";
 import { Truck as TruckType, Driver, OwnershipType, TruckCosts, Expense } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -85,6 +86,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     haulingType: 'standard',
     location: { city: "", province: "Buenos Aires", country: "Argentina", lat: 0, lng: 0 },
     avatarUrl: "",
+    assignedCompanionIds: [],
     semiTrailer: {
       plate: "",
       brand: "",
@@ -115,7 +117,10 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     db ? query(collection(db, "drivers"), orderBy("lastName")) : null
   , [db]);
 
-  const { data: drivers } = useCollection<Driver>(driversQuery);
+  const { data: allStaff } = useCollection<Driver>(driversQuery);
+
+  const driversOnly = useMemo(() => allStaff?.filter(s => s.role === 'driver' || !s.role) || [], [allStaff]);
+  const companionsOnly = useMemo(() => allStaff?.filter(s => s.role === 'companion') || [], [allStaff]);
 
   const fuelExpensesQuery = useMemo(() => {
     if (!db || !truckId) return null;
@@ -138,6 +143,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
         ownershipType: existingTruck.ownershipType || 'company',
         haulingType: existingTruck.haulingType || 'standard',
         assignedDriverId: existingTruck.assignedDriverId || "",
+        assignedCompanionIds: existingTruck.assignedCompanionIds || [],
         semiTrailer: existingTruck.semiTrailer || { plate: "", brand: "", model: "", year: new Date().getFullYear(), type: "plataforma", axles: 3 },
         bitren: existingTruck.bitren || { type: 'type_a', firstSemiPlate: "", secondSemiPlate: "", totalAxles: 9, brand: "", model: "", year: new Date().getFullYear() },
         costs: existingTruck.costs || INITIAL_COSTS,
@@ -210,6 +216,22 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const addCompanion = (id: string) => {
+    if (!id || id === 'none') return;
+    if (formData.assignedCompanionIds?.includes(id)) return;
+    setFormData(prev => ({
+      ...prev,
+      assignedCompanionIds: [...(prev.assignedCompanionIds || []), id]
+    }));
+  };
+
+  const removeCompanion = (id: string) => {
+    setFormData(prev => ({
+      ...prev,
+      assignedCompanionIds: prev.assignedCompanionIds?.filter(cid => cid !== id)
+    }));
   };
 
   const handleSubmit = async () => {
@@ -286,7 +308,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
           <Button variant="ghost" size="icon" onClick={() => router.back()}><ArrowLeft /></Button>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">{truckId ? 'Editar Unidad' : 'Nueva Unidad de Flota'}</h1>
-            <p className="text-sm text-slate-500">Gestión de especificaciones técnicas, documentación y costos.</p>
+            <p className="text-sm text-slate-500">Gestión de especificaciones técnicas, personal y costos.</p>
           </div>
         </div>
         {formData.plate && (
@@ -357,24 +379,11 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                     </Select>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Chofer Asignado</Label>
-                    <Select value={formData.assignedDriverId} onValueChange={v => setFormData({...formData, assignedDriverId: v})}>
-                      <SelectTrigger className="bg-white"><SelectValue placeholder="Seleccionar chofer" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Sin asignar</SelectItem>
-                        {drivers?.map(d => (
-                          <SelectItem key={d.id} value={d.id}>{d.lastName}, {d.firstName}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Marca</Label>
                       <Select value={formData.brand} onValueChange={v => setFormData({...formData, brand: v, model: ""})}>
-                        <SelectTrigger><SelectValue placeholder="Marca" /></SelectTrigger>
+                        <SelectTrigger className="bg-white"><SelectValue placeholder="Marca" /></SelectTrigger>
                         <SelectContent>
                           {Object.keys(BRANDS).map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
                         </SelectContent>
@@ -383,12 +392,72 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                     <div className="space-y-2">
                       <Label>Modelo</Label>
                       <Select value={formData.model} onValueChange={v => setFormData({...formData, model: v})} disabled={!formData.brand}>
-                        <SelectTrigger><SelectValue placeholder="Modelo" /></SelectTrigger>
+                        <SelectTrigger className="bg-white"><SelectValue placeholder="Modelo" /></SelectTrigger>
                         <SelectContent>
                           {formData.brand && (BRANDS as any)[formData.brand]?.map((m: string) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-sm">
+              <CardHeader>
+                <CardTitle>Personal Asignado</CardTitle>
+                <CardDescription>Personal permanente que opera esta unidad.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-2">
+                  <Label>Chofer Designado (Tractor)</Label>
+                  <Select value={formData.assignedDriverId || 'none'} onValueChange={v => setFormData({...formData, assignedDriverId: v})}>
+                    <SelectTrigger className="bg-white"><SelectValue placeholder="Seleccionar chofer" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin asignar</SelectItem>
+                      {driversOnly.map(d => (
+                        <SelectItem key={d.id} value={d.id}>{d.lastName}, {d.firstName}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-4">
+                  <Label>Acompañantes / Ayudantes</Label>
+                  <div className="flex gap-2">
+                    <Select onValueChange={addCompanion}>
+                      <SelectTrigger className="bg-white"><SelectValue placeholder="Agregar acompañante" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none" disabled>Seleccionar de la lista</SelectItem>
+                        {companionsOnly.map(c => (
+                          <SelectItem key={c.id} value={c.id}>{c.lastName}, {c.firstName}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    {formData.assignedCompanionIds?.map(id => {
+                      const staff = companionsOnly.find(c => c.id === id);
+                      if (!staff) return null;
+                      return (
+                        <div key={id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
+                          <div className="flex items-center gap-2">
+                            <Avatar className="h-6 w-6">
+                              <AvatarImage src={staff.avatarUrl} />
+                              <AvatarFallback className="text-[10px]">{staff.lastName[0]}</AvatarFallback>
+                            </Avatar>
+                            <span className="text-xs font-bold">{staff.lastName}, {staff.firstName}</span>
+                          </div>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500" onClick={() => removeCompanion(id)}>
+                            <Trash2 size={14} />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                    {(!formData.assignedCompanionIds || formData.assignedCompanionIds.length === 0) && (
+                      <p className="text-[10px] text-slate-400 italic text-center py-2 border-2 border-dashed rounded-xl">Sin acompañantes designados</p>
+                    )}
                   </div>
                 </div>
               </CardContent>

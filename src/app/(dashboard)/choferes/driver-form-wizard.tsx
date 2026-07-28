@@ -18,7 +18,7 @@ import {
   ShieldCheck, CheckCircle2, User, FileText, 
   Phone, HeartPulse, Info, X, Briefcase, Upload, AlertTriangle, FileCheck, Camera
 } from "lucide-react";
-import { Driver } from "@/app/lib/types";
+import { Driver, DriverRole } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -48,6 +48,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   const lintiInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<Partial<Driver>>({
+    role: 'driver',
     docType: 'DNI',
     dni: "",
     firstName: "",
@@ -95,6 +96,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
     if (existingDriver) {
       setFormData({
         ...existingDriver,
+        role: existingDriver.role || 'driver',
         dni: existingDriver.dni || "",
         firstName: existingDriver.firstName || "",
         lastName: existingDriver.lastName || "",
@@ -160,7 +162,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         });
-        toast({ title: "Alta Exitosa", description: "El conductor ha sido habilitado en el sistema." });
+        toast({ title: "Alta Exitosa", description: "El personal ha sido habilitado en el sistema." });
       }
       router.push('/choferes');
     } catch (error) {
@@ -188,7 +190,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
             <ArrowLeft />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">{driverId ? 'Editar Chofer' : 'Nuevo Chofer Profesional'}</h1>
+            <h1 className="text-2xl font-bold text-slate-900">{driverId ? 'Editar Personal' : 'Nuevo Integrante de Flota'}</h1>
             <p className="text-sm text-slate-500">Registro integral de personal y cumplimiento normativo.</p>
           </div>
         </div>
@@ -221,7 +223,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
       <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 mx-4">
         {step === 1 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Identificación y Datos Personales</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Identificación y Rol</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="flex flex-col items-center justify-center space-y-4 p-6 bg-slate-50 rounded-2xl border-2 border-dashed">
                 <Avatar className="w-32 h-32 border-4 border-white shadow-xl">
@@ -231,8 +233,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                   </AvatarFallback>
                 </Avatar>
                 <div className="text-center space-y-1">
-                  <p className="text-xs font-bold uppercase text-slate-600">Foto del Chofer</p>
-                  <p className="text-[10px] text-slate-400">Identificación visual para el panel</p>
+                  <p className="text-xs font-bold uppercase text-slate-600">Foto Identificatoria</p>
                 </div>
                 <input type="file" ref={avatarInputRef} className="hidden" accept="image/*" onChange={(e) => onFileChange('avatarUrl', e)} />
                 <Button variant="outline" type="button" size="sm" onClick={() => handleFileClick('avatarUrl')} className="bg-white" disabled={isProcessingFile === 'avatarUrl'}>
@@ -242,6 +243,18 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
               </div>
 
               <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Rol en la Organización</Label>
+                  <Select value={formData.role} onValueChange={(v: DriverRole) => setFormData({...formData, role: v})}>
+                    <SelectTrigger className="bg-white h-12">
+                      <SelectValue placeholder="Seleccionar Rol" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="driver">🚚 Chofer Profesional (Tractor)</SelectItem>
+                      <SelectItem value="companion">👥 Acompañante / Ayudante</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-2">
                   <Label>Número de DNI</Label>
                   <Input placeholder="Sin puntos" value={formData.dni ?? ''} onChange={e => setFormData({...formData, dni: e.target.value.replace(/\D/g, '')})} />
@@ -253,16 +266,6 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                 <div className="space-y-2">
                   <Label>Apellidos</Label>
                   <Input placeholder="Pérez González" value={formData.lastName ?? ''} onChange={e => setFormData({...formData, lastName: e.target.value})} />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Fecha de Nacimiento</Label>
-                    <Input type="date" value={formData.birthDate ?? ''} onChange={e => setFormData({...formData, birthDate: e.target.value})} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Nacionalidad</Label>
-                    <Input value={formData.nationality ?? ''} onChange={e => setFormData({...formData, nationality: e.target.value})} />
-                  </div>
                 </div>
               </div>
             </CardContent>
@@ -447,7 +450,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
             ) : (
               <Button onClick={handleSubmit} className="bg-blue-600" disabled={isSubmitting || isProcessingFile !== null}>
                 {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" size={16} />}
-                {driverId ? 'Guardar Cambios' : 'Habilitar Chofer'}
+                {driverId ? 'Guardar Cambios' : 'Habilitar Personal'}
               </Button>
             )}
           </div>

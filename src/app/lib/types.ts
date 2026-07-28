@@ -14,6 +14,8 @@ export type OwnershipType = 'company' | 'third_party';
 export type MaintenanceType = 'preventive' | 'corrective' | 'inspection';
 export type MaintenanceStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 
+export type DriverRole = 'driver' | 'companion';
+
 export interface Maintenance {
   id: string;
   orderNumber: string;
@@ -210,6 +212,7 @@ export interface Truck {
   avatarUrl?: string;
   ownershipType: OwnershipType;
   assignedDriverId?: string;
+  assignedCompanionIds?: string[];
   createdAt: any;
   updatedAt: any;
   
@@ -230,6 +233,7 @@ export interface LoadingBay {
 
 export interface Driver {
   id: string;
+  role: DriverRole;
   docType: string;
   dni: string;
   dniFileUrl?: string;

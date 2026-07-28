@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from "react";
@@ -75,7 +76,7 @@ export default function ChoferesPage() {
 
     try {
       await deleteDoc(doc(db, "drivers", id));
-      toast({ title: "Chofer eliminado", description: "El registro ha sido removido del sistema." });
+      toast({ title: "Registro eliminado", description: "El registro ha sido removido del sistema." });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al eliminar" });
     }
@@ -132,11 +133,11 @@ export default function ChoferesPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Gestión de Choferes</h1>
-          <p className="text-slate-500 text-sm">Control de personal habilitado y cumplimiento de licencias profesionales.</p>
+          <h1 className="text-2xl font-bold text-slate-900">Gestión de Personal</h1>
+          <p className="text-slate-500 text-sm">Control de personal habilitado (Choferes y Acompañantes).</p>
         </div>
         <Button className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100" onClick={() => router.push('/choferes/nuevo')}>
-          <UserPlus className="w-4 h-4 mr-2" /> Alta de Chofer
+          <UserPlus className="w-4 h-4 mr-2" /> Alta de Personal
         </Button>
       </div>
 
@@ -145,7 +146,7 @@ export default function ChoferesPage() {
           <CardContent className="pt-4 flex items-center gap-4">
             <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600"><Users size={20} /></div>
             <div>
-              <p className="text-[10px] uppercase font-bold text-blue-400">Total Choferes</p>
+              <p className="text-[10px] uppercase font-bold text-blue-400">Total Personal</p>
               <p className="text-xl font-bold text-blue-700">{drivers?.length || 0}</p>
             </div>
           </CardContent>
@@ -201,20 +202,20 @@ export default function ChoferesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Chofer</TableHead>
+                  <TableHead>Personal</TableHead>
+                  <TableHead>Rol</TableHead>
                   <TableHead>Licencia Nacional</TableHead>
                   <TableHead>Unidad / Viajes</TableHead>
-                  <TableHead>Habilitación LINTI</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredDrivers.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-20 text-slate-400 italic">No se encontraron choferes.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center py-20 text-slate-400 italic">No se encontraron registros.</TableCell></TableRow>
                 ) : (
                   filteredDrivers.map((driver) => {
-                    const assignedTruck = trucks?.find(t => t.assignedDriverId === driver.id);
+                    const assignedTruck = trucks?.find(t => t.assignedDriverId === driver.id || t.assignedCompanionIds?.includes(driver.id));
                     const tripCount = loads?.filter(l => l.assignedDriverId === driver.id).length || 0;
                     const photoStats = getDocPhotoStats(driver);
                     
@@ -240,23 +241,20 @@ export default function ChoferesPage() {
                                 {driver.lastName}, {driver.firstName}
                               </div>
                               <div className="text-[10px] text-slate-500 font-mono">DNI: {driver.dni}</div>
-                              <div className="flex items-center gap-1 mt-1">
-                                <Camera size={10} className={cn(photoStats.all ? "text-green-600" : "text-slate-400")} />
-                                <span className={cn("text-[9px] font-black uppercase tracking-tighter", photoStats.all ? "text-green-700" : "text-slate-500")}>
-                                  Legajo: {photoStats.count}/{photoStats.total} fotos
-                                </span>
-                                {photoStats.all && <CheckCircle2 size={8} className="text-green-600" />}
-                              </div>
                             </div>
                           </Link>
                         </TableCell>
                         <TableCell>
+                          <Badge variant="outline" className={cn(
+                            "text-[9px] uppercase font-bold",
+                            driver.role === 'companion' ? "text-slate-500 border-slate-200" : "text-blue-600 border-blue-200 bg-blue-50"
+                          )}>
+                            {driver.role === 'companion' ? 'Acompañante' : 'Chofer'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
                           <div className="space-y-1">
-                            <div className="text-[11px] font-bold text-slate-700">Lic: {driver.licenseNumber}</div>
-                            <div className="text-[10px] flex items-center gap-1">
-                              <Calendar size={10} className="text-slate-400" />
-                              {driver.licenseExpiry ? format(parseISO(driver.licenseExpiry), "dd/MM/yyyy") : '-'}
-                            </div>
+                            <div className="text-[11px] font-bold text-slate-700">{driver.licenseNumber ? `Lic: ${driver.licenseNumber}` : 'S/L'}</div>
                             <div className="text-[9px] uppercase font-bold tracking-tighter">{getExpiryLabel(driver.licenseExpiry)}</div>
                           </div>
                         </TableCell>
@@ -267,26 +265,17 @@ export default function ChoferesPage() {
                             ) : (
                               <div className="text-[10px] text-slate-400 italic">Sin unidad fija</div>
                             )}
-                            <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-bold uppercase"><Package size={12} className="text-slate-400" /> {tripCount} Viajes realizados</div>
+                            {driver.role === 'driver' && (
+                              <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-bold uppercase"><Package size={12} className="text-slate-400" /> {tripCount} Viajes realizados</div>
+                            )}
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          {!driver.hasLinti ? (
-                            <Badge variant="outline" className="text-[9px] text-slate-400 uppercase">Sin LINTI</Badge>
-                          ) : (
-                            <div className="space-y-1">
-                              <div className="text-[11px] font-bold text-blue-700">N° {driver.lintiNumber}</div>
-                              <div className="text-[10px] flex items-center gap-1"><ShieldCheck size={10} className="text-blue-400" /> {driver.lintiExpiry ? format(parseISO(driver.lintiExpiry), "dd/MM/yyyy") : '-'}</div>
-                              <div className="text-[9px] uppercase font-bold tracking-tighter">{getExpiryLabel(driver.lintiExpiry)}</div>
-                            </div>
-                          )}
                         </TableCell>
                         <TableCell>{getStatusBadge(driver.status)}</TableCell>
                         <TableCell className="text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical size={16} /></Button></DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-56">
-                              <DropdownMenuLabel>Gestión de Chofer</DropdownMenuLabel>
+                              <DropdownMenuLabel>Gestión de Personal</DropdownMenuLabel>
                               <DropdownMenuItem onClick={() => router.push(`/choferes/${driver.id}`)}>
                                 <Eye className="w-4 h-4 mr-2" /> Ver Expediente
                               </DropdownMenuItem>

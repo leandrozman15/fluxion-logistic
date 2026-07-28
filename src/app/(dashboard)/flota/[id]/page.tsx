@@ -16,7 +16,7 @@ import {
   Truck as TruckIcon, FileText, Calendar, AlertTriangle, 
   CheckCircle2, Clock, Upload, ArrowLeft, ShieldCheck, 
   MapPin, Gauge, Box, Info, Download, Trash2, MoreVertical, LayoutGrid, Fuel, DollarSign, Activity, TrendingUp, User, Building2, Briefcase, Edit2,
-  Loader2, Eye, Wrench, History, ExternalLink, Zap, Scale
+  Loader2, Eye, Wrench, History, ExternalLink, Zap, Scale, Users
 } from "lucide-react";
 import { Truck, VehicleDocument, DocStatus, Expense, Driver, Maintenance, TruckCosts } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -45,7 +45,8 @@ export default function TruckDetailPage() {
   const { toast } = useToast();
   
   const [assignedDriver, setAssignedDriver] = useState<Driver | null>(null);
-  const [loadingDriver, setLoadingDriver] = useState(false);
+  const [assignedCompanions, setAssignedCompanions] = useState<Driver[]>([]);
+  const [loadingStaff, setLoadingStaff] = useState(false);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [activeUploadId, setActiveUploadId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -128,23 +129,35 @@ export default function TruckDetailPage() {
       updateDoc(truckRef, { documentation: initialDocs });
     }
     
-    const fetchDriver = async () => {
-      if (truck?.assignedDriverId && truck.assignedDriverId !== 'none' && db) {
-        setLoadingDriver(true);
-        try {
+    const fetchStaff = async () => {
+      if (!db || !truck) return;
+      setLoadingStaff(true);
+      try {
+        if (truck.assignedDriverId && truck.assignedDriverId !== 'none') {
           const dSnap = await getDoc(doc(db, "drivers", truck.assignedDriverId));
           if (dSnap.exists()) setAssignedDriver(dSnap.data() as Driver);
-        } catch (e) {
-          console.error(e);
-        } finally {
-          setLoadingDriver(false);
+        } else {
+          setAssignedDriver(null);
         }
-      } else {
-        setAssignedDriver(null);
+
+        if (truck.assignedCompanionIds && truck.assignedCompanionIds.length > 0) {
+          const companionPromises = truck.assignedCompanionIds.map(id => getDoc(doc(db, "drivers", id)));
+          const companionSnaps = await Promise.all(companionPromises);
+          const companions = companionSnaps
+            .filter(s => s.exists())
+            .map(s => s.data() as Driver);
+          setAssignedCompanions(companions);
+        } else {
+          setAssignedCompanions([]);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoadingStaff(false);
       }
     };
     
-    fetchDriver();
+    fetchStaff();
   }, [truck, truckRef, db]);
 
   const getStatusIcon = (status: DocStatus) => {
@@ -292,20 +305,50 @@ export default function TruckDetailPage() {
           </Card>
 
           <Card className="border-none shadow-sm border-l-4 border-l-blue-600">
-            <CardHeader className="pb-2"><CardTitle className="text-xs uppercase font-bold text-slate-500 flex items-center gap-2"><User size={14} className="text-blue-600" /> Chofer Designado</CardTitle></CardHeader>
-            <CardContent>
-              {loadingDriver ? <Loader2 className="w-4 h-4 animate-spin" /> : assignedDriver ? (
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-10 w-10 border shadow-sm">
-                    <AvatarImage src={assignedDriver.avatarUrl} />
-                    <AvatarFallback>{assignedDriver.lastName[0]}</AvatarFallback>
-                  </Avatar>
+            <CardHeader className="pb-2"><CardTitle className="text-xs uppercase font-bold text-slate-500 flex items-center gap-2"><Users size={14} className="text-blue-600" /> Personal de Cabina</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              {loadingStaff ? (
+                <div className="flex items-center justify-center py-4"><Loader2 className="w-4 h-4 animate-spin" /></div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Chofer */}
                   <div>
-                    <p className="text-sm font-bold text-slate-900">{assignedDriver.lastName}, {assignedDriver.firstName}</p>
-                    <p className="text-[10px] text-slate-500 uppercase font-bold">LIC: {assignedDriver.licenseNumber}</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Chofer Designado</p>
+                    {assignedDriver ? (
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-10 w-10 border shadow-sm">
+                          <AvatarImage src={assignedDriver.avatarUrl} />
+                          <AvatarFallback>{assignedDriver.lastName[0]}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="text-sm font-bold text-slate-900">{assignedDriver.lastName}, {assignedDriver.firstName}</p>
+                          <p className="text-[10px] text-slate-500 uppercase font-bold">LIC: {assignedDriver.licenseNumber || 'S/D'}</p>
+                        </div>
+                      </div>
+                    ) : <div className="text-xs italic text-slate-400">Sin chofer asignado.</div>}
                   </div>
+
+                  {/* Acompañantes */}
+                  {assignedCompanions.length > 0 && (
+                    <div className="pt-2 border-t border-slate-100">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Acompañantes</p>
+                      <div className="space-y-2">
+                        {assignedCompanions.map(companion => (
+                          <div key={companion.id} className="flex items-center gap-3">
+                            <Avatar className="h-8 w-8 border shadow-sm">
+                              <AvatarImage src={companion.avatarUrl} />
+                              <AvatarFallback className="text-[10px]">{companion.lastName[0]}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="text-xs font-bold text-slate-700">{companion.lastName}, {companion.firstName}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ) : <div className="text-xs italic text-slate-400">Sin chofer asignado.</div>}
+              )}
             </CardContent>
           </Card>
         </div>
