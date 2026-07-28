@@ -148,7 +148,6 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     }
   }, [existingTruck]);
 
-  // CALCULO AUTOMATICO DE CARGA UTIL (PBTC - TARA)
   useEffect(() => {
     const pbtc = formData.grossCombinedWeightKg || 0;
     const tara = formData.unladenWeightKg || 0;
