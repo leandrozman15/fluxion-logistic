@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Truck, ArrowLeft, ArrowRight, Save, Loader2, 
   Gauge, Box, Thermometer, Droplets, Anchor, Layers, 
-  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon, LayoutGrid, Users, Building2, User, DollarSign, Activity, TrendingUp, Wrench, Fuel, InfoIcon
+  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon, LayoutGrid, Users, Building2, User, DollarSign, Activity, TrendingUp, Wrench, Fuel, InfoIcon, Scale
 } from "lucide-react";
 import { Truck as TruckType, Driver, OwnershipType, TruckCosts, Expense } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -43,14 +43,6 @@ const PROVINCIAS = [
   "Entre Ríos", "Formosa", "Jujuy", "La Pampa", "La Rioja", "Mendoza", "Misiones", 
   "Neuquén", "Río Negro", "Salta", "San Juan", "San Luis", "Santa Cruz", "Santa Fe", 
   "Santiago del Estero", "Tierra del Fuego", "Tucumán"
-];
-
-const BODY_TYPES = [
-  { id: "furgon", label: "Furgón Cerrado", icon: Box },
-  { id: "reefer", label: "Refrigerado", icon: Thermometer },
-  { id: "plataforma", label: "Plataforma", icon: Layers },
-  { id: "cisterna", label: "Cisterna", icon: Droplets },
-  { id: "volquete", label: "Volquete", icon: Anchor },
 ];
 
 const INITIAL_COSTS: TruckCosts = {
@@ -84,7 +76,9 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
 
   const [formData, setFormData] = useState<Partial<TruckType>>({
     plate: "", chassis: "", brand: "", model: "", year: new Date().getFullYear(),
-    axles: 2, vehicleType: "Camión Rígido", capacityKg: 0, volumeM3: 0,
+    axles: 2, vehicleType: "Camión Rígido", 
+    grossCombinedWeightKg: 45000, unladenWeightKg: 15000, capacityKg: 30000,
+    volumeM3: 0,
     dimensions: { length: 0, width: 0, height: 0 }, bodyType: "furgon",
     grossWeight: 0, fuelType: "Diesel", tankLiters: 0, odometerKm: 0,
     avgConsumption: 32, status: "available",
@@ -147,10 +141,23 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
         assignedDriverId: existingTruck.assignedDriverId || "",
         semiTrailer: existingTruck.semiTrailer || { plate: "", brand: "", model: "", year: new Date().getFullYear(), type: "plataforma", axles: 3 },
         bitren: existingTruck.bitren || { type: 'type_a', firstSemiPlate: "", secondSemiPlate: "", totalAxles: 9, brand: "", model: "", year: new Date().getFullYear() },
-        costs: existingTruck.costs || INITIAL_COSTS
+        costs: existingTruck.costs || INITIAL_COSTS,
+        grossCombinedWeightKg: existingTruck.grossCombinedWeightKg || 45000,
+        unladenWeightKg: existingTruck.unladenWeightKg || 15000,
+        capacityKg: existingTruck.capacityKg || 30000
       });
     }
   }, [existingTruck]);
+
+  // CALCULO AUTOMATICO DE CARGA UTIL (PBTC - TARA)
+  useEffect(() => {
+    const pbtc = formData.grossCombinedWeightKg || 0;
+    const tara = formData.unladenWeightKg || 0;
+    const capacity = Math.max(0, pbtc - tara);
+    if (capacity !== formData.capacityKg) {
+      setFormData(prev => ({ ...prev, capacityKg: capacity }));
+    }
+  }, [formData.grossCombinedWeightKg, formData.unladenWeightKg]);
 
   const handleNext = () => setStep(s => s + 1);
   const handleBack = () => setStep(s => s - 1);
@@ -295,7 +302,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
           {[
             { id: 1, label: "Identificación", icon: Info },
             { id: 2, label: "Arrastre", icon: Truck },
-            { id: 3, label: "Ubicación", icon: MapPin },
+            { id: 3, label: "Pesos y GPS", icon: MapPin },
             { id: 4, label: "Costos", icon: DollarSign }
           ].map((s) => (
             <div key={s.id} className="flex flex-col items-center gap-1.5 flex-1 relative">
@@ -405,10 +412,12 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                       "flex flex-col items-center justify-center gap-2 p-6 rounded-2xl border-2 transition-all",
                       formData.haulingType === 'standard' ? "bg-blue-600 text-white border-blue-600 shadow-lg" : "bg-white text-slate-500 border-slate-100"
                     )}
-                    onClick={() => setFormData({...formData, haulingType: 'standard'})}
+                    onClick={() => {
+                      setFormData({...formData, haulingType: 'standard', grossCombinedWeightKg: 45000});
+                    }}
                   >
                     <Layers size={32} />
-                    <span className="font-black uppercase text-xs">Semirremolque Standard</span>
+                    <span className="font-black uppercase text-xs">Semirremolque Standard (45tn)</span>
                   </button>
                   <button 
                     type="button"
@@ -416,10 +425,12 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                       "flex flex-col items-center justify-center gap-2 p-6 rounded-2xl border-2 transition-all",
                       formData.haulingType === 'bitren' ? "bg-blue-600 text-white border-blue-600 shadow-lg" : "bg-white text-slate-500 border-slate-100"
                     )}
-                    onClick={() => setFormData({...formData, haulingType: 'bitren'})}
+                    onClick={() => {
+                      setFormData({...formData, haulingType: 'bitren', grossCombinedWeightKg: 60000});
+                    }}
                   >
                     <div className="flex gap-1"><Layers size={24} /><Layers size={24} /></div>
-                    <span className="font-black uppercase text-xs">Unidad Bitrén</span>
+                    <span className="font-black uppercase text-xs">Unidad Bitrén (60/75tn)</span>
                   </button>
                 </div>
 
@@ -454,7 +465,13 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                        <div className="space-y-1">
                           <Label className="text-[10px] uppercase font-bold text-blue-600">Tipo de Bitrén</Label>
-                          <Select value={formData.bitren?.type} onValueChange={(v: any) => setFormData({...formData, bitren: {...formData.bitren!, type: v}})}>
+                          <Select value={formData.bitren?.type} onValueChange={(v: any) => {
+                            setFormData({
+                              ...formData, 
+                              bitren: {...formData.bitren!, type: v},
+                              grossCombinedWeightKg: v === 'type_a' ? 60000 : 75000
+                            });
+                          }}>
                              <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                              <SelectContent>
                                 <SelectItem value="type_a">Tipo A (hasta 22,40m / 60tn)</SelectItem>
@@ -478,13 +495,6 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                           <Input className="h-8 font-mono font-bold" value={formData.bitren?.secondSemiPlate} onChange={e => setFormData({...formData, bitren: {...formData.bitren!, secondSemiPlate: e.target.value.toUpperCase()}})} />
                        </div>
                     </div>
-
-                    <div className="flex gap-2 p-3 bg-white/50 rounded-lg">
-                       <InfoIcon size={14} className="text-blue-500 shrink-0 mt-0.5" />
-                       <p className="text-[10px] text-blue-700 leading-relaxed italic">
-                         Nota: El Bitrén se registra como una unidad completa. Asegure que la configuración de ejes permita alcanzar el PBTC declarado.
-                       </p>
-                    </div>
                   </div>
                 )}
               </CardContent>
@@ -494,45 +504,77 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
 
         {step === 3 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Ubicación y Estado del Odómetro</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Control de Pesos y Ubicación Base</CardTitle></CardHeader>
             <CardContent className="space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="p-6 bg-slate-900 text-white rounded-2xl space-y-6">
-                  <div className="space-y-2">
-                    <Label className="text-white/50 text-[10px] uppercase">Kilometraje Actual (KM)</Label>
-                    <Input 
-                      type="number" 
-                      className="bg-white/5 border-white/10 text-white font-mono text-2xl h-14"
-                      value={formData.odometerKm ?? 0} 
-                      onChange={e => handleNumericChange('odometerKm', e.target.value)} 
-                    />
+                <div className="p-6 bg-slate-900 text-white rounded-3xl space-y-6 shadow-xl">
+                  <div className="flex items-center gap-2 text-blue-400 font-bold uppercase text-[10px] tracking-widest border-b border-white/10 pb-2">
+                    <Scale size={16} /> Parámetros de Pesaje Legal
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-white/50 text-[10px] uppercase">Consumo Objetivo (L/100km)</Label>
-                    <Input 
-                      type="number" 
-                      className="bg-white/5 border-white/10 text-white"
-                      value={formData.avgConsumption ?? 32} 
-                      onChange={e => handleNumericChange('avgConsumption', e.target.value)} 
-                    />
+                  
+                  <div className="grid grid-cols-1 gap-6">
+                    <div className="space-y-2">
+                      <Label className="text-white/50 text-[10px] uppercase font-black">PBTC Máximo (Kilogramos)</Label>
+                      <Input 
+                        type="number" 
+                        className="bg-white/5 border-white/10 text-white font-mono text-2xl h-14"
+                        value={formData.grossCombinedWeightKg ?? 0} 
+                        onChange={e => handleNumericChange('grossCombinedWeightKg', e.target.value)} 
+                      />
+                      <p className="text-[8px] text-blue-400 italic font-bold">Peso Máximo Combinado Autorizado (Camión + Carga)</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-white/50 text-[10px] uppercase font-black">Tara del Vehículo (Kilogramos)</Label>
+                      <Input 
+                        type="number" 
+                        className="bg-white/5 border-white/10 text-white font-mono text-2xl h-14"
+                        value={formData.unladenWeightKg ?? 0} 
+                        onChange={e => handleNumericChange('unladenWeightKg', e.target.value)} 
+                      />
+                      <p className="text-[8px] text-white/30 italic">Peso del camión vacío y con tanques llenos.</p>
+                    </div>
+
+                    <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-2xl">
+                       <div className="text-[10px] uppercase font-bold text-blue-400">Capacidad de Carga Útil Calc.</div>
+                       <div className="text-3xl font-black italic text-green-400">
+                         {(formData.capacityKg || 0).toLocaleString()} <span className="text-sm uppercase font-normal opacity-50">KG</span>
+                       </div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Provincia Base</Label>
-                    <Select value={formData.location?.province} onValueChange={v => setFormData({...formData, location: {...formData.location!, province: v, country: "Argentina"}})}>
-                      <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                      <SelectContent>{PROVINCIAS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
-                    </Select>
+                <div className="space-y-6">
+                  <div className="p-4 bg-slate-50 border rounded-2xl space-y-4">
+                     <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
+                        <Gauge size={14}/> Telemetría y GPS Base
+                     </p>
+                     <div className="space-y-2">
+                        <Label>Kilometraje (Odómetro)</Label>
+                        <Input type="number" className="bg-white" value={formData.odometerKm ?? 0} onChange={e => handleNumericChange('odometerKm', e.target.value)} />
+                     </div>
+                     <div className="space-y-2">
+                        <Label>Consumo Objetivo (L/100km)</Label>
+                        <Input type="number" className="bg-white" value={formData.avgConsumption ?? 32} onChange={e => handleNumericChange('avgConsumption', e.target.value)} />
+                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Localidad</Label>
-                    <Input value={formData.location?.city ?? ''} onChange={e => setFormData({...formData, location: {...formData.location!, city: e.target.value}})} />
+
+                  <div className="space-y-4 pt-2">
+                    <div className="space-y-2">
+                      <Label>Provincia Base</Label>
+                      <Select value={formData.location?.province} onValueChange={v => setFormData({...formData, location: {...formData.location!, province: v, country: "Argentina"}})}>
+                        <SelectTrigger className="bg-white"><SelectValue placeholder="Elegir..." /></SelectTrigger>
+                        <SelectContent>{PROVINCIAS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Localidad</Label>
+                      <Input value={formData.location?.city ?? ''} onChange={e => setFormData({...formData, location: {...formData.location!, city: e.target.value}})} />
+                    </div>
+                    <Button variant="outline" type="button" className="w-full text-xs font-bold" onClick={handleGetLocation}>
+                      <Crosshair size={14} className="mr-2" /> CAPTURAR POSICIÓN BASE
+                    </Button>
                   </div>
-                  <Button variant="outline" type="button" className="w-full text-xs" onClick={handleGetLocation}>
-                    <Crosshair size={14} className="mr-2" /> Capturar GPS Base
-                  </Button>
                 </div>
               </div>
             </CardContent>
@@ -541,36 +583,41 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
 
         {step === 4 && (
           <div className="space-y-6">
-            <Card className="border-none shadow-xl bg-slate-900 text-white overflow-hidden relative">
+            <Card className="border-none shadow-xl bg-slate-900 text-white overflow-hidden relative rounded-3xl">
               <div className="absolute top-0 right-0 p-4 opacity-5"><Layers size={120}/></div>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-black flex items-center gap-2 text-blue-400 uppercase italic">
-                  <Gauge size={20} /> Costo Teórico Final
+                  <Gauge size={20} /> Análisis de Costos por KM
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6 relative">
                  <div className="text-center py-4">
                     <p className="text-5xl font-black italic text-green-400">${calculations.totalPerKm.toFixed(2)}</p>
-                    <p className="text-[10px] uppercase font-bold text-white/40 tracking-widest mt-1">Por Kilómetro Recorrido</p>
+                    <p className="text-[10px] uppercase font-bold text-white/40 tracking-widest mt-1">Costo Teórico por Kilómetro</p>
                  </div>
-                 <div className="p-3 bg-white/5 border border-white/10 rounded-lg">
-                    <p className="text-[9px] text-white/50 leading-relaxed italic">
-                      * El costo incluye fijos (seguros, patentes, sueldos) y variables (combustible real, neumáticos, service).
-                    </p>
+                 <div className="p-4 bg-white/5 border border-white/10 rounded-2xl grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-[8px] text-white/40 uppercase font-black">Fijos</p>
+                      <p className="text-xs font-bold text-blue-300">${calculations.fixedPerKm.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[8px] text-white/40 uppercase font-black">Combustible</p>
+                      <p className="text-xs font-bold text-green-300">${calculations.fuelPerKm.toFixed(2)}</p>
+                    </div>
                  </div>
               </CardContent>
             </Card>
             
-            <Card className="border-none shadow-sm">
-              <CardHeader className="bg-slate-50 border-b">
-                <CardTitle className="text-sm">Parámetros de Cálculo</CardTitle>
+            <Card className="border-none shadow-sm rounded-3xl overflow-hidden">
+              <CardHeader className="bg-slate-50 border-b py-4">
+                <CardTitle className="text-sm flex items-center gap-2"><Activity size={16}/> Parámetros Operativos Mensuales</CardTitle>
               </CardHeader>
               <CardContent className="pt-6">
                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase font-bold text-slate-400">Kilómetros Mensuales Estimados</Label>
+                    <Label className="text-[10px] uppercase font-bold text-slate-400">Kilómetros Mensuales Proyectados</Label>
                     <Input 
                       type="number" 
-                      className="bg-white"
+                      className="bg-white h-12 text-lg font-bold"
                       value={formData.costs?.operational.estimatedMonthlyKm || ''} 
                       onChange={e => handleCostChange('operational', 'estimatedMonthlyKm', e.target.value)}
                     />
@@ -588,13 +635,13 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
           </Button>
           <div className="flex gap-2">
             {step < 4 ? (
-              <Button onClick={handleNext} className="bg-blue-600 min-w-[120px]">
+              <Button onClick={handleNext} className="bg-blue-600 min-w-[120px] font-bold">
                 Siguiente <ChevronRight size={16} className="ml-1" />
               </Button>
             ) : (
-              <Button onClick={handleSubmit} className="bg-green-600 min-w-[150px]" disabled={isSubmitting || isProcessingAvatar}>
+              <Button onClick={handleSubmit} className="bg-green-600 min-w-[150px] font-bold" disabled={isSubmitting || isProcessingAvatar}>
                 {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save size={16} className="mr-2" />}
-                {truckId ? 'Guardar Cambios' : 'Habilitar Unidad'}
+                {truckId ? 'GUARDAR CAMBIOS' : 'HABILITAR UNIDAD'}
               </Button>
             )}
           </div>

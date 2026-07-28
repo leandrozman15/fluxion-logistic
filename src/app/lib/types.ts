@@ -190,7 +190,12 @@ export interface Truck {
   year: number;
   axles: number;
   vehicleType: string;
-  capacityKg: number;
+  
+  // Weights (Argentine Law Compliance)
+  grossCombinedWeightKg: number; // PBTC
+  unladenWeightKg: number; // Tara
+  capacityKg: number; // Payload (Calculated)
+  
   volumeM3: number;
   dimensions: { length: number; width: number; height: number };
   bodyType: string;

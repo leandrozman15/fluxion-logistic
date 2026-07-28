@@ -16,7 +16,7 @@ import {
   Truck as TruckIcon, FileText, Calendar, AlertTriangle, 
   CheckCircle2, Clock, Upload, ArrowLeft, ShieldCheck, 
   MapPin, Gauge, Box, Info, Download, Trash2, MoreVertical, LayoutGrid, Fuel, DollarSign, Activity, TrendingUp, User, Building2, Briefcase, Edit2,
-  Loader2, Eye, Wrench, History, ExternalLink, Zap
+  Loader2, Eye, Wrench, History, ExternalLink, Zap, Scale
 } from "lucide-react";
 import { Truck, VehicleDocument, DocStatus, Expense, Driver, Maintenance, TruckCosts } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -208,7 +208,6 @@ export default function TruckDetailPage() {
   if (!truck) return <div className="p-10 text-center">Vehículo no encontrado.</div>;
 
   const docProgress = truck.documentation ? (truck.documentation.filter(d => d.status === 'valid').length / truck.documentation.length) * 100 : 0;
-  const totalFuelCost = fuelExpenses?.reduce((acc, exp) => acc + (exp.amount || 0), 0) || 0;
 
   return (
     <div className="space-y-6">
@@ -226,9 +225,6 @@ export default function TruckDetailPage() {
                 <Badge variant="outline" className="uppercase text-[10px] bg-blue-50 text-blue-700 border-blue-100">
                   {truck.ownershipType === 'company' ? 'Propiedad Empresa' : 'Tercero'}
                 </Badge>
-                <Badge className={cn("text-[9px] uppercase font-black", truck.haulingType === 'bitren' ? "bg-amber-500" : "bg-slate-500")}>
-                   {truck.haulingType === 'bitren' ? 'Configuración Bitrén' : 'Standard'}
-                </Badge>
               </div>
               <p className="text-sm text-slate-500 flex items-center gap-1">
                 <MapPin size={14} /> Base: {truck.location?.city || 'S/D'}, {truck.location?.province || 'S/D'}
@@ -243,7 +239,7 @@ export default function TruckDetailPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="space-y-6">
-          <Card className="border-none shadow-sm overflow-hidden">
+          <Card className="border-none shadow-sm overflow-hidden bg-white">
             <div className="h-32 bg-slate-900 flex items-center justify-center text-white relative">
                <TruckIcon size={48} className="opacity-20" />
                <div className="absolute bottom-4 left-4">
@@ -255,21 +251,31 @@ export default function TruckDetailPage() {
             </div>
             <CardContent className="pt-6 space-y-6">
               <div className="space-y-2">
+                 <div className="flex items-center justify-between text-[10px] font-black uppercase text-slate-400">
+                    <Scale size={14} /> Balance Legal de Carga
+                 </div>
+                 <div className="grid grid-cols-2 gap-4 mt-2">
+                    <div className="p-3 bg-slate-50 rounded-xl">
+                       <p className="text-[8px] font-bold text-slate-400 uppercase">PBTC Máx.</p>
+                       <p className="text-sm font-black text-slate-700">{(truck.grossCombinedWeightKg || 0).toLocaleString()} KG</p>
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-xl">
+                       <p className="text-[8px] font-bold text-slate-400 uppercase">Tara Real</p>
+                       <p className="text-sm font-black text-slate-700">{(truck.unladenWeightKg || 0).toLocaleString()} KG</p>
+                    </div>
+                 </div>
+                 <div className="p-4 bg-green-50 border border-green-100 rounded-xl mt-2">
+                    <p className="text-[10px] font-black text-green-700 uppercase">Carga Útil Habilitada</p>
+                    <p className="text-2xl font-black text-green-600 italic">{(truck.capacityKg || 0).toLocaleString()} KG</p>
+                 </div>
+              </div>
+
+              <div className="space-y-2 pt-4 border-t">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-slate-500 uppercase">Cumplimiento Legal</span>
+                  <span className="font-bold text-slate-500 uppercase">Cumplimiento Docs</span>
                   <span className="font-bold text-blue-600">{Math.round(docProgress)}%</span>
                 </div>
                 <Progress value={docProgress} className="h-2 bg-slate-100" />
-              </div>
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                 <div className="space-y-1">
-                    <p className="text-[10px] uppercase font-bold text-slate-400">Consumo Avg.</p>
-                    <p className="text-xl font-black text-slate-700">{truck.avgConsumption || 32} <span className="text-[10px] font-normal text-slate-400">L/100</span></p>
-                 </div>
-                 <div className="space-y-1">
-                    <p className="text-[10px] uppercase font-bold text-slate-400">Estado</p>
-                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-100 uppercase text-[9px]">{truck.status}</Badge>
-                 </div>
               </div>
             </CardContent>
           </Card>
@@ -320,7 +326,7 @@ export default function TruckDetailPage() {
                      <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Unidad</p><p className="text-sm font-bold">{truck.brand} {truck.model}</p></div>
                      <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Patente Tractor</p><p className="text-sm font-mono font-bold text-blue-600">{truck.plate}</p></div>
                      <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Ejes Tractor</p><p className="text-sm font-bold">{truck.axles}</p></div>
-                     <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Carga Útil Est.</p><p className="text-sm font-bold">{truck.capacityKg.toLocaleString()} KG</p></div>
+                     <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Capacidad Legal</p><p className="text-sm font-bold text-green-700">{truck.capacityKg.toLocaleString()} KG</p></div>
                   </CardContent>
                </Card>
 
