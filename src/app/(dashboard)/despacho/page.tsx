@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, orderBy, serverTimestamp, doc, setDoc, getDocs, limit } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -22,7 +23,8 @@ import {
   ChevronRight,
   ArrowRightLeft,
   MoveRight,
-  Anchor
+  Anchor,
+  Globe
 } from "lucide-react";
 import { Client, Truck as TruckType, Hub, OptimizedRouteProposal, Load } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -30,6 +32,16 @@ import { optimizeDistribution } from "@/services/route-optimizer";
 import { format } from "date-fns";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+
+// Carga dinámica del mapa para evitar errores de SSR
+const MapContainer = dynamic(
+  () => import("react-leaflet").then((mod) => mod.MapContainer),
+  { ssr: false, loading: () => <div className="h-full w-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center"><Loader2 className="animate-spin" /></div> }
+);
+const TileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false });
+const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), { ssr: false });
+const Polyline = dynamic(() => import("react-leaflet").then((mod) => mod.Polyline), { ssr: false });
+const Popup = dynamic(() => import("react-leaflet").then((mod) => mod.Popup), { ssr: false });
 
 export default function DespachoInteligentePage() {
   const db = useFirestore();
@@ -44,6 +56,15 @@ export default function DespachoInteligentePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [proposals, setProposals] = useState<OptimizedRouteProposal[] | null>(null);
   const [planDate, setPlanDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [L, setL] = useState<any>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    import('leaflet').then((leaflet) => {
+      setL(leaflet.default);
+    });
+  }, []);
 
   const clientsQuery = useMemo(() => db ? query(collection(db, "clients"), orderBy("name")) : null, [db]);
   const trucksQuery = useMemo(() => db ? query(collection(db, "trucks"), orderBy("plate")) : null, [db]);
@@ -52,6 +73,21 @@ export default function DespachoInteligentePage() {
   const { data: clients, loading: loadingClients } = useCollection<Client>(clientsQuery);
   const { data: trucks, loading: loadingTrucks } = useCollection<TruckType>(trucksQuery);
   const { data: hubs, loading: loadingHubs } = useCollection<Hub>(hubsQuery);
+
+  // Iconos para el mapa
+  const hubIcon = (isMain: boolean) => L ? L.divIcon({
+    className: 'custom-hub-icon',
+    html: `<div class="${isMain ? 'bg-amber-500' : 'bg-slate-900'} text-white p-1 rounded shadow-lg border border-white flex items-center justify-center">${isMain ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' : '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>'}</div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10]
+  }) : null;
+
+  const clientIcon = L ? L.divIcon({
+    className: 'custom-client-icon',
+    html: `<div class="bg-green-600 text-white p-1 rounded-full shadow-lg border border-white flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z"/><path d="m3 9 2.45-4.9A2 2 0 0 1 7.24 3h10a2 2 0 0 1 1.79 1.1L21 9"/></svg></div>`,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9]
+  }) : null;
 
   // Seleccionar sede principal por defecto
   useEffect(() => {
@@ -85,7 +121,6 @@ export default function DespachoInteligentePage() {
 
     setIsOptimizing(true);
     try {
-      // Sanitización de datos para Server Action
       const sanitizedClients = clients
         ?.filter(c => selectedClients.includes(c.id))
         .map(c => ({
@@ -269,13 +304,13 @@ export default function DespachoInteligentePage() {
               <Label className="text-[10px] uppercase font-bold text-slate-400">Fecha de Operación</Label>
               <Input 
                 type="date" 
-                className="bg-white h-9" 
+                className="bg-white h-9 w-full sm:w-40" 
                 value={planDate} 
                 onChange={e => setPlanDate(e.target.value)} 
               />
            </div>
            <Button 
-            className="bg-blue-600 shadow-lg shadow-blue-100 h-9" 
+            className="bg-blue-600 shadow-lg shadow-blue-100 h-9 w-full sm:w-auto" 
             onClick={handleRunOptimization}
             disabled={isOptimizing || selectedClients.length === 0}
            >
@@ -424,49 +459,85 @@ export default function DespachoInteligentePage() {
           ) : (
             <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {proposals.map((prop, idx) => (
-                    <Card key={prop.truckId} className="border-none shadow-md overflow-hidden">
-                       <div className="h-2 w-full bg-blue-600"></div>
-                       <CardHeader className="pb-2">
-                          <div className="flex justify-between items-start">
-                             <div>
-                                <CardTitle className="text-lg font-black font-mono flex items-center gap-2">
-                                  <Truck size={18} className="text-blue-600" /> {prop.truckPlate}
-                                </CardTitle>
-                                <CardDescription className="text-[10px] uppercase font-bold text-slate-400">Ruta Sugerida #{idx + 1}</CardDescription>
-                             </div>
-                             <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-100">{prop.stops.length} Destinos</Badge>
-                          </div>
-                       </CardHeader>
-                       <CardContent className="space-y-4">
-                          <div className="p-3 bg-slate-50 rounded-xl space-y-2">
-                             <div className="flex justify-between text-xs">
-                                <span className="text-slate-400 font-bold uppercase tracking-widest text-[9px]">Distancia Est.</span>
-                                <span className="font-bold text-slate-800">{prop.totalDistanceKm} KM</span>
-                             </div>
-                             <div className="flex justify-between text-xs">
-                                <span className="text-slate-400 font-bold uppercase tracking-widest text-[9px]">Tiempo Jornada</span>
-                                <span className="font-bold text-slate-800">{prop.estimatedDurationMinutes} min</span>
-                             </div>
-                          </div>
-                          
-                          <div className="space-y-2">
-                             <p className="text-[10px] font-black uppercase text-slate-400 px-1">Secuencia de Entrega</p>
-                             <div className="space-y-2 relative pl-4 border-l-2 border-dashed border-blue-100">
-                                <div className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1"><MapPin size={10}/> Partida: {activeHub?.name}</div>
-                                {prop.stops.map((s, sIdx) => (
-                                  <div key={s.id} className="relative">
-                                    <div className="absolute -left-[21px] top-1.5 w-2 h-2 rounded-full bg-blue-600 border-2 border-white shadow-sm"></div>
-                                    <div className="text-xs font-bold text-slate-700">{s.name}</div>
-                                    <p className="text-[10px] text-slate-400 truncate">{s.address.street} {s.address.number}</p>
-                                  </div>
-                                ))}
-                                <div className="text-[9px] font-black text-blue-600 uppercase flex items-center gap-1 pt-1"><Anchor size={10}/> Finalización en: {endHub?.name}</div>
-                             </div>
-                          </div>
-                       </CardContent>
-                    </Card>
-                  ))}
+                  {proposals.map((prop, idx) => {
+                    // Generar puntos para el mapa de esta propuesta
+                    const routePoints = mounted && activeHub && endHub ? [
+                      [activeHub.lat, activeHub.lng] as [number, number],
+                      ...prop.stops.map(s => [s.address.lat!, s.address.lng!] as [number, number]),
+                      [endHub.lat, endHub.lng] as [number, number]
+                    ] : [];
+
+                    return (
+                      <Card key={prop.truckId} className="border-none shadow-md overflow-hidden flex flex-col">
+                        <div className="h-2 w-full bg-blue-600"></div>
+                        
+                        {/* Mapa de la Ruta Sugerida */}
+                        <div className="h-40 w-full relative bg-slate-100 border-b">
+                           {mounted && routePoints.length > 0 && (
+                             <MapContainer 
+                               center={routePoints[0]} 
+                               zoom={6} 
+                               className="h-full w-full"
+                               zoomControl={false}
+                               dragging={false}
+                               touchZoom={false}
+                               scrollWheelZoom={false}
+                             >
+                               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                               <Polyline positions={routePoints} color="#2563eb" weight={3} dashArray="5, 10" />
+                               <Marker position={routePoints[0]} icon={hubIcon(true)} />
+                               {prop.stops.map(s => (
+                                 <Marker key={s.id} position={[s.address.lat!, s.address.lng!]} icon={clientIcon} />
+                               ))}
+                               <Marker position={routePoints[routePoints.length - 1]} icon={hubIcon(activeHub?.id === endHub?.id)} />
+                             </MapContainer>
+                           )}
+                           <div className="absolute top-2 right-2 z-[500]">
+                              <Badge className="bg-white/90 text-blue-600 border shadow-sm text-[8px] font-black">VISTA GPS</Badge>
+                           </div>
+                        </div>
+
+                        <CardHeader className="pb-2">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                  <CardTitle className="text-lg font-black font-mono flex items-center gap-2">
+                                    <Truck size={18} className="text-blue-600" /> {prop.truckPlate}
+                                  </CardTitle>
+                                  <CardDescription className="text-[10px] uppercase font-bold text-slate-400">Ruta Sugerida #{idx + 1}</CardDescription>
+                              </div>
+                              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-100">{prop.stops.length} Destinos</Badge>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-4 flex-1">
+                            <div className="p-3 bg-slate-50 rounded-xl space-y-2">
+                              <div className="flex justify-between text-xs">
+                                  <span className="text-slate-400 font-bold uppercase tracking-widest text-[9px]">Distancia Est.</span>
+                                  <span className="font-bold text-slate-800">{prop.totalDistanceKm} KM</span>
+                              </div>
+                              <div className="flex justify-between text-xs">
+                                  <span className="text-slate-400 font-bold uppercase tracking-widest text-[9px]">Tiempo Jornada</span>
+                                  <span className="font-bold text-slate-800">{prop.estimatedDurationMinutes} min</span>
+                              </div>
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <p className="text-[10px] font-black uppercase text-slate-400 px-1">Secuencia de Entrega</p>
+                              <div className="space-y-2 relative pl-4 border-l-2 border-dashed border-blue-100">
+                                  <div className="text-[9px] font-bold text-slate-400 uppercase flex items-center gap-1"><MapPin size={10}/> Partida: {activeHub?.name}</div>
+                                  {prop.stops.map((s, sIdx) => (
+                                    <div key={s.id} className="relative">
+                                      <div className="absolute -left-[21px] top-1.5 w-2 h-2 rounded-full bg-blue-600 border-2 border-white shadow-sm"></div>
+                                      <div className="text-xs font-bold text-slate-700">{s.name}</div>
+                                      <p className="text-[10px] text-slate-400 truncate">{s.address.street} {s.address.number}</p>
+                                    </div>
+                                  ))}
+                                  <div className="text-[9px] font-black text-blue-600 uppercase flex items-center gap-1 pt-1"><Anchor size={10}/> Finalización en: {endHub?.name}</div>
+                              </div>
+                            </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
                </div>
 
                <div className="p-6 bg-slate-900 text-white rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6">
@@ -476,7 +547,7 @@ export default function DespachoInteligentePage() {
                      </div>
                      <div>
                         <p className="text-lg font-bold italic">Confirmar Plan Maestro</p>
-                        <p className="text-xs text-white/50">Se generarán {proposals.filter(p => p.stops.length > 0).length} órdenes desde <b>{activeHub?.name}</b> finalizando en <b>{endHub?.name}</b>.</p>
+                        <p className="text-xs text-white/50">Se generarán {proposals.filter(p => p.stops.length > 0).length} fletes desde <b>{activeHub?.name}</b> finalizando en <b>{endHub?.name}</b>.</p>
                      </div>
                   </div>
                   <Button 
@@ -496,3 +567,4 @@ export default function DespachoInteligentePage() {
     </div>
   );
 }
+
