@@ -215,17 +215,22 @@ export default function AnalyticsPage() {
 
   const driversPerformance = useMemo(() => {
     if (!drivers || !loads) return [];
-    return drivers.map(driver => {
-      const driverLoads = loads.filter(l => l.assignedDriverId === driver.id && l.status === 'delivered');
-      const totalKm = driverLoads.reduce((acc, l) => acc + (l.tracking?.distanceTraveledKm || 0), 0);
-      return {
-        id: driver.id,
-        name: `${driver.lastName}, ${driver.firstName[0]}.`,
-        avatar: driver.avatarUrl,
-        km: Math.round(totalKm),
-        trips: driverLoads.length
-      };
-    }).sort((a, b) => b.km - a.km).slice(0, 10);
+    // Filtrar solo conductores profesionales para el ranking (excluir acompañantes)
+    return drivers
+      .filter(d => d.role === 'driver')
+      .map(driver => {
+        const driverLoads = loads.filter(l => l.assignedDriverId === driver.id && l.status === 'delivered');
+        const totalKm = driverLoads.reduce((acc, l) => acc + (l.tracking?.distanceTraveledKm || 0), 0);
+        return {
+          id: driver.id,
+          name: `${driver.lastName}, ${driver.firstName[0]}.`,
+          avatar: driver.avatarUrl,
+          km: Math.round(totalKm),
+          trips: driverLoads.length
+        };
+      })
+      .sort((a, b) => b.km - a.km)
+      .slice(0, 10);
   }, [drivers, loads]);
 
   const clientsRevenue = useMemo(() => {
@@ -387,7 +392,7 @@ export default function AnalyticsPage() {
             <CardTitle className="text-sm font-bold flex items-center gap-2">
               <Users className="w-4 h-4 text-blue-600" /> Ranking de Choferes por KM
             </CardTitle>
-            <CardDescription className="text-[10px] uppercase font-bold text-slate-400">Kilometraje total acumulado por conductor</CardDescription>
+            <CardDescription className="text-[10px] uppercase font-bold text-slate-400">Kilometraje total acumulado por conductor profesional</CardDescription>
           </CardHeader>
           <CardContent className="h-[350px] pt-8">
             <ResponsiveContainer width="100%" height="100%">
