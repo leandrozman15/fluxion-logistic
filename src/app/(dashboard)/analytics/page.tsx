@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState } from "react";
@@ -20,7 +19,9 @@ import {
   DollarSign,
   Briefcase,
   User,
-  Star
+  Star,
+  Zap,
+  Target
 } from "lucide-react";
 import { Load, Expense, Truck, Driver, Client } from "@/app/lib/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -35,13 +36,15 @@ import {
   Legend,
   PieChart,
   Pie,
-  Cell
+  Cell,
+  AreaChart,
+  Area
 } from "recharts";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
-const COLORS = ['#2563eb', '#ef4444', '#10b981', '#f59e0b'];
+const COLORS = ['#2563eb', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'];
 
 export default function AnalyticsPage() {
   const db = useFirestore();
@@ -68,7 +71,6 @@ export default function AnalyticsPage() {
     loads.forEach(load => {
       if (load.status === 'delivered') {
         const total = load.tracking?.distanceTraveledKm || 0;
-        // Si no es ida y vuelta, se estima un 40% de km muertos (regreso vacío)
         if (!load.isRoundTrip) {
            productive += (total * 0.6);
            dead += (total * 0.4);
@@ -122,7 +124,7 @@ export default function AnalyticsPage() {
   const driversPerformance = useMemo(() => {
     if (!drivers || !loads) return [];
     return drivers
-      .filter(d => d.role === 'driver') // Solo choferes, no acompañantes
+      .filter(d => d.role === 'driver')
       .map(driver => {
         const driverLoads = loads.filter(l => l.assignedDriverId === driver.id && l.status === 'delivered');
         const totalKm = driverLoads.reduce((acc, l) => acc + (l.tracking?.distanceTraveledKm || 0), 0);
@@ -136,16 +138,6 @@ export default function AnalyticsPage() {
       .sort((a, b) => b.km - a.km).slice(0, 10);
   }, [drivers, loads]);
 
-  const clientRevenue = useMemo(() => {
-    if (!clients || !loads) return [];
-    return clients.map(client => {
-      const revenue = loads
-        .filter(l => (l.clientId === client.id || l.clientName === client.name) && l.status === 'delivered')
-        .reduce((acc, l) => acc + (l.totalAmount || 0), 0);
-      return { name: client.name, value: revenue };
-    }).sort((a, b) => b.value - a.value).slice(0, 7);
-  }, [clients, loads]);
-
   if (loadsLoading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-blue-600" /></div>;
 
   const globalRevenue = fleetProfitability.reduce((acc, d) => acc + d.revenue, 0);
@@ -155,43 +147,75 @@ export default function AnalyticsPage() {
   const globalMarginPercent = (globalFixedCosts + globalVariableCosts) > 0 ? (globalMargin / (globalFixedCosts + globalVariableCosts)) * 100 : 0;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="space-y-8 pb-20">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Inteligencia de Flota y Costos</h1>
-          <p className="text-muted-foreground text-sm">Análisis de rentabilidad real cruzando facturación, gastos fijos y variables.</p>
+          <h1 className="text-3xl font-black text-slate-900 italic tracking-tight uppercase">Inteligencia de Flota</h1>
+          <p className="text-slate-500 text-sm font-medium">Análisis de rentabilidad real cruzando facturación, gastos fijos y variables.</p>
         </div>
-        <Select value={range} onValueChange={setRange}>
-          <SelectTrigger className="w-[200px] bg-white"><SelectValue placeholder="Período" /></SelectTrigger>
-          <SelectContent><SelectItem value="30">Acumulado Anual 2025</SelectItem></SelectContent>
-        </Select>
+        <div className="bg-white p-1 rounded-xl border shadow-sm flex items-center">
+          <Select value={range} onValueChange={setRange}>
+            <SelectTrigger className="w-[220px] border-none shadow-none font-bold text-xs uppercase tracking-widest"><SelectValue placeholder="Período" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="30">Acumulado Anual 2025</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <KPICard title="Facturación Bruta" value={globalRevenue.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })} icon={TrendingUp} description="Fletes entregados" />
-        <KPICard title="Gastos Estructurales" value={globalFixedCosts.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })} icon={Briefcase} description="Sueldos, seguros, patentes" />
-        <Card className={cn(globalMargin >= 0 ? "bg-green-50 border-green-100" : "bg-red-50 border-red-100")}>
-          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold text-slate-500 uppercase">Margen Operativo (%)</CardTitle></CardHeader>
-          <CardContent>
-            <div className={cn("text-2xl font-black", globalMargin >= 0 ? "text-green-700" : "text-red-700")}>
-              {globalMarginPercent.toFixed(1)}%
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="border-none shadow-xl bg-white overflow-hidden group">
+          <CardHeader className="pb-2 space-y-0">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Facturación Bruta</CardTitle>
+              <div className="p-2 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors"><TrendingUp size={16} /></div>
             </div>
-            <p className={cn("text-[10px] font-bold uppercase mt-1", globalMargin >= 0 ? "text-green-600" : "text-red-600")}>
-              {globalMargin.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })} ganancia real
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-black text-slate-900 italic">{globalRevenue.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })}</div>
+            <p className="text-[10px] text-slate-400 mt-1 font-bold uppercase">Fletes entregados</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-none shadow-xl bg-white overflow-hidden group">
+          <CardHeader className="pb-2 space-y-0">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Gastos Estructurales</CardTitle>
+              <div className="p-2 bg-red-50 text-red-600 rounded-lg group-hover:bg-red-600 group-hover:text-white transition-colors"><Briefcase size={16} /></div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-black text-slate-900 italic">{globalFixedCosts.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })}</div>
+            <p className="text-[10px] text-slate-400 mt-1 font-bold uppercase">Sueldos, seguros, patentes</p>
+          </CardContent>
+        </Card>
+
+        <Card className={cn("border-none shadow-xl overflow-hidden", globalMargin >= 0 ? "bg-green-600 text-white" : "bg-red-600 text-white")}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-[10px] font-black opacity-60 uppercase tracking-[0.2em]">Margen Operativo</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-black italic">{globalMarginPercent.toFixed(1)}%</div>
+            <p className="text-[10px] font-bold uppercase mt-1 opacity-70">
+              {globalMargin.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })} Utilidad Real
             </p>
           </CardContent>
         </Card>
-        <Card className="bg-slate-900 text-white">
-          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold opacity-70 uppercase">Líder de Flota</CardTitle></CardHeader>
-          <CardContent>
+
+        <Card className="border-none shadow-xl bg-slate-900 text-white overflow-hidden relative">
+          <div className="absolute top-0 right-0 p-4 opacity-10"><Zap size={64} className="fill-blue-500 text-blue-500" /></div>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-[10px] font-black text-white/50 uppercase tracking-[0.2em]">Líder de Flota</CardTitle>
+          </CardHeader>
+          <CardContent className="relative z-10">
              <div className="flex items-center gap-3">
-                <Avatar className="h-10 w-10 border border-white/20">
+                <Avatar className="h-12 w-12 border-2 border-white/20 shadow-md">
                    <AvatarImage src={driversPerformance[0]?.avatarUrl} className="object-cover" />
-                   <AvatarFallback><User size={16} /></AvatarFallback>
+                   <AvatarFallback className="bg-blue-600 text-white font-bold">{driversPerformance[0]?.name[0]}</AvatarFallback>
                 </Avatar>
-                <div>
-                   <div className="text-sm font-black text-blue-400 truncate">{driversPerformance[0]?.name || 'S/D'}</div>
-                   <p className="text-[10px] opacity-50 uppercase font-bold">{driversPerformance[0]?.km.toLocaleString() || 0} KM recorridos</p>
+                <div className="min-w-0">
+                   <div className="text-sm font-black text-blue-400 truncate uppercase italic">{driversPerformance[0]?.name || 'S/D'}</div>
+                   <p className="text-[10px] text-white/50 uppercase font-black">{driversPerformance[0]?.km.toLocaleString() || 0} KM Conducidos</p>
                 </div>
              </div>
           </CardContent>
@@ -199,43 +223,50 @@ export default function AnalyticsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="border-none shadow-sm lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-sm flex items-center gap-2"><BarChart3 size={16} className="text-blue-600" /> Facturación vs. Costos Totales</CardTitle>
-            <CardDescription>Comparativa de ingresos y egresos por camión</CardDescription>
+        <Card className="border-none shadow-xl lg:col-span-2 rounded-3xl overflow-hidden">
+          <CardHeader className="bg-slate-50/50 border-b">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-sm font-black uppercase tracking-tighter flex items-center gap-2"><BarChart3 size={18} className="text-blue-600" /> Facturación vs. Costos Totales</CardTitle>
+                <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Comparativa de ingresos y egresos por camión</CardDescription>
+              </div>
+              <Badge variant="outline" className="bg-white text-[8px] font-black uppercase">Auditoría Financiera</Badge>
+            </div>
           </CardHeader>
-          <CardContent className="h-[300px] pt-4">
+          <CardContent className="h-[350px] pt-8">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={fleetProfitability}>
+              <BarChart data={fleetProfitability} barGap={8}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
-                <XAxis dataKey="plate" fontSize={10} />
-                <YAxis fontSize={10} />
+                <XAxis dataKey="plate" fontSize={10} axisLine={false} tickLine={false} fontStyle="italic" fontWeight="bold" />
+                <YAxis fontSize={10} axisLine={false} tickLine={false} />
                 <Tooltip 
+                  cursor={{fill: 'rgba(0,0,0,0.02)'}}
+                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}
                   formatter={(value: any) => value.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })}
                 />
-                <Legend />
-                <Bar name="Facturación" dataKey="revenue" fill="#2563eb" radius={[4, 4, 0, 0]} />
-                <Bar name="Costos Totales" dataKey="totalInvestment" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                <Legend iconType="circle" />
+                <Bar name="Facturación" dataKey="revenue" fill="#2563eb" radius={[6, 6, 0, 0]} />
+                <Bar name="Costos Totales" dataKey="totalInvestment" fill="#ef4444" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        <Card className="border-none shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-sm flex items-center gap-2"><PieChartIcon size={16} className="text-blue-600" /> Eficiencia de Ruta (KM)</CardTitle>
-            <CardDescription>Tramo con carga vs. Regreso vacío.</CardDescription>
+        <Card className="border-none shadow-xl rounded-3xl overflow-hidden">
+          <CardHeader className="bg-slate-50/50 border-b">
+            <CardTitle className="text-sm font-black uppercase tracking-tighter flex items-center gap-2"><PieChartIcon size={18} className="text-blue-600" /> Eficiencia de Ruta (KM)</CardTitle>
+            <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Tramo con carga vs. Regreso vacío.</CardDescription>
           </CardHeader>
-          <CardContent className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
+          <CardContent className="h-[350px] flex flex-col items-center justify-center">
+            <ResponsiveContainer width="100%" height="80%">
               <PieChart>
                 <Pie
                   data={efficiencyData}
                   cx="50%"
                   cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
+                  innerRadius={65}
+                  outerRadius={95}
+                  paddingAngle={8}
                   dataKey="value"
                 >
                   {efficiencyData.map((entry, index) => (
@@ -243,125 +274,143 @@ export default function AnalyticsPage() {
                   ))}
                 </Pie>
                 <Tooltip />
-                <Legend verticalAlign="bottom" height={36}/>
               </PieChart>
             </ResponsiveContainer>
+            <div className="grid grid-cols-2 gap-4 w-full mt-4">
+               {efficiencyData.map((entry, i) => (
+                 <div key={i} className="text-center">
+                    <div className="text-xs font-black uppercase text-slate-500">{entry.name}</div>
+                    <div className={cn("text-lg font-black italic", i === 0 ? "text-blue-600" : "text-red-500")}>
+                      {entry.value.toLocaleString()} <span className="text-[8px] font-normal opacity-50 uppercase">km</span>
+                    </div>
+                 </div>
+               ))}
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="border-none shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-sm flex items-center gap-2"><Navigation size={16} className="text-blue-600" /> Ranking de Choferes por KM</CardTitle>
-            <CardDescription>Kilometraje acumulado (Solo Choferes Profesionales)</CardDescription>
+        <Card className="border-none shadow-xl rounded-3xl overflow-hidden">
+          <CardHeader className="bg-slate-50/50 border-b">
+            <CardTitle className="text-sm font-black uppercase tracking-tighter flex items-center gap-2"><Navigation size={18} className="text-blue-600" /> Leaderboard Choferes</CardTitle>
+            <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Rendimiento por KM (Choferes Profesionales)</CardDescription>
           </CardHeader>
-          <CardContent className="pt-2">
-             <div className="space-y-4">
+          <CardContent className="pt-6">
+             <div className="space-y-5">
                 {driversPerformance.map((dr, idx) => (
-                  <div key={dr.id} className="flex items-center justify-between">
-                     <div className="flex items-center gap-3">
-                        <div className="text-xs font-bold text-slate-400 w-4">{idx + 1}°</div>
-                        <Avatar className="h-8 w-8 border">
+                  <div key={dr.id} className="flex items-center justify-between group">
+                     <div className="flex items-center gap-4">
+                        <div className={cn(
+                          "text-xs font-black w-6 h-6 rounded-lg flex items-center justify-center",
+                          idx === 0 ? "bg-amber-100 text-amber-600 shadow-sm" : "bg-slate-50 text-slate-400"
+                        )}>
+                          {idx + 1}
+                        </div>
+                        <Avatar className="h-10 w-10 border-2 border-white shadow-sm ring-1 ring-slate-100">
                            <AvatarImage src={dr.avatarUrl} className="object-cover" />
-                           <AvatarFallback className="text-[10px] bg-slate-50">{dr.name[0]}</AvatarFallback>
+                           <AvatarFallback className="text-[10px] bg-slate-50 font-bold">{dr.name[0]}</AvatarFallback>
                         </Avatar>
-                        <div className="text-xs font-bold text-slate-700">{dr.name}</div>
+                        <div>
+                          <div className="text-xs font-black text-slate-700 uppercase italic leading-none">{dr.name}</div>
+                          <div className="text-[8px] text-slate-400 font-bold uppercase mt-1">Conductor Habilitado</div>
+                        </div>
                      </div>
-                     <Badge variant="secondary" className="font-mono text-[10px]">{dr.km.toLocaleString()} KM</Badge>
+                     <Badge variant="secondary" className="font-mono text-[10px] font-black bg-blue-50 text-blue-600 border-none px-3">{dr.km.toLocaleString()} KM</Badge>
                   </div>
                 ))}
-                {driversPerformance.length === 0 && <p className="text-center py-10 text-xs text-slate-400 italic">Sin datos de viajes.</p>}
+                {driversPerformance.length === 0 && <p className="text-center py-20 text-xs text-slate-400 italic">Esperando datos de tráfico...</p>}
              </div>
           </CardContent>
         </Card>
 
-        <Card className="border-none shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-sm flex items-center gap-2"><Users size={16} className="text-blue-600" /> Facturación por Cliente</CardTitle>
-            <CardDescription>Ingresos generados por cuenta de cliente</CardDescription>
-          </CardHeader>
-          <CardContent className="h-[250px] pt-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={clientRevenue} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60}>
-                  {clientRevenue.map((entry, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
-                </Pie>
-                <Tooltip formatter={(value: any) => value.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })} />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card className="border-none shadow-sm bg-slate-50">
-          <CardHeader><CardTitle className="text-sm">Balance Operativo Global</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex justify-between items-center py-2 border-b">
-              <span className="text-xs text-slate-500">Total Ingresos</span>
-              <span className="text-lg font-black text-blue-600">{globalRevenue.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</span>
-            </div>
-            <div className="flex justify-between items-center py-2 border-b">
-              <span className="text-xs text-slate-500">Total Egresos</span>
-              <span className="text-lg font-black text-red-600">{(globalFixedCosts + globalVariableCosts).toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</span>
-            </div>
-            <div className="flex justify-between items-center py-2 bg-white p-3 rounded-lg shadow-sm">
-              <span className="text-xs font-bold">Utilidad Neta</span>
-              <span className={cn("text-xl font-black", globalMargin >= 0 ? "text-green-600" : "text-red-600")}>
-                {globalMargin.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}
-              </span>
-            </div>
-            <div className="text-[10px] text-center font-bold text-slate-400 uppercase">
-              {globalMarginPercent.toFixed(1)}% Margen Promedio Flota
-            </div>
-          </CardContent>
+        <Card className="border-none shadow-xl rounded-3xl overflow-hidden lg:col-span-2">
+           <CardHeader className="bg-slate-50/50 border-b">
+              <CardTitle className="text-sm font-black uppercase tracking-tighter flex items-center gap-2"><Activity size={18} className="text-blue-600" /> Balance Operativo Global</CardTitle>
+           </CardHeader>
+           <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-8">
+              <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 space-y-2">
+                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Ingresos</p>
+                 <p className="text-3xl font-black text-blue-600 italic leading-none">{globalRevenue.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })}</p>
+              </div>
+              <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 space-y-2">
+                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Inversión Logística</p>
+                 <p className="text-3xl font-black text-red-600 italic leading-none">{(globalFixedCosts + globalVariableCosts).toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })}</p>
+              </div>
+              <div className={cn("p-6 rounded-3xl border shadow-lg space-y-2", globalMargin >= 0 ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200")}>
+                 <p className={cn("text-[10px] font-black uppercase tracking-widest", globalMargin >= 0 ? "text-green-600" : "text-red-600")}>Utilidad Neta Estimada</p>
+                 <p className={cn("text-3xl font-black italic leading-none", globalMargin >= 0 ? "text-green-700" : "text-red-700")}>
+                    {globalMargin.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })}
+                 </p>
+              </div>
+           </CardContent>
         </Card>
       </div>
 
-      <Card className="border-none shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-sm">Auditoría Detallada de Rentabilidad por Unidad</CardTitle>
+      <Card className="border-none shadow-2xl rounded-[2rem] overflow-hidden">
+        <CardHeader className="bg-slate-900 text-white p-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-xl font-black italic tracking-tighter flex items-center gap-3"><Target size={24} className="text-blue-400" /> Auditoría de Rentabilidad por Unidad</CardTitle>
+              <CardDescription className="text-white/50 text-[10px] uppercase font-black tracking-widest mt-1">Análisis quirúrgico de cada activo de la organización</CardDescription>
+            </div>
+            <div className="hidden sm:flex gap-4">
+               <div className="text-right">
+                  <p className="text-[8px] font-black text-white/30 uppercase">Meta Eficiencia</p>
+                  <p className="text-lg font-black text-green-400 leading-none">85%+</p>
+               </div>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead className="bg-slate-50 border-b">
                 <tr>
-                  <th className="p-4 text-[10px] uppercase font-bold text-slate-500">Camión / Unidad</th>
-                  <th className="p-4 text-[10px] uppercase font-bold text-slate-500">Gastos Fijos</th>
-                  <th className="p-4 text-[10px] uppercase font-bold text-slate-500">Variables (Ruta)</th>
-                  <th className="p-4 text-[10px] uppercase font-bold text-slate-500">Inversión Total</th>
-                  <th className="p-4 text-[10px] uppercase font-bold text-slate-500">Facturación</th>
-                  <th className="p-4 text-[10px] uppercase font-bold text-slate-500 text-right">Índice IE</th>
+                  <th className="px-8 py-5 text-[10px] uppercase font-black text-slate-500 tracking-widest">Unidad Operativa</th>
+                  <th className="px-6 py-5 text-[10px] uppercase font-black text-slate-500 tracking-widest text-center">Fijos/Mes</th>
+                  <th className="px-6 py-5 text-[10px] uppercase font-black text-slate-500 tracking-widest text-center">Variables (Ruta)</th>
+                  <th className="px-6 py-5 text-[10px] uppercase font-black text-slate-500 tracking-widest text-center">Inversión Total</th>
+                  <th className="px-6 py-5 text-[10px] uppercase font-black text-slate-500 tracking-widest text-center">Facturación</th>
+                  <th className="px-8 py-5 text-[10px] uppercase font-black text-slate-500 tracking-widest text-right">Índice IE</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {fleetProfitability.map((row) => (
-                  <tr key={row.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="p-4">
-                       <div className="flex items-center gap-3">
-                          <Avatar className="h-10 w-10 rounded-lg border">
-                             <AvatarImage src={row.avatarUrl} className="object-cover" />
-                             <AvatarFallback className="bg-blue-50 text-blue-600 rounded-lg"><TruckIcon size={20} /></AvatarFallback>
-                          </Avatar>
+                  <tr key={row.id} className="hover:bg-slate-50/50 transition-all group">
+                    <td className="px-8 py-6">
+                       <div className="flex items-center gap-4">
+                          <div className="relative h-14 w-14 shrink-0 rounded-2xl overflow-hidden border-2 border-white shadow-md shadow-slate-200">
+                             <img src={row.avatarUrl || "https://picsum.photos/seed/truck/200"} className="h-full w-full object-cover" />
+                          </div>
                           <div>
-                             <div className="font-bold text-sm text-slate-900">{row.plate}</div>
-                             <div className="text-[9px] text-slate-400 uppercase font-bold">{row.model}</div>
-                             <div className="text-[8px] text-blue-500 font-bold uppercase">{row.trips} fletes entregados</div>
+                             <div className="font-black text-base text-slate-900 font-mono tracking-tighter leading-none group-hover:text-blue-600 transition-colors">{row.plate}</div>
+                             <div className="text-[10px] text-slate-400 uppercase font-black mt-1">{row.model}</div>
+                             <div className="flex items-center gap-1.5 text-[8px] text-blue-500 font-black uppercase mt-1">
+                               <Package size={10}/> {row.trips} Fletes Finalizados
+                             </div>
                           </div>
                        </div>
                     </td>
-                    <td className="p-4 text-sm font-medium text-slate-600">{row.fixedCosts.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</td>
-                    <td className="p-4 text-sm font-medium text-slate-600">{row.variableCosts.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</td>
-                    <td className="p-4 text-sm font-bold text-slate-700">{row.totalInvestment.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</td>
-                    <td className="p-4 text-sm font-black text-blue-600">{row.revenue.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</td>
-                    <td className="p-4 text-right">
+                    <td className="px-6 py-6 text-center font-bold text-slate-600 text-sm">{row.fixedCosts.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })}</td>
+                    <td className="px-6 py-6 text-center font-bold text-slate-600 text-sm">{row.variableCosts.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })}</td>
+                    <td className="px-6 py-6 text-center font-black text-slate-800 text-sm">{row.totalInvestment.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })}</td>
+                    <td className="px-6 py-6 text-center font-black text-blue-600 text-base italic">{row.revenue.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })}</td>
+                    <td className="px-8 py-6 text-right">
                       <Badge className={cn(
-                        "text-[9px] uppercase font-black",
-                        row.marginPercent > 20 ? "bg-green-600" : row.marginPercent > 0 ? "bg-blue-600" : "bg-red-600"
+                        "text-[10px] uppercase font-black h-8 px-4 border-none italic shadow-sm",
+                        row.marginPercent > 20 ? "bg-green-100 text-green-700" : row.marginPercent > 0 ? "bg-blue-100 text-blue-700" : "bg-red-100 text-red-700"
                       )}>
-                        {row.marginPercent.toFixed(1)}% {row.marginPercent > 0 ? 'Saludable' : 'Crítico'}
+                        {row.marginPercent.toFixed(1)}% {row.marginPercent > 20 ? 'Saludable' : row.marginPercent > 0 ? 'Regular' : 'Crítico'}
                       </Badge>
                     </td>
                   </tr>
                 ))}
+                {fleetProfitability.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-8 py-32 text-center text-slate-400 italic font-medium">
+                      No hay registros financieros para el período seleccionado.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
