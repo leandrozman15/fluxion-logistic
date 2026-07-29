@@ -47,7 +47,7 @@ const COLORS = ['#2563eb', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'];
 
 /**
  * Componente de Tick Personalizado para el Eje X.
- * Renderiza la foto, patente y modelo de forma fija bajo las barras.
+ * Renderiza la foto, patente, marca y modelo en 3 renglones independientes.
  */
 const CustomXAxisTick = ({ x, y, payload, data }: any) => {
   const item = data.find((d: any) => d.plate === payload.value);
@@ -55,7 +55,7 @@ const CustomXAxisTick = ({ x, y, payload, data }: any) => {
 
   return (
     <g transform={`translate(${x},${y})`}>
-      <foreignObject x="-45" y="15" width="90" height="100">
+      <foreignObject x="-45" y="15" width="90" height="120">
         <div xmlns="http://www.w3.org/1999/xhtml" className="flex flex-col items-center text-center">
           <div className="w-12 h-12 rounded-xl overflow-hidden border-2 border-white shadow-md mb-2 bg-white">
             <img 
@@ -65,7 +65,8 @@ const CustomXAxisTick = ({ x, y, payload, data }: any) => {
             />
           </div>
           <p className="text-[10px] font-black text-slate-900 uppercase leading-none truncate w-full">{item.plate}</p>
-          <p className="text-[8px] text-slate-400 font-bold uppercase truncate w-full mt-1">{item.model}</p>
+          <p className="text-[8px] text-blue-600 font-bold uppercase truncate w-full mt-1">{item.brand}</p>
+          <p className="text-[8px] text-slate-400 font-bold uppercase truncate w-full mt-0.5">{item.model}</p>
         </div>
       </foreignObject>
     </g>
@@ -134,7 +135,8 @@ export default function AnalyticsPage() {
       return {
         id: truck.id,
         plate: truck.plate,
-        model: `${truck.brand} ${truck.model}`,
+        brand: truck.brand,
+        model: truck.model,
         avatarUrl: truck.avatarUrl,
         fixedCosts,
         variableCosts: totalVariableCosts,
@@ -259,14 +261,14 @@ export default function AnalyticsPage() {
               <Badge variant="outline" className="bg-white text-[8px] font-black uppercase">Auditoría Financiera</Badge>
             </div>
           </CardHeader>
-          <CardContent className="h-[500px] pt-12">
+          <CardContent className="h-[520px] pt-12">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={fleetProfitability} barGap={12} margin={{ bottom: 120, top: 30 }}>
+              <BarChart data={fleetProfitability} barGap={12} margin={{ bottom: 140, top: 30 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
                 <XAxis 
                   dataKey="plate" 
                   interval={0} 
-                  height={100}
+                  height={120}
                   tick={<CustomXAxisTick data={fleetProfitability} />} 
                   axisLine={false} 
                   tickLine={false} 
@@ -427,7 +429,7 @@ export default function AnalyticsPage() {
                           </div>
                           <div>
                              <div className="font-black text-base text-slate-900 font-mono tracking-tighter leading-none group-hover:text-blue-600 transition-colors">{row.plate}</div>
-                             <div className="text-[10px] text-slate-400 uppercase font-black mt-1">{row.model}</div>
+                             <div className="text-[10px] text-slate-400 uppercase font-black mt-1">{row.brand} {row.model}</div>
                              <div className="flex items-center gap-1.5 text-[8px] text-blue-500 font-black uppercase mt-1">
                                <Package size={10}/> {row.trips} Fletes Finalizados
                              </div>
