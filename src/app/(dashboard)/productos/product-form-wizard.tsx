@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from "react";
@@ -10,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { 
@@ -23,7 +23,6 @@ import { Product } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { compressImage } from "@/lib/utils/image-compression";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface ProductFormWizardProps {
   productId?: string;
@@ -147,7 +146,9 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => router.back()}><ArrowLeft /></Button>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">{productId ? 'Editar Ficha Técnica' : 'Nuevo Producto / Carga'}</h1>
+            <h1 className="text-2xl font-bold text-slate-900">
+              {productId ? 'Editar Ficha Técnica' : 'Nuevo Producto / Carga'}
+            </h1>
             <p className="text-sm text-slate-500">Gestión exhaustiva de especificaciones y cumplimiento AR.</p>
           </div>
         </div>
@@ -402,16 +403,18 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
           <Button variant="ghost" onClick={handleBack} disabled={step === 1 || isSubmitting}>
              <ChevronLeft size={16} className="mr-1" /> VOLVER
           </Button>
-          {step < 4 ? (
-            <Button onClick={handleNext} className="bg-blue-600 min-w-[120px]">
-              SIGUIENTE <ChevronRight size={16} className="ml-1" />
-            </Button>
-          ) : (
-            <Button onClick={handleSubmit} className="bg-green-600 min-w-[150px]" disabled={isSubmitting}>
-              {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />}
-              EMITIR REGISTRO
-            </Button>
-          )}
+          <div className="flex gap-2">
+            {step < 4 ? (
+              <Button onClick={handleNext} className="bg-blue-600 min-w-[120px]">
+                SIGUIENTE <ChevronRight size={16} className="ml-1" />
+              </Button>
+            ) : (
+              <Button onClick={handleSubmit} className="bg-green-600 min-w-[150px]" disabled={isSubmitting}>
+                {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />}
+                EMITIR REGISTRO
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>

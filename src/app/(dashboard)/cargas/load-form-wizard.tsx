@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { 
   Package, ArrowLeft, ArrowRight, Save, Loader2, 
   MapPin, Calendar, Clock, DollarSign, Truck, 
-  Info, AlertTriangle, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, LayoutGrid, UserCheck, Edit, TrendingUp, CreditCard, Anchor, Scale, ListOrdered, ShieldCheck, Ship, ScanBarcode
+  Info, AlertTriangle, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, LayoutGrid, UserCheck, Edit, TrendingUp, CreditCard, Anchor, Scale, ListOrdered, ShieldCheck, Ship, ScanBarcode, X
 } from "lucide-react";
 import { Load, Client, Hub, LoadLegStop, LoadDocument, LoadDocType, Truck as TruckType, Driver, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -67,6 +67,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     returnDestination: { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", country: "Argentina", zip: "", instructions: "", dockName: "" },
     outboundStops: [],
     returnStops: [],
+    assignedCompanionIds: [],
     basePrice: 0, 
     totalAmount: 0,
     status: "pending",
@@ -154,6 +155,9 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
   const { data: clients } = useCollection<Client>(clientsQuery);
   const { data: hubs } = useCollection<Hub>(hubsQuery);
 
+  const driversOnly = useMemo(() => drivers?.filter(d => d.role === 'driver' || !d.role) || [], [drivers]);
+  const companionsOnly = useMemo(() => drivers?.filter(d => d.role === 'companion') || [], [drivers]);
+
   const locationsList = useMemo(() => {
     const list: any[] = [];
     hubs?.forEach(h => list.push({ id: h.id, name: `[SEDE] ${h.name}`, type: 'hub', data: h }));
@@ -183,7 +187,23 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     setFormData(prev => ({
       ...prev,
       assignedTruckId: id,
-      assignedDriverId: truck.assignedDriverId && truck.assignedDriverId !== 'none' ? truck.assignedDriverId : prev.assignedDriverId
+      assignedDriverId: truck.assignedDriverId && truck.assignedDriverId !== 'none' ? truck.assignedDriverId : prev.assignedDriverId,
+      assignedCompanionIds: truck.assignedCompanionIds || []
+    }));
+  };
+
+  const handleAddCompanion = (id: string) => {
+    if (id === 'none') return;
+    const current = formData.assignedCompanionIds || [];
+    if (!current.includes(id)) {
+      setFormData(prev => ({ ...prev, assignedCompanionIds: [...current, id] }));
+    }
+  };
+
+  const removeCompanion = (cid: string) => {
+    setFormData(prev => ({ 
+      ...prev, 
+      assignedCompanionIds: (prev.assignedCompanionIds || []).filter(id => id !== cid) 
     }));
   };
 
@@ -336,29 +356,54 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
             </Card>
 
             <Card className="border-none shadow-sm">
-              <CardHeader><CardTitle>Asignación de Activos</CardTitle></CardHeader>
-              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label>Unidad de Tracción</Label>
-                  <Select value={formData.assignedTruckId ?? ''} onValueChange={handleTruckSelect}>
-                    <SelectTrigger className="bg-white h-12"><SelectValue placeholder="Elegir Camión" /></SelectTrigger>
-                    <SelectContent>
-                      {trucks?.map(t => (
-                        <SelectItem key={t.id} value={t.id}>{t.plate} ({(t.capacityKg/1000).toFixed(1)}tn útil)</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              <CardHeader><CardTitle>Asignación de Activos y Personal</CardTitle></CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label>Unidad de Tracción</Label>
+                    <Select value={formData.assignedTruckId ?? ''} onValueChange={handleTruckSelect}>
+                      <SelectTrigger className="bg-white h-12"><SelectValue placeholder="Elegir Camión" /></SelectTrigger>
+                      <SelectContent>
+                        {trucks?.map(t => (
+                          <SelectItem key={t.id} value={t.id}>{t.plate} ({(t.capacityKg/1000).toFixed(1)}tn útil)</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Chofer Profesional (Tractor)</Label>
+                    <Select value={formData.assignedDriverId ?? ''} onValueChange={v => setFormData({...formData, assignedDriverId: v})}>
+                      <SelectTrigger className="bg-white h-12"><SelectValue placeholder="Elegir Chofer" /></SelectTrigger>
+                      <SelectContent>
+                        {driversOnly.map(d => (
+                          <SelectItem key={d.id} value={d.id}>{d.lastName}, {d.firstName}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Responsable de Cabina</Label>
-                  <Select value={formData.assignedDriverId ?? ''} onValueChange={v => setFormData({...formData, assignedDriverId: v})}>
-                    <SelectTrigger className="bg-white h-12"><SelectValue placeholder="Elegir Chofer" /></SelectTrigger>
+
+                <div className="space-y-3 pt-4 border-t">
+                  <Label>Acompañantes / Ayudantes</Label>
+                  <Select onValueChange={handleAddCompanion}>
+                    <SelectTrigger className="bg-white h-12"><SelectValue placeholder="Agregar Acompañante..." /></SelectTrigger>
                     <SelectContent>
-                      {drivers?.map(d => (
+                      {companionsOnly.map(d => (
                         <SelectItem key={d.id} value={d.id}>{d.lastName}, {d.firstName}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    {formData.assignedCompanionIds?.map(cid => {
+                      const dr = companionsOnly.find(c => c.id === cid);
+                      return (
+                        <Badge key={cid} variant="secondary" className="pl-2 pr-1 py-1 gap-2 bg-blue-50 text-blue-700 border-blue-100">
+                          {dr ? `${dr.lastName}, ${dr.firstName[0]}.` : cid}
+                          <button onClick={() => removeCompanion(cid)} className="hover:text-red-500"><X size={12} /></button>
+                        </Badge>
+                      );
+                    })}
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -400,6 +445,54 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {step === 3 && (
+           <Card className="border-none shadow-sm">
+             <CardHeader><CardTitle>Logística de Retorno / Fin de Jornada</CardTitle></CardHeader>
+             <CardContent className="space-y-6">
+                <div className="flex items-center justify-between p-4 bg-orange-50/50 border border-orange-100 rounded-2xl">
+                   <div className="space-y-0.5">
+                      <Label className="text-xs font-black uppercase text-orange-700">Viaje de Ida y Vuelta</Label>
+                      <p className="text-[10px] text-orange-600 font-bold uppercase">Habilitar paradas de recolección en el retorno</p>
+                   </div>
+                   <Switch checked={formData.isRoundTrip} onCheckedChange={v => setFormData({...formData, isRoundTrip: v})} />
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-xs font-black uppercase text-slate-400">Recolecciones de Retorno</Label>
+                    <Button size="sm" variant="outline" className="text-orange-600 border-orange-200 rounded-full" onClick={() => { setActiveLeg('return'); setIsStopModalOpen(true); }}>
+                      <Plus size={14} className="mr-1" /> AGREGAR RETORNO
+                    </Button>
+                  </div>
+                  <div className="space-y-3">
+                    {formData.returnStops?.map((stop, idx) => (
+                      <div key={stop.id} className="p-4 bg-white border border-orange-100 rounded-2xl shadow-sm flex items-center justify-between">
+                         <div className="flex items-center gap-4">
+                            <div className="w-8 h-8 rounded-full bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-xs">{idx + 1}</div>
+                            <div><p className="font-bold text-sm">{stop.name}</p><p className="text-[10px] text-slate-400">{stop.weightKg} KG • {stop.address}</p></div>
+                         </div>
+                         <Button variant="ghost" size="icon" className="text-red-500" onClick={() => setFormData(prev => ({ ...prev, returnStops: (prev.returnStops || []).filter(s => s.id !== stop.id) }))}>
+                           <Trash2 size={16} />
+                         </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-50 rounded-2xl border space-y-4">
+                  <Label className="text-xs font-black uppercase text-slate-700">Punto Final de Arribo</Label>
+                  <Select onValueChange={id => {
+                    const sel = locationsList.find(l => l.id === id);
+                    if (sel) setFormData({...formData, returnDestination: { ...formData.returnDestination!, id: sel.id, name: sel.data.name, address: sel.data.address?.street || sel.data.address, lat: sel.data.address?.lat || sel.data.lat, lng: sel.data.address?.lng || sel.data.lng }});
+                  }} value={formData.returnDestination?.id ?? ''}>
+                    <SelectTrigger className="bg-white"><SelectValue placeholder="Sede de Regreso" /></SelectTrigger>
+                    <SelectContent>{locationsList.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+             </CardContent>
+           </Card>
         )}
 
         {step === 4 && (
@@ -523,7 +616,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
 
       <Dialog open={isStopModalOpen} onOpenChange={setIsStopModalOpen}>
         <DialogContent className="max-w-2xl rounded-3xl">
-          <DialogHeader><DialogTitle>Nueva Parada de Entrega</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Nueva Parada de {activeLeg === 'outbound' ? 'Entrega' : 'Recolección'}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
