@@ -20,12 +20,35 @@ export interface Product {
   id: string;
   sku: string;
   name: string;
+  brand?: string;
   description: string;
   category: string;
+  
+  // Logistics
   unitWeightKg: number;
   unitVolumeM3: number;
+  dimensions?: { l: number; w: number; h: number };
+  unitType: 'unit' | 'kg' | 'liter';
+  
+  // Packaging
+  packagingType: 'box' | 'bag' | 'drum' | 'pallet' | 'loose' | 'container';
+  unitsPerPallet?: number;
+  
+  // Compliance / Argentina
+  ncmCode?: string; // Nomenclatura Común Mercosur
+  gtin?: string;
+  origin: 'nacional' | 'importado';
+  
+  // Regulatory
   dangerLevel: 'none' | 'low' | 'medium' | 'high';
+  onuNumber?: string; // N° ONU for dangerous goods
   requiresReefer: boolean;
+  tempRange?: { min: number; max: number };
+  senasaHabilitation?: string;
+  anmatHabilitation?: string;
+  
+  status: 'active' | 'discontinued';
+  photoUrl?: string;
   createdAt: any;
   updatedAt: any;
 }

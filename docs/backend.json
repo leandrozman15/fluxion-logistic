@@ -15,7 +15,7 @@
         "schema": { "$ref": "#/backend/entities/Client" }
       },
       "products": {
-        "description": "Catálogo de artículos transportados con especificaciones logísticas.",
+        "description": "Catálogo de artículos transportados con especificaciones logísticas y regulatorias (NCM/SENASA/ANMAT).",
         "schema": { "$ref": "#/backend/entities/Product" }
       },
       "loads": {
@@ -86,7 +86,10 @@
         "name": { "type": "string" },
         "category": { "type": "string" },
         "unitWeightKg": { "type": "number" },
-        "unitVolumeM3": { "type": "number" }
+        "unitVolumeM3": { "type": "number" },
+        "ncmCode": { "type": "string" },
+        "requiresReefer": { "type": "boolean" },
+        "dangerLevel": { "type": "string" }
       }
     },
     "Load": {
