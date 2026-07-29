@@ -14,6 +14,10 @@
         "description": "Cartera de clientes dadores de carga con geolocalización de fachada.",
         "schema": { "$ref": "#/backend/entities/Client" }
       },
+      "products": {
+        "description": "Catálogo de artículos transportados con especificaciones logísticas.",
+        "schema": { "$ref": "#/backend/entities/Product" }
+      },
       "loads": {
         "description": "Órdenes de flete y transporte regional.",
         "schema": { "$ref": "#/backend/entities/Load" }
@@ -72,6 +76,17 @@
             "lng": { "type": "number" }
           }
         }
+      }
+    },
+    "Product": {
+      "title": "Product",
+      "type": "object",
+      "properties": {
+        "sku": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "unitWeightKg": { "type": "number" },
+        "unitVolumeM3": { "type": "number" }
       }
     },
     "Load": {

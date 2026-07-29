@@ -1,3 +1,4 @@
+
 'use client';
 
 import { 
@@ -29,7 +30,8 @@ import {
   Sun,
   Smartphone,
   Wrench,
-  Zap
+  Zap,
+  Box
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth, useFirestore, useDoc } from "@/firebase";
@@ -66,6 +68,7 @@ function DashboardSidebar() {
     { title: "Flota de Camiones", icon: Truck, href: "/flota" },
     { title: "Gestión Choferes", icon: Users, href: "/choferes" },
     { title: "Cartera Clientes", icon: Briefcase, href: "/clientes" },
+    { title: "Catálogo Productos", icon: Box, href: "/productos" },
     { title: "Cargas y Fletes", icon: Package, href: "/cargas" },
     { title: "Mantenimiento", icon: Wrench, href: "/mantenimiento" },
     { title: "Sedes Logísticas", icon: Building2, href: "/sedes" },

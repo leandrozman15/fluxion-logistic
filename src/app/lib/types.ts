@@ -16,6 +16,20 @@ export type MaintenanceStatus = 'scheduled' | 'in_progress' | 'completed' | 'can
 
 export type DriverRole = 'driver' | 'companion';
 
+export interface Product {
+  id: string;
+  sku: string;
+  name: string;
+  description: string;
+  category: string;
+  unitWeightKg: number;
+  unitVolumeM3: number;
+  dangerLevel: 'none' | 'low' | 'medium' | 'high';
+  requiresReefer: boolean;
+  createdAt: any;
+  updatedAt: any;
+}
+
 export interface Maintenance {
   id: string;
   orderNumber: string;
