@@ -1,19 +1,18 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, orderBy, deleteDoc, doc } from "firebase/firestore";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { 
   Box, Plus, Search, MoreVertical, Trash2, Edit2, 
-  Loader2, Scale, Layers, AlertTriangle, ThermometerSnowflake, 
-  Tag, Ship, Info, Package, ChevronRight, Eye
+  Loader2, Scale, AlertTriangle, ThermometerSnowflake, 
+  FileText, Ship, Package, Eye, Download
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -44,10 +43,10 @@ export default function ProductosPage() {
   const filteredProducts = useMemo(() => {
     if (!products) return [];
     return products.filter(p => 
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.ncmCode?.toLowerCase().includes(searchTerm.toLowerCase())
+      (p.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.sku || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.category || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.ncmCode || "").toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [products, searchTerm]);
 
@@ -83,7 +82,7 @@ export default function ProductosPage() {
           <div className="relative max-w-md w-full">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
             <Input 
-              placeholder="Buscar por SKU, nombre, categoría o NCM..." 
+              placeholder="Buscar por SKU, nombre o NCM..." 
               className="pl-8 bg-white"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
@@ -145,7 +144,7 @@ export default function ProductosPage() {
                       <TableCell>
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-700">
-                            <Scale size={12} className="text-slate-400" /> {product.unitWeightKg.toLocaleString()} KG
+                            <Scale size={12} className="text-slate-400" /> {product.unitWeightKg?.toLocaleString()} KG
                           </div>
                           <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500">
                             <Box size={12} className="text-slate-400" /> {product.unitsPerPallet} u. x Pallet
@@ -180,11 +179,11 @@ export default function ProductosPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-56">
                             <DropdownMenuLabel>Gestión de Producto</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={() => router.push(`/productos/${product.id}/ficha`)}>
+                              <FileText className="w-4 h-4 mr-2" /> Descargar Ficha Técnica
+                            </DropdownMenuItem>
                             <DropdownMenuItem asChild>
                               <Link href={`/productos/${product.id}/editar`}><Edit2 className="w-4 h-4 mr-2" /> Editar Ficha Completa</Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <Info className="w-4 h-4 mr-2" /> Ver Trazabilidad
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem className="text-red-600 focus:bg-red-50 focus:text-red-600" onClick={() => handleDelete(product.id)}>
