@@ -36,7 +36,8 @@ import {
   Legend,
   PieChart,
   Pie,
-  Cell
+  Cell,
+  LabelList
 } from "recharts";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -54,17 +55,17 @@ const CustomXAxisTick = ({ x, y, payload, data }: any) => {
 
   return (
     <g transform={`translate(${x},${y})`}>
-      <foreignObject x="-35" y="10" width="70" height="90">
+      <foreignObject x="-45" y="15" width="90" height="100">
         <div xmlns="http://www.w3.org/1999/xhtml" className="flex flex-col items-center text-center">
-          <div className="w-10 h-10 rounded-lg overflow-hidden border shadow-sm mb-1 bg-white">
+          <div className="w-12 h-12 rounded-xl overflow-hidden border-2 border-white shadow-md mb-2 bg-white">
             <img 
               src={item.avatarUrl || "https://picsum.photos/seed/truck/200"} 
               className="w-full h-full object-cover" 
               alt=""
             />
           </div>
-          <p className="text-[9px] font-black text-slate-800 uppercase leading-none truncate w-full">{item.plate}</p>
-          <p className="text-[7px] text-slate-400 font-bold uppercase truncate w-full">{item.model}</p>
+          <p className="text-[10px] font-black text-slate-900 uppercase leading-none truncate w-full">{item.plate}</p>
+          <p className="text-[8px] text-slate-400 font-bold uppercase truncate w-full mt-1">{item.model}</p>
         </div>
       </foreignObject>
     </g>
@@ -258,22 +259,38 @@ export default function AnalyticsPage() {
               <Badge variant="outline" className="bg-white text-[8px] font-black uppercase">Auditoría Financiera</Badge>
             </div>
           </CardHeader>
-          <CardContent className="h-[450px] pt-8">
+          <CardContent className="h-[500px] pt-12">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={fleetProfitability} barGap={8} margin={{ bottom: 100 }}>
+              <BarChart data={fleetProfitability} barGap={12} margin={{ bottom: 120, top: 30 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
                 <XAxis 
                   dataKey="plate" 
                   interval={0} 
-                  height={90}
+                  height={100}
                   tick={<CustomXAxisTick data={fleetProfitability} />} 
                   axisLine={false} 
                   tickLine={false} 
                 />
-                <YAxis fontSize={10} axisLine={false} tickLine={false} />
-                <Legend verticalAlign="top" iconType="circle" wrapperStyle={{ paddingBottom: 20 }} />
-                <Bar name="Facturación" dataKey="revenue" fill="#2563eb" radius={[6, 6, 0, 0]} />
-                <Bar name="Costos Totales" dataKey="totalInvestment" fill="#ef4444" radius={[6, 6, 0, 0]} />
+                <YAxis fontSize={10} axisLine={false} tickLine={false} tickFormatter={(val) => `$${(val/1000)}k`} />
+                <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ paddingBottom: 40 }} />
+                
+                <Bar name="Facturación" dataKey="revenue" fill="#2563eb" radius={[6, 6, 0, 0]}>
+                   <LabelList 
+                    dataKey="revenue" 
+                    position="top" 
+                    formatter={(val: number) => val > 0 ? `$${(val / 1000).toFixed(0)}k` : ''}
+                    style={{ fontSize: '10px', fontWeight: '900', fill: '#2563eb' }}
+                   />
+                </Bar>
+                
+                <Bar name="Costos Totales" dataKey="totalInvestment" fill="#ef4444" radius={[6, 6, 0, 0]}>
+                   <LabelList 
+                    dataKey="totalInvestment" 
+                    position="top" 
+                    formatter={(val: number) => val > 0 ? `$${(val / 1000).toFixed(0)}k` : ''}
+                    style={{ fontSize: '10px', fontWeight: '900', fill: '#ef4444' }}
+                   />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
