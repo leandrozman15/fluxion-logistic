@@ -21,7 +21,8 @@ import {
   User,
   Star,
   Zap,
-  Target
+  Target,
+  Package
 } from "lucide-react";
 import { Load, Expense, Truck, Driver, Client } from "@/app/lib/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
