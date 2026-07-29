@@ -44,7 +44,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoadingNumber, setIsLoadingNumber] = useState(false);
 
   // Stop Modal State
   const [isStopModalOpen, setIsStopModalOpen] = useState(false);
@@ -58,90 +57,31 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     orderNumber: "",
     serviceType: 'standard',
     clientName: "",
-    invoiceNumber: "",
     isRoundTrip: false,
     pickupDate: format(new Date(), "yyyy-MM-dd"),
     pickupTime: "08:00",
-    estimatedArrivalDate: format(new Date(), "yyyy-MM-dd"),
-    estimatedArrivalTime: "18:00",
     origin: { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", country: "Argentina", zip: "", instructions: "", dockName: "" },
     returnDestination: { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", country: "Argentina", zip: "", instructions: "", dockName: "" },
     outboundStops: [],
     returnStops: [],
     assignedCompanionIds: [],
-    basePrice: 0, 
     totalAmount: 0,
     status: "pending",
-    international: {
-      operationType: 'import',
-      exitCustoms: "",
-      entryCustoms: "",
-      declarationNumber: "",
-      micDtaNumber: "",
-      containerNumber: "",
-      sealNumber: "",
-      transportDocType: 'CP',
-      transportDocNumber: "",
-      fobValueUsd: 0,
-      freightValueUsd: 0,
-      insuranceValueUsd: 0,
-      cifValueUsd: 0,
-      importDutiesUsd: 0,
-      customsIvaUsd: 0,
-      totalCustomsCostsUsd: 0,
-      isMalvinaPresented: false
-    },
-    budget: { initialAdvance: 0, totalBudget: 0, driverCommission: 0, otherInternalCosts: 0, categories: {} },
-    tracking: {
-      currentLat: 0, currentLng: 0, currentSpeed: 0, avgSpeed: 0, maxSpeed: 0,
-      distanceTraveledKm: 0, distanceRemainingKm: 0,
-      timeOnRouteMinutes: 0, timeStoppedMinutes: 0, lastUpdateAt: null,
-      history: [], alerts: []
-    }
+    international: { containerNumber: "", sealNumber: "" },
+    budget: { initialAdvance: 0, totalBudget: 0, categories: {} },
+    tracking: { currentLat: 0, currentLng: 0, currentSpeed: 0, avgSpeed: 0, maxSpeed: 0, distanceTraveledKm: 0, distanceRemainingKm: 0, timeOnRouteMinutes: 0, timeStoppedMinutes: 0, lastUpdateAt: null, history: [], alerts: [] }
   });
 
   const loadRef = useMemo(() => loadId && db ? doc(db, "loads", loadId) : null, [db, loadId]);
   const { data: existingLoad, loading: loadingExisting } = useDoc<Load>(loadRef);
 
   useEffect(() => {
-    async function fetchNextOrderNumber() {
-      if (loadId || !db) return;
-      setIsLoadingNumber(true);
-      try {
-        const q = query(collection(db, "loads"), orderBy("orderNumber", "desc"), limit(1));
-        const querySnapshot = await getDocs(q);
-        let nextNumber = 1;
-        const currentYear = new Date().getFullYear();
-        if (!querySnapshot.empty) {
-          const lastLoad = querySnapshot.docs[0].data() as Load;
-          const parts = lastLoad.orderNumber.split("-");
-          if (parts.length === 3) {
-            const lastSeq = parseInt(parts[2]);
-            if (!isNaN(lastSeq)) nextNumber = lastSeq + 1;
-          }
-        }
-        const paddedNumber = String(nextNumber).padStart(4, '0');
-        setFormData(prev => ({ ...prev, orderNumber: `FL-${currentYear}-${paddedNumber}` }));
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setIsLoadingNumber(false);
-      }
-    }
-    if (!loadId) fetchNextOrderNumber();
-  }, [db, loadId]);
-
-  useEffect(() => {
     if (existingLoad) {
       setFormData({
         ...existingLoad,
-        pickupDate: existingLoad.pickupDate || format(new Date(), "yyyy-MM-dd"),
-        pickupTime: existingLoad.pickupTime || "08:00",
         outboundStops: existingLoad.outboundStops || [],
         returnStops: existingLoad.returnStops || [],
-        returnDestination: existingLoad.returnDestination || { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", country: "Argentina", zip: "", instructions: "", dockName: "" },
-        budget: existingLoad.budget || { initialAdvance: 0, totalBudget: 0, driverCommission: 0, otherInternalCosts: 0, categories: {} },
-        international: existingLoad.international || formData.international
+        assignedCompanionIds: existingLoad.assignedCompanionIds || []
       });
     }
   }, [existingLoad]);
@@ -242,20 +182,15 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
 
   const handleSubmit = async () => {
     if (!db) return;
-    if (isWeightLimitExceeded) {
-       toast({ variant: "destructive", title: "Sobrepeso Detectado", description: "No puede despachar una unidad excedida." });
-       return;
-    }
     setIsSubmitting(true);
     try {
       if (loadId) {
         await updateDoc(doc(db, "loads", loadId), { ...formData, updatedAt: serverTimestamp() });
-        toast({ title: "Orden Actualizada" });
       } else {
         const newRef = doc(collection(db, "loads"));
         await setDoc(newRef, { ...formData, id: newRef.id, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-        toast({ title: "Flete Registrado" });
       }
+      toast({ title: "Operación Guardada" });
       router.push('/cargas');
     } catch (e) {
       toast({ variant: "destructive", title: "Error al guardar" });
@@ -276,12 +211,9 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
             <p className="text-sm text-slate-500">Gestión de pesos e itinerario COMEX.</p>
           </div>
         </div>
-        <Badge variant="outline" className="h-8 px-4 font-mono text-blue-600 bg-blue-50 border-blue-100 hidden sm:flex">
-          {formData.orderNumber || '...'}
-        </Badge>
       </div>
 
-      <div className="bg-white p-4 rounded-3xl border shadow-sm overflow-x-auto">
+      <div className="bg-white p-4 rounded-xl border shadow-sm overflow-x-auto">
         <div className="flex items-center justify-between min-w-[600px]">
           {[
             { id: 1, label: "Recursos", icon: Truck },
@@ -293,7 +225,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
             <div key={s.id} className="flex flex-col items-center gap-1.5 flex-1 relative">
               <div className={cn(
                 "w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold z-10 transition-all",
-                step > s.id ? "bg-green-50 text-white border-green-600 shadow-sm" : step === s.id ? "bg-blue-600 text-white shadow-md shadow-blue-100" : "bg-slate-50 text-slate-300 border"
+                step > s.id ? "bg-green-500 text-white" : step === s.id ? "bg-blue-600 text-white shadow-md shadow-blue-100" : "bg-slate-50 text-slate-300 border"
               )}>
                 {step > s.id ? <CheckCircle2 size={18} /> : <s.icon size={16} />}
               </div>
@@ -340,7 +272,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Chofer Profesional (Tractor)</Label>
+                    <Label>Chofer Profesional</Label>
                     <Select value={formData.assignedDriverId ?? ''} onValueChange={v => setFormData({...formData, assignedDriverId: v})}>
                       <SelectTrigger className="bg-white h-12"><SelectValue placeholder="Elegir Chofer" /></SelectTrigger>
                       <SelectContent>{driversOnly.map(d => <SelectItem key={d.id} value={d.id}>{d.lastName}, {d.firstName}</SelectItem>)}</SelectContent>
@@ -367,7 +299,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
 
         {step === 2 && (
           <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Logística de Ida</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Hoja de Ruta (Ida)</CardTitle></CardHeader>
             <CardContent className="space-y-6">
               <div className="p-4 bg-slate-50 rounded-2xl border border-dashed space-y-4">
                 <Label className="text-xs font-black uppercase text-blue-600">Origen / Despacho</Label>
@@ -415,7 +347,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center z-50">
-        <div className="max-w-5xl w-full flex justify-between items-center px-4"><Button variant="ghost" onClick={() => step > 1 ? setStep(step - 1) : router.back()} disabled={isSubmitting}><ChevronLeft size={16} className="mr-1" /> VOLVER</Button>{step < 5 ? <Button onClick={() => setStep(step + 1)} className="bg-blue-600">SIGUIENTE <ChevronRight size={16} /></Button> : <Button onClick={handleSubmit} className="bg-green-600" disabled={isSubmitting || isWeightLimitExceeded}>EMITIR ORDEN <Save size={16} className="ml-2" /></Button>}</div>
+        <div className="max-w-5xl w-full flex justify-between items-center px-4"><Button variant="ghost" onClick={() => setStep(prev => Math.max(1, prev - 1))} disabled={isSubmitting}><ChevronLeft size={16} className="mr-1" /> VOLVER</Button>{step < 5 ? <Button onClick={() => setStep(prev => Math.min(5, prev + 1))} className="bg-blue-600">SIGUIENTE <ChevronRight size={16} /></Button> : <Button onClick={handleSubmit} className="bg-green-600" disabled={isSubmitting || isWeightLimitExceeded}>EMITIR ORDEN <Save size={16} className="ml-2" /></Button>}</div>
       </div>
 
       <Dialog open={isStopModalOpen} onOpenChange={setIsStopModalOpen}>

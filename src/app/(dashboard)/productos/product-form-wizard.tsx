@@ -83,6 +83,7 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
         const newRef = doc(collection(db, "products"));
         await setDoc(newRef, { ...formData, id: newRef.id, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
       }
+      toast({ title: "Producto Guardado" });
       router.push('/productos');
     } catch (error) {
       toast({ variant: "destructive", title: "Error al guardar" });

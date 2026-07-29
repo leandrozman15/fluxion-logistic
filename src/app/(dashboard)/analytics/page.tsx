@@ -16,9 +16,11 @@ import {
   Navigation,
   PieChart as PieChartIcon,
   AlertTriangle,
-  Scale
+  Scale,
+  DollarSign,
+  Briefcase
 } from "lucide-react";
-import { Load, Expense, Maintenance, Truck, Driver, Client } from "@/app/lib/types";
+import { Load, Expense, Truck, Driver, Client } from "@/app/lib/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   BarChart, 
@@ -31,7 +33,9 @@ import {
   Legend,
   PieChart,
   Pie,
-  Cell
+  Cell,
+  ComposedChart,
+  Line
 } from "recharts";
 import { cn } from "@/lib/utils";
 
@@ -43,15 +47,15 @@ export default function AnalyticsPage() {
 
   const loadsQuery = useMemo(() => db ? query(collection(db, "loads"), orderBy("createdAt", "desc"), limit(500)) : null, [db]);
   const expensesQuery = useMemo(() => db ? query(collection(db, "global_expenses"), orderBy("createdAt", "desc")) : null, [db]);
-  const maintenanceQuery = useMemo(() => db ? query(collection(db, "maintenance"), orderBy("scheduledDate", "desc")) : null, [db]);
   const trucksQuery = useMemo(() => db ? collection(db, "trucks") : null, [db]);
   const driversQuery = useMemo(() => db ? collection(db, "drivers") : null, [db]);
+  const clientsQuery = useMemo(() => db ? collection(db, "clients") : null, [db]);
 
   const { data: loads, loading: loadsLoading } = useCollection<Load>(loadsQuery);
   const { data: expenses } = useCollection<Expense>(expensesQuery);
-  const { data: maintenance } = useCollection<Maintenance>(maintenanceQuery);
   const { data: trucks } = useCollection<Truck>(trucksQuery);
   const { data: drivers } = useCollection<Driver>(driversQuery);
+  const { data: clients } = useCollection<Client>(clientsQuery);
 
   const fleetStats = useMemo(() => {
     if (!loads) return { productiveKm: 0, deadKm: 0, totalKm: 0 };
@@ -84,23 +88,40 @@ export default function AnalyticsPage() {
     { name: 'KM Muertos (Vacío)', value: fleetStats.deadKm },
   ];
 
-  const fleetData = useMemo(() => {
+  const fleetProfitability = useMemo(() => {
     if (!trucks) return [];
     return trucks.map(truck => {
       const truckLoads = loads?.filter(l => l.assignedTruckId === truck.id && l.status === 'delivered') || [];
       const revenue = truckLoads.reduce((acc, l) => acc + (l.totalAmount || 0), 0);
+      
       const truckExpenses = expenses?.filter(e => e.truckId === truck.id) || [];
       const totalVariableCosts = truckExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
+      
       const fixedCosts = truck.costs?.fixed ? Object.values(truck.costs.fixed).reduce((acc, val) => acc + (val as number), 0) : 0;
-      const totalCosts = totalVariableCosts + fixedCosts;
-      return { id: truck.id, name: truck.plate, revenue, totalCosts, margin: revenue - totalCosts };
+      
+      const totalInvestment = totalVariableCosts + fixedCosts;
+      const margin = revenue - totalInvestment;
+      const marginPercent = totalInvestment > 0 ? (margin / totalInvestment) * 100 : 0;
+
+      return {
+        id: truck.id,
+        plate: truck.plate,
+        model: `${truck.brand} ${truck.model}`,
+        fixedCosts,
+        variableCosts: totalVariableCosts,
+        totalInvestment,
+        revenue,
+        margin,
+        marginPercent,
+        trips: truckLoads.length
+      };
     }).sort((a, b) => b.revenue - a.revenue);
   }, [trucks, loads, expenses]);
 
   const driversPerformance = useMemo(() => {
     if (!drivers || !loads) return [];
     return drivers
-      .filter(d => d.role === 'driver') // EXCLUIR ACOMPAÑANTES
+      .filter(d => d.role === 'driver')
       .map(driver => {
         const driverLoads = loads.filter(l => l.assignedDriverId === driver.id && l.status === 'delivered');
         const totalKm = driverLoads.reduce((acc, l) => acc + (l.tracking?.distanceTraveledKm || 0), 0);
@@ -109,16 +130,30 @@ export default function AnalyticsPage() {
       .sort((a, b) => b.km - a.km).slice(0, 10);
   }, [drivers, loads]);
 
+  const clientRevenue = useMemo(() => {
+    if (!clients || !loads) return [];
+    return clients.map(client => {
+      const revenue = loads
+        .filter(l => (l.clientId === client.id || l.clientName === client.name) && l.status === 'delivered')
+        .reduce((acc, l) => acc + (l.totalAmount || 0), 0);
+      return { name: client.name, value: revenue };
+    }).sort((a, b) => b.value - a.value).slice(0, 7);
+  }, [clients, loads]);
+
   if (loadsLoading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-blue-600" /></div>;
 
-  const globalRevenue = fleetData.reduce((acc, d) => acc + d.revenue, 0);
+  const globalRevenue = fleetProfitability.reduce((acc, d) => acc + d.revenue, 0);
+  const globalFixedCosts = fleetProfitability.reduce((acc, d) => acc + d.fixedCosts, 0);
+  const globalVariableCosts = fleetProfitability.reduce((acc, d) => acc + d.variableCosts, 0);
+  const globalMargin = globalRevenue - (globalFixedCosts + globalVariableCosts);
+  const globalMarginPercent = (globalFixedCosts + globalVariableCosts) > 0 ? (globalMargin / (globalFixedCosts + globalVariableCosts)) * 100 : 0;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Inteligencia y Eficiencia de Flota</h1>
-          <p className="text-muted-foreground text-sm">Análisis de rentabilidad y auditoría de kilómetros muertos.</p>
+          <h1 className="text-2xl font-bold text-slate-900">Inteligencia de Flota y Costos</h1>
+          <p className="text-muted-foreground text-sm">Análisis de rentabilidad real cruzando facturación, gastos fijos y variables.</p>
         </div>
         <Select value={range} onValueChange={setRange}>
           <SelectTrigger className="w-[200px] bg-white"><SelectValue placeholder="Período" /></SelectTrigger>
@@ -127,26 +162,55 @@ export default function AnalyticsPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <KPICard title="Facturación Bruta" value={globalRevenue.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })} icon={TrendingUp} />
-        <KPICard title="Kilometraje Total" value={`${fleetStats.totalKm.toLocaleString()} KM`} icon={Navigation} />
-        <Card className="bg-red-50 border-red-100">
-          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold text-red-600 uppercase">KM Improductivos (Vacío)</CardTitle></CardHeader>
+        <KPICard title="Facturación Bruta" value={globalRevenue.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })} icon={TrendingUp} description="Fletes entregados" />
+        <KPICard title="Gastos Estructurales" value={globalFixedCosts.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })} icon={Briefcase} description="Sueldos, seguros, patentes" />
+        <Card className={cn(globalMargin >= 0 ? "bg-green-50 border-green-100" : "bg-red-50 border-red-100")}>
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold text-slate-500 uppercase">Margen Operativo (%)</CardTitle></CardHeader>
           <CardContent>
-            <div className="text-2xl font-black text-red-700">{fleetStats.deadKm.toLocaleString()} KM</div>
-            <p className="text-[10px] text-red-500 font-bold uppercase mt-1">Pérdida por falta de retorno</p>
+            <div className={cn("text-2xl font-black", globalMargin >= 0 ? "text-green-700" : "text-red-700")}>
+              {globalMarginPercent.toFixed(1)}%
+            </div>
+            <p className={cn("text-[10px] font-bold uppercase mt-1", globalMargin >= 0 ? "text-green-600" : "text-red-600")}>
+              {globalMargin.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })} ganancia real
+            </p>
           </CardContent>
         </Card>
         <Card className="bg-slate-900 text-white">
-          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold opacity-70 uppercase">Líder de Ruta</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-black text-blue-400">{driversPerformance[0]?.name || 'S/D'}</div></CardContent>
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold opacity-70 uppercase">Líderes de Ruta</CardTitle></CardHeader>
+          <CardContent>
+            <div className="text-lg font-black text-blue-400 truncate">{driversPerformance[0]?.name || 'S/D'}</div>
+            <p className="text-[10px] opacity-50 uppercase font-bold">{driversPerformance[0]?.km.toLocaleString() || 0} KM recorridos</p>
+          </CardContent>
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="border-none shadow-sm lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2"><BarChart3 size={16} className="text-blue-600" /> Facturación vs. Costos Totales</CardTitle>
+            <CardDescription>Comparativa de ingresos y egresos por camión</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[300px] pt-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={fleetProfitability}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
+                <XAxis dataKey="plate" fontSize={10} />
+                <YAxis fontSize={10} />
+                <Tooltip 
+                  formatter={(value: any) => value.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })}
+                />
+                <Legend />
+                <Bar name="Facturación" dataKey="revenue" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                <Bar name="Costos Totales" dataKey="totalInvestment" fill="#ef4444" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
         <Card className="border-none shadow-sm">
           <CardHeader>
             <CardTitle className="text-sm flex items-center gap-2"><PieChartIcon size={16} className="text-blue-600" /> Eficiencia de Ruta (KM)</CardTitle>
-            <CardDescription>Comparativa entre tramos con carga vs. tramos vacíos.</CardDescription>
+            <CardDescription>Tramo con carga vs. Regreso vacío.</CardDescription>
           </CardHeader>
           <CardContent className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -173,21 +237,108 @@ export default function AnalyticsPage() {
 
         <Card className="border-none shadow-sm">
           <CardHeader>
-            <CardTitle className="text-sm flex items-center gap-2"><BarChart3 size={16} className="text-blue-600" /> Facturación por Unidad</CardTitle>
+            <CardTitle className="text-sm flex items-center gap-2"><Navigation size={16} className="text-blue-600" /> Ranking de Choferes por KM</CardTitle>
+            <CardDescription>Kilometraje total acumulado por conductor</CardDescription>
           </CardHeader>
-          <CardContent className="h-[300px] pt-4">
+          <CardContent className="h-[250px] pt-4">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={fleetData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
-                <XAxis dataKey="name" fontSize={10} />
-                <YAxis fontSize={10} />
+              <BarChart data={driversPerformance} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.1} />
+                <XAxis type="number" fontSize={10} />
+                <YAxis dataKey="name" type="category" fontSize={10} width={70} />
                 <Tooltip />
-                <Bar name="Facturación" dataKey="revenue" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="km" fill="#2563eb" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
+
+        <Card className="border-none shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2"><Users size={16} className="text-blue-600" /> Facturación por Cliente / Destino</CardTitle>
+            <CardDescription>Ingresos generados por cuenta de cliente</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[250px] pt-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={clientRevenue} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60}>
+                  {clientRevenue.map((entry, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
+                </Pie>
+                <Tooltip formatter={(value: any) => value.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })} />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card className="border-none shadow-sm bg-slate-50">
+          <CardHeader>
+            <CardTitle className="text-sm">Balance Operativo Global</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex justify-between items-center py-2 border-b">
+              <span className="text-xs text-slate-500">Total Ingresos</span>
+              <span className="text-lg font-black text-blue-600">{globalRevenue.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</span>
+            </div>
+            <div className="flex justify-between items-center py-2 border-b">
+              <span className="text-xs text-slate-500">Total Egresos</span>
+              <span className="text-lg font-black text-red-600">{(globalFixedCosts + globalVariableCosts).toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</span>
+            </div>
+            <div className="flex justify-between items-center py-2 bg-white p-3 rounded-lg shadow-sm">
+              <span className="text-xs font-bold">Utilidad Neta Estimada</span>
+              <span className={cn("text-xl font-black", globalMargin >= 0 ? "text-green-600" : "text-red-600")}>
+                {globalMargin.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}
+              </span>
+            </div>
+            <div className="text-[10px] text-center font-bold text-slate-400 uppercase">
+              {globalMarginPercent.toFixed(1)}% Margen Promedio
+            </div>
+          </CardContent>
+        </Card>
       </div>
+
+      <Card className="border-none shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-sm">Auditoría Detallada de Rentabilidad</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-slate-50 border-b">
+                <tr>
+                  <th className="p-4 text-[10px] uppercase font-bold text-slate-500">Camión</th>
+                  <th className="p-4 text-[10px] uppercase font-bold text-slate-500">Fijos/Mes</th>
+                  <th className="p-4 text-[10px] uppercase font-bold text-slate-500">Ruta (Variables)</th>
+                  <th className="p-4 text-[10px] uppercase font-bold text-slate-500">Inversión Total</th>
+                  <th className="p-4 text-[10px] uppercase font-bold text-slate-500">Facturación</th>
+                  <th className="p-4 text-[10px] uppercase font-bold text-slate-500 text-right">Índice IE</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {fleetProfitability.map((row) => (
+                  <tr key={row.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="p-4">
+                      <div className="font-bold text-sm text-slate-900">{row.plate}</div>
+                      <div className="text-[10px] text-slate-400 uppercase">{row.trips} fletes finalizados</div>
+                    </td>
+                    <td className="p-4 text-sm font-medium text-slate-600">{row.fixedCosts.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</td>
+                    <td className="p-4 text-sm font-medium text-slate-600">{row.variableCosts.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</td>
+                    <td className="p-4 text-sm font-bold text-slate-700">{row.totalInvestment.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</td>
+                    <td className="p-4 text-sm font-black text-blue-600">{row.revenue.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</td>
+                    <td className="p-4 text-right">
+                      <Badge className={cn(
+                        "text-[9px] uppercase font-black",
+                        row.marginPercent > 20 ? "bg-green-600" : row.marginPercent > 0 ? "bg-blue-600" : "bg-red-600"
+                      )}>
+                        {row.marginPercent.toFixed(1)}% {row.marginPercent > 0 ? 'Saludable' : 'Crítico'}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

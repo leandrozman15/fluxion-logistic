@@ -54,6 +54,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Truck, Driver, Load, Hub, Client } from "@/app/lib/types";
 import { isToday, startOfMonth, format, formatDistanceToNow, addMinutes, addDays, isAfter, isBefore, startOfDay, endOfDay, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -62,7 +63,6 @@ import Link from "next/link";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { calculateDistance, estimateFuelLiters } from "@/lib/utils/tracking-math";
 import { toSafeDate, formatSafeDate } from "@/lib/utils/date-utils";
@@ -215,32 +215,12 @@ export default function MonitorOperativoPage() {
     }
   };
 
-  const handleRevokeDock = async (load: Load) => {
-    if (!db) return;
-    try {
-      await updateDoc(doc(db, "loads", load.id), {
-        "dockEntryAuthorized": false,
-        updatedAt: serverTimestamp()
-      });
-      toast({ title: "Vía Libre Revocada" });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Error" });
-    }
-  };
-
   const calculateETA = (distanceRemaining: number | undefined, currentSpeed: number | undefined) => {
     if (distanceRemaining && (currentSpeed === undefined || currentSpeed < 1)) return "DETENIDO";
     if (!distanceRemaining || !currentSpeed || currentSpeed < 1) return "CALCULANDO...";
     const hours = distanceRemaining / currentSpeed;
     const etaDate = addMinutes(new Date(), Math.round(hours * 60));
     return format(etaDate, "HH:mm") + " hs";
-  };
-
-  const calculateEfficiency = (load: Load) => {
-    if (load.status === 'delivered') return 100;
-    const alerts = load.tracking?.alerts?.length || 0;
-    const speedPenalty = (load.tracking?.maxSpeed || 0) > 90 ? 15 : 0;
-    return Math.max(0, 100 - (alerts * 10) - speedPenalty);
   };
 
   const getPlannedTotalKm = (load: Load) => {
@@ -357,7 +337,6 @@ export default function MonitorOperativoPage() {
                const truck = trucks?.find(t => t.id === load.assignedTruckId);
                const isExpanded = expandedLoadId === load.id;
                const tracking = load.tracking;
-               const efficiency = calculateEfficiency(load);
                const totalPlannedKm = getPlannedTotalKm(load);
 
                return (
@@ -372,7 +351,7 @@ export default function MonitorOperativoPage() {
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-8 gap-y-3 flex-[2] w-full lg:w-auto mt-4 lg:mt-0 border-t lg:border-t-0 pt-4 lg:pt-0">
                          <div className="space-y-1"><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Personal y Unidad</p><div className="space-y-0.5"><p className="text-xs font-bold text-slate-700 flex items-center gap-1.5 truncate"><User size={10} className="text-blue-500" /> {driver ? `${driver.lastName}, ${driver.firstName[0]}.` : 'Sin Chofer'}</p><p className="text-[10px] font-mono font-bold text-blue-600"><ShieldCheck size={10} className="inline mr-1" /> {truck?.plate || 'Sin Camión'}</p></div></div>
                          <div className="space-y-1"><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Salida Programada</p><div className="space-y-0.5"><p className="text-xs font-bold text-slate-800">{load.pickupTime} hs</p><p className="text-[9px] font-bold text-slate-400 uppercase">{load.serviceType}</p></div></div>
-                         <div className="space-y-1"><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Eficiencia / Avance</p><div className="space-y-1"><div className="flex items-center gap-1.5"><TrendingUp size={10} className={cn(efficiency > 80 ? "text-green-500" : "text-orange-500")} /><span className={cn("text-xs font-black", efficiency > 80 ? "text-green-600" : "text-orange-600")}>{efficiency}%</span></div><Progress value={load.status === 'delivered' ? 100 : (tracking?.distanceTraveledKm || 0)} className="h-1 w-20 bg-slate-100" /></div></div>
+                         <div className="space-y-1"><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Avance Ruta</p><div className="space-y-1"><div className="flex items-center gap-1.5"><TrendingUp size={10} className="text-blue-500" /><span className="text-xs font-black text-slate-700">{Math.round(tracking?.distanceTraveledKm || 0)} KM</span></div><Progress value={load.status === 'delivered' ? 100 : (tracking?.distanceTraveledKm || 0)} className="h-1 w-20 bg-slate-100" /></div></div>
                       </div>
                       <div className="flex items-center gap-2 mt-4 lg:mt-0 w-full lg:w-auto">
                         <Button variant="ghost" size="sm" className="flex-1 lg:flex-none text-[10px] font-bold text-blue-600 bg-blue-100 hover:bg-blue-200" asChild><Link href={`/rutas/${load.id}`}><Zap size={12} className="mr-1" /> APP CHOFER</Link></Button>
