@@ -22,7 +22,7 @@ import {
 import { Load, Client, Hub, LoadLegStop, LoadDocument, LoadDocType, Truck as TruckType, Driver, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { format, addMinutes, parse } from "date-fns";
+import { format } from "date-fns";
 
 const SERVICE_TYPES = [
   { id: 'standard', label: 'Carga General', icon: Package },
@@ -275,7 +275,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
           <Button variant="ghost" size="icon" onClick={() => router.back()}><ArrowLeft /></Button>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">{loadId ? 'Editar Flete' : 'Nueva Operación'}</h1>
-            <p className="text-sm text-slate-500">Gestión de pesos y hoja de ruta.</p>
+            <p className="text-sm text-slate-500">Gestión de pesos e itinerario COMEX.</p>
           </div>
         </div>
         <Badge variant="outline" className="h-8 px-4 font-mono text-blue-600 bg-blue-50 border-blue-100 hidden sm:flex">

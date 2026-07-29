@@ -17,7 +17,7 @@ import {
   Scale, Layers, ShieldCheck, CheckCircle2, 
   Info, Tag, Ship, ThermometerSnowflake, 
   AlertTriangle, ScanBarcode, Camera, Image as ImageIcon, 
-  ChevronRight, ChevronLeft, Building2, Package
+  ChevronRight, ChevronLeft, Package
 } from "lucide-react";
 import { Product } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -94,7 +94,7 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
         try {
           const compressed = await compressImage(base64, 800, 800, 0.7);
           setFormData(prev => ({ ...prev, photoUrl: compressed }));
-          toast({ title: "Imagen procesada" });
+          toast({ title: "Imagen de producto lista" });
         } catch (err) {
           setFormData(prev => ({ ...prev, photoUrl: base64 }));
         } finally {
@@ -186,7 +186,7 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
               <CardHeader><CardTitle>Información del Artículo</CardTitle></CardHeader>
               <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="flex flex-col items-center justify-center p-6 bg-slate-50 border-2 border-dashed rounded-2xl space-y-4">
-                  <div className="relative w-32 h-32 bg-white rounded-2xl border-2 border-slate-200 shadow-md flex items-center justify-center overflow-hidden">
+                  <div className="relative w-40 h-40 bg-white rounded-2xl border-2 border-slate-200 shadow-md flex items-center justify-center overflow-hidden group">
                     {formData.photoUrl ? (
                       <img src={formData.photoUrl} className="w-full h-full object-cover" alt="Producto" />
                     ) : (
@@ -200,8 +200,9 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
                   </div>
                   <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handlePhotoChange} />
                   <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-                    <Camera size={14} className="mr-2" /> SUBIR IMAGEN
+                    <Camera size={14} className="mr-2" /> {formData.photoUrl ? 'CAMBIAR IMAGEN' : 'SUBIR IMAGEN'}
                   </Button>
+                  <p className="text-[10px] text-slate-400 text-center px-4 italic">Suba una foto clara para que el chofer identifique la carga en destino.</p>
                 </div>
                 <div className="space-y-4">
                   <div className="space-y-1"><Label>SKU / Código Único</Label><Input placeholder="Ej: LOG-AR-1234" value={formData.sku} onChange={e => setFormData({...formData, sku: e.target.value.toUpperCase()})} /></div>

@@ -315,7 +315,6 @@ export default function MonitorOperativoPage() {
       if (dest?.lat && dest?.lng) {
         total += calculateDistance(cursor.lat, cursor.lng, dest.lat, dest.lng);
       } else if (load.isRoundTrip) {
-        // Fallback al origen si es round trip pero no hay destino de retorno explícito
         total += calculateDistance(cursor.lat, cursor.lng, load.origin.lat, load.origin.lng);
       }
     }
@@ -785,7 +784,7 @@ export default function MonitorOperativoPage() {
                                <h4 className="text-[10px] font-black uppercase text-orange-600 flex items-center gap-2 tracking-widest">
                                   <Repeat size={14} /> Tramo 2: Logística de Retorno
                                </h4>
-                               {(load.isRoundTrip || (load.returnStops?.length || 0) > 0 || !!load.returnDestination?.name) ? (
+                               {(load.isRoundTrip || (load.returnStops?.length || 0) > 0 || !!load.returnDestination?.lat) ? (
                                   <div className="space-y-3 relative pl-4 border-l-2 border-dashed border-orange-200 dark:border-orange-800">
                                      {load.returnStops?.map((stop, rIdx) => {
                                        const prev = rIdx === 0 
@@ -829,7 +828,7 @@ export default function MonitorOperativoPage() {
                                         {(() => {
                                           const prevPoint = (load.returnStops?.length || 0) > 0 
                                             ? load.returnStops[load.returnStops.length - 1] 
-                                            : (load.outboundStops?.length || 0 > 0 ? load.outboundStops[load.outboundStops.length - 1] : load.origin);
+                                            : (load.outboundStops?.length > 0 ? load.outboundStops[load.outboundStops.length - 1] : load.origin);
                                           
                                           const destLat = load.returnDestination?.lat || load.origin.lat;
                                           const destLng = load.returnDestination?.lng || load.origin.lng;

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { 
@@ -44,9 +43,6 @@ import { useMemo, useState, useEffect } from "react";
 import { doc } from "firebase/firestore";
 import { Tenant } from "@/app/lib/types";
 
-/**
- * Componente interno que maneja la lógica de cierre automático en móviles.
- */
 function DashboardSidebar() {
   const { setOpenMobile, isMobile } = useSidebar();
   const auth = useAuth();
