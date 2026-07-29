@@ -45,44 +45,30 @@ import { Badge } from "@/components/ui/badge";
 const COLORS = ['#2563eb', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'];
 
 /**
- * Componente de Tooltip Personalizado para el gráfico de barras.
- * Muestra foto, marca y modelo de la unidad.
+ * Componente de Tick Personalizado para el Eje X.
+ * Renderiza la foto, patente y modelo de forma fija bajo las barras.
  */
-const CustomBarTooltip = ({ active, payload }: any) => {
-  if (active && payload && payload.length) {
-    const data = payload[0].payload;
-    return (
-      <div className="bg-white p-4 rounded-2xl shadow-2xl border border-slate-100 flex flex-col gap-3 min-w-[220px]">
-        <div className="flex items-center gap-3 border-b pb-2">
-          <div className="h-10 w-10 rounded-lg overflow-hidden border shadow-sm shrink-0">
+const CustomXAxisTick = ({ x, y, payload, data }: any) => {
+  const item = data.find((d: any) => d.plate === payload.value);
+  if (!item) return null;
+
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <foreignObject x="-35" y="10" width="70" height="90">
+        <div xmlns="http://www.w3.org/1999/xhtml" className="flex flex-col items-center text-center">
+          <div className="w-10 h-10 rounded-lg overflow-hidden border shadow-sm mb-1 bg-white">
             <img 
-              src={data.avatarUrl || "https://picsum.photos/seed/truck/200"} 
-              className="h-full w-full object-cover" 
-              alt="Unidad"
+              src={item.avatarUrl || "https://picsum.photos/seed/truck/200"} 
+              className="w-full h-full object-cover" 
+              alt=""
             />
           </div>
-          <div className="min-w-0">
-            <p className="text-xs font-black text-slate-900 leading-none truncate uppercase tracking-tighter">{data.plate}</p>
-            <p className="text-[10px] text-slate-400 font-bold uppercase truncate">{data.model}</p>
-          </div>
+          <p className="text-[9px] font-black text-slate-800 uppercase leading-none truncate w-full">{item.plate}</p>
+          <p className="text-[7px] text-slate-400 font-bold uppercase truncate w-full">{item.model}</p>
         </div>
-        <div className="space-y-1.5">
-          {payload.map((entry: any, index: number) => (
-            <div key={index} className="flex justify-between items-center text-xs gap-4">
-              <span className="flex items-center gap-1.5 font-bold text-slate-500 uppercase text-[9px]">
-                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: entry.fill }} />
-                {entry.name}
-              </span>
-              <span className="font-black text-slate-800 italic">
-                {entry.value.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-  return null;
+      </foreignObject>
+    </g>
+  );
 };
 
 export default function AnalyticsPage() {
@@ -174,7 +160,7 @@ export default function AnalyticsPage() {
           km: Math.round(totalKm) 
         };
       })
-      .sort((a, b) => b.km - a.km).slice(0, 10);
+      .sort((a, b) => b.km - a.km).reverse().slice(0, 10);
   }, [drivers, loads]);
 
   if (loadsLoading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-blue-600" /></div>;
@@ -267,22 +253,25 @@ export default function AnalyticsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-sm font-black uppercase tracking-tighter flex items-center gap-2"><BarChart3 size={18} className="text-blue-600" /> Facturación vs. Costos Totales</CardTitle>
-                <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Comparativa de ingresos y egresos por camión (con marca y modelo)</CardDescription>
+                <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Auditoría financiera por unidad operativa activa</CardDescription>
               </div>
               <Badge variant="outline" className="bg-white text-[8px] font-black uppercase">Auditoría Financiera</Badge>
             </div>
           </CardHeader>
-          <CardContent className="h-[350px] pt-8">
+          <CardContent className="h-[450px] pt-8">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={fleetProfitability} barGap={8}>
+              <BarChart data={fleetProfitability} barGap={8} margin={{ bottom: 100 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
-                <XAxis dataKey="plate" fontSize={10} axisLine={false} tickLine={false} fontStyle="italic" fontWeight="bold" />
-                <YAxis fontSize={10} axisLine={false} tickLine={false} />
-                <Tooltip 
-                  cursor={{fill: 'rgba(0,0,0,0.02)'}}
-                  content={<CustomBarTooltip />}
+                <XAxis 
+                  dataKey="plate" 
+                  interval={0} 
+                  height={90}
+                  tick={<CustomXAxisTick data={fleetProfitability} />} 
+                  axisLine={false} 
+                  tickLine={false} 
                 />
-                <Legend iconType="circle" />
+                <YAxis fontSize={10} axisLine={false} tickLine={false} />
+                <Legend verticalAlign="top" iconType="circle" wrapperStyle={{ paddingBottom: 20 }} />
                 <Bar name="Facturación" dataKey="revenue" fill="#2563eb" radius={[6, 6, 0, 0]} />
                 <Bar name="Costos Totales" dataKey="totalInvestment" fill="#ef4444" radius={[6, 6, 0, 0]} />
               </BarChart>
