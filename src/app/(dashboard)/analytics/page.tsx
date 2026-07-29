@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState } from "react";
@@ -21,10 +22,12 @@ import {
   Star,
   Zap,
   Target,
-  Package
+  Package,
+  Calendar,
+  ChevronDown,
+  CheckCircle2
 } from "lucide-react";
 import { Load, Expense, Truck, Driver, Client } from "@/app/lib/types";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   BarChart, 
   Bar, 
@@ -42,8 +45,27 @@ import {
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { toSafeDate } from "@/lib/utils/date-utils";
 
 const COLORS = ['#2563eb', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'];
+
+const MONTHS = [
+  { id: 0, name: "Enero" },
+  { id: 1, name: "Febrero" },
+  { id: 2, name: "Marzo" },
+  { id: 3, name: "Abril" },
+  { id: 4, name: "Mayo" },
+  { id: 5, name: "Junio" },
+  { id: 6, name: "Julio" },
+  { id: 7, name: "Agosto" },
+  { id: 8, name: "Septiembre" },
+  { id: 9, name: "Octubre" },
+  { id: 10, name: "Noviembre" },
+  { id: 11, name: "Diciembre" },
+];
 
 /**
  * Componente de Tick Personalizado para el Eje X.
@@ -75,21 +97,37 @@ const CustomXAxisTick = ({ x, y, payload, data }: any) => {
 
 export default function AnalyticsPage() {
   const db = useFirestore();
-  const [range, setRange] = useState("30");
+  const [selectedMonths, setSelectedMonths] = useState<number[]>(MONTHS.map(m => m.id));
 
   const loadsQuery = useMemo(() => db ? query(collection(db, "loads"), orderBy("createdAt", "desc"), limit(500)) : null, [db]);
   const expensesQuery = useMemo(() => db ? query(collection(db, "global_expenses"), orderBy("createdAt", "desc")) : null, [db]);
   const trucksQuery = useMemo(() => db ? collection(db, "trucks") : null, [db]);
   const driversQuery = useMemo(() => db ? collection(db, "drivers") : null, [db]);
 
-  const { data: loads, loading: loadsLoading } = useCollection<Load>(loadsQuery);
-  const { data: expenses } = useCollection<Expense>(expensesQuery);
+  const { data: allLoads, loading: loadsLoading } = useCollection<Load>(loadsQuery);
+  const { data: allExpenses } = useCollection<Expense>(expensesQuery);
   const { data: trucks } = useCollection<Truck>(trucksQuery);
   const { data: drivers } = useCollection<Driver>(driversQuery);
 
+  // Filtrado de datos por meses seleccionados
+  const filteredData = useMemo(() => {
+    if (!allLoads) return { loads: [], expenses: [] };
+
+    const loads = allLoads.filter(l => {
+      const date = toSafeDate(l.pickupDate) || toSafeDate(l.createdAt);
+      return date && selectedMonths.includes(date.getMonth());
+    });
+
+    const expenses = allExpenses?.filter(e => {
+      const date = toSafeDate(e.createdAt);
+      return date && selectedMonths.includes(date.getMonth());
+    }) || [];
+
+    return { loads, expenses };
+  }, [allLoads, allExpenses, selectedMonths]);
+
   const fleetStats = useMemo(() => {
-    if (!loads) return { productiveKm: 0, deadKm: 0, totalKm: 0 };
-    
+    const { loads } = filteredData;
     let productive = 0;
     let dead = 0;
 
@@ -110,7 +148,7 @@ export default function AnalyticsPage() {
       deadKm: Math.round(dead), 
       totalKm: Math.round(productive + dead) 
     };
-  }, [loads]);
+  }, [filteredData]);
 
   const efficiencyData = [
     { name: 'KM Productivos', value: fleetStats.productiveKm },
@@ -119,13 +157,18 @@ export default function AnalyticsPage() {
 
   const fleetProfitability = useMemo(() => {
     if (!trucks) return [];
+    const { loads, expenses } = filteredData;
+
     return trucks.map(truck => {
-      const truckLoads = loads?.filter(l => l.assignedTruckId === truck.id && l.status === 'delivered') || [];
+      const truckLoads = loads.filter(l => l.assignedTruckId === truck.id && l.status === 'delivered');
       const revenue = truckLoads.reduce((acc, l) => acc + (l.totalAmount || 0), 0);
-      const truckExpenses = expenses?.filter(e => e.truckId === truck.id) || [];
+      const truckExpenses = expenses.filter(e => e.truckId === truck.id);
       const totalVariableCosts = truckExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
       
-      const fixedCosts = truck.costs?.fixed ? Object.values(truck.costs.fixed).reduce((acc, val) => acc + (val as number), 0) : 0;
+      // Costo fijo prorrateado por meses seleccionados
+      const monthlyFixed = truck.costs?.fixed ? Object.values(truck.costs.fixed).reduce((acc, val) => acc + (val as number), 0) : 0;
+      const fixedCosts = monthlyFixed * selectedMonths.length;
+      
       const totalInvestment = totalVariableCosts + fixedCosts;
       const margin = revenue - totalInvestment;
       const marginPercent = totalInvestment > 0 ? (margin / totalInvestment) * 100 : 0;
@@ -145,10 +188,12 @@ export default function AnalyticsPage() {
         trips: truckLoads.length
       };
     }).sort((a, b) => b.revenue - a.revenue);
-  }, [trucks, loads, expenses]);
+  }, [trucks, filteredData, selectedMonths]);
 
   const driversPerformance = useMemo(() => {
-    if (!drivers || !loads) return [];
+    if (!drivers || !filteredData.loads) return [];
+    const { loads } = filteredData;
+
     return drivers
       .filter(d => d.role === 'driver')
       .map(driver => {
@@ -162,7 +207,7 @@ export default function AnalyticsPage() {
         };
       })
       .sort((a, b) => b.km - a.km).slice(0, 5);
-  }, [drivers, loads]);
+  }, [drivers, filteredData]);
 
   if (loadsLoading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-blue-600" /></div>;
 
@@ -172,6 +217,14 @@ export default function AnalyticsPage() {
   const globalMargin = globalRevenue - (globalFixedCosts + globalVariableCosts);
   const globalMarginPercent = (globalFixedCosts + globalVariableCosts) > 0 ? (globalMargin / (globalFixedCosts + globalVariableCosts)) * 100 : 0;
 
+  const toggleMonth = (monthId: number) => {
+    setSelectedMonths(prev => 
+      prev.includes(monthId) ? prev.filter(m => m !== monthId) : [...prev, monthId]
+    );
+  };
+
+  const isAnnual = selectedMonths.length === 12;
+
   return (
     <div className="space-y-4 pb-10">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 rounded-3xl border shadow-sm">
@@ -179,12 +232,47 @@ export default function AnalyticsPage() {
           <h1 className="text-2xl font-black text-slate-900 italic tracking-tight uppercase leading-none">Inteligencia de Flota y Costos</h1>
           <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Auditoría en tiempo real de rentabilidad y eficiencia</p>
         </div>
-        <Select value={range} onValueChange={setRange}>
-          <SelectTrigger className="w-[180px] font-black text-[10px] uppercase tracking-widest h-8"><SelectValue placeholder="Período" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="30">Acumulado Anual 2025</SelectItem>
-          </SelectContent>
-        </Select>
+        
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="min-w-[200px] justify-between font-black text-[10px] uppercase tracking-widest h-9 rounded-xl">
+              <div className="flex items-center gap-2">
+                <Calendar size={14} className="text-blue-600" />
+                {isAnnual ? 'Acumulado Anual 2025' : `${selectedMonths.length} Meses seleccionados`}
+              </div>
+              <ChevronDown size={14} className="opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-64 p-2 rounded-2xl" align="end">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between p-2 border-b pb-2 mb-2">
+                <span className="text-[10px] font-black uppercase text-slate-400">Seleccionar Período</span>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-6 text-[8px] font-black uppercase text-blue-600"
+                  onClick={() => setSelectedMonths(isAnnual ? [] : MONTHS.map(m => m.id))}
+                >
+                  {isAnnual ? 'Limpiar' : 'Todo el año'}
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-1">
+                {MONTHS.map(month => (
+                  <div key={month.id} className="flex items-center space-x-2 p-1 hover:bg-slate-50 rounded-lg transition-colors">
+                    <Checkbox 
+                      id={`month-${month.id}`} 
+                      checked={selectedMonths.includes(month.id)} 
+                      onCheckedChange={() => toggleMonth(month.id)}
+                    />
+                    <label htmlFor={`month-${month.id}`} className="text-[10px] font-bold uppercase text-slate-600 cursor-pointer flex-1">
+                      {month.name}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
@@ -226,7 +314,7 @@ export default function AnalyticsPage() {
              <div className="flex items-center gap-2">
                 <Avatar className="h-8 w-8 border border-white/20">
                    <AvatarImage src={driversPerformance[0]?.avatarUrl} className="object-cover" />
-                   <AvatarFallback className="bg-blue-600 text-white font-bold text-[10px]">{driversPerformance[0]?.name[0]}</AvatarFallback>
+                   <AvatarFallback className="bg-blue-600 text-white font-bold text-[10px]">{driversPerformance[0]?.name[0] || '?'}</AvatarFallback>
                 </Avatar>
                 <div className="min-w-0">
                    <div className="text-xs font-black text-blue-400 truncate uppercase italic">{driversPerformance[0]?.name || 'S/D'}</div>
@@ -331,6 +419,9 @@ export default function AnalyticsPage() {
                        <Badge variant="secondary" className="font-mono text-[9px] font-black bg-blue-50 text-blue-600 border-none">{dr.km.toLocaleString()} KM</Badge>
                     </div>
                   ))}
+                  {driversPerformance.length === 0 && (
+                    <p className="text-center py-10 text-[10px] text-slate-400 italic">Sin actividad en este período.</p>
+                  )}
                </div>
             </CardContent>
           </Card>
@@ -365,7 +456,7 @@ export default function AnalyticsPage() {
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-black italic tracking-tighter flex items-center gap-2"><Target size={18} className="text-blue-400" /> Auditoría Detallada de Rentabilidad</CardTitle>
             <div className="text-right">
-               <p className="text-[8px] font-black text-white/30 uppercase">Meta Eficiencia: 85%+</p>
+               <p className="text-[8px] font-black text-white/30 uppercase">Período: {selectedMonths.length} Meses</p>
             </div>
           </div>
         </CardHeader>
@@ -375,7 +466,7 @@ export default function AnalyticsPage() {
               <thead className="bg-slate-50 border-b">
                 <tr>
                   <th className="px-6 py-4 text-[9px] uppercase font-black text-slate-500 tracking-widest">Camión</th>
-                  <th className="px-4 py-4 text-[9px] uppercase font-black text-slate-500 tracking-widest text-center">Fijos/Mes</th>
+                  <th className="px-4 py-4 text-[9px] uppercase font-black text-slate-500 tracking-widest text-center">Fijos Período</th>
                   <th className="px-4 py-4 text-[9px] uppercase font-black text-slate-500 tracking-widest text-center">Ruta (Variables)</th>
                   <th className="px-4 py-4 text-[9px] uppercase font-black text-slate-500 tracking-widest text-center">Inversión Total</th>
                   <th className="px-4 py-4 text-[9px] uppercase font-black text-slate-500 tracking-widest text-center">Facturación</th>
