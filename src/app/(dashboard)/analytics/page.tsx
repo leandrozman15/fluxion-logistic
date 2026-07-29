@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState } from "react";
@@ -89,7 +90,6 @@ export default function AnalyticsPage() {
       const truckLoads = loads?.filter(l => l.assignedTruckId === truck.id && l.status === 'delivered') || [];
       const revenue = truckLoads.reduce((acc, l) => acc + (l.totalAmount || 0), 0);
       const truckExpenses = expenses?.filter(e => e.truckId === truck.id) || [];
-      const fuelCost = truckExpenses.filter(e => e.category === 'fuel').reduce((acc, e) => acc + (e.amount || 0), 0);
       const totalVariableCosts = truckExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
       const fixedCosts = truck.costs?.fixed ? Object.values(truck.costs.fixed).reduce((acc, val) => acc + (val as number), 0) : 0;
       const totalCosts = totalVariableCosts + fixedCosts;
