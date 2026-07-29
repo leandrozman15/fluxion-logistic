@@ -18,7 +18,9 @@ import {
   AlertTriangle,
   Scale,
   DollarSign,
-  Briefcase
+  Briefcase,
+  User,
+  Star
 } from "lucide-react";
 import { Load, Expense, Truck, Driver, Client } from "@/app/lib/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -34,10 +36,11 @@ import {
   PieChart,
   Pie,
   Cell,
-  ComposedChart,
-  Line
+  Cell as ReCell
 } from "recharts";
 import { cn } from "@/lib/utils";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 
 const COLORS = ['#2563eb', '#ef4444', '#10b981', '#f59e0b'];
 
@@ -66,8 +69,8 @@ export default function AnalyticsPage() {
     loads.forEach(load => {
       if (load.status === 'delivered') {
         const total = load.tracking?.distanceTraveledKm || 0;
-        // Heurística: Si no hay retorno y no es round trip, el tramo de vuelta (aprox 40%) es muerto
-        if (!load.isRoundTrip && (!load.returnStops || load.returnStops.length === 0)) {
+        // Si es solo ida, el 40% es regreso muerto (vacio)
+        if (!load.isRoundTrip) {
            productive += (total * 0.6);
            dead += (total * 0.4);
         } else {
@@ -93,12 +96,9 @@ export default function AnalyticsPage() {
     return trucks.map(truck => {
       const truckLoads = loads?.filter(l => l.assignedTruckId === truck.id && l.status === 'delivered') || [];
       const revenue = truckLoads.reduce((acc, l) => acc + (l.totalAmount || 0), 0);
-      
       const truckExpenses = expenses?.filter(e => e.truckId === truck.id) || [];
       const totalVariableCosts = truckExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
-      
       const fixedCosts = truck.costs?.fixed ? Object.values(truck.costs.fixed).reduce((acc, val) => acc + (val as number), 0) : 0;
-      
       const totalInvestment = totalVariableCosts + fixedCosts;
       const margin = revenue - totalInvestment;
       const marginPercent = totalInvestment > 0 ? (margin / totalInvestment) * 100 : 0;
@@ -107,6 +107,7 @@ export default function AnalyticsPage() {
         id: truck.id,
         plate: truck.plate,
         model: `${truck.brand} ${truck.model}`,
+        avatarUrl: truck.avatarUrl,
         fixedCosts,
         variableCosts: totalVariableCosts,
         totalInvestment,
@@ -121,11 +122,16 @@ export default function AnalyticsPage() {
   const driversPerformance = useMemo(() => {
     if (!drivers || !loads) return [];
     return drivers
-      .filter(d => d.role === 'driver')
+      .filter(d => d.role === 'driver') // Solo choferes, no acompañantes
       .map(driver => {
         const driverLoads = loads.filter(l => l.assignedDriverId === driver.id && l.status === 'delivered');
         const totalKm = driverLoads.reduce((acc, l) => acc + (l.tracking?.distanceTraveledKm || 0), 0);
-        return { id: driver.id, name: `${driver.lastName}, ${driver.firstName[0]}.`, km: Math.round(totalKm) };
+        return { 
+          id: driver.id, 
+          name: `${driver.lastName}, ${driver.firstName[0]}.`, 
+          avatarUrl: driver.avatarUrl,
+          km: Math.round(totalKm) 
+        };
       })
       .sort((a, b) => b.km - a.km).slice(0, 10);
   }, [drivers, loads]);
@@ -176,10 +182,18 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
         <Card className="bg-slate-900 text-white">
-          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold opacity-70 uppercase">Líderes de Ruta</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold opacity-70 uppercase">Líder de Flota</CardTitle></CardHeader>
           <CardContent>
-            <div className="text-lg font-black text-blue-400 truncate">{driversPerformance[0]?.name || 'S/D'}</div>
-            <p className="text-[10px] opacity-50 uppercase font-bold">{driversPerformance[0]?.km.toLocaleString() || 0} KM recorridos</p>
+             <div className="flex items-center gap-3">
+                <Avatar className="h-10 w-10 border border-white/20">
+                   <AvatarImage src={driversPerformance[0]?.avatarUrl} className="object-cover" />
+                   <AvatarFallback><User size={16} /></AvatarFallback>
+                </Avatar>
+                <div>
+                   <div className="text-sm font-black text-blue-400 truncate">{driversPerformance[0]?.name || 'S/D'}</div>
+                   <p className="text-[10px] opacity-50 uppercase font-bold">{driversPerformance[0]?.km.toLocaleString() || 0} KM recorridos</p>
+                </div>
+             </div>
           </CardContent>
         </Card>
       </div>
@@ -238,24 +252,31 @@ export default function AnalyticsPage() {
         <Card className="border-none shadow-sm">
           <CardHeader>
             <CardTitle className="text-sm flex items-center gap-2"><Navigation size={16} className="text-blue-600" /> Ranking de Choferes por KM</CardTitle>
-            <CardDescription>Kilometraje total acumulado por conductor</CardDescription>
+            <CardDescription>Kilometraje acumulado (Solo Choferes Profesionales)</CardDescription>
           </CardHeader>
-          <CardContent className="h-[250px] pt-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={driversPerformance} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.1} />
-                <XAxis type="number" fontSize={10} />
-                <YAxis dataKey="name" type="category" fontSize={10} width={70} />
-                <Tooltip />
-                <Bar dataKey="km" fill="#2563eb" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <CardContent className="pt-2">
+             <div className="space-y-4">
+                {driversPerformance.map((dr, idx) => (
+                  <div key={dr.id} className="flex items-center justify-between">
+                     <div className="flex items-center gap-3">
+                        <div className="text-xs font-bold text-slate-400 w-4">{idx + 1}°</div>
+                        <Avatar className="h-8 w-8 border">
+                           <AvatarImage src={dr.avatarUrl} className="object-cover" />
+                           <AvatarFallback className="text-[10px] bg-slate-50">{dr.name[0]}</AvatarFallback>
+                        </Avatar>
+                        <div className="text-xs font-bold text-slate-700">{dr.name}</div>
+                     </div>
+                     <Badge variant="secondary" className="font-mono text-[10px]">{dr.km.toLocaleString()} KM</Badge>
+                  </div>
+                ))}
+                {driversPerformance.length === 0 && <p className="text-center py-10 text-xs text-slate-400 italic">Sin datos de viajes.</p>}
+             </div>
           </CardContent>
         </Card>
 
         <Card className="border-none shadow-sm">
           <CardHeader>
-            <CardTitle className="text-sm flex items-center gap-2"><Users size={16} className="text-blue-600" /> Facturación por Cliente / Destino</CardTitle>
+            <CardTitle className="text-sm flex items-center gap-2"><Users size={16} className="text-blue-600" /> Facturación por Cliente</CardTitle>
             <CardDescription>Ingresos generados por cuenta de cliente</CardDescription>
           </CardHeader>
           <CardContent className="h-[250px] pt-4">
@@ -271,9 +292,7 @@ export default function AnalyticsPage() {
         </Card>
 
         <Card className="border-none shadow-sm bg-slate-50">
-          <CardHeader>
-            <CardTitle className="text-sm">Balance Operativo Global</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle className="text-sm">Balance Operativo Global</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="flex justify-between items-center py-2 border-b">
               <span className="text-xs text-slate-500">Total Ingresos</span>
@@ -284,13 +303,13 @@ export default function AnalyticsPage() {
               <span className="text-lg font-black text-red-600">{(globalFixedCosts + globalVariableCosts).toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</span>
             </div>
             <div className="flex justify-between items-center py-2 bg-white p-3 rounded-lg shadow-sm">
-              <span className="text-xs font-bold">Utilidad Neta Estimada</span>
+              <span className="text-xs font-bold">Utilidad Neta</span>
               <span className={cn("text-xl font-black", globalMargin >= 0 ? "text-green-600" : "text-red-600")}>
                 {globalMargin.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}
               </span>
             </div>
             <div className="text-[10px] text-center font-bold text-slate-400 uppercase">
-              {globalMarginPercent.toFixed(1)}% Margen Promedio
+              {globalMarginPercent.toFixed(1)}% Margen Promedio Flota
             </div>
           </CardContent>
         </Card>
@@ -298,16 +317,16 @@ export default function AnalyticsPage() {
 
       <Card className="border-none shadow-sm">
         <CardHeader>
-          <CardTitle className="text-sm">Auditoría Detallada de Rentabilidad</CardTitle>
+          <CardTitle className="text-sm">Auditoría Detallada de Rentabilidad por Unidad</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead className="bg-slate-50 border-b">
                 <tr>
-                  <th className="p-4 text-[10px] uppercase font-bold text-slate-500">Camión</th>
-                  <th className="p-4 text-[10px] uppercase font-bold text-slate-500">Fijos/Mes</th>
-                  <th className="p-4 text-[10px] uppercase font-bold text-slate-500">Ruta (Variables)</th>
+                  <th className="p-4 text-[10px] uppercase font-bold text-slate-500">Camión / Unidad</th>
+                  <th className="p-4 text-[10px] uppercase font-bold text-slate-500">Gastos Fijos</th>
+                  <th className="p-4 text-[10px] uppercase font-bold text-slate-500">Variables (Ruta)</th>
                   <th className="p-4 text-[10px] uppercase font-bold text-slate-500">Inversión Total</th>
                   <th className="p-4 text-[10px] uppercase font-bold text-slate-500">Facturación</th>
                   <th className="p-4 text-[10px] uppercase font-bold text-slate-500 text-right">Índice IE</th>
@@ -317,8 +336,17 @@ export default function AnalyticsPage() {
                 {fleetProfitability.map((row) => (
                   <tr key={row.id} className="hover:bg-slate-50 transition-colors">
                     <td className="p-4">
-                      <div className="font-bold text-sm text-slate-900">{row.plate}</div>
-                      <div className="text-[10px] text-slate-400 uppercase">{row.trips} fletes finalizados</div>
+                       <div className="flex items-center gap-3">
+                          <Avatar className="h-10 w-10 rounded-lg border">
+                             <AvatarImage src={row.avatarUrl} className="object-cover" />
+                             <AvatarFallback className="bg-blue-50 text-blue-600 rounded-lg"><TruckIcon size={20} /></AvatarFallback>
+                          </Avatar>
+                          <div>
+                             <div className="font-bold text-sm text-slate-900">{row.plate}</div>
+                             <div className="text-[9px] text-slate-400 uppercase font-bold">{row.model}</div>
+                             <div className="text-[8px] text-blue-500 font-bold uppercase">{row.trips} fletes entregados</div>
+                          </div>
+                       </div>
                     </td>
                     <td className="p-4 text-sm font-medium text-slate-600">{row.fixedCosts.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</td>
                     <td className="p-4 text-sm font-medium text-slate-600">{row.variableCosts.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}</td>
