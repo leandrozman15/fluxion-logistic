@@ -293,7 +293,7 @@ export default function MonitorOperativoPage() {
     let total = 0;
     let cursor = { lat: load.origin.lat, lng: load.origin.lng };
 
-    // Tramos de Ida
+    // Ida + Paradas
     (load.outboundStops || []).forEach(s => {
       if (s.lat && s.lng) {
         total += calculateDistance(cursor.lat, cursor.lng, s.lat, s.lng);
@@ -301,22 +301,22 @@ export default function MonitorOperativoPage() {
       }
     });
 
-    // Tramos de Retorno
-    const hasReturn = load.isRoundTrip || (load.returnStops?.length || 0) > 0 || !!load.returnDestination?.lat;
-    if (hasReturn) {
-      (load.returnStops || []).forEach(s => {
+    // Retorno
+    const hasReturnStops = (load.returnStops?.length || 0) > 0;
+    const finalDestLat = load.returnDestination?.lat || (load.isRoundTrip ? load.origin.lat : null);
+    const finalDestLng = load.returnDestination?.lng || (load.isRoundTrip ? load.origin.lng : null);
+
+    if (hasReturnStops) {
+      load.returnStops.forEach(s => {
         if (s.lat && s.lng) {
           total += calculateDistance(cursor.lat, cursor.lng, s.lat, s.lng);
           cursor = { lat: s.lat, lng: s.lng };
         }
       });
+    }
 
-      const dest = load.returnDestination;
-      if (dest?.lat && dest?.lng) {
-        total += calculateDistance(cursor.lat, cursor.lng, dest.lat, dest.lng);
-      } else if (load.isRoundTrip) {
-        total += calculateDistance(cursor.lat, cursor.lng, load.origin.lat, load.origin.lng);
-      }
+    if (finalDestLat && finalDestLng) {
+      total += calculateDistance(cursor.lat, cursor.lng, finalDestLat, finalDestLng);
     }
 
     return Math.round(total);

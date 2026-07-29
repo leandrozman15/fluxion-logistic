@@ -167,7 +167,7 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
           <div key={s.id} className="flex flex-col items-center gap-1.5 flex-1 min-w-[80px] relative">
             <div className={cn(
               "w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold z-10 transition-all",
-              step > s.id ? "bg-green-500 text-white shadow-sm" : step === s.id ? "bg-blue-600 text-white shadow-lg" : "bg-slate-50 text-slate-300 border"
+              step > s.id ? "bg-green-50 text-white shadow-sm" : step === s.id ? "bg-blue-600 text-white shadow-lg" : "bg-slate-50 text-slate-300 border"
             )}>
               {step > s.id ? <CheckCircle2 size={18} /> : <s.icon size={16} />}
             </div>

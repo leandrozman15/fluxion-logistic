@@ -11,7 +11,7 @@ import {
   Layers, Ship, ThermometerSnowflake, AlertTriangle, 
   QrCode, ShieldCheck, Box, CheckCircle2
 } from "lucide-react";
-import { Product } from "@/app/lib/types";
+import { Product, Tenant } from "@/app/lib/types";
 import { QRCodeSVG } from "qrcode.react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -28,10 +28,19 @@ export default function ProductTechnicalSheetPage() {
 
   const { data: product, loading } = useDoc<Product>(productRef);
 
+  const tenantRef = useMemo(() => {
+    if (!db) return null;
+    return doc(db, "tenants", "default_tenant");
+  }, [db]);
+
+  const { data: tenant } = useDoc<Tenant>(tenantRef);
+
   if (loading) return <div className="h-screen flex items-center justify-center gap-2 font-bold animate-pulse text-slate-500"><Loader2 className="animate-spin" /> GENERANDO FICHA TÉCNICA...</div>;
   if (!product) return <div className="p-20 text-center">Producto no encontrado.</div>;
 
   const validationUrl = typeof window !== 'undefined' ? `${window.location.origin}/productos/${product.id}` : '';
+  const orgName = tenant?.name || "LOGÍSTICA AR";
+  const logoUrl = tenant?.settings?.logoUrl || "/icono.png";
 
   return (
     <div className="min-h-screen bg-slate-200 py-10 print:bg-white print:py-0">
@@ -51,7 +60,10 @@ export default function ProductTechnicalSheetPage() {
           <div className="flex justify-between items-start border-b-4 border-slate-900 pb-6 mb-8 relative z-10">
             <div className="space-y-2">
               <div className="flex items-center gap-3 text-blue-600 font-black text-3xl italic tracking-tighter uppercase">
-                LOGÍSTICA<span className="text-slate-900">AR</span>
+                <div className="relative w-12 h-12 shrink-0">
+                  <img src={logoUrl} alt="Logo" className="w-full h-full object-contain" />
+                </div>
+                <span>{orgName}</span>
               </div>
               <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Sistema de Gestión de Cargas AR-1</p>
             </div>
@@ -208,7 +220,7 @@ export default function ProductTechnicalSheetPage() {
                    <p className="text-[9px] font-black uppercase text-center">Responsable Logística / Calidad</p>
                 </div>
                 <div className="text-right space-y-1">
-                   <p className="text-[8px] font-bold text-slate-400 uppercase tracking-[0.2em]">LogísticaAr - Gestión de Catálogo v4.0</p>
+                   <p className="text-[8px] font-bold text-slate-400 uppercase tracking-[0.2em]">{orgName} - Gestión de Catálogo v4.0</p>
                    <p className="text-[7px] text-slate-300 font-mono">{product.id}</p>
                 </div>
              </div>
