@@ -211,6 +211,22 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
                 </div>
               </CardContent>
             </Card>
+            
+            <Card className="border-none shadow-sm">
+              <CardHeader><CardTitle>Descripción Técnica</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <Label>Detalles del Producto</Label>
+                  <Textarea 
+                    placeholder="Ingrese una descripción detallada que aparecerá en la Ficha Técnica..." 
+                    className="min-h-[120px]"
+                    value={formData.description} 
+                    onChange={e => setFormData({...formData, description: e.target.value})} 
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
             <Card className="border-none shadow-sm">
               <CardHeader><CardTitle>Categorización</CardTitle></CardHeader>
               <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -379,15 +395,6 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
             </Card>
 
             <Card>
-              <CardHeader><CardTitle className="text-sm">Observaciones Adicionales</CardTitle></CardHeader>
-              <CardContent>
-                <Textarea 
-                  placeholder="Detalles sobre fragilidad, restricciones de apilado o cuidados especiales..." 
-                  className="min-h-[120px]"
-                  value={formData.description}
-                  onChange={e => setFormData({...formData, description: e.target.value})}
-                />
-              </CardContent>
               <CardFooter className="bg-slate-50 border-t p-6 flex justify-end">
                  <Button onClick={handleSubmit} className="h-14 px-10 rounded-2xl bg-green-600 hover:bg-green-700 font-black shadow-xl" disabled={isSubmitting}>
                    {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} 
@@ -411,7 +418,7 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
               </Button>
             ) : (
               <Button onClick={handleSubmit} className="bg-green-600 min-w-[150px]" disabled={isSubmitting}>
-                {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />}
+                {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" size={16} />}
                 EMITIR REGISTRO
               </Button>
             )}

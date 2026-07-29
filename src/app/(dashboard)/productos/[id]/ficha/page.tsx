@@ -6,11 +6,10 @@ import { useFirestore, useDoc } from "@/firebase";
 import { doc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { 
   Printer, ArrowLeft, Loader2, Package, Scale, 
   Layers, Ship, ThermometerSnowflake, AlertTriangle, 
-  Info, QrCode, Tag, CheckCircle2, ShieldCheck, Box
+  QrCode, ShieldCheck, Box, CheckCircle2
 } from "lucide-react";
 import { Product } from "@/app/lib/types";
 import { QRCodeSVG } from "qrcode.react";
@@ -102,7 +101,10 @@ export default function ProductTechnicalSheetPage() {
                       <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tighter leading-none">{product.name}</h2>
                       <p className="text-sm font-bold text-slate-400 uppercase mt-1">{product.brand} | {product.category}</p>
                    </div>
-                   <p className="text-xs text-slate-600 leading-relaxed border-t pt-2">{product.description || "Sin descripción técnica adicional registrada."}</p>
+                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                      <h3 className="text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Descripción del Producto</h3>
+                      <p className="text-xs text-slate-700 leading-relaxed">{product.description || "Sin descripción técnica adicional registrada."}</p>
+                   </div>
                 </section>
 
                 {/* LOGÍSTICA Y PESOS */}
