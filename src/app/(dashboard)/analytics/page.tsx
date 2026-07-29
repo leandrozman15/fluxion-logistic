@@ -35,8 +35,7 @@ import {
   Legend,
   PieChart,
   Pie,
-  Cell,
-  Cell as ReCell
+  Cell
 } from "recharts";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -69,7 +68,7 @@ export default function AnalyticsPage() {
     loads.forEach(load => {
       if (load.status === 'delivered') {
         const total = load.tracking?.distanceTraveledKm || 0;
-        // Si es solo ida, el 40% es regreso muerto (vacio)
+        // Si no es ida y vuelta, se estima un 40% de km muertos (regreso vacío)
         if (!load.isRoundTrip) {
            productive += (total * 0.6);
            dead += (total * 0.4);
@@ -98,6 +97,7 @@ export default function AnalyticsPage() {
       const revenue = truckLoads.reduce((acc, l) => acc + (l.totalAmount || 0), 0);
       const truckExpenses = expenses?.filter(e => e.truckId === truck.id) || [];
       const totalVariableCosts = truckExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
+      
       const fixedCosts = truck.costs?.fixed ? Object.values(truck.costs.fixed).reduce((acc, val) => acc + (val as number), 0) : 0;
       const totalInvestment = totalVariableCosts + fixedCosts;
       const margin = revenue - totalInvestment;
