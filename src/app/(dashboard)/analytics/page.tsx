@@ -33,7 +33,7 @@ import {
   ArrowDownRight,
   X
 } from "lucide-react";
-import { Load, Expense, Truck, Driver, Client } from "@/app/lib/types";
+import { Load, Expense, Truck, Driver } from "@/app/lib/types";
 import { 
   BarChart, 
   Bar, 
@@ -54,7 +54,7 @@ import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toSafeDate } from "@/lib/utils/date-utils";
 
 const COLORS = ['#2563eb', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'];
@@ -108,7 +108,7 @@ export default function AnalyticsPage() {
   const [selectedMonths, setSelectedMonths] = useState<number[]>([]);
   const [isInterannualOpen, setIsInterannualOpen] = useState(false);
 
-  // Inicializar con el mes actual en el primer render
+  // Inicializar con el mes actual del año 2026
   useEffect(() => {
     setMounted(true);
     setSelectedMonths([new Date().getMonth()]);
@@ -239,10 +239,10 @@ export default function AnalyticsPage() {
   const globalMargin = globalRevenue - (globalFixedCosts + globalVariableCosts);
   const globalMarginPercent = (globalFixedCosts + globalVariableCosts) > 0 ? (globalMargin / (globalFixedCosts + globalVariableCosts)) * 100 : 0;
 
-  // Datos simulados para el Informe Interanual (Basados en proyecciones)
+  // Datos simulados para el Informe Interanual (Basados en proyecciones 2025 vs 2026)
   const comparisonData = [
     { year: '2025', revenue: 48500000, investment: 41200000, km: 115000, margin: 17.7 },
-    { year: '2026', revenue: globalRevenue * 12, investment: (globalFixedCosts + globalVariableCosts) * 12, km: fleetStats.totalKm * 12, margin: globalMarginPercent }
+    { year: '2026', revenue: globalRevenue * (12/Math.max(1, selectedMonths.length)), investment: (globalFixedCosts + globalVariableCosts) * (12/Math.max(1, selectedMonths.length)), km: fleetStats.totalKm * (12/Math.max(1, selectedMonths.length)), margin: globalMarginPercent }
   ];
 
   return (
@@ -277,7 +277,7 @@ export default function AnalyticsPage() {
             <PopoverContent className="w-64 p-2 rounded-2xl shadow-2xl border-none" align="end">
               <div className="space-y-2">
                 <div className="flex items-center justify-between p-2 border-b pb-2 mb-2">
-                  <span className="text-[10px] font-black uppercase text-slate-400">Seleccionar Período</span>
+                  <span className="text-[10px] font-black uppercase text-slate-400">Seleccionar Período 2026</span>
                   <Button 
                     variant="ghost" 
                     size="sm" 
@@ -355,7 +355,7 @@ export default function AnalyticsPage() {
                 </Avatar>
                 <div className="min-w-0">
                    <div className="text-xs font-black text-blue-400 truncate uppercase italic">{driversPerformance[0]?.name || 'S/D'}</div>
-                   <p className="text-[8px] text-white/50 uppercase font-bold">{driversPerformance[0]?.km.toLocaleString() || 0} KM recorridos</p>
+                   <p className="text-[8px] text-white/50 uppercase font-bold">{driversPerformance[0]?.km.toLocaleString() || 0} KM</p>
                 </div>
              </div>
           </CardContent>
@@ -368,7 +368,7 @@ export default function AnalyticsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2"><BarChart3 size={14} className="text-blue-600" /> Facturación vs. Costos Totales</CardTitle>
-                <CardDescription className="text-[8px] font-bold uppercase text-slate-400">Comparativa de ingresos y egresos por camión (Patente, Marca y Modelo)</CardDescription>
+                <CardDescription className="text-[8px] font-bold uppercase text-slate-400">Comparativa de ingresos y egresos por camión (2026)</CardDescription>
               </div>
               <Badge variant="outline" className="bg-white text-[8px] font-black uppercase border-blue-100 text-blue-600 px-2 py-0.5">Auditoría Financiera</Badge>
             </div>
@@ -443,11 +443,11 @@ export default function AnalyticsPage() {
           <Card className="border-none shadow-md rounded-3xl overflow-hidden h-[324px]">
             <CardHeader className="bg-slate-50/50 border-b py-3">
               <CardTitle className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2"><Navigation size={14} className="text-blue-600" /> Ranking de Choferes por KM</CardTitle>
-              <CardDescription className="text-[8px] font-bold uppercase text-slate-400">Desempeño acumulado en el período seleccionado</CardDescription>
+              <CardDescription className="text-[8px] font-bold uppercase text-slate-400">Desempeño acumulado 2026</CardDescription>
             </CardHeader>
             <CardContent className="p-4 overflow-y-auto max-h-[260px]">
                <div className="space-y-3">
-                  {driversPerformance.map((dr, idx) => (
+                  {driversPerformance.map((dr) => (
                     <div key={dr.id} className="flex items-center justify-between">
                        <div className="flex items-center gap-2">
                           <Avatar className="h-7 w-7 border shadow-sm">
@@ -460,7 +460,7 @@ export default function AnalyticsPage() {
                     </div>
                   ))}
                   {driversPerformance.length === 0 && (
-                    <p className="text-center py-10 text-[10px] text-slate-400 italic">Sin actividad registrada en este período.</p>
+                    <p className="text-center py-10 text-[10px] text-slate-400 italic">Sin actividad registrada en 2026.</p>
                   )}
                </div>
             </CardContent>
@@ -470,7 +470,7 @@ export default function AnalyticsPage() {
 
       <Card className="border-none shadow-md rounded-3xl overflow-hidden">
         <CardHeader className="bg-slate-50/50 border-b py-3">
-          <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2"><Activity size={14} className="text-blue-600" /> Balance Operativo Global</CardTitle>
+          <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2"><Activity size={14} className="text-blue-600" /> Balance Operativo Global 2026</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
@@ -494,9 +494,9 @@ export default function AnalyticsPage() {
       <Card className="border-none shadow-xl rounded-3xl overflow-hidden">
         <CardHeader className="bg-slate-900 text-white py-4">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-black italic tracking-tighter flex items-center gap-2"><Target size={18} className="text-blue-400" /> Auditoría Detallada de Rentabilidad por Unidad</CardTitle>
+            <CardTitle className="text-sm font-black italic tracking-tighter flex items-center gap-2"><Target size={18} className="text-blue-400" /> Auditoría Detallada por Unidad</CardTitle>
             <div className="text-right">
-               <p className="text-[8px] font-black text-white/30 uppercase">Período: {selectedMonths.length} Meses / 2026</p>
+               <p className="text-[8px] font-black text-white/30 uppercase">Período Seleccionado 2026</p>
             </div>
           </div>
         </CardHeader>
@@ -506,9 +506,9 @@ export default function AnalyticsPage() {
               <thead className="bg-slate-50 border-b">
                 <tr>
                   <th className="px-6 py-4 text-[9px] uppercase font-black text-slate-500 tracking-widest">Vehículo</th>
-                  <th className="px-4 py-4 text-[9px] uppercase font-black text-slate-500 tracking-widest text-center">Fijos Período</th>
-                  <th className="px-4 py-4 text-[9px] uppercase font-black text-slate-500 tracking-widest text-center">Ruta (Variables)</th>
-                  <th className="px-4 py-4 text-[9px] uppercase font-black text-slate-500 tracking-widest text-center">Inversión Total</th>
+                  <th className="px-4 py-4 text-[9px] uppercase font-black text-slate-500 tracking-widest text-center">Fijos</th>
+                  <th className="px-4 py-4 text-[9px] uppercase font-black text-slate-500 tracking-widest text-center">Ruta</th>
+                  <th className="px-4 py-4 text-[9px] uppercase font-black text-slate-500 tracking-widest text-center">Inversión</th>
                   <th className="px-4 py-4 text-[9px] uppercase font-black text-slate-500 tracking-widest text-center">Facturación</th>
                   <th className="px-6 py-4 text-[9px] uppercase font-black text-slate-500 tracking-widest text-right">Índice IE</th>
                 </tr>
@@ -525,21 +525,21 @@ export default function AnalyticsPage() {
                              <div className="font-black text-sm text-slate-900 font-mono tracking-tighter leading-none">{row.plate}</div>
                              <div className="text-[10px] text-slate-400 uppercase font-black mt-0.5">{row.brand} {row.model}</div>
                              <div className="flex items-center gap-1 text-[8px] text-blue-500 font-black uppercase mt-1">
-                               <Package size={10}/> {row.trips} fletes finalizados
+                               <Package size={10}/> {row.trips} fletes
                              </div>
                           </div>
                        </div>
                     </td>
-                    <td className="px-4 py-4 text-center font-bold text-slate-600 text-xs">{row.fixedCosts.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })}</td>
-                    <td className="px-4 py-4 text-center font-bold text-slate-600 text-xs">{row.variableCosts.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })}</td>
-                    <td className="px-4 py-4 text-center font-black text-slate-800 text-xs">{row.totalInvestment.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })}</td>
-                    <td className="px-4 py-4 text-center font-black text-blue-600 text-sm italic">{row.revenue.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })}</td>
+                    <td className="px-4 py-4 text-center font-bold text-slate-600 text-xs">${(row.fixedCosts / 1000).toFixed(0)}k</td>
+                    <td className="px-4 py-4 text-center font-bold text-slate-600 text-xs">${(row.variableCosts / 1000).toFixed(0)}k</td>
+                    <td className="px-4 py-4 text-center font-black text-slate-800 text-xs">${(row.totalInvestment / 1000).toFixed(0)}k</td>
+                    <td className="px-4 py-4 text-center font-black text-blue-600 text-sm italic">${(row.revenue / 1000).toFixed(0)}k</td>
                     <td className="px-6 py-4 text-right">
                       <Badge className={cn(
                         "text-[8px] uppercase font-black h-6 px-3 border-none italic shadow-sm",
                         row.marginPercent > 20 ? "bg-green-100 text-green-700" : row.marginPercent > 0 ? "bg-blue-100 text-blue-700" : "bg-red-100 text-red-700"
                       )}>
-                        {row.marginPercent.toFixed(1)}% {row.marginPercent > 20 ? 'Saludable' : row.marginPercent > 0 ? 'Regular' : 'Crítico'}
+                        {row.marginPercent.toFixed(1)}% {row.marginPercent > 20 ? 'OK' : 'Crítico'}
                       </Badge>
                     </td>
                   </tr>
@@ -550,20 +550,20 @@ export default function AnalyticsPage() {
         </CardContent>
       </Card>
 
-      {/* DIALOG INFORME INTERANUAL */}
+      {/* DIALOG INFORME INTERANUAL 2025-2026 */}
       <Dialog open={isInterannualOpen} onOpenChange={setIsInterannualOpen}>
         <DialogContent className="max-w-4xl rounded-[2.5rem] overflow-hidden p-0 border-none shadow-2xl">
-           <DialogHeader className="bg-slate-900 text-white p-8 pb-6 relative overflow-hidden">
+           <div className="bg-slate-900 text-white p-8 pb-6 relative overflow-hidden">
               <div className="absolute top-0 right-0 p-8 opacity-5"><TrendingUp size={160} /></div>
               <div className="relative z-10">
-                <DialogTitle className="text-2xl font-black italic uppercase tracking-tighter flex items-center gap-3">
+                <h2 className="text-2xl font-black italic uppercase tracking-tighter flex items-center gap-3">
                   <TrendingUp className="text-blue-400" size={28} /> Auditoría Interanual Consolidada
-                </DialogTitle>
-                <DialogDescription className="text-white/50 text-[10px] uppercase font-bold tracking-widest mt-1">
+                </h2>
+                <p className="text-white/50 text-[10px] uppercase font-bold tracking-widest mt-1">
                   Comparativa de rendimiento financiero y operativo 2025 vs 2026 (Proyectado)
-                </DialogDescription>
+                </p>
               </div>
-           </DialogHeader>
+           </div>
            
            <div className="p-8 space-y-8 bg-slate-50 max-h-[80vh] overflow-y-auto">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -639,7 +639,7 @@ export default function AnalyticsPage() {
                     <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl flex items-start gap-3">
                        <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
                        <p className="text-[10px] text-amber-700 leading-relaxed italic">
-                          <strong>Análisis de Escalamiento:</strong> Se detecta un incremento en la facturación total, sin embargo, los costos fijos por inflación en Argentina requieren un ajuste del 12% en la tarifa por KM para mantener el margen del 20%.
+                          <strong>Análisis de Escalamiento:</strong> Se detecta un incremento en la facturación total, sin embargo, los costos fijos por inflación requieren un ajuste del 12% en la tarifa por KM para mantener el margen del 20% en 2026.
                        </p>
                     </div>
                  </div>
@@ -660,4 +660,3 @@ export default function AnalyticsPage() {
     </div>
   );
 }
-
