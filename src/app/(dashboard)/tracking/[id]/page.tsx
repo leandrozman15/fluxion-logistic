@@ -1,10 +1,11 @@
+
 'use client';
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc } from "@/firebase";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp, increment, arrayUnion } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -41,6 +42,7 @@ export default function LiveTrackingPage() {
   const [isSimulating, setIsSimulating] = useState(false);
   const [L, setL] = useState<any>(null);
   const [mounted, setMounted] = useState(false);
+  const loadRefData = useRef<Load | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -57,23 +59,22 @@ export default function LiveTrackingPage() {
   const { data: load, loading } = useDoc<Load>(loadRef);
 
   useEffect(() => {
-    if (!isSimulating || !load || !loadRef) return;
+    if (load) loadRefData.current = load;
+  }, [load]);
 
-    // Simulación ajustada a 1 minuto (60000ms) para ahorro de costos
+  useEffect(() => {
+    if (!isSimulating || !loadRef) return;
+
+    // Simulación ajustada a 1 minuto (60000ms) para ahorro de costos y ancho de banda
     const interval = setInterval(async () => {
-      const currentTracking = load.tracking || {
-        currentLat: load.origin.lat || -34.6037,
-        currentLng: load.origin.lng || -58.3816,
+      const currentLoad = loadRefData.current;
+      if (!currentLoad) return;
+
+      const currentTracking = currentLoad.tracking || {
+        currentLat: currentLoad.origin.lat || -34.6037,
+        currentLng: currentLoad.origin.lng || -58.3816,
         currentSpeed: 75,
-        avgSpeed: 70,
-        maxSpeed: 95,
-        distanceTraveledKm: 10,
-        distanceRemainingKm: 250,
-        timeOnRouteMinutes: 15,
-        timeStoppedMinutes: 0,
         estimatedFuelLiters: 4,
-        history: [],
-        alerts: []
       };
 
       const newLat = currentTracking.currentLat + (Math.random() * 0.002 - 0.001);
@@ -87,24 +88,24 @@ export default function LiveTrackingPage() {
         timestamp: new Date().toISOString()
       };
 
-      const updatedHistory = [...(currentTracking.history || []), newPoint].slice(-100);
-      const newFuel = (currentTracking.estimatedFuelLiters || 0) + (estimateFuelFactor(newSpeed) * 0.016); // 1 min aprox
+      const fuelDelta = (estimateFuelFactor(newSpeed) * 0.016); // Estimación consumo en 1 min
 
+      // Usamos increment() y arrayUnion() para eficiencia extrema (Fix Resource Exhausted)
       await updateDoc(loadRef, {
         "tracking.currentLat": newLat,
         "tracking.currentLng": newLng,
         "tracking.currentSpeed": newSpeed,
-        "tracking.maxSpeed": Math.max(currentTracking.maxSpeed || 0, newSpeed),
-        "tracking.distanceTraveledKm": (currentTracking.distanceTraveledKm || 0) + 1.2, // ~70km/h
-        "tracking.distanceRemainingKm": Math.max(0, (currentTracking.distanceRemainingKm || 0) - 1.2),
-        "tracking.estimatedFuelLiters": newFuel,
-        "tracking.history": updatedHistory,
+        "tracking.maxSpeed": newSpeed > (currentLoad.tracking?.maxSpeed || 0) ? newSpeed : (currentLoad.tracking?.maxSpeed || 0),
+        "tracking.distanceTraveledKm": increment(1.2), // ~70km/h son ~1.2km por minuto
+        "tracking.distanceRemainingKm": increment(-1.2),
+        "tracking.estimatedFuelLiters": increment(fuelDelta),
+        "tracking.history": arrayUnion(newPoint),
         "tracking.lastUpdateAt": serverTimestamp()
       });
     }, 60000);
 
     return () => clearInterval(interval);
-  }, [isSimulating, load, loadRef]);
+  }, [isSimulating, loadRef]);
 
   const truckIcon = L ? L.divIcon({
     className: 'custom-truck-icon',

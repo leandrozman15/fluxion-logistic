@@ -5,7 +5,7 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection, useUser } from "@/firebase";
-import { doc, updateDoc, serverTimestamp, collection, addDoc, arrayUnion } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp, collection, addDoc, arrayUnion, increment } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -87,6 +87,7 @@ export default function RouteDetailPage() {
   
   const [L, setL] = useState<any>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const loadRefData = useRef<Load | null>(null);
 
   const [expenseData, setExpenseData] = useState<any>({
     category: 'fuel', amount: 0, description: "", location: "", liters: 0, odometerKm: 0, pricePerLiter: 0, fuelBrand: ""
@@ -111,6 +112,11 @@ export default function RouteDetailPage() {
   const loadRef = useMemo(() => (db && id) ? doc(db, "loads", id as string) : null, [db, id]);
   const { data: load, loading } = useDoc<Load>(loadRef);
 
+  // Mantener una referencia actualizada del flete para evitar cierres de stale data en el intervalo GPS
+  useEffect(() => {
+    if (load) loadRefData.current = load;
+  }, [load]);
+
   const expensesQuery = useMemo(() => (db && id) ? collection(db, "loads", id as string, "expenses") : null, [db, id]);
   const { data: expenses } = useCollection<Expense>(expensesQuery);
 
@@ -128,10 +134,11 @@ export default function RouteDetailPage() {
 
           // Calculamos la distancia recorrida desde el último punto para telemetría
           let distanceDelta = 0;
-          if (load.tracking?.currentLat && load.tracking?.currentLng) {
+          const currentData = loadRefData.current;
+          if (currentData?.tracking?.currentLat && currentData?.tracking?.currentLng) {
             distanceDelta = calculateDistance(
-              load.tracking.currentLat,
-              load.tracking.currentLng,
+              currentData.tracking.currentLat,
+              currentData.tracking.currentLng,
               latitude,
               longitude
             );
@@ -145,19 +152,19 @@ export default function RouteDetailPage() {
           };
 
           // Actualización atómica de Firestore para GPS
+          // Usamos increment() y arrayUnion() para minimizar el ancho de banda y evitar Resource Exhausted
           updateDoc(loadRef, {
             "tracking.currentLat": latitude,
             "tracking.currentLng": longitude,
             "tracking.currentSpeed": currentSpeed,
             "tracking.lastUpdateAt": serverTimestamp(),
-            "tracking.distanceTraveledKm": (load.tracking?.distanceTraveledKm || 0) + distanceDelta,
+            "tracking.distanceTraveledKm": increment(distanceDelta),
             "tracking.history": arrayUnion(newPoint),
             updatedAt: serverTimestamp()
           });
         },
         (error) => {
           console.error("GPS Error:", error);
-          // Omitimos toast recurrente para no molestar al chofer si hay micro-cortes
         },
         { enableHighAccuracy: true, timeout: 15000 }
       );
