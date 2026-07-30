@@ -7,7 +7,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
-  Printer, ArrowLeft, Loader2, Navigation, ClipboardCheck, ShieldCheck, Anchor, Download, Truck, User, MapPin, Scale, Info
+  Printer, ArrowLeft, Loader2, Navigation, ClipboardCheck, ShieldCheck, Anchor, Download, Truck, User, MapPin, Scale, Info, CheckCircle2
 } from "lucide-react";
 import { Load, Driver, Truck as TruckType, Tenant } from "@/app/lib/types";
 import { QRCodeSVG } from "qrcode.react";
@@ -76,7 +76,7 @@ export default function LoadOrderDocumentPage() {
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Orden_Carga_${load?.orderNumber || 'Flete'}.pdf`);
+      pdf.save(`Hoja_Ruta_${load?.orderNumber || 'Flete'}.pdf`);
     } catch (e) {
       console.error(e);
     } finally {
@@ -90,13 +90,17 @@ export default function LoadOrderDocumentPage() {
   const confirmationUrl = typeof window !== 'undefined' ? `${window.location.origin}/rutas/${load.id}` : '';
   const orgName = tenant?.name || "LOGÍSTICA AR";
 
+  // Buscar última firma disponible si ya fue entregado
+  const lastStop = load.outboundStops?.[load.outboundStops.length - 1];
+  const pod = lastStop?.proofOfDelivery;
+
   return (
     <div className="min-h-screen bg-slate-100 py-8 print:bg-white print:py-0">
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex justify-between items-center px-4 print:hidden">
           <Button variant="ghost" onClick={() => router.back()} className="text-slate-600 bg-white shadow-sm border rounded-xl"><ArrowLeft className="mr-2 h-4 w-4" /> Volver</Button>
           <Button onClick={downloadPdf} disabled={isGeneratingPdf} className="bg-blue-700 hover:bg-blue-800 rounded-xl font-bold shadow-xl">
-            {isGeneratingPdf ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2 h-4 w-4" />} Descargar Orden Nativa
+            {isGeneratingPdf ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2 h-4 w-4" />} Descargar Hoja de Ruta
           </Button>
         </div>
 
@@ -127,7 +131,7 @@ export default function LoadOrderDocumentPage() {
             </div>
           </div>
 
-          {/* GRID DE DATOS MAESTROS (ALTA DENSIDAD) */}
+          {/* GRID DE DATOS MAESTROS */}
           <div className="grid grid-cols-12 gap-0 border-2 border-black">
              {/* SECCIÓN CLIENTE */}
              <div className="col-span-7 p-4 border-r-2 border-b-2 border-black bg-slate-50/50 space-y-3">
@@ -184,8 +188,8 @@ export default function LoadOrderDocumentPage() {
                 </div>
              </div>
 
-             {/* SECCIÓN ITINERARIO (MÁXIMA DENSIDAD) */}
-             <div className="col-span-12 p-4 space-y-3">
+             {/* SECCIÓN ITINERARIO */}
+             <div className="col-span-12 p-4 space-y-3 min-h-[150px]">
                 <h3 className="text-[9px] font-black uppercase flex items-center gap-2 border-b border-black/20 pb-1 text-blue-800"><Navigation size={12}/> 4. SECUENCIA DE ENTREGAS (DESTINOS)</h3>
                 <table className="w-full text-[10px] border-collapse">
                    <thead>
@@ -194,6 +198,7 @@ export default function LoadOrderDocumentPage() {
                          <th className="py-1 px-2 text-left font-black uppercase">PUNTO DE DESCARGA</th>
                          <th className="py-1 px-2 text-left font-black uppercase">DOMICILIO</th>
                          <th className="py-1 px-2 text-right font-black uppercase">PESO DECL.</th>
+                         <th className="py-1 px-2 text-center font-black uppercase w-24">ESTADO</th>
                       </tr>
                    </thead>
                    <tbody>
@@ -203,35 +208,21 @@ export default function LoadOrderDocumentPage() {
                            <td className="py-2 px-2 font-bold uppercase">{stop.name}</td>
                            <td className="py-2 px-2 text-[9px] text-slate-500 uppercase">{stop.address}</td>
                            <td className="py-2 px-2 text-right font-black">{stop.weightKg.toLocaleString()} KG</td>
+                           <td className="py-2 px-2 text-center">
+                              {stop.deliveredAt ? (
+                                <Badge className="bg-green-600 text-white border-none text-[7px] font-black h-4 px-1">ENTREGADO</Badge>
+                              ) : (
+                                <span className="text-[8px] text-slate-300 italic">PENDIENTE</span>
+                              )}
+                           </td>
                         </tr>
                       ))}
                    </tbody>
                 </table>
              </div>
-
-             {/* SECCIÓN COMEX / PUERTO (SI APLICA) */}
-             {load.international?.containerNumber && (
-               <div className="col-span-12 p-4 border-t-2 border-black bg-blue-50/30">
-                  <h3 className="text-[9px] font-black uppercase flex items-center gap-2 border-b border-black/20 pb-1 text-blue-800"><Anchor size={12}/> 5. DATOS ADUANEROS / PUERTO</h3>
-                  <div className="grid grid-cols-3 gap-6 mt-2">
-                     <div>
-                        <p className="text-[8px] font-bold text-slate-400 uppercase">CONTENEDOR N°</p>
-                        <p className="text-xs font-mono font-black">{load.international.containerNumber}</p>
-                     </div>
-                     <div>
-                        <p className="text-[8px] font-bold text-slate-400 uppercase">PRECINTO N°</p>
-                        <p className="text-xs font-mono font-black">{load.international.sealNumber || '---'}</p>
-                     </div>
-                     <div>
-                        <p className="text-[8px] font-bold text-slate-400 uppercase">TIPO OPERACIÓN</p>
-                        <p className="text-xs font-black uppercase">{load.international.operationType || 'TRANSITO'}</p>
-                     </div>
-                  </div>
-               </div>
-             )}
           </div>
 
-          {/* BALANCE DE PESOS LEGALES */}
+          {/* BALANCE DE PESOS */}
           <div className="mt-6 grid grid-cols-3 gap-0 border-2 border-black">
              <div className="p-3 border-r-2 border-black text-center">
                 <p className="text-[8px] font-bold text-slate-400 uppercase">PESO TOTAL CARGA</p>
@@ -247,29 +238,65 @@ export default function LoadOrderDocumentPage() {
              </div>
           </div>
 
-          {/* PIE DE PÁGINA: FIRMAS Y VALIDACIÓN */}
-          <div className="mt-auto pt-10 grid grid-cols-12 gap-6 border-t-4 border-black">
-             <div className="col-span-8 grid grid-cols-3 gap-8">
-                <div className="space-y-4 text-center">
-                   <div className="h-16 border-b-2 border-black"></div>
-                   <p className="text-[8px] font-black uppercase">RESPONSABLE EMISIÓN</p>
-                </div>
-                <div className="space-y-4 text-center">
-                   <div className="h-16 border-b-2 border-black"></div>
-                   <p className="text-[8px] font-black uppercase">CHOFER (CONFORMIDAD)</p>
-                </div>
-                <div className="space-y-4 text-center">
-                   <div className="h-16 border-b-2 border-black flex items-center justify-center">
-                      <div className="border-2 border-black px-2 py-1 rotate-[-4deg] text-[8px] font-black">VALIDADO LOGÍSTICA</div>
+          {/* SECCIÓN DE FIRMAS NATIVA (ALTA DENSIDAD) */}
+          <div className="mt-auto pt-10">
+             <h3 className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-black/10 pb-1 mb-6">VALIDACIÓN Y CONFORMIDAD DE ENTREGA</h3>
+             
+             <div className="grid grid-cols-12 gap-0 border-2 border-black min-h-[160px]">
+                {/* FIRMA EMISOR */}
+                <div className="col-span-4 p-5 border-r-2 border-black flex flex-col justify-between items-center text-center bg-slate-50/30">
+                   <div className="flex-1 flex items-center justify-center">
+                      <div className="border-2 border-black px-4 py-1.5 rotate-[-5deg] text-[9px] font-black shadow-sm bg-white">VALIDADO CENTRAL</div>
                    </div>
-                   <p className="text-[8px] font-black uppercase">SELLO DESPACHO</p>
+                   <div className="w-full border-t border-black/20 pt-2">
+                      <p className="text-[8px] font-black uppercase">RESPONSABLE EMISIÓN</p>
+                      <p className="text-[7px] font-bold text-slate-400">LogísticaAr Control Hub</p>
+                   </div>
+                </div>
+
+                {/* FIRMA CHOFER */}
+                <div className="col-span-4 p-5 border-r-2 border-black flex flex-col justify-between items-center text-center">
+                   <div className="flex-1 flex items-center justify-center w-full">
+                      {pod?.driverSignatureUrl ? (
+                        <img src={pod.driverSignatureUrl} className="max-h-24 w-auto grayscale" alt="Firma Chofer" />
+                      ) : (
+                        <div className="h-16 w-full border-b border-dashed border-slate-300"></div>
+                      )}
+                   </div>
+                   <div className="w-full border-t border-black/20 pt-2">
+                      <p className="text-[8px] font-black uppercase">CONFORMIDAD DEL CHOFER</p>
+                      <p className="text-[7px] font-bold text-slate-400">{driver ? `${driver.lastName}, ${driver.firstName}` : 'Personal Asignado'}</p>
+                   </div>
+                </div>
+
+                {/* FIRMA RECEPTOR */}
+                <div className="col-span-4 p-5 flex flex-col justify-between items-center text-center">
+                   <div className="flex-1 flex items-center justify-center w-full">
+                      {pod?.receiverSignatureUrl ? (
+                        <img src={pod.receiverSignatureUrl} className="max-h-24 w-auto grayscale" alt="Firma Receptor" />
+                      ) : (
+                        <div className="h-16 w-full border-b border-dashed border-slate-300"></div>
+                      )}
+                   </div>
+                   <div className="w-full border-t border-black/20 pt-2">
+                      <p className="text-[8px] font-black uppercase">RECEPCIÓN EN DESTINO</p>
+                      <p className="text-[7px] font-bold text-slate-400">ACLARACIÓN: {pod?.receiverName || 'Sello de Planta'}</p>
+                   </div>
                 </div>
              </div>
-             <div className="col-span-4 flex flex-col items-center justify-center space-y-2 border-l-2 border-black pl-6">
-                <div className="p-2 border-2 border-black bg-white">
-                   <QRCodeSVG value={confirmationUrl} size={90} level="H" />
+
+             {/* QR Y TRAZABILIDAD */}
+             <div className="mt-8 flex justify-between items-end">
+                <div className="space-y-1">
+                   <p className="text-[10px] font-black text-slate-900 uppercase">Protocolo de Documentación Digital</p>
+                   <p className="text-[8px] text-slate-400 font-medium leading-tight max-w-sm">Esta hoja de ruta ha sido emitida bajo normativa de seguridad digital. El código QR permite la validación de pesos y estados de entrega en tiempo real desde la central.</p>
                 </div>
-                <p className="text-[7px] font-bold text-center uppercase leading-tight">VALIDACIÓN DIGITAL <br/> ESCANEE PARA RASTREO</p>
+                <div className="flex flex-col items-center gap-2">
+                   <div className="p-1.5 border-2 border-black">
+                      <QRCodeSVG value={confirmationUrl} size={70} />
+                   </div>
+                   <p className="text-[6px] font-black uppercase text-center leading-none">VALIDACIÓN <br/> OPERATIVA</p>
+                </div>
              </div>
           </div>
         </div>
