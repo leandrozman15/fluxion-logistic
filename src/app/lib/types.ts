@@ -98,6 +98,14 @@ export interface Tenant {
   updatedAt?: any;
 }
 
+export interface PendingRemitoItem {
+  productId: string;
+  productName: string;
+  sku: string;
+  quantity: number;
+  weightKg: number;
+}
+
 export interface PendingRemito {
   id: string;
   number: string;
@@ -110,6 +118,7 @@ export interface PendingRemito {
   lat?: number;
   lng?: number;
   weightKg: number;
+  items?: PendingRemitoItem[];
   fileUrl?: string;
   status: 'pending' | 'dispatched';
   createdAt: any;

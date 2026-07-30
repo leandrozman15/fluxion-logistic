@@ -1,60 +1,41 @@
+
 'use client';
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, orderBy, addDoc, serverTimestamp, deleteDoc, doc, where } from "firebase/firestore";
+import { collection, query, orderBy, deleteDoc, doc } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Files, Search, Loader2, Plus, 
   CheckCircle2, Clock, MapPin, 
-  ArrowRight, FileText, ScanBarcode, Ship, Truck, User, Scale, Receipt, Camera, Trash2, X, Save
+  ArrowRight, FileText, ScanBarcode, Ship, Truck, User, Scale, Receipt, Trash2, Save, ShoppingBag
 } from "lucide-react";
-import { PendingRemito, Client } from "@/app/lib/types";
+import { PendingRemito } from "@/app/lib/types";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { compressImage } from "@/lib/utils/image-compression";
+import Link from "next/link";
 
 export default function RemitosDashboardPage() {
   const db = useFirestore();
   const router = useRouter();
   const { toast } = useToast();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [searchTerm, setSearchTerm] = useState("");
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isProcessingFile, setIsProcessingFile] = useState(false);
 
-  const [formData, setFormData] = useState<Partial<PendingRemito>>({
-    number: "",
-    cotNumber: "",
-    clientId: "",
-    weightKg: 0,
-    fileUrl: ""
-  });
-
-  // Consulta simplificada para evitar errores de índice
   const remitosQuery = useMemo(() => {
     if (!db) return null;
     return query(collection(db, "pending_remitos"), orderBy("createdAt", "desc"));
   }, [db]);
 
-  const clientsQuery = useMemo(() => db ? query(collection(db, "clients"), orderBy("name")) : null, [db]);
-
   const { data: allRemitos, loading } = useCollection<PendingRemito>(remitosQuery);
-  const { data: clients } = useCollection<Client>(clientsQuery);
 
   const filteredRemitos = useMemo(() => {
     if (!allRemitos) return [];
-    // Filtramos por estado 'pending' en el cliente
     return allRemitos.filter(r => 
       r.status === 'pending' && (
         r.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -62,60 +43,6 @@ export default function RemitosDashboardPage() {
       )
     );
   }, [allRemitos, searchTerm]);
-
-  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setIsProcessingFile(true);
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const base64 = event.target?.result as string;
-        try {
-          const compressed = await compressImage(base64, 1200, 1200, 0.6);
-          setFormData(prev => ({ ...prev, fileUrl: compressed }));
-          toast({ title: "Documento procesado" });
-        } catch (err) {
-          setFormData(prev => ({ ...prev, fileUrl: base64 }));
-        } finally {
-          setIsProcessingFile(false);
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleAddRemito = async () => {
-    if (!db || !formData.clientId || !formData.number) {
-      toast({ variant: "destructive", title: "Faltan datos", description: "Cliente y N° Remito son obligatorios." });
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const client = clients?.find(c => c.id === formData.clientId);
-      if (!client) throw new Error("Cliente no encontrado");
-
-      await addDoc(collection(db, "pending_remitos"), {
-        ...formData,
-        clientName: client.name,
-        address: `${client.address.street} ${client.address.number}`,
-        city: client.address.city,
-        province: client.address.province,
-        lat: client.address.lat,
-        lng: client.address.lng,
-        status: 'pending',
-        createdAt: serverTimestamp()
-      });
-
-      toast({ title: "Remito Ingresado", description: "Ya está disponible para que Tráfico lo asigne a una ruta." });
-      setIsAddOpen(false);
-      setFormData({ number: "", cotNumber: "", clientId: "", weightKg: 0, fileUrl: "" });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Error al guardar" });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   const handleDelete = async (id: string) => {
     if (!db || !confirm("¿Eliminar este remito pendiente?")) return;
@@ -135,75 +62,11 @@ export default function RemitosDashboardPage() {
           <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Área de Ventas y Administración: Ingrese los documentos para despacho.</p>
         </div>
         
-        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-indigo-600 hover:bg-indigo-700 shadow-xl shadow-indigo-100 font-black uppercase text-[11px] h-12 px-6 rounded-2xl">
-              <Plus className="w-5 h-5 mr-2" /> Ingresar Nuevo Remito
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl rounded-[2rem]">
-            <DialogHeader>
-              <DialogTitle className="text-xl font-black uppercase italic">Nuevo Remito Administrativo</DialogTitle>
-              <DialogDescription>Cargue los datos para que Tráfico pueda organizar el reparto.</DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-6 py-4">
-               <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-black text-slate-400">1. Cliente / Destino Final</Label>
-                  <Select value={formData.clientId} onValueChange={v => setFormData({...formData, clientId: v})}>
-                    <SelectTrigger className="h-12 bg-slate-50 rounded-xl border-none font-bold">
-                       <SelectValue placeholder="Seleccionar Cliente" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clients?.map(c => <SelectItem key={c.id} value={c.id}>{c.name} ({c.address.city})</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-               </div>
-
-               <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-[10px] uppercase font-black text-slate-400">N° Remito / Guía</Label>
-                    <Input placeholder="0001-000XXXXX" className="h-12 bg-slate-50 border-none font-mono font-bold rounded-xl" value={formData.number} onChange={e => setFormData({...formData, number: e.target.value.toUpperCase()})} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-[10px] uppercase font-black text-slate-400">N° COT (Opcional)</Label>
-                    <Input placeholder="8877665544" className="h-12 bg-slate-50 border-none font-mono font-bold rounded-xl" value={formData.cotNumber} onChange={e => setFormData({...formData, cotNumber: e.target.value})} />
-                  </div>
-               </div>
-
-               <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-[10px] uppercase font-black text-slate-400">Peso de la Carga (KG)</Label>
-                    <div className="relative">
-                      <Scale className="absolute left-3 top-3.5 h-5 w-5 text-slate-400" />
-                      <Input type="number" className="pl-10 h-12 bg-slate-50 border-none font-black rounded-xl" value={formData.weightKg} onChange={e => setFormData({...formData, weightKg: parseFloat(e.target.value) || 0})} />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                     <Label className="text-[10px] uppercase font-black text-slate-400">Adjuntar Digitalización</Label>
-                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={onFileChange} />
-                     <Button 
-                      variant="outline" 
-                      className={cn(
-                        "w-full h-12 rounded-xl border-dashed border-2 transition-all",
-                        formData.fileUrl ? "bg-green-50 border-green-200 text-green-700" : "bg-slate-50 border-slate-200 text-slate-400"
-                      )}
-                      onClick={() => fileInputRef.current?.click()}
-                     >
-                        {isProcessingFile ? <Loader2 className="animate-spin" /> : formData.fileUrl ? <CheckCircle2 className="mr-2" /> : <Camera className="mr-2" />}
-                        {formData.fileUrl ? 'ARCHIVO LISTO' : 'SUBIR FOTO/PDF'}
-                     </Button>
-                  </div>
-               </div>
-            </div>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setIsAddOpen(false)} className="font-bold text-slate-400">CANCELAR</Button>
-              <Button onClick={handleAddRemito} disabled={isSubmitting || !formData.clientId || !formData.number} className="bg-indigo-600 font-black h-12 px-8 rounded-xl shadow-lg shadow-indigo-100">
-                {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />}
-                CONFIRMAR INGRESO
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <Button className="bg-indigo-600 hover:bg-indigo-700 shadow-xl shadow-indigo-100 font-black uppercase text-[11px] h-12 px-6 rounded-2xl" asChild>
+          <Link href="/remitos/nuevo">
+            <Plus className="w-5 h-5 mr-2" /> Ingresar Nuevo Remito
+          </Link>
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -264,7 +127,7 @@ export default function RemitosDashboardPage() {
                 <TableRow>
                   <TableHead className="px-8 text-[10px] font-black uppercase tracking-widest">N° Remito / Fecha</TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest">Destino / Cliente</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Peso Declarado</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Bultos / Peso</TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Estado</TableHead>
                   <TableHead className="pr-8 text-right text-[10px] font-black uppercase tracking-widest">Acciones</TableHead>
                 </TableRow>
@@ -295,7 +158,12 @@ export default function RemitosDashboardPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
-                         <Badge className="bg-slate-100 text-slate-700 border-none font-black px-3">{remito.weightKg.toLocaleString()} KG</Badge>
+                         <div className="space-y-1">
+                            <Badge className="bg-indigo-50 text-indigo-700 border-none font-black px-3 gap-1">
+                               <ShoppingBag size={10} /> {remito.items?.length || 0} ITEMS
+                            </Badge>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">{remito.weightKg.toLocaleString()} KG TOTAL</p>
+                         </div>
                       </TableCell>
                       <TableCell className="text-center">
                          <Badge variant="outline" className="bg-orange-50 text-orange-600 border-orange-100 text-[8px] font-black uppercase animate-pulse">ESPERANDO TRÁFICO</Badge>
