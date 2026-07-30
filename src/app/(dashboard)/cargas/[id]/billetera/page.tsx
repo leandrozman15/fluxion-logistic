@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection } from "@/firebase";
 import { doc, updateDoc, serverTimestamp, collection, query, orderBy, getDoc } from "firebase/firestore";
@@ -14,12 +15,14 @@ import { Input } from "@/components/ui/input";
 import { 
   DollarSign, ArrowLeft, Loader2, CheckCircle2, 
   AlertTriangle, Receipt, Printer, FileText,
-  PieChart, CreditCard, Wallet, XCircle, MapPin, Trash2, Save, Truck as TruckIcon, User
+  PieChart, CreditCard, Wallet, XCircle, MapPin, Download, Save
 } from "lucide-react";
 import { Load, Expense, ExpenseStatus, Driver, Truck } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 
 const CATEGORY_LABELS: Record<string, string> = {
   fuel: 'COMBUSTIBLE',
@@ -35,8 +38,10 @@ export default function LoadWalletPage() {
   const router = useRouter();
   const db = useFirestore();
   const { toast } = useToast();
+  const reportRef = useRef<HTMLDivElement>(null);
   
   const [isUpdatingId, setIsUpdatingId] = useState<string | null>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [driver, setDriver] = useState<Driver | null>(null);
   const [truck, setTruck] = useState<Truck | null>(null);
   const [loadingExtras, setLoadingExtras] = useState(false);
@@ -97,9 +102,6 @@ export default function LoadWalletPage() {
     };
 
     updateDoc(docRef, updateData)
-      .then(() => {
-        toast({ title: `Gasto ${status === 'approved' ? 'Aprobado' : 'Rechazado'}` });
-      })
       .catch(async (serverError) => {
         const permissionError = new FirestorePermissionError({
           path: docRef.path,
@@ -131,21 +133,44 @@ export default function LoadWalletPage() {
     });
   };
 
+  const downloadPdf = async () => {
+    if (!reportRef.current) return;
+    setIsGeneratingPdf(true);
+    try {
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2,
+        logging: false,
+        useCORS: true
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Rendicion_Gastos_${load?.orderNumber || 'Viaje'}.pdf`);
+      toast({ title: "PDF Generado con éxito" });
+    } catch (e) {
+      console.error(e);
+      toast({ variant: "destructive", title: "Error al generar PDF" });
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
   if (loading || loadingExtras) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!load) return <div className="p-10 text-center">Carga no encontrada.</div>;
 
   const balanceFinal = (load.budget?.initialAdvance || 0) - stats.total;
 
-  const handlePrint = () => {
-    if (typeof window !== 'undefined') {
-      window.print();
-    }
-  };
-
   return (
     <div className="space-y-6 pb-20">
       {/* HEADER WEB */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 print:hidden">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full"><ArrowLeft /></Button>
           <div>
@@ -154,98 +179,19 @@ export default function LoadWalletPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="font-bold h-10 px-6 rounded-xl shadow-sm" onClick={handlePrint}>
-            <Printer size={16} className="mr-2" /> Imprimir Reporte
+          <Button 
+            variant="outline" 
+            className="font-bold h-10 px-6 rounded-xl shadow-sm bg-white" 
+            onClick={downloadPdf}
+            disabled={isGeneratingPdf}
+          >
+            {isGeneratingPdf ? <Loader2 className="animate-spin mr-2" /> : <Download size={16} className="mr-2" />} 
+            Descargar Auditoría
           </Button>
         </div>
       </div>
 
-      {/* DOCUMENTO NATIVO DE RENDICIÓN (SOLO PDF) */}
-      <div className="hidden print:block font-sans text-black">
-         <div className="border-4 border-black p-1">
-            <div className="border border-black p-8">
-               <div className="flex justify-between items-start border-b-2 border-black pb-6">
-                  <div>
-                     <h1 className="text-3xl font-black uppercase tracking-tighter">Planilla de Rendición</h1>
-                     <p className="text-sm font-bold uppercase tracking-widest mt-1">Operaciones Logísticas Nacionales</p>
-                  </div>
-                  <div className="text-right">
-                     <p className="text-2xl font-black font-mono">OT: {load.orderNumber}</p>
-                     <p className="text-xs font-bold uppercase">Emisión: {new Date().toLocaleDateString()}</p>
-                  </div>
-               </div>
-
-               <div className="grid grid-cols-2 gap-0 border-b border-black">
-                  <div className="p-4 border-r border-black space-y-1">
-                     <p className="text-[10px] font-black uppercase text-slate-500">Conductor Responsable</p>
-                     <p className="text-sm font-black uppercase">{driver ? `${driver.lastName}, ${driver.firstName}` : '---'}</p>
-                     <p className="text-[10px] font-bold">DNI: {driver?.dni || '-'}</p>
-                  </div>
-                  <div className="p-4 space-y-1">
-                     <p className="text-[10px] font-black uppercase text-slate-500">Unidad de Transporte</p>
-                     <p className="text-sm font-black uppercase">PATENTE: {truck?.plate || '---'}</p>
-                     <p className="text-[10px] font-bold">{truck?.brand} {truck?.model}</p>
-                  </div>
-               </div>
-
-               <div className="mt-8">
-                  <table className="w-full border-collapse">
-                     <thead>
-                        <tr className="border-b-2 border-black">
-                           <th className="py-2 text-left text-[10px] font-black uppercase">Fecha</th>
-                           <th className="py-2 text-left text-[10px] font-black uppercase">Concepto / Lugar</th>
-                           <th className="py-2 text-left text-[10px] font-black uppercase">N° Comprobante</th>
-                           <th className="py-2 text-right text-[10px] font-black uppercase">Monto (ARS)</th>
-                        </tr>
-                     </thead>
-                     <tbody className="divide-y divide-slate-200">
-                        {expenses?.map(exp => (
-                          <tr key={exp.id}>
-                             <td className="py-3 text-[11px] font-mono">{exp.createdAt?.toDate ? new Date(exp.createdAt.toDate()).toLocaleDateString() : '---'}</td>
-                             <td className="py-3">
-                                <p className="text-[11px] font-black uppercase">{CATEGORY_LABELS[exp.category] || exp.category}</p>
-                                <p className="text-[9px] font-bold text-slate-500 uppercase">{exp.location}</p>
-                             </td>
-                             <td className="py-3 text-[11px] font-mono font-bold uppercase">{exp.receiptNumber || '---'}</td>
-                             <td className="py-3 text-right text-[11px] font-black">${exp.amount.toLocaleString()}</td>
-                          </tr>
-                        ))}
-                     </tbody>
-                     <tfoot>
-                        <tr className="border-t-2 border-black">
-                           <td colSpan={3} className="py-4 text-right text-[10px] font-black uppercase">Subtotal de Gastos Auditados:</td>
-                           <td className="py-4 text-right text-sm font-black">${stats.total.toLocaleString()}</td>
-                        </tr>
-                        <tr>
-                           <td colSpan={3} className="py-2 text-right text-[10px] font-black uppercase">Anticipo de Fondos:</td>
-                           <td className="py-2 text-right text-sm font-bold">-${(load.budget?.initialAdvance || 0).toLocaleString()}</td>
-                        </tr>
-                        <tr className="border-t border-black">
-                           <td colSpan={3} className="py-4 text-right text-xs font-black uppercase italic">Balance a Liquidar:</td>
-                           <td className={cn("py-4 text-right text-lg font-black italic", balanceFinal >= 0 ? "text-red-600" : "text-green-600")}>
-                              ${Math.abs(balanceFinal).toLocaleString()} {balanceFinal > 0 ? '(A FAVOR CIA)' : '(A FAVOR CHOFER)'}
-                           </td>
-                        </tr>
-                     </tfoot>
-                  </table>
-               </div>
-
-               <div className="mt-20 grid grid-cols-2 gap-20">
-                  <div className="border-t border-black pt-4 text-center">
-                     <p className="text-[10px] font-black uppercase">Firma del Conductor</p>
-                     <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase">{driver?.lastName}, {driver?.firstName}</p>
-                  </div>
-                  <div className="border-t border-black pt-4 text-center">
-                     <p className="text-[10px] font-black uppercase">Autorización Auditoría</p>
-                     <p className="text-[9px] font-bold text-slate-400 mt-1">ADMINISTRACIÓN CENTRAL</p>
-                  </div>
-               </div>
-            </div>
-         </div>
-      </div>
-
-      {/* VISTA WEB (NORMAL) */}
-      <div className="grid gap-4 md:grid-cols-4 print:hidden">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card className="bg-slate-900 text-white border-none shadow-xl rounded-2xl">
           <CardHeader className="pb-2">
             <CardTitle className="text-[9px] uppercase text-white/40 font-black tracking-widest">Saldo Anticipo</CardTitle>
@@ -284,7 +230,7 @@ export default function LoadWalletPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 print:hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 overflow-hidden border-none shadow-xl rounded-[2rem] bg-white">
           <CardHeader className="bg-slate-50/50 border-b py-6">
              <CardTitle className="text-sm font-black flex items-center gap-2 uppercase italic">
@@ -298,7 +244,7 @@ export default function LoadWalletPage() {
                    <TableHead className="text-[10px] font-black uppercase tracking-widest">Categoría / Lugar</TableHead>
                    <TableHead className="text-[10px] font-black uppercase tracking-widest">N° Factura / Ticket</TableHead>
                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Monto</TableHead>
-                   <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Acciones</TableHead>
+                   <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Audit.</TableHead>
                  </TableRow>
                </TableHeader>
                <TableBody>
@@ -325,7 +271,7 @@ export default function LoadWalletPage() {
                      <TableCell className="text-center font-black text-slate-900 text-sm italic">${exp.amount?.toLocaleString()}</TableCell>
                      <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          {exp.status === 'registered' && (
+                          {exp.status === 'registered' ? (
                             <>
                               <Button 
                                 size="icon" 
@@ -344,10 +290,14 @@ export default function LoadWalletPage() {
                                 {isUpdatingId === exp.id ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={18} />}
                               </Button>
                             </>
+                          ) : (
+                            <Badge className={cn(
+                              "text-[8px] uppercase font-black",
+                              exp.status === 'approved' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                            )}>
+                              {exp.status === 'approved' ? 'OK' : 'RECHAZADO'}
+                            </Badge>
                           )}
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 rounded-full">
-                             <FileText size={16} />
-                          </Button>
                         </div>
                      </TableCell>
                    </TableRow>
@@ -380,32 +330,102 @@ export default function LoadWalletPage() {
                </CardTitle>
              </CardHeader>
              <CardContent className="space-y-4 pt-6">
-               <p className="text-[10px] font-bold opacity-80 leading-relaxed uppercase">Conciliación final de anticipos vs comprobantes auditados.</p>
+               <p className="text-[10px] font-bold opacity-80 leading-relaxed uppercase">La liquidación final concilia los anticipos entregados contra los comprobantes auditados.</p>
                <Button 
                 variant="outline" 
                 className="w-full bg-white/10 border-white/20 text-white hover:bg-white hover:text-blue-700 font-black text-[10px] uppercase h-12 rounded-xl tracking-widest" 
-                onClick={handlePrint}
+                onClick={downloadPdf}
+                disabled={isGeneratingPdf}
                >
-                 <Printer size={14} className="mr-2" /> GENERAR PDF DE CIERRE
+                 {isGeneratingPdf ? <Loader2 className="animate-spin mr-2" /> : <Download size={14} className="mr-2" />} 
+                 GENERAR PDF DE CIERRE
                </Button>
              </CardContent>
            </Card>
         </div>
       </div>
 
-      <style jsx global>{`
-        @media print {
-          @page { size: A4; margin: 10mm; }
-          body { background: white !important; -webkit-print-color-adjust: exact; }
-          .print\:hidden { display: none !important; }
-          .print\:block { display: block !important; }
-          header, nav, aside, footer { display: none !important; }
-          main { margin: 0 !important; padding: 0 !important; width: 100% !important; }
-          .rounded-[2rem], .rounded-3xl, .rounded-2xl { border-radius: 0 !important; }
-          .shadow-xl, .shadow-2xl, .shadow-sm { box-shadow: none !important; }
-        }
-      `}</style>
+      {/* DOCUMENTO NATIVO PARA PDF (OCULTO EN WEB) */}
+      <div className="fixed top-0 left-[-9999px] w-[210mm] min-h-[297mm] bg-white text-black p-10 font-sans" ref={reportRef}>
+         <div className="border-4 border-black p-8 flex flex-col min-h-full">
+            <div className="flex justify-between items-start border-b-4 border-black pb-8 mb-8">
+               <div>
+                  <h1 className="text-4xl font-black uppercase italic tracking-tighter text-blue-700">Logística AR</h1>
+                  <p className="text-[11px] font-black uppercase tracking-[0.3em] text-slate-500 mt-2">Planilla de Rendición Contable</p>
+               </div>
+               <div className="text-right">
+                  <h2 className="text-xl font-black uppercase bg-black text-white px-4 py-1 italic mb-2">Internal Audit Report</h2>
+                  <p className="text-3xl font-mono font-black text-slate-800">OT: {load.orderNumber}</p>
+               </div>
+            </div>
+
+            <div className="grid grid-cols-2 border-2 border-black mb-10">
+               <div className="p-6 border-r-2 border-black space-y-2">
+                  <p className="text-[10px] font-black uppercase text-slate-500">Chofer Responsable</p>
+                  <p className="text-lg font-black uppercase">{driver ? `${driver.lastName}, ${driver.firstName}` : '---'}</p>
+                  <p className="text-xs font-mono">DNI: {driver?.dni || '---'}</p>
+               </div>
+               <div className="p-6 space-y-2">
+                  <p className="text-[10px] font-black uppercase text-slate-500">Unidad de Transporte</p>
+                  <p className="text-lg font-black uppercase">PATENTE: {truck?.plate || '---'}</p>
+                  <p className="text-xs font-mono">{truck?.brand} {truck?.model}</p>
+               </div>
+            </div>
+
+            <table className="w-full border-2 border-black mb-10 text-left">
+               <thead>
+                  <tr className="bg-slate-100 border-b-2 border-black">
+                     <th className="p-3 text-[10px] font-black uppercase">Fecha</th>
+                     <th className="p-3 text-[10px] font-black uppercase">Concepto / Lugar</th>
+                     <th className="p-3 text-[10px] font-black uppercase">N° Comprobante</th>
+                     <th className="p-3 text-right text-[10px] font-black uppercase">Monto (ARS)</th>
+                  </tr>
+               </thead>
+               <tbody className="divide-y divide-black">
+                  {expenses?.filter(e => e.status === 'approved').map(exp => (
+                    <tr key={exp.id}>
+                       <td className="p-3 text-[11px] font-mono">{exp.createdAt?.toDate ? new Date(exp.createdAt.toDate()).toLocaleDateString() : '---'}</td>
+                       <td className="p-3">
+                          <p className="text-[11px] font-black uppercase">{CATEGORY_LABELS[exp.category] || exp.category}</p>
+                          <p className="text-[9px] font-bold text-slate-500 uppercase">{exp.location}</p>
+                       </td>
+                       <td className="p-3 text-[11px] font-mono font-black uppercase">{exp.receiptNumber || '---'}</td>
+                       <td className="p-3 text-right text-[11px] font-black">${exp.amount.toLocaleString()}</td>
+                    </tr>
+                  ))}
+               </tbody>
+               <tfoot>
+                  <tr className="border-t-4 border-black bg-slate-50">
+                     <td colSpan={3} className="p-4 text-right text-xs font-black uppercase">Total Gastos Auditados:</td>
+                     <td className="p-4 text-right text-base font-black">${stats.total.toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                     <td colSpan={3} className="p-2 text-right text-xs font-black uppercase">Anticipo de Fondos:</td>
+                     <td className="p-2 text-right text-base font-black text-red-600">-${(load.budget?.initialAdvance || 0).toLocaleString()}</td>
+                  </tr>
+                  <tr className="border-t-2 border-black">
+                     <td colSpan={3} className="p-4 text-right text-sm font-black uppercase italic">Saldo Neto a Liquidar:</td>
+                     <td className={cn("p-4 text-right text-xl font-black italic", balanceFinal >= 0 ? "text-green-600" : "text-red-600")}>
+                        ${Math.abs(balanceFinal).toLocaleString()} {balanceFinal > 0 ? '(A FAVOR CIA)' : '(A FAVOR CHOFER)'}
+                     </td>
+                  </tr>
+               </tfoot>
+            </table>
+
+            <div className="mt-auto pt-10 border-t-4 border-black flex justify-between items-end">
+               <div className="text-center w-1/3 space-y-4">
+                  <div className="h-20 border-b-2 border-black"></div>
+                  <p className="text-[10px] font-black uppercase">Firma del Conductor</p>
+               </div>
+               <div className="text-center w-1/3 space-y-4">
+                  <div className="h-20 border-b-2 border-black flex items-center justify-center">
+                     <p className="text-[10px] font-black uppercase border-2 border-black p-2 rotate-[-5deg]">AUDITADO OK</p>
+                  </div>
+                  <p className="text-[10px] font-black uppercase">Firma Administración</p>
+               </div>
+            </div>
+         </div>
+      </div>
     </div>
   );
 }
-
