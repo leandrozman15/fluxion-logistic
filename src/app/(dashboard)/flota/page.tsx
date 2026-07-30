@@ -55,7 +55,7 @@ export default function FlotaPage() {
     return query(collection(db, "global_expenses"), where("category", "==", "fuel"));
   }, [db]);
 
-  const { data: fuelExpenses } = useCollection<Expense>(fuelExpensesQuery);
+  const { data: allFuelExpenses } = useCollection<Expense>(fuelExpensesQuery);
 
   const filteredTrucks = useMemo(() => {
     if (!trucks) return [];
@@ -112,12 +112,13 @@ export default function FlotaPage() {
     const sumFixed = Object.values(costs.fixed).reduce((a, b) => a + (b as number), 0);
     const fixedPerKm = sumFixed / kmMensuales;
     
-    const oilPerKm = costs.variable.preventiveMaintenance.cost / (costs.variable.preventiveMaintenance.frequencyKm || 1);
-    const tiresPerKm = costs.variable.tires.costFullSet / (costs.variable.tires.lifeSpanKm || 1);
-    const reservePerKm = costs.variable.unforeseenReservePerKm;
+    const oilPerKm = (costs.variable.preventiveMaintenance?.cost || 0) / (costs.variable.preventiveMaintenance?.frequencyKm || 1);
+    const tiresPerKm = (costs.variable.tires?.costFullSet || 0) / (costs.variable.tires?.lifeSpanKm || 1);
+    const reservePerKm = costs.variable.unforeseenReservePerKm || 0;
 
+    // CÁLCULO DINÁMICO DE COMBUSTIBLE
     let fuelPerKm = 0;
-    const truckFuel = fuelExpenses?.filter(e => e.truckId === truck.id);
+    const truckFuel = allFuelExpenses?.filter(e => e.truckId === truck.id);
     if (truckFuel && truckFuel.length > 0) {
       const validTickets = truckFuel.filter(e => !!e.pricePerLiter && e.pricePerLiter > 0);
       if (validTickets.length > 0) {
@@ -128,6 +129,12 @@ export default function FlotaPage() {
     
     return fixedPerKm + oilPerKm + tiresPerKm + reservePerKm + fuelPerKm;
   };
+
+  const globalAvgCost = useMemo(() => {
+    if (!trucks || trucks.length === 0) return 0;
+    const total = trucks.reduce((acc, t) => acc + calculateTheoreticalCost(t), 0);
+    return total / trucks.length;
+  }, [trucks, allFuelExpenses]);
 
   return (
     <div className="space-y-6">
@@ -157,7 +164,7 @@ export default function FlotaPage() {
             <div>
               <p className="text-[10px] uppercase font-bold text-white/40">Costo Medio Flota / KM</p>
               <p className="text-xl font-bold text-blue-400">
-                ${(trucks?.reduce((acc, t) => acc + calculateTheoreticalCost(t), 0) || 0 / (trucks?.length || 1)).toFixed(2)}
+                ${globalAvgCost.toFixed(2)}
               </p>
             </div>
           </CardContent>
@@ -256,7 +263,7 @@ export default function FlotaPage() {
                         <TableCell>
                            <div className="flex flex-col">
                               <span className="text-sm font-black text-blue-600">${costPerKm.toFixed(2)}</span>
-                              <span className="text-[8px] uppercase font-bold text-slate-400 tracking-tighter">Costo Teórico</span>
+                              <span className="text-[8px] uppercase font-bold text-slate-400 tracking-tighter">Costo Real</span>
                            </div>
                         </TableCell>
                         <TableCell><div className="flex items-center gap-2"><Progress value={docCount > 0 ? (validDocs / docCount) * 100 : 0} className="h-1.5 w-16" /><span className={cn("text-[10px] font-bold", isCritical ? "text-red-600" : "text-slate-500")}>{validDocs}/{docCount}</span></div></TableCell>

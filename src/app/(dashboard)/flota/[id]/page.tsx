@@ -98,21 +98,24 @@ export default function TruckDetailPage() {
   }, [maintenanceHistoryRaw]);
 
   const costCalculation = useMemo(() => {
-    if (!truck?.costs) return { totalPerKm: 0, fixedPerKm: 0, fuelPerKm: 0 };
+    if (!truck?.costs) return { totalPerKm: 0, fixedPerKm: 0, fuelPerKm: 0, oilPerKm: 0, tiresPerKm: 0, reservePerKm: 0 };
     const costs = truck.costs;
     const kmMensuales = costs.operational.estimatedMonthlyKm || 1;
     
-    const sumFixed = Object.values(costs.fixed).reduce((a, b) => a + b, 0);
+    const sumFixed = Object.values(costs.fixed).reduce((a, b) => a + (b as number), 0);
     const fixedPerKm = sumFixed / kmMensuales;
-    const oilPerKm = costs.variable.preventiveMaintenance.cost / (costs.variable.preventiveMaintenance.frequencyKm || 1);
-    const tiresPerKm = costs.variable.tires.costFullSet / (costs.variable.tires.lifeSpanKm || 1);
-    const reservePerKm = costs.variable.unforeseenReservePerKm;
+    const oilPerKm = (costs.variable.preventiveMaintenance?.cost || 0) / (costs.variable.preventiveMaintenance?.frequencyKm || 1);
+    const tiresPerKm = (costs.variable.tires?.costFullSet || 0) / (costs.variable.tires?.lifeSpanKm || 1);
+    const reservePerKm = costs.variable.unforeseenReservePerKm || 0;
 
+    // CÁLCULO DINÁMICO DE COMBUSTIBLE
     let fuelPerKm = 0;
     if (fuelExpenses && fuelExpenses.length > 0) {
+      // Tomamos el promedio de precio por litro de los tickets cargados (media móvil)
       const validTickets = fuelExpenses.filter(e => !!e.pricePerLiter && e.pricePerLiter > 0);
       if (validTickets.length > 0) {
         const avgPrice = validTickets.reduce((acc, e) => acc + (e.pricePerLiter || 0), 0) / validTickets.length;
+        // Costo = (Precio Promedio * Consumo por 100km) / 100
         fuelPerKm = (avgPrice * (truck.avgConsumption || 32)) / 100;
       }
     }
@@ -295,11 +298,24 @@ export default function TruckDetailPage() {
 
           <Card className="bg-slate-900 text-white border-none shadow-xl relative overflow-hidden">
             <div className="absolute top-0 right-0 p-4 opacity-5"><DollarSign size={80}/></div>
-            <CardHeader className="pb-2"><CardTitle className="text-xs uppercase font-black text-blue-400 tracking-tighter">Costo por KM (Estimado)</CardTitle></CardHeader>
-            <CardContent>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs uppercase font-black text-blue-400 tracking-tighter">Costo Total por KM (Auditado)</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
                <div className="flex items-end gap-2">
                  <p className="text-4xl font-black italic text-green-400">${costCalculation.totalPerKm.toFixed(2)}</p>
                  <p className="text-[10px] uppercase font-bold text-white/30 pb-1">Costo Real</p>
+               </div>
+               
+               <div className="grid grid-cols-2 gap-4 border-t border-white/5 pt-4">
+                  <div>
+                    <p className="text-[8px] uppercase font-bold text-white/40">Fijos + Seguros</p>
+                    <p className="text-sm font-black text-blue-300">${costCalculation.fixedPerKm.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[8px] uppercase font-bold text-white/40">Gasoil (Auditado)</p>
+                    <p className="text-sm font-black text-orange-400">${costCalculation.fuelPerKm.toFixed(2)}</p>
+                  </div>
                </div>
             </CardContent>
           </Card>
@@ -447,13 +463,78 @@ export default function TruckDetailPage() {
 
             <TabsContent value="costs" className="space-y-6 animate-in fade-in">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                 <Card className="border-none shadow-sm"><CardHeader className="bg-slate-50 border-b py-3"><CardTitle className="text-xs uppercase font-black text-slate-500">Gastos Fijos Mensuales</CardTitle></CardHeader><CardContent className="pt-4 space-y-2">{truck.costs?.fixed && Object.entries(truck.costs.fixed).map(([k,v]) => (<div key={k} className="flex justify-between text-xs border-b border-slate-50 py-1"><span className="text-slate-500 capitalize">{k.replace(/([A-Z])/g, ' $1')}</span><span className="font-bold">${(v as number).toLocaleString()}</span></div>))}</CardContent></Card>
-                 <Card className="border-none shadow-sm bg-slate-900 text-white"><CardHeader><CardTitle className="text-xs uppercase font-bold text-blue-400">Análisis de Operatividad</CardTitle></CardHeader><CardContent className="space-y-4"><div className="flex justify-between items-center text-xs"><span>KM Mensuales Est.</span><span className="font-bold">{truck.costs?.operational.estimatedMonthlyKm.toLocaleString()} KM</span></div><div className="p-3 bg-blue-500/10 rounded-lg flex justify-between items-center text-sm font-black"><span className="text-blue-400">COSTO KM TEÓRICO</span><span className="text-green-400">${costCalculation.totalPerKm.toFixed(2)}</span></div></CardContent></Card>
+                 <Card className="border-none shadow-sm">
+                   <CardHeader className="bg-slate-50 border-b py-3">
+                      <CardTitle className="text-xs uppercase font-black text-slate-500">Gastos Fijos Mensuales</CardTitle>
+                   </CardHeader>
+                   <CardContent className="pt-4 space-y-2">
+                      {truck.costs?.fixed && Object.entries(truck.costs.fixed).map(([k,v]) => (
+                        <div key={k} className="flex justify-between text-xs border-b border-slate-50 py-1">
+                          <span className="text-slate-500 capitalize">{k.replace(/([A-Z])/g, ' $1')}</span>
+                          <span className="font-bold">${(v as number).toLocaleString()}</span>
+                        </div>
+                      ))}
+                   </CardContent>
+                 </Card>
+                 
+                 <div className="space-y-4">
+                    <Card className="border-none shadow-sm bg-slate-900 text-white">
+                      <CardHeader>
+                        <CardTitle className="text-xs uppercase font-bold text-blue-400">Estructura Auditada por KM</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="flex justify-between items-center text-xs">
+                          <span>Fijos (Sueldos/Seguros)</span>
+                          <span className="font-bold">${costCalculation.fixedPerKm.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span>Mantenimiento y Gomas</span>
+                          <span className="font-bold">${(costCalculation.oilPerKm + costCalculation.tiresPerKm).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs text-orange-400">
+                          <span>Gasoil (Media móvil)</span>
+                          <span className="font-bold">${costCalculation.fuelPerKm.toFixed(2)}</span>
+                        </div>
+                        <div className="p-3 bg-blue-500/10 rounded-lg flex justify-between items-center text-sm font-black border border-blue-500/20">
+                          <span className="text-blue-400">COSTO KM REAL</span>
+                          <span className="text-green-400">${costCalculation.totalPerKm.toFixed(2)}</span>
+                        </div>
+                        <p className="text-[8px] text-white/30 italic">Cálculo basado en la meta de {truck.costs?.operational.estimatedMonthlyKm.toLocaleString()} KM/mes.</p>
+                      </CardContent>
+                    </Card>
+                 </div>
               </div>
             </TabsContent>
 
             <TabsContent value="history" className="space-y-6 animate-in fade-in">
-               <div className="space-y-4"><h3 className="text-sm font-bold flex items-center gap-2"><Fuel className="text-blue-600" /> Cargas de Combustible</h3><Table><TableHeader className="bg-slate-50"><TableRow><TableHead className="text-[10px] uppercase">Fecha</TableHead><TableHead className="text-[10px] uppercase">Litros</TableHead><TableHead className="text-[10px] uppercase">Costo</TableHead><TableHead className="text-[10px] uppercase">Lugar</TableHead></TableRow></TableHeader><TableBody>{fuelExpenses?.map(exp => (<TableRow key={exp.id}><TableCell className="text-xs">{exp.createdAt?.toDate ? format(exp.createdAt.toDate(), "dd/MM/yy") : '-'}</TableCell><TableCell className="text-xs font-bold">{exp.liters} L</TableCell><TableCell className="text-xs font-bold text-green-700">${exp.amount.toLocaleString()}</TableCell><TableCell className="text-[10px] text-slate-500 uppercase">{exp.location}</TableCell></TableRow>))}</TableBody></Table></div>
+               <div className="space-y-4">
+                  <h3 className="text-sm font-bold flex items-center gap-2"><Fuel className="text-blue-600" /> Cargas de Combustible y Precios</h3>
+                  <Table>
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="text-[10px] uppercase">Fecha</TableHead>
+                        <TableHead className="text-[10px] uppercase">Litros</TableHead>
+                        <TableHead className="text-[10px] uppercase">$/Litro</TableHead>
+                        <TableHead className="text-[10px] uppercase">Total</TableHead>
+                        <TableHead className="text-[10px] uppercase">Lugar</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {fuelExpenses?.map(exp => (
+                        <TableRow key={exp.id}>
+                          <TableCell className="text-xs">{exp.createdAt?.toDate ? format(exp.createdAt.toDate(), "dd/MM/yy") : '-'}</TableCell>
+                          <TableCell className="text-xs font-bold">{exp.liters} L</TableCell>
+                          <TableCell className="text-xs font-mono text-blue-600">${exp.pricePerLiter?.toFixed(2)}</TableCell>
+                          <TableCell className="text-xs font-bold text-green-700">${exp.amount.toLocaleString()}</TableCell>
+                          <TableCell className="text-[10px] text-slate-500 uppercase">{exp.location}</TableCell>
+                        </TableRow>
+                      ))}
+                      {(!fuelExpenses || fuelExpenses.length === 0) && (
+                        <TableRow><TableCell colSpan={5} className="text-center py-10 text-slate-400 italic text-xs">Sin registros de combustible para esta unidad.</TableCell></TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+               </div>
             </TabsContent>
           </Tabs>
         </div>
