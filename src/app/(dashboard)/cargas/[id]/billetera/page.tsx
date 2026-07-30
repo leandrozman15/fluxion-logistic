@@ -17,7 +17,7 @@ import {
   AlertTriangle, Receipt, Printer, FileText,
   PieChart, CreditCard, Wallet, XCircle, MapPin, Download, Save
 } from "lucide-react";
-import { Load, Expense, ExpenseStatus, Driver, Truck } from "@/app/lib/types";
+import { Load, Expense, ExpenseStatus, Driver, Truck, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
@@ -52,6 +52,13 @@ export default function LoadWalletPage() {
   }, [db, id]);
 
   const { data: load, loading } = useDoc<Load>(loadRef);
+
+  const tenantRef = useMemo(() => {
+    if (!db) return null;
+    return doc(db, "tenants", "default_tenant");
+  }, [db]);
+
+  const { data: tenant } = useDoc<Tenant>(tenantRef);
 
   const expensesQuery = useMemo(() => {
     if (!db || !id) return null;
@@ -140,7 +147,8 @@ export default function LoadWalletPage() {
       const canvas = await html2canvas(reportRef.current, {
         scale: 2,
         logging: false,
-        useCORS: true
+        useCORS: true,
+        backgroundColor: "#ffffff"
       });
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
@@ -349,9 +357,14 @@ export default function LoadWalletPage() {
       <div className="fixed top-0 left-[-9999px] w-[210mm] min-h-[297mm] bg-white text-black p-10 font-sans" ref={reportRef}>
          <div className="border-4 border-black p-8 flex flex-col min-h-full">
             <div className="flex justify-between items-start border-b-4 border-black pb-8 mb-8">
-               <div>
-                  <h1 className="text-4xl font-black uppercase italic tracking-tighter text-blue-700">Logística AR</h1>
-                  <p className="text-[11px] font-black uppercase tracking-[0.3em] text-slate-500 mt-2">Planilla de Rendición Contable</p>
+               <div className="flex items-center gap-4">
+                  {tenant?.settings?.logoUrl && (
+                    <img src={tenant.settings.logoUrl} className="h-16 w-auto object-contain" alt="Logo" />
+                  )}
+                  <div>
+                    <h1 className="text-4xl font-black uppercase italic tracking-tighter text-blue-700">{tenant?.name || 'LOGÍSTICA AR'}</h1>
+                    <p className="text-[11px] font-black uppercase tracking-[0.3em] text-slate-500 mt-2">Planilla de Rendición Contable</p>
+                  </div>
                </div>
                <div className="text-right">
                   <h2 className="text-xl font-black uppercase bg-black text-white px-4 py-1 italic mb-2">Internal Audit Report</h2>
@@ -375,6 +388,7 @@ export default function LoadWalletPage() {
             <table className="w-full border-2 border-black mb-10 text-left">
                <thead>
                   <tr className="bg-slate-100 border-b-2 border-black">
+                     <th className="p-3 text-[10px] font-black uppercase w-8">Audit.</th>
                      <th className="p-3 text-[10px] font-black uppercase">Fecha</th>
                      <th className="p-3 text-[10px] font-black uppercase">Concepto / Lugar</th>
                      <th className="p-3 text-[10px] font-black uppercase">N° Comprobante</th>
@@ -384,6 +398,9 @@ export default function LoadWalletPage() {
                <tbody className="divide-y divide-black">
                   {expenses?.filter(e => e.status === 'approved').map(exp => (
                     <tr key={exp.id}>
+                       <td className="p-3 text-center">
+                          <div style={{ color: '#16a34a', fontSize: '14px', fontWeight: 'bold' }}>✓</div>
+                       </td>
                        <td className="p-3 text-[11px] font-mono">{exp.createdAt?.toDate ? new Date(exp.createdAt.toDate()).toLocaleDateString() : '---'}</td>
                        <td className="p-3">
                           <p className="text-[11px] font-black uppercase">{CATEGORY_LABELS[exp.category] || exp.category}</p>
@@ -396,17 +413,17 @@ export default function LoadWalletPage() {
                </tbody>
                <tfoot>
                   <tr className="border-t-4 border-black bg-slate-50">
-                     <td colSpan={3} className="p-4 text-right text-xs font-black uppercase">Total Gastos Auditados:</td>
+                     <td colSpan={4} className="p-4 text-right text-xs font-black uppercase">Total Gastos Auditados:</td>
                      <td className="p-4 text-right text-base font-black">${stats.total.toLocaleString()}</td>
                   </tr>
                   <tr>
-                     <td colSpan={3} className="p-2 text-right text-xs font-black uppercase">Anticipo de Fondos:</td>
+                     <td colSpan={4} className="p-2 text-right text-xs font-black uppercase">Anticipo de Fondos:</td>
                      <td className="p-2 text-right text-base font-black text-red-600">-${(load.budget?.initialAdvance || 0).toLocaleString()}</td>
                   </tr>
                   <tr className="border-t-2 border-black">
-                     <td colSpan={3} className="p-4 text-right text-sm font-black uppercase italic">Saldo Neto a Liquidar:</td>
+                     <td colSpan={4} className="p-4 text-right text-sm font-black uppercase italic">Saldo Neto de Auditoría:</td>
                      <td className={cn("p-4 text-right text-xl font-black italic", balanceFinal >= 0 ? "text-green-600" : "text-red-600")}>
-                        ${Math.abs(balanceFinal).toLocaleString()} {balanceFinal > 0 ? '(A FAVOR CIA)' : '(A FAVOR CHOFER)'}
+                        ${Math.abs(balanceFinal).toLocaleString()}
                      </td>
                   </tr>
                </tfoot>
