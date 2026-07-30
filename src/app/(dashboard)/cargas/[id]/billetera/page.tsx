@@ -1,9 +1,9 @@
 'use client';
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection } from "@/firebase";
-import { doc, updateDoc, serverTimestamp, collection, query, orderBy } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp, collection, query, orderBy, getDoc } from "firebase/firestore";
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,9 +14,9 @@ import { Input } from "@/components/ui/input";
 import { 
   DollarSign, ArrowLeft, Loader2, CheckCircle2, 
   AlertTriangle, Receipt, Printer, FileText,
-  PieChart, CreditCard, Wallet, XCircle, Trash2, Save, MapPin
+  PieChart, CreditCard, Wallet, XCircle, Trash2, Save, MapPin, Truck as TruckIcon, User
 } from "lucide-react";
-import { Load, Expense, ExpenseStatus } from "@/app/lib/types";
+import { Load, Expense, ExpenseStatus, Driver, Truck } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
@@ -35,7 +35,11 @@ export default function LoadWalletPage() {
   const router = useRouter();
   const db = useFirestore();
   const { toast } = useToast();
+  
   const [isUpdatingId, setIsUpdatingId] = useState<string | null>(null);
+  const [driver, setDriver] = useState<Driver | null>(null);
+  const [truck, setTruck] = useState<Truck | null>(null);
+  const [loadingExtras, setLoadingExtras] = useState(false);
 
   const loadRef = useMemo(() => {
     if (!db || !id) return null;
@@ -50,6 +54,29 @@ export default function LoadWalletPage() {
   }, [db, id]);
 
   const { data: expenses } = useCollection<Expense>(expensesQuery);
+
+  // Cargar datos del chofer y camión para el reporte
+  useEffect(() => {
+    async function fetchExtras() {
+      if (!db || !load) return;
+      setLoadingExtras(true);
+      try {
+        if (load.assignedDriverId) {
+          const dSnap = await getDoc(doc(db, "drivers", load.assignedDriverId));
+          if (dSnap.exists()) setDriver(dSnap.data() as Driver);
+        }
+        if (load.assignedTruckId) {
+          const tSnap = await getDoc(doc(db, "trucks", load.assignedTruckId));
+          if (tSnap.exists()) setTruck(tSnap.data() as Truck);
+        }
+      } catch (e) {
+        console.error("Error fetching report extras:", e);
+      } finally {
+        setLoadingExtras(false);
+      }
+    }
+    fetchExtras();
+  }, [db, load]);
 
   const stats = useMemo(() => {
     if (!expenses) return { total: 0, pending: 0, approved: 0 };
@@ -70,7 +97,6 @@ export default function LoadWalletPage() {
       updatedAt: serverTimestamp()
     };
 
-    // NO usar await aquí para permitir actualizaciones optimistas en la UI
     updateDoc(docRef, updateData)
       .then(() => {
         toast({ title: `Gasto ${status === 'approved' ? 'Aprobado' : 'Rechazado'}` });
@@ -106,13 +132,15 @@ export default function LoadWalletPage() {
     });
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
+  if (loading || loadingExtras) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!load) return <div className="p-10 text-center">Carga no encontrada.</div>;
 
   const budgetUsed = load.budget?.totalBudget ? (stats.total / load.budget.totalBudget) * 100 : 0;
+  const balanceFinal = (load.budget?.initialAdvance || 0) - stats.total;
 
   return (
     <div className="space-y-6 pb-20">
+      {/* HEADER WEB */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 print:hidden">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full"><ArrowLeft /></Button>
@@ -131,42 +159,52 @@ export default function LoadWalletPage() {
         </div>
       </div>
 
-      {/* CABECERA PARA IMPRESIÓN (OCULTA EN WEB) */}
+      {/* CABECERA PARA IMPRESIÓN (SOLO PDF) */}
       <div className="hidden print:block border-b-4 border-slate-900 pb-6 mb-8">
          <div className="flex justify-between items-start">
             <div>
-               <h1 className="text-3xl font-black italic uppercase text-blue-600">Rendición de Gastos de Viaje</h1>
-               <p className="text-sm font-bold text-slate-500 uppercase">Sistema Centralizado de Auditoría Logística</p>
+               <h1 className="text-3xl font-black italic uppercase text-blue-600">Planilla de Rendición de Viaje</h1>
+               <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Sistema de Auditoría Logística AR</p>
             </div>
             <div className="text-right">
-               <p className="text-lg font-black font-mono">ORDEN: {load.orderNumber}</p>
-               <p className="text-xs text-slate-400">Emisión: {new Date().toLocaleDateString()}</p>
+               <p className="text-xl font-black font-mono">ORDEN: {load.orderNumber}</p>
+               <p className="text-xs text-slate-400 font-bold">Fecha: {new Date().toLocaleDateString()}</p>
             </div>
          </div>
-         <div className="grid grid-cols-3 gap-8 mt-6">
+         
+         <div className="grid grid-cols-4 gap-4 mt-8 bg-slate-50 p-4 rounded-lg border">
             <div className="space-y-1">
-               <p className="text-[10px] font-black text-slate-400 uppercase">Cliente / Operación</p>
-               <p className="text-sm font-bold uppercase">{load.clientName}</p>
+               <p className="text-[8px] font-black text-slate-400 uppercase">Personal</p>
+               <p className="text-xs font-black uppercase">{driver ? `${driver.lastName}, ${driver.firstName}` : 'S/D'}</p>
+               <p className="text-[8px] text-slate-500 font-bold">DNI: {driver?.dni || '-'}</p>
             </div>
-            <div className="space-y-1">
-               <p className="text-[10px] font-black text-slate-400 uppercase">Tipo de Carga</p>
-               <p className="text-sm font-bold uppercase">{load.serviceType}</p>
+            <div className="space-y-1 border-l pl-4">
+               <p className="text-[8px] font-black text-slate-400 uppercase">Vehículo</p>
+               <p className="text-xs font-black uppercase text-blue-700">{truck?.plate || 'S/D'}</p>
+               <p className="text-[8px] text-slate-500 font-bold">{truck?.brand} {truck?.model}</p>
             </div>
-            <div className="space-y-1 text-right">
-               <p className="text-[10px] font-black text-slate-400 uppercase">Estado de Viaje</p>
-               <p className="text-sm font-bold uppercase">{load.status}</p>
+            <div className="space-y-1 border-l pl-4">
+               <p className="text-[8px] font-black text-slate-400 uppercase">Operación</p>
+               <p className="text-xs font-black uppercase truncate">{load.clientName}</p>
+               <p className="text-[8px] text-slate-500 font-bold">{load.serviceType.toUpperCase()}</p>
+            </div>
+            <div className="space-y-1 border-l pl-4 text-right">
+               <p className="text-[8px] font-black text-slate-400 uppercase">Balance Final</p>
+               <p className={cn("text-lg font-black italic", balanceFinal >= 0 ? "text-green-600" : "text-red-600")}>
+                 ${balanceFinal.toLocaleString()}
+               </p>
             </div>
          </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-4 print:hidden">
         <Card className="bg-slate-900 text-white border-none shadow-xl rounded-2xl">
           <CardHeader className="pb-2">
             <CardTitle className="text-[9px] uppercase text-white/40 font-black tracking-widest">Saldo Anticipo</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-black italic text-green-400 leading-none">
-               ${((load.budget?.initialAdvance || 0) - stats.total).toLocaleString()}
+               ${balanceFinal.toLocaleString()}
             </div>
             <p className="text-[9px] text-white/30 font-bold uppercase mt-2">Base: ${load.budget?.initialAdvance?.toLocaleString()}</p>
           </CardContent>
@@ -202,10 +240,10 @@ export default function LoadWalletPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2 overflow-hidden border-none shadow-xl rounded-[2rem] bg-white">
-          <CardHeader className="bg-slate-50/50 border-b py-6">
+        <Card className="lg:col-span-2 overflow-hidden border-none shadow-xl rounded-[2rem] bg-white print:shadow-none print:rounded-none">
+          <CardHeader className="bg-slate-50/50 border-b py-6 print:bg-white print:border-b-2">
              <CardTitle className="text-sm font-black flex items-center gap-2 uppercase italic">
-               <Receipt className="text-blue-600" /> Detalle de Tickets y Facturas
+               <Receipt className="text-blue-600 print:hidden" /> Detalle de Tickets y Facturas Auditadas
              </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -215,7 +253,7 @@ export default function LoadWalletPage() {
                    <TableHead className="text-[10px] font-black uppercase tracking-widest">Categoría / Lugar</TableHead>
                    <TableHead className="text-[10px] font-black uppercase tracking-widest">N° Factura / Ticket</TableHead>
                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Monto</TableHead>
-                   <TableHead className="text-[10px] font-black uppercase tracking-widest">Audit.</TableHead>
+                   <TableHead className="text-[10px] font-black uppercase tracking-widest">Estado</TableHead>
                    <TableHead className="text-right text-[10px] font-black uppercase tracking-widest print:hidden">Acciones</TableHead>
                  </TableRow>
                </TableHeader>
@@ -233,12 +271,17 @@ export default function LoadWalletPage() {
                        </div>
                      </TableCell>
                      <TableCell>
-                        <Input 
-                          placeholder="F-0001-0000..." 
-                          className="h-8 text-[10px] font-mono font-bold bg-slate-50 border-none rounded-lg focus:ring-1 ring-blue-200 print:bg-transparent print:p-0"
-                          defaultValue={exp.receiptNumber || ""}
-                          onBlur={(e) => handleUpdateReceipt(exp.id, e.target.value)}
-                        />
+                        <div className="print:hidden">
+                           <Input 
+                             placeholder="F-0001-0000..." 
+                             className="h-8 text-[10px] font-mono font-bold bg-slate-50 border-none rounded-lg focus:ring-1 ring-blue-200"
+                             defaultValue={exp.receiptNumber || ""}
+                             onBlur={(e) => handleUpdateReceipt(exp.id, e.target.value)}
+                           />
+                        </div>
+                        <div className="hidden print:block font-mono font-bold text-xs uppercase">
+                           {exp.receiptNumber || '---'}
+                        </div>
                      </TableCell>
                      <TableCell className="text-center font-black text-slate-900 text-sm italic">${exp.amount?.toLocaleString()}</TableCell>
                      <TableCell>
@@ -257,27 +300,27 @@ export default function LoadWalletPage() {
                               <Button 
                                 size="icon" 
                                 variant="ghost" 
-                                className="h-7 w-7 text-green-600 hover:bg-green-50 rounded-full"
+                                className="h-8 w-8 text-green-600 hover:bg-green-50 rounded-full"
                                 onClick={() => handleUpdateStatus(exp.id, 'approved')}
                                 title="Aprobar Gasto"
                                 disabled={isUpdatingId === exp.id}
                               >
-                                {isUpdatingId === exp.id ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                                {isUpdatingId === exp.id ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={18} />}
                               </Button>
                               <Button 
                                 size="icon" 
                                 variant="ghost" 
-                                className="h-7 w-7 text-red-600 hover:bg-red-50 rounded-full"
+                                className="h-8 w-8 text-red-600 hover:bg-red-50 rounded-full"
                                 onClick={() => handleUpdateStatus(exp.id, 'rejected')}
                                 title="Rechazar Gasto"
                                 disabled={isUpdatingId === exp.id}
                               >
-                                {isUpdatingId === exp.id ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={16} />}
+                                {isUpdatingId === exp.id ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={18} />}
                               </Button>
                             </>
                           )}
-                          <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-400 rounded-full">
-                             <FileText size={14} />
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-400 rounded-full">
+                             <FileText size={16} />
                           </Button>
                         </div>
                      </TableCell>
@@ -329,32 +372,39 @@ export default function LoadWalletPage() {
            </Card>
         </div>
 
-        {/* PIE DE PÁGINA PARA IMPRESIÓN */}
-        <div className="hidden print:grid grid-cols-2 gap-10 mt-12 col-span-3 pt-10 border-t border-slate-200">
-           <div className="space-y-4">
-              <div className="h-20 border-b border-slate-300"></div>
-              <p className="text-[10px] font-black uppercase text-center">Firma del Conductor</p>
+        {/* PIE DE PÁGINA PARA IMPRESIÓN (SOLO PDF) */}
+        <div className="hidden print:grid grid-cols-2 gap-20 mt-12 col-span-3 pt-10 border-t-2 border-slate-200">
+           <div className="space-y-4 text-center">
+              <div className="h-24 border-b-2 border-slate-300"></div>
+              <p className="text-[10px] font-black uppercase">Firma del Conductor</p>
+              <p className="text-[8px] text-slate-400 font-bold uppercase">{driver ? `${driver.lastName}, ${driver.firstName}` : 'Conductor'}</p>
            </div>
-           <div className="space-y-4">
-              <div className="h-20 border-b border-slate-300"></div>
-              <p className="text-[10px] font-black uppercase text-center">Responsable de Auditoría</p>
+           <div className="space-y-4 text-center">
+              <div className="h-24 border-b-2 border-slate-300"></div>
+              <p className="text-[10px] font-black uppercase">Responsable de Auditoría</p>
+              <p className="text-[8px] text-slate-400 font-bold uppercase">Logística AR Central</p>
            </div>
-           <div className="col-span-2 text-center mt-10">
-              <p className="text-[8px] font-black text-slate-300 uppercase tracking-[0.5em]">DOCUMENTO DE RENDICIÓN OFICIAL - LOGÍSTICA AR</p>
+           <div className="col-span-2 text-center mt-20">
+              <p className="text-[8px] font-black text-slate-300 uppercase tracking-[0.5em]">DOCUMENTO DE RENDICIÓN OFICIAL - VALIDEZ CONTABLE INTERNA</p>
            </div>
         </div>
       </div>
+
       <style jsx global>{`
         @media print {
           @page { size: A4; margin: 15mm; }
-          body { background: white !important; font-size: 12pt; }
+          body { background: white !important; color: black !important; -webkit-print-color-adjust: exact; }
           .print\:hidden { display: none !important; }
           .print\:block { display: block !important; }
           .print\:grid { display: grid !important; }
-          input { border: none !important; padding: 0 !important; }
+          .bg-slate-50 { background-color: #f8fafc !important; }
+          .border { border: 1px solid #e2e8f0 !important; }
+          .text-blue-600 { color: #2563eb !important; }
           .shadow-sm, .shadow-xl, .shadow-2xl { box-shadow: none !important; }
           .rounded-3xl, .rounded-[2rem] { border-radius: 4px !important; }
           tr { border-bottom: 1px solid #e2e8f0 !important; }
+          header, nav, aside { display: none !important; }
+          main { margin: 0 !important; padding: 0 !important; width: 100% !important; }
         }
       `}</style>
     </div>
