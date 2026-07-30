@@ -126,7 +126,7 @@ export default function RouteDetailPage() {
     if (!loadRef) return;
     setIsUpdating(true);
     try {
-      await updateDoc(loadRef, { 
+      updateDoc(loadRef, { 
         status: 'on_route',
         "tracking.tripStartedAt": serverTimestamp(),
         updatedAt: serverTimestamp() 
@@ -144,7 +144,7 @@ export default function RouteDetailPage() {
     setIsUpdating(true);
     const label = PAUSE_TYPES.find(p => p.id === typeId)?.label || "Pausa";
     try {
-      await updateDoc(loadRef, {
+      updateDoc(loadRef, {
         status: 'on_pause',
         "tracking.lastPauseType": label,
         "tracking.pauseStartedAt": serverTimestamp(),
@@ -162,7 +162,7 @@ export default function RouteDetailPage() {
     if (!loadRef) return;
     setIsUpdating(true);
     try {
-      await updateDoc(loadRef, {
+      updateDoc(loadRef, {
         status: 'on_route',
         "tracking.lastPauseType": null,
         "tracking.pauseStartedAt": null,
@@ -213,7 +213,7 @@ export default function RouteDetailPage() {
 
       const allDone = updatedStops.every(s => !!s.deliveredAt);
       
-      await updateDoc(loadRef, {
+      updateDoc(loadRef, {
         outboundStops: updatedStops,
         status: allDone ? 'delivered' : 'on_route',
         updatedAt: serverTimestamp()
@@ -230,12 +230,36 @@ export default function RouteDetailPage() {
   };
 
   const handleAddExpense = async () => {
-    if (!db || !id || !user) return;
+    if (!db || !id || !user || !load) return;
     setIsUpdating(true);
     try {
       const expRef = collection(db, "loads", id as string, "expenses");
-      await addDoc(expRef, { ...expenseData, driverId: user.uid, loadId: id, status: 'registered', createdAt: serverTimestamp() });
-      toast({ title: "Gasto Registrado", description: "Pendiente de aprobación por administración." });
+      const globalExpRef = collection(db, "global_expenses");
+      
+      const payload = { 
+        ...expenseData, 
+        driverId: user.uid, 
+        loadId: id, 
+        truckId: load.assignedTruckId,
+        status: 'registered', 
+        createdAt: serverTimestamp() 
+      };
+
+      // 1. Guardar en gastos locales del flete
+      addDoc(expRef, payload);
+
+      // 2. Guardar en gastos globales de flota
+      addDoc(globalExpRef, payload);
+
+      // 3. ACTUALIZACIÓN CRÍTICA: Sincronizar Odómetro si es combustible
+      if (expenseData.category === 'fuel' && expenseData.odometerKm > 0 && load.assignedTruckId) {
+        updateDoc(doc(db, "trucks", load.assignedTruckId), {
+          odometerKm: expenseData.odometerKm,
+          updatedAt: serverTimestamp()
+        });
+      }
+
+      toast({ title: "Gasto Registrado", description: "Pendiente de aprobación. Odómetro actualizado." });
       setIsExpenseOpen(false);
       setExpenseData({ category: 'fuel', amount: 0, description: "", location: "", liters: 0, odometerKm: 0, pricePerLiter: 0, fuelBrand: "" });
     } catch (e) {
@@ -255,7 +279,7 @@ export default function RouteDetailPage() {
         timestamp: new Date().toISOString()
       };
 
-      await updateDoc(loadRef, {
+      updateDoc(loadRef, {
         status: 'incident',
         "tracking.alerts": arrayUnion(incident),
         updatedAt: serverTimestamp()
@@ -569,27 +593,30 @@ export default function RouteDetailPage() {
                            </div>
                         </div>
                      </div>
-                     {expenseData.category === 'fuel' && (
-                       <div className="p-6 bg-blue-50 border border-blue-100 rounded-3xl space-y-6 animate-in zoom-in-95">
-                          <Label className="text-[10px] font-black text-blue-800 uppercase tracking-widest flex items-center gap-2"><Fuel size={14}/> Detalle de Carga</Label>
+                     <div className="p-6 bg-blue-50 border border-blue-100 rounded-3xl space-y-6 animate-in zoom-in-95">
+                        <Label className="text-[10px] font-black text-blue-800 uppercase tracking-widest flex items-center gap-2"><Fuel size={14}/> Detalle Técnico</Label>
+                        {expenseData.category === 'fuel' && (
                           <Select value={expenseData.fuelBrand} onValueChange={v => setExpenseData({...expenseData, fuelBrand: v})}>
                              <SelectTrigger className="bg-white h-12 rounded-xl border-none shadow-sm font-bold"><SelectValue placeholder="Marca de Estación" /></SelectTrigger>
                              <SelectContent>
                                 {['YPF', 'Shell', 'Axion', 'Puma', 'Otra'].map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
                              </SelectContent>
                           </Select>
-                          <div className="grid grid-cols-2 gap-4">
+                        )}
+                        <div className="grid grid-cols-2 gap-4">
+                           {expenseData.category === 'fuel' && (
                              <div className="space-y-1">
                                 <Label className="text-[8px] uppercase font-bold text-blue-400 ml-1">Litros</Label>
                                 <Input type="number" placeholder="Lts" className="bg-white h-12 border-none font-black rounded-xl" value={expenseData.liters} onChange={e => setExpenseData({...expenseData, liters: parseFloat(e.target.value) || 0})} />
                              </div>
-                             <div className="space-y-1">
-                                <Label className="text-[8px] uppercase font-bold text-blue-400 ml-1">Km Odómetro</Label>
-                                <Input type="number" placeholder="Km" className="bg-white h-12 border-none font-black rounded-xl" value={expenseData.odometerKm} onChange={e => setExpenseData({...expenseData, odometerKm: parseFloat(e.target.value) || 0})} />
-                             </div>
-                          </div>
-                       </div>
-                     )}
+                           )}
+                           <div className="space-y-1 col-span-2 sm:col-span-1">
+                              <Label className="text-[8px] uppercase font-bold text-blue-400 ml-1">Km Odómetro Actual</Label>
+                              <Input type="number" placeholder="Km" className="bg-white h-12 border-none font-black rounded-xl" value={expenseData.odometerKm} onChange={e => setExpenseData({...expenseData, odometerKm: parseFloat(e.target.value) || 0})} />
+                           </div>
+                        </div>
+                        <p className="text-[9px] text-blue-400 italic">El kilometraje ingresado actualizará automáticamente la ficha técnica del camión.</p>
+                     </div>
                   </div>
                   <DialogFooter>
                     <Button className="w-full h-16 bg-blue-600 text-white font-black text-lg rounded-2xl shadow-xl shadow-blue-200" onClick={handleAddExpense} disabled={isUpdating || !expenseData.amount}>

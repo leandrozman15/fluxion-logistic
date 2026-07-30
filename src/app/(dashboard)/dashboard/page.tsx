@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
@@ -48,7 +47,8 @@ import {
   ListOrdered,
   Ship,
   ScanBarcode,
-  MoveRight
+  MoveRight,
+  Coffee
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -199,7 +199,7 @@ export default function MonitorOperativoPage() {
     if (!db || !selectedLoadForDock || !selectedDock) return;
     setIsUpdatingDock(true);
     try {
-      await updateDoc(doc(db, "loads", selectedLoadForDock.id), {
+      updateDoc(doc(db, "loads", selectedLoadForDock.id), {
         "origin.dockName": selectedDock,
         "dockEntryAuthorized": true,
         "dockEntryMessage": `AUTORIZADO: Diríjase a ${selectedDock}`,
@@ -277,7 +277,22 @@ export default function MonitorOperativoPage() {
             {isFinished ? `Finalizado` : !isStarted ? `Base: ${load.origin.name}` : isReturnPhase ? `Retorno` : `A: ${stops[nextStopIdx]?.name || 'Destino'}`}
           </span>
         </div>
-        {(load.status === 'on_route' || load.status === 'on_pause') && load.tracking && (
+        
+        {/* INDICADOR DE PAUSA DETALLADO */}
+        {load.status === 'on_pause' && (
+          <div className="flex items-center gap-2 mt-1">
+            <Badge className="bg-amber-500 hover:bg-amber-600 text-white border-none text-[8px] font-black uppercase flex items-center gap-1 shadow-sm shadow-amber-200 animate-pulse">
+               <Coffee size={8} /> PAUSA: {load.tracking?.lastPauseType || 'Descanso'}
+            </Badge>
+            {load.tracking?.pauseStartedAt && (
+              <span className="text-[9px] font-bold text-amber-600 uppercase">
+                desde hace {formatDistanceToNow(toSafeDate(load.tracking.pauseStartedAt)!, { locale: es })}
+              </span>
+            )}
+          </div>
+        )}
+
+        {load.status === 'on_route' && load.tracking && (
           <div className="flex items-center gap-1.5 text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
              <Zap size={10} className="animate-pulse fill-current" /> ETA GPS: {calculateETA(load.tracking.distanceRemainingKm, load.tracking.currentSpeed)}
           </div>
@@ -349,8 +364,11 @@ export default function MonitorOperativoPage() {
                  <Collapsible key={load.id} open={isExpanded} onOpenChange={() => setExpandedLoadId(isExpanded ? null : load.id)} className="group transition-all">
                    <div className={cn("px-6 py-4 flex flex-col lg:flex-row items-start lg:items-center justify-between transition-colors cursor-pointer group hover:bg-slate-50", isExpanded && "bg-blue-50/50 border-l-4 border-l-blue-600")}>
                       <div className="flex items-center gap-5 flex-1 min-w-0" onClick={() => setExpandedLoadId(isExpanded ? null : load.id)}>
-                         <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border shadow-sm", load.status === 'on_route' ? "bg-blue-600 text-white border-blue-400" : "bg-white text-slate-400 border-slate-200")}>
-                           {load.serviceType === 'customs' ? <Ship size={24}/> : (load.status === 'on_route' ? <Navigation size={24} className="animate-pulse" /> : <Clock size={24} />)}
+                         <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border shadow-sm", 
+                           load.status === 'on_route' ? "bg-blue-600 text-white border-blue-400" : 
+                           load.status === 'on_pause' ? "bg-amber-500 text-white border-amber-400" :
+                           "bg-white text-slate-400 border-slate-200")}>
+                           {load.serviceType === 'customs' ? <Ship size={24}/> : (load.status === 'on_route' ? <Navigation size={24} className="animate-pulse" /> : load.status === 'on_pause' ? <Coffee size={24} /> : <Clock size={24} />)}
                          </div>
                          <div className="space-y-1 min-w-0 flex-1"><div className="flex items-center gap-2"><p className="text-base font-black text-slate-900 tracking-tighter">{load.orderNumber}</p>{load.international?.containerNumber && <Badge variant="secondary" className="bg-blue-900 text-white border-none text-[8px] h-4 font-mono px-2"><ScanBarcode size={10} className="mr-1" /> {load.international.containerNumber}</Badge>}</div><RouteStatusLine load={load} /></div>
                       </div>
@@ -360,7 +378,7 @@ export default function MonitorOperativoPage() {
                          <div className="space-y-1"><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Avance Ruta</p><div className="space-y-1"><div className="flex items-center gap-1.5"><TrendingUp size={10} className="text-blue-500" /><span className="text-xs font-black text-slate-700">{Math.round(tracking?.distanceTraveledKm || 0)} KM</span></div><Progress value={load.status === 'delivered' ? 100 : (tracking?.distanceTraveledKm || 0)} className="h-1 w-20 bg-slate-100" /></div></div>
                       </div>
                       <div className="flex items-center gap-2 mt-4 lg:mt-0 w-full lg:w-auto">
-                        <Button variant="ghost" size="sm" className="flex-1 lg:flex-none text-[10px] font-bold text-blue-600 bg-blue-100 hover:bg-blue-200" asChild><Link href={`/rutas/${load.id}`}><Zap size={12} className="mr-1" /> APP CHOFER</Link></Button>
+                        <Button variant="ghost" size="sm" className="flex-1 lg:flex-none text-[10px] font-bold text-blue-600 bg-blue-100 hover:bg-blue-200" asChild><Link href={`/tracking/${load.id}`}><Zap size={12} className="mr-1" /> VIVO</Link></Button>
                         <CollapsibleTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8">{isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</Button></CollapsibleTrigger>
                       </div>
                    </div>
@@ -406,7 +424,7 @@ export default function MonitorOperativoPage() {
                 </Popup>
               </Marker>
             ))}
-            {L && truckIcon && filteredAgenda.filter(l => l.status === 'on_route' && l.tracking?.currentLat).map((load) => (
+            {L && truckIcon && filteredAgenda.filter(l => (l.status === 'on_route' || l.status === 'on_pause') && l.tracking?.currentLat).map((load) => (
               <Marker key={load.id} position={[load.tracking!.currentLat, load.tracking!.currentLng]} icon={truckIcon}><Popup><div className="p-1 font-bold text-sm">Orden: {load.orderNumber}</div></Popup></Marker>
             ))}
           </MapContainer>
