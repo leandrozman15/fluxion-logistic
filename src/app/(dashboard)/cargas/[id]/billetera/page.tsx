@@ -114,7 +114,9 @@ export default function LoadWalletPage() {
       const label = CATEGORY_LABELS[exp.category] || exp.category.toUpperCase();
       totals[label] = (totals[label] || 0) + (exp.amount || 0);
     });
-    return Object.entries(totals).map(([name, value]) => ({ name, value }));
+    return Object.entries(totals)
+      .map(([name, value]) => ({ name, value }))
+      .filter(item => item.value > 0);
   }, [expenses]);
 
   const handleUpdateStatus = (expenseId: string, status: ExpenseStatus) => {
@@ -188,6 +190,7 @@ export default function LoadWalletPage() {
   if (!load) return <div className="p-10 text-center">Carga no encontrada.</div>;
 
   const balanceFinal = stats.approved - (load.budget?.initialAdvance || 0);
+  const budgetProgress = load.budget?.totalBudget ? (stats.approved / load.budget.totalBudget) * 100 : 0;
 
   return (
     <div className="space-y-6 pb-20 print:bg-white print:p-0">
@@ -242,9 +245,9 @@ export default function LoadWalletPage() {
             <CardTitle className="text-[9px] uppercase text-slate-400 font-black tracking-widest">Consumo de Presupuesto Global</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 pt-2">
-            <Progress value={load.budget?.totalBudget ? (stats.approved / load.budget.totalBudget) * 100 : 0} className="h-2 rounded-full" />
+            <Progress value={budgetProgress} className="h-2 rounded-full" />
             <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-tighter">
-               <span>GASTO AUDITADO: ${stats.approved.toLocaleString()}</span>
+               <span className="flex items-center gap-1"><CheckCircle2 size={10} className="text-green-500" /> GASTO AUDITADO: ${stats.approved.toLocaleString()}</span>
                <span>TOPE ESTIMADO: ${load.budget?.totalBudget?.toLocaleString() || '0'}</span>
             </div>
           </CardContent>
@@ -345,28 +348,36 @@ export default function LoadWalletPage() {
                <CardTitle className="text-xs font-black uppercase tracking-widest">Distribución de Costos</CardTitle>
              </CardHeader>
              <CardContent className="space-y-6 pt-6 flex flex-col items-center">
-                <div className="h-[180px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={pieData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={45}
-                        outerRadius={70}
-                        paddingAngle={5}
-                        dataKey="value"
-                      >
-                        {pieData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <RechartsTooltip 
-                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', fontSize: '10px', fontWeight: 'bold' }}
-                        formatter={(val: number) => [`$${val.toLocaleString()}`, "Monto"]}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
+                <div className="h-[200px] w-full">
+                  {pieData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={pieData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={45}
+                          outerRadius={70}
+                          paddingAngle={5}
+                          dataKey="value"
+                          stroke="none"
+                        >
+                          {pieData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <RechartsTooltip 
+                          contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', fontSize: '10px', fontWeight: 'bold' }}
+                          formatter={(val: number) => [`$${val.toLocaleString()}`, "Monto"]}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-2">
+                       <PieChartIcon size={40} className="opacity-20" />
+                       <p className="text-[10px] font-black uppercase">Sin datos para graficar</p>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2 w-full">
                   <div className="grid grid-cols-2 gap-x-2 gap-y-1">
