@@ -15,7 +15,7 @@ import { Progress } from "@/components/ui/progress";
 import { 
   Truck, ArrowLeft, ArrowRight, Save, Loader2, 
   Gauge, Box, Anchor, Layers, 
-  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon, LayoutGrid, Building2, User, DollarSign, Activity, TrendingUp, Zap, Scale, Trash2, Plus, UserCheck, X
+  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon, LayoutGrid, Building2, User, DollarSign, Activity, TrendingUp, Zap, Scale, Trash2, Plus, UserCheck, X, Wrench, LifeBuoy
 } from "lucide-react";
 import { Truck as TruckType, Driver, OwnershipType, TruckCosts } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -160,9 +160,14 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     const monthlyKm = c.operational.estimatedMonthlyKm || 1;
     
     const fixedPerKm = fixedTotal / monthlyKm;
-    const variablePerKm = (c.variable.preventiveMaintenance.cost / (c.variable.preventiveMaintenance.frequencyKm || 1)) +
-                          (c.variable.tires.costFullSet / (c.variable.tires.lifeSpanKm || 1)) +
-                          c.variable.unforeseenReservePerKm;
+    
+    // Desgaste de neumáticos
+    const tireIncidencePerKm = (c.variable.tires.costFullSet || 0) / (c.variable.tires.lifeSpanKm || 1);
+    
+    // Cambio de aceite / Service
+    const oilIncidencePerKm = (c.variable.preventiveMaintenance.cost || 0) / (c.variable.preventiveMaintenance.frequencyKm || 1);
+    
+    const variablePerKm = oilIncidencePerKm + tireIncidencePerKm + (c.variable.unforeseenReservePerKm || 0);
     
     return {
       fixed: fixedPerKm,
@@ -179,8 +184,8 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => router.back()}><ArrowLeft /></Button>
           <div>
-             <h1 className="text-2xl font-bold">Nueva Unidad de Flota</h1>
-             <p className="text-xs text-slate-500">Gestión de especificaciones técnicas, documentación y costos.</p>
+             <h1 className="text-2xl font-bold">Configuración de Unidad</h1>
+             <p className="text-xs text-slate-500">Gestión técnica y estructura de costos por kilómetro.</p>
           </div>
         </div>
       </div>
@@ -333,86 +338,124 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
           <div className="space-y-6">
             <Card className="border-none shadow-xl bg-slate-900 text-white overflow-hidden rounded-3xl">
                <CardHeader className="pb-2 border-b border-white/5 bg-white/5">
-                  <CardTitle className="text-xs uppercase font-black text-blue-400 tracking-widest">Análisis de Costos por KM</CardTitle>
+                  <CardTitle className="text-xs uppercase font-black text-blue-400 tracking-widest">Análisis Operativo por Kilómetro</CardTitle>
                </CardHeader>
                <CardContent className="p-6">
                   <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                      <div className="text-center md:text-left">
                         <p className="text-4xl font-black italic text-green-400">${calculatedKmCost.total.toFixed(2)}</p>
-                        <p className="text-[10px] uppercase font-bold text-white/30">Costo Teórico por Kilómetro</p>
+                        <p className="text-[10px] uppercase font-bold text-white/30">Costo Teórico Total por KM</p>
                      </div>
                      <div className="grid grid-cols-2 gap-8">
                         <div>
                            <p className="text-lg font-black text-blue-400">${calculatedKmCost.fixed.toFixed(2)}</p>
-                           <p className="text-[9px] uppercase font-bold text-white/20">Fijos</p>
+                           <p className="text-[9px] uppercase font-bold text-white/20">Fijos (Prorrateo)</p>
                         </div>
                         <div>
                            <p className="text-lg font-black text-amber-400">${calculatedKmCost.variable.toFixed(2)}</p>
-                           <p className="text-[9px] uppercase font-bold text-white/20">Variables</p>
+                           <p className="text-[9px] uppercase font-bold text-white/20">Variables (Desgaste)</p>
                         </div>
                      </div>
                   </div>
                </CardContent>
             </Card>
 
-            <Card className="border-none shadow-sm rounded-3xl overflow-hidden">
-                <CardHeader className="bg-slate-50 border-b py-4">
-                  <CardTitle className="text-sm flex items-center gap-2 text-slate-700">
-                    <Building2 size={16} className="text-blue-600" /> Gastos Fijos Mensuales
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase font-bold text-slate-400">Sueldo + Cargas (Chofer)</Label>
-                    <Input type="number" value={formData.costs?.fixed.salaryWithSocial || ''} onChange={e => handleCostChange('fixed', 'salaryWithSocial', e.target.value)} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase font-bold text-slate-400">Seguro Total Unidad</Label>
-                    <Input type="number" value={formData.costs?.fixed.insuranceTotal || ''} onChange={e => handleCostChange('fixed', 'insuranceTotal', e.target.value)} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase font-bold text-slate-400">Patente (Cuota Mensual)</Label>
-                    <Input type="number" value={formData.costs?.fixed.patenteMonthly || ''} onChange={e => handleCostChange('fixed', 'patenteMonthly', e.target.value)} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase font-bold text-slate-400">Impuestos y Habilitaciones</Label>
-                    <Input type="number" value={formData.costs?.fixed.taxesHabilitations || ''} onChange={e => handleCostChange('fixed', 'taxesHabilitations', e.target.value)} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase font-bold text-slate-400">Amortización / Reserva</Label>
-                    <Input type="number" value={formData.costs?.fixed.amortization || ''} onChange={e => handleCostChange('fixed', 'amortization', e.target.value)} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase font-bold text-slate-400">GPS y Satelital</Label>
-                    <Input type="number" value={formData.costs?.fixed.satelliteGps || ''} onChange={e => handleCostChange('fixed', 'satelliteGps', e.target.value)} />
-                  </div>
-                </CardContent>
-            </Card>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card className="border-none shadow-sm rounded-3xl overflow-hidden">
+                  <CardHeader className="bg-slate-50 border-b py-4">
+                    <CardTitle className="text-sm flex items-center gap-2 text-slate-700">
+                      <Building2 size={16} className="text-blue-600" /> Gastos Fijos Mensuales
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-6 space-y-4">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase font-bold text-slate-400">Sueldo + Cargas (Chofer)</Label>
+                      <Input type="number" value={formData.costs?.fixed.salaryWithSocial || ''} onChange={e => handleCostChange('fixed', 'salaryWithSocial', e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase font-bold text-slate-400">Seguro Total Unidad</Label>
+                      <Input type="number" value={formData.costs?.fixed.insuranceTotal || ''} onChange={e => handleCostChange('fixed', 'insuranceTotal', e.target.value)} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase font-bold text-slate-400">Patente (Cuota)</Label>
+                        <Input type="number" value={formData.costs?.fixed.patenteMonthly || ''} onChange={e => handleCostChange('fixed', 'patenteMonthly', e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase font-bold text-slate-400">GPS / Satelital</Label>
+                        <Input type="number" value={formData.costs?.fixed.satelliteGps || ''} onChange={e => handleCostChange('fixed', 'satelliteGps', e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase font-bold text-slate-400">Amortización</Label>
+                        <Input type="number" value={formData.costs?.fixed.amortization || ''} onChange={e => handleCostChange('fixed', 'amortization', e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase font-bold text-slate-400">Habilitaciones</Label>
+                        <Input type="number" value={formData.costs?.fixed.taxesHabilitations || ''} onChange={e => handleCostChange('fixed', 'taxesHabilitations', e.target.value)} />
+                      </div>
+                    </div>
+                  </CardContent>
+              </Card>
 
-            <Card className="border-none shadow-sm rounded-3xl overflow-hidden">
-                <CardHeader className="bg-slate-50 border-b py-4">
-                  <CardTitle className="text-sm flex items-center gap-2 text-slate-700">
-                    <TrendingUp size={16} className="text-blue-600" /> Gastos Variables y Meta
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-6 space-y-6">
-                  <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-6">
+                <Card className="border-none shadow-sm rounded-3xl overflow-hidden">
+                    <CardHeader className="bg-slate-50 border-b py-4">
+                      <CardTitle className="text-sm flex items-center gap-2 text-slate-700">
+                        <Wrench size={16} className="text-blue-600" /> Service / Cambio Aceite
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-6 grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase font-bold text-slate-400">Costo Service</Label>
+                        <Input type="number" value={formData.costs?.variable.preventiveMaintenance?.cost || ''} onChange={e => handleCostChange('variable', 'preventiveMaintenance', e.target.value, 'cost')} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase font-bold text-slate-400">Frecuencia (KM)</Label>
+                        <Input type="number" value={formData.costs?.variable.preventiveMaintenance?.frequencyKm || ''} onChange={e => handleCostChange('variable', 'preventiveMaintenance', e.target.value, 'frequencyKm')} />
+                      </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="border-none shadow-sm rounded-3xl overflow-hidden">
+                    <CardHeader className="bg-slate-50 border-b py-4">
+                      <CardTitle className="text-sm flex items-center gap-2 text-slate-700">
+                        <LifeBuoy size={16} className="text-blue-600" /> Neumáticos y Reservas
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-6 space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase font-bold text-slate-400">Costo Juego Completo</Label>
+                          <Input type="number" value={formData.costs?.variable.tires.costFullSet || ''} onChange={e => handleCostChange('variable', 'tires', e.target.value, 'costFullSet')} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase font-bold text-slate-400">Vida Útil (KM)</Label>
+                          <Input type="number" value={formData.costs?.variable.tires.lifeSpanKm || ''} onChange={e => handleCostChange('variable', 'tires', e.target.value, 'lifeSpanKm')} />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase font-bold text-slate-400">Reserva Imprevistos x KM</Label>
+                        <Input type="number" step="0.01" value={formData.costs?.variable.unforeseenReservePerKm || ''} onChange={e => handleCostChange('variable', 'unforeseenReservePerKm', e.target.value)} />
+                      </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="border-none shadow-sm rounded-3xl overflow-hidden bg-blue-50 border-blue-100">
+                  <CardHeader className="py-4 border-b border-blue-100 bg-white/50">
+                    <CardTitle className="text-xs uppercase font-black text-blue-700">Meta de Operatividad</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-4 space-y-2">
                     <div className="space-y-1">
-                      <Label className="text-[10px] uppercase font-bold text-slate-400">Service (Costo)</Label>
-                      <Input type="number" value={formData.costs?.variable.preventiveMaintenance?.cost || ''} onChange={e => handleCostChange('variable', 'preventiveMaintenance', e.target.value, 'cost')} />
+                      <Label className="text-[10px] uppercase font-bold text-blue-400">KM Mensuales Proyectados</Label>
+                      <Input type="number" className="bg-white" value={formData.costs?.operational.estimatedMonthlyKm || ''} onChange={e => handleCostChange('operational', 'estimatedMonthlyKm', e.target.value)} />
+                      <p className="text-[8px] text-blue-400 italic">Crucial para prorratear los costos fijos sobre el kilometraje real.</p>
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase font-bold text-slate-400">Frecuencia (KM)</Label>
-                      <Input type="number" value={formData.costs?.variable.preventiveMaintenance?.frequencyKm || ''} onChange={e => handleCostChange('variable', 'preventiveMaintenance', e.target.value, 'frequencyKm')} />
-                    </div>
-                  </div>
-                  <div className="space-y-1 pt-2 border-t">
-                    <Label className="text-[10px] uppercase font-bold text-slate-400">Meta KM Mensual Proyectada</Label>
-                    <Input type="number" value={formData.costs?.operational.estimatedMonthlyKm || ''} onChange={e => handleCostChange('operational', 'estimatedMonthlyKm', e.target.value)} />
-                    <p className="text-[9px] text-slate-400 italic">Dato vital para prorratear costos fijos sobre el kilometraje.</p>
-                  </div>
-                </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
           </div>
         )}
       </div>
