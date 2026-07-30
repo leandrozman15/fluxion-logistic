@@ -104,6 +104,7 @@ export interface PendingRemitoItem {
   sku: string;
   quantity: number;
   weightKg: number;
+  volumeM3: number;
 }
 
 export interface PendingRemito {
@@ -118,6 +119,7 @@ export interface PendingRemito {
   lat?: number;
   lng?: number;
   weightKg: number;
+  volumeM3: number;
   items?: PendingRemitoItem[];
   fileUrl?: string;
   status: 'pending' | 'dispatched';

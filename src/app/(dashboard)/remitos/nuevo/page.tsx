@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, orderBy, addDoc, serverTimestamp } from "firebase/firestore";
@@ -13,7 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Plus, ArrowLeft, Loader2, Save, Camera, CheckCircle2, 
-  Trash2, Package, Scale, ShoppingCart, Search, Box, Receipt
+  Trash2, Package, Scale, ShoppingCart, Search, Box, Receipt, Layers,
+  ChevronRight, ArrowRight
 } from "lucide-react";
 import { Client, Product, PendingRemitoItem } from "@/app/lib/types";
 import { cn } from "@/lib/utils";
@@ -28,7 +29,6 @@ export default function NewRemitoPage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
 
   const [formData, setFormData] = useState({
     number: "",
@@ -38,23 +38,27 @@ export default function NewRemitoPage() {
     items: [] as PendingRemitoItem[]
   });
 
+  // State for the "Quick Add" form
+  const [selectedProductId, setSelectedProductId] = useState<string>("");
+  const [currentQuantity, setCurrentQuantity] = useState<number>(1);
+
   const clientsQuery = useMemo(() => db ? query(collection(db, "clients"), orderBy("name")) : null, [db]);
   const productsQuery = useMemo(() => db ? query(collection(db, "products"), orderBy("name")) : null, [db]);
 
   const { data: clients } = useCollection<Client>(clientsQuery);
   const { data: products } = useCollection<Product>(productsQuery);
 
+  const selectedProduct = useMemo(() => 
+    products?.find(p => p.id === selectedProductId) || null
+  , [products, selectedProductId]);
+
   const totalWeight = useMemo(() => {
     return formData.items.reduce((acc, item) => acc + (item.weightKg || 0), 0);
   }, [formData.items]);
 
-  const filteredProducts = useMemo(() => {
-    if (!products) return [];
-    return products.filter(p => 
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      p.sku.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [products, searchTerm]);
+  const totalVolume = useMemo(() => {
+    return formData.items.reduce((acc, item) => acc + (item.volumeM3 || 0), 0);
+  }, [formData.items]);
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -76,13 +80,20 @@ export default function NewRemitoPage() {
     }
   };
 
-  const addItem = (product: Product) => {
-    const existing = formData.items.find(i => i.productId === product.id);
+  const addItem = () => {
+    if (!selectedProduct) return;
+    
+    const existing = formData.items.find(i => i.productId === selectedProduct.id);
     if (existing) {
       setFormData(prev => ({
         ...prev,
-        items: prev.items.map(i => i.productId === product.id 
-          ? { ...i, quantity: i.quantity + 1, weightKg: (i.quantity + 1) * product.unitWeightKg } 
+        items: prev.items.map(i => i.productId === selectedProduct.id 
+          ? { 
+              ...i, 
+              quantity: i.quantity + currentQuantity, 
+              weightKg: (i.quantity + currentQuantity) * selectedProduct.unitWeightKg,
+              volumeM3: (i.quantity + currentQuantity) * selectedProduct.unitVolumeM3
+            } 
           : i
         )
       }));
@@ -90,27 +101,20 @@ export default function NewRemitoPage() {
       setFormData(prev => ({
         ...prev,
         items: [...prev.items, {
-          productId: product.id,
-          productName: product.name,
-          sku: product.sku,
-          quantity: 1,
-          weightKg: product.unitWeightKg
+          productId: selectedProduct.id,
+          productName: selectedProduct.name,
+          sku: selectedProduct.sku,
+          quantity: currentQuantity,
+          weightKg: currentQuantity * selectedProduct.unitWeightKg,
+          volumeM3: currentQuantity * selectedProduct.unitVolumeM3
         }]
       }));
     }
-  };
-
-  const updateQuantity = (productId: string, quantity: number) => {
-    const product = products?.find(p => p.id === productId);
-    if (!product) return;
     
-    setFormData(prev => ({
-      ...prev,
-      items: prev.items.map(i => i.productId === productId 
-        ? { ...i, quantity: Math.max(1, quantity), weightKg: Math.max(1, quantity) * product.unitWeightKg } 
-        : i
-      )
-    }));
+    // Reset add form
+    setSelectedProductId("");
+    setCurrentQuantity(1);
+    toast({ title: "Producto añadido" });
   };
 
   const removeItem = (productId: string) => {
@@ -140,6 +144,7 @@ export default function NewRemitoPage() {
         lat: client.address.lat,
         lng: client.address.lng,
         weightKg: totalWeight,
+        volumeM3: totalVolume,
         status: 'pending',
         createdAt: serverTimestamp()
       });
@@ -154,31 +159,31 @@ export default function NewRemitoPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-24">
+    <div className="max-w-5xl mx-auto space-y-6 pb-24 px-4 sm:px-0">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full bg-white shadow-sm border"><ArrowLeft /></Button>
           <div>
-            <h1 className="text-2xl font-black text-slate-900 italic tracking-tighter uppercase leading-none">Nuevo Remito Administrativo</h1>
-            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Confección de pedido con desglose de artículos</p>
+            <h1 className="text-2xl font-black text-slate-900 italic tracking-tighter uppercase leading-none">Confección de Remito</h1>
+            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Ingreso administrativo de pedidos para despacho</p>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="lg:col-span-8 space-y-6">
           <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden">
-            <CardHeader className="bg-slate-900 text-white p-8">
+            <CardHeader className="bg-slate-900 text-white p-8 pb-6">
               <CardTitle className="text-sm uppercase font-black tracking-widest flex items-center gap-2">
                 <Receipt size={18} className="text-blue-400" /> 1. Datos del Documento
               </CardTitle>
             </CardHeader>
             <CardContent className="p-8 space-y-8">
                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-black text-slate-400">Seleccionar Cliente de Destino</Label>
+                  <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Cliente de Destino</Label>
                   <Select value={formData.clientId} onValueChange={v => setFormData({...formData, clientId: v})}>
-                    <SelectTrigger className="h-14 bg-slate-50 rounded-2xl border-none font-bold text-lg">
-                       <SelectValue placeholder="Buscando en cartera..." />
+                    <SelectTrigger className="h-12 bg-slate-50 rounded-2xl border-none font-bold text-base">
+                       <SelectValue placeholder="Seleccione un cliente..." />
                     </SelectTrigger>
                     <SelectContent>
                       {clients?.map(c => <SelectItem key={c.id} value={c.id}>{c.name} ({c.address.city})</SelectItem>)}
@@ -188,30 +193,30 @@ export default function NewRemitoPage() {
 
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <Label className="text-[10px] uppercase font-black text-slate-400">N° de Remito / Hoja</Label>
-                    <Input placeholder="Ej: 0001-00045678" className="h-14 bg-slate-50 border-none font-mono font-black text-xl rounded-2xl" value={formData.number} onChange={e => setFormData({...formData, number: e.target.value.toUpperCase()})} />
+                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">N° de Remito</Label>
+                    <Input placeholder="0001-00045678" className="h-12 bg-slate-50 border-none font-mono font-black text-lg rounded-2xl" value={formData.number} onChange={e => setFormData({...formData, number: e.target.value.toUpperCase()})} />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-[10px] uppercase font-black text-slate-400">N° COT (AR)</Label>
-                    <Input placeholder="Código de transporte" className="h-14 bg-slate-50 border-none font-mono font-black text-xl rounded-2xl" value={formData.cotNumber} onChange={e => setFormData({...formData, cotNumber: e.target.value})} />
+                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Certificado COT</Label>
+                    <Input placeholder="Código AR" className="h-12 bg-slate-50 border-none font-mono font-bold text-lg rounded-2xl" value={formData.cotNumber} onChange={e => setFormData({...formData, cotNumber: e.target.value})} />
                   </div>
                </div>
 
                <div className="space-y-4 pt-4 border-t">
                   <div className="flex justify-between items-center">
-                    <Label className="text-[10px] uppercase font-black text-slate-400">Digitalizar Remito Físico</Label>
-                    {formData.fileUrl && <Badge className="bg-green-600 text-white font-black text-[8px] h-4">CAPTURA OK</Badge>}
+                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Escaneo de Documento</Label>
+                    {formData.fileUrl && <Badge className="bg-green-600 text-white font-black text-[8px] h-4">DIGITALIZADO</Badge>}
                   </div>
                   <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={onFileChange} />
                   <div 
                     className={cn(
-                      "aspect-video md:h-32 rounded-[2rem] border-3 border-dashed flex flex-col items-center justify-center gap-2 cursor-pointer transition-all",
+                      "aspect-video md:h-24 rounded-3xl border-2 border-dashed flex flex-col items-center justify-center gap-2 cursor-pointer transition-all",
                       formData.fileUrl ? "bg-green-50 border-green-200" : "bg-slate-50 border-slate-200 hover:bg-blue-50 hover:border-blue-300"
                     )}
                     onClick={() => fileInputRef.current?.click()}
                   >
-                     {isProcessingFile ? <Loader2 className="animate-spin text-blue-600" /> : formData.fileUrl ? <CheckCircle2 className="text-green-600" size={32} /> : <Camera className="text-slate-300" size={32} />}
-                     <p className="text-[10px] font-black uppercase text-slate-400">Subir evidencia digital</p>
+                     {isProcessingFile ? <Loader2 className="animate-spin text-blue-600" /> : formData.fileUrl ? <CheckCircle2 className="text-green-600" size={24} /> : <Camera className="text-slate-300" size={24} />}
+                     <p className="text-[9px] font-black uppercase text-slate-400">Adjuntar Remito Físico</p>
                   </div>
                </div>
             </CardContent>
@@ -220,20 +225,64 @@ export default function NewRemitoPage() {
           <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden">
              <CardHeader className="bg-white border-b py-6 px-8 flex flex-row items-center justify-between">
                 <div>
-                   <CardTitle className="text-sm font-black uppercase italic tracking-tighter">Artículos en Remito</CardTitle>
-                   <CardDescription className="text-[10px] font-bold">Listado de bultos para el despacho</CardDescription>
+                   <CardTitle className="text-sm font-black uppercase italic tracking-tighter">Artículos a Entregar</CardTitle>
+                   <CardDescription className="text-[10px] font-bold">Detalle granular del pedido</CardDescription>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-6">
                    <div className="text-right">
-                      <p className="text-[9px] font-black text-slate-400 uppercase">Peso Total Pedido</p>
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Carga Total</p>
                       <p className="text-2xl font-black text-slate-900 italic">{totalWeight.toLocaleString()} <span className="text-xs font-normal opacity-40">KG</span></p>
                    </div>
-                   <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 border border-blue-100">
-                      <Scale size={24}/>
+                   <div className="text-right">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Cubaje</p>
+                      <p className="text-2xl font-black text-blue-600 italic">{totalVolume.toFixed(2)} <span className="text-xs font-normal opacity-40">M³</span></p>
                    </div>
                 </div>
              </CardHeader>
              <CardContent className="p-0">
+                {/* Quick Add Row */}
+                <div className="p-6 bg-blue-50/50 border-b border-blue-100 flex flex-col md:flex-row gap-4 items-end">
+                   <div className="flex-1 space-y-1.5 min-w-0">
+                      <Label className="text-[9px] font-black uppercase text-blue-600 ml-1">Producto del Catálogo</Label>
+                      <Select value={selectedProductId} onValueChange={setSelectedProductId}>
+                         <SelectTrigger className="bg-white h-11 border-blue-100 rounded-xl font-bold">
+                            <SelectValue placeholder="Buscar artículo..." />
+                         </SelectTrigger>
+                         <SelectContent>
+                            {products?.map(p => (
+                               <SelectItem key={p.id} value={p.id} className="text-xs">
+                                  {p.sku} - {p.name}
+                               </SelectItem>
+                            ))}
+                         </SelectContent>
+                      </Select>
+                   </div>
+                   <div className="w-full md:w-24 space-y-1.5">
+                      <Label className="text-[9px] font-black uppercase text-blue-600 ml-1">Cant.</Label>
+                      <Input 
+                        type="number" 
+                        min="1" 
+                        className="h-11 bg-white border-blue-100 rounded-xl font-black text-center" 
+                        value={currentQuantity} 
+                        onChange={e => setCurrentQuantity(parseInt(e.target.value) || 1)} 
+                      />
+                   </div>
+                   <div className="w-full md:w-32 space-y-1.5">
+                      <Label className="text-[9px] font-black uppercase text-slate-400 ml-1">Peso/Vol</Label>
+                      <div className="h-11 flex flex-col justify-center bg-slate-100/50 rounded-xl px-3 border border-slate-100">
+                         <span className="text-[10px] font-black text-slate-700 leading-none">{(selectedProduct?.unitWeightKg || 0) * currentQuantity} kg</span>
+                         <span className="text-[8px] font-bold text-slate-400">{(selectedProduct?.unitVolumeM3 || 0) * currentQuantity} m³</span>
+                      </div>
+                   </div>
+                   <Button 
+                    className="h-11 w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-black px-6 rounded-xl shadow-lg shadow-blue-200"
+                    onClick={addItem}
+                    disabled={!selectedProductId}
+                   >
+                      <Plus className="mr-2" size={16} /> AGREGAR
+                   </Button>
+                </div>
+
                 <div className="divide-y divide-slate-100">
                    {formData.items.map(item => (
                      <div key={item.productId} className="p-6 flex items-center justify-between hover:bg-slate-50 transition-colors">
@@ -247,14 +296,13 @@ export default function NewRemitoPage() {
                            </div>
                         </div>
                         <div className="flex items-center gap-8">
-                           <div className="flex items-center gap-3 bg-white border rounded-xl p-1 shadow-sm">
-                              <button onClick={() => updateQuantity(item.productId, item.quantity - 1)} className="w-8 h-8 rounded-lg hover:bg-slate-50 flex items-center justify-center text-slate-400">-</button>
-                              <span className="w-10 text-center font-black text-sm">{item.quantity}</span>
-                              <button onClick={() => updateQuantity(item.productId, item.quantity + 1)} className="w-8 h-8 rounded-lg hover:bg-slate-50 flex items-center justify-center text-slate-400">+</button>
+                           <div className="text-center w-16">
+                              <p className="text-xs font-black text-slate-900">{item.quantity}</p>
+                              <p className="text-[8px] text-slate-400 font-bold uppercase">Bultos</p>
                            </div>
                            <div className="text-right w-24">
                               <p className="text-xs font-black text-slate-900">{item.weightKg.toLocaleString()} KG</p>
-                              <p className="text-[9px] text-slate-400 font-bold uppercase">Parcial</p>
+                              <p className="text-[9px] text-slate-400 font-bold uppercase">{item.volumeM3.toFixed(2)} M³</p>
                            </div>
                            <Button variant="ghost" size="icon" className="text-red-400 hover:text-red-600" onClick={() => removeItem(item.productId)}><Trash2 size={18} /></Button>
                         </div>
@@ -263,7 +311,7 @@ export default function NewRemitoPage() {
                    {formData.items.length === 0 && (
                      <div className="p-20 text-center space-y-4">
                         <ShoppingCart size={48} className="mx-auto text-slate-100" />
-                        <p className="text-xs font-bold text-slate-300 uppercase tracking-widest">El remito no tiene productos aún</p>
+                        <p className="text-xs font-bold text-slate-300 uppercase tracking-widest italic">El remito no tiene productos aún</p>
                      </div>
                    )}
                 </div>
@@ -271,64 +319,56 @@ export default function NewRemitoPage() {
           </Card>
         </div>
 
-        <div className="space-y-6">
-           <Card className="border-none shadow-xl rounded-[2.5rem] bg-white overflow-hidden h-[600px] flex flex-col">
-              <CardHeader className="bg-blue-600 text-white p-6 shrink-0">
-                 <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2"><Box size={16}/> Catálogo de Artículos</CardTitle>
-                 <div className="mt-4 relative">
-                    <Search className="absolute left-3 top-3 h-4 w-4 text-white/40" />
-                    <Input 
-                      placeholder="Buscar por nombre o SKU..." 
-                      className="bg-white/10 border-white/20 text-white placeholder:text-white/40 pl-10 h-10 rounded-xl"
-                      value={searchTerm}
-                      onChange={e => setSearchTerm(e.target.value)}
-                    />
-                 </div>
+        <div className="lg:col-span-4 space-y-6">
+           <Card className="border-none shadow-xl rounded-[2.5rem] bg-slate-900 text-white overflow-hidden">
+              <CardHeader className="p-8 pb-6 border-b border-white/5">
+                 <CardTitle className="text-sm font-black uppercase tracking-widest text-blue-400 flex items-center gap-2">
+                    <Layers size={18} /> Resumen de Carga
+                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-0 overflow-y-auto flex-1">
-                 <div className="divide-y divide-slate-50">
-                    {filteredProducts.map(p => (
-                      <div key={p.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-all group">
-                         <div className="min-w-0">
-                            <p className="text-xs font-black text-slate-800 truncate uppercase leading-tight">{p.name}</p>
-                            <p className="text-[10px] text-slate-400 font-mono">{p.sku}</p>
-                            <Badge variant="outline" className="text-[7px] h-3 uppercase font-black px-1 mt-1 border-slate-100">{p.unitWeightKg} KG/U</Badge>
-                         </div>
-                         <Button 
-                          size="sm" 
-                          variant="ghost" 
-                          className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => addItem(p)}
-                         >
-                            <Plus size={14} />
-                         </Button>
-                      </div>
-                    ))}
-                    {filteredProducts.length === 0 && (
-                      <p className="p-10 text-center text-[10px] text-slate-400 italic">No se encontraron productos.</p>
-                    )}
+              <CardContent className="p-8 space-y-6">
+                 <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                       <span className="text-xs font-bold text-white/50 uppercase">Total Kilogramos</span>
+                       <span className="text-xl font-black italic">{totalWeight.toLocaleString()} KG</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                       <span className="text-xs font-bold text-white/50 uppercase">Total Volumen</span>
+                       <span className="text-xl font-black italic">{totalVolume.toFixed(2)} M³</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                       <span className="text-xs font-bold text-white/50 uppercase">Total Artículos</span>
+                       <span className="text-xl font-black italic">{formData.items.length} SKUs</span>
+                    </div>
+                 </div>
+
+                 <div className="pt-6 border-t border-white/5 space-y-4">
+                    <div className="flex items-center gap-3">
+                       <div className="w-10 h-10 bg-green-500/20 rounded-xl flex items-center justify-center text-green-400 border border-green-500/30">
+                          <CheckCircle2 size={20} />
+                       </div>
+                       <p className="text-[10px] text-white/40 font-bold uppercase leading-tight">Ventas y Administración:<br/>Confirmar el ingreso para Tráfico.</p>
+                    </div>
+                    <Button 
+                      className="w-full h-16 bg-green-600 hover:bg-green-700 text-white font-black text-lg rounded-[1.5rem] shadow-2xl shadow-green-900/40 border-none"
+                      disabled={isSubmitting || formData.items.length === 0}
+                      onClick={handleSave}
+                    >
+                      {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />}
+                      CONFIRMAR REMITO
+                    </Button>
                  </div>
               </CardContent>
            </Card>
 
-           <div className="p-6 bg-slate-900 text-white rounded-[2.5rem] space-y-4 shadow-2xl">
-              <div className="flex items-center gap-4">
-                 <div className="w-12 h-12 bg-green-500/20 rounded-2xl flex items-center justify-center text-green-400 border border-green-500/30">
-                    <Save size={24} />
-                 </div>
-                 <div>
-                    <p className="text-sm font-black italic tracking-tight uppercase">Confirmar Pedido</p>
-                    <p className="text-[10px] text-white/40 font-bold">Enviar al buzón de despacho</p>
-                 </div>
+           <div className="p-6 bg-white border-2 border-slate-100 rounded-[2.5rem] shadow-sm flex items-start gap-4">
+              <Info size={24} className="text-blue-600 shrink-0 mt-1" />
+              <div className="space-y-1">
+                 <p className="text-xs font-black text-slate-800 uppercase italic">Control de Pesos</p>
+                 <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
+                    Al confirmar, este remito aparecerá en la pantalla de "Despacho Inteligente". Tráfico podrá agruparlo con otros pedidos en el camión más eficiente basándose en el peso y volumen que usted acaba de declarar.
+                 </p>
               </div>
-              <Button 
-                className="w-full h-16 bg-green-600 hover:bg-green-700 text-white font-black text-lg rounded-2xl shadow-xl shadow-green-900/20"
-                disabled={isSubmitting || formData.items.length === 0}
-                onClick={handleSave}
-              >
-                {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />}
-                CONFIRMAR INGRESO
-              </Button>
            </div>
         </div>
       </div>
