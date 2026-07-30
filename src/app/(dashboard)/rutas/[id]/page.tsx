@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -279,7 +278,7 @@ export default function RouteDetailPage() {
                  </Button>
                ) : load.status === 'on_route' && currentStop ? (
                  <div className="space-y-3">
-                   <p className="text-[10px] font-bold text-white/70 uppercase">Destino Actual: {currentStop.name}</p>
+                   <p className="text-[10px] font-bold text-white/70 uppercase">Destino {currentStopIndex + 1} de {load.outboundStops.length}: {currentStop.name}</p>
                    <Button className="w-full bg-green-500 hover:bg-green-600 text-white h-16 text-lg font-black rounded-2xl shadow-xl" onClick={() => setIsPodOpen(true)} disabled={isUpdating}>
                      CONFIRMAR LLEGADA <CheckCircle2 className="ml-2" />
                    </Button>
