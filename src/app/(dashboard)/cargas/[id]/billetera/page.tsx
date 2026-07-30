@@ -22,6 +22,7 @@ import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
+import { format } from "date-fns";
 
 const CATEGORY_LABELS: Record<string, string> = {
   fuel: 'COMBUSTIBLE',
@@ -144,7 +145,7 @@ export default function LoadWalletPage() {
     setIsGeneratingPdf(true);
     try {
       const canvas = await html2canvas(reportRef.current, {
-        scale: 2,
+        scale: 3,
         logging: false,
         useCORS: true,
         backgroundColor: "#ffffff"
@@ -167,7 +168,7 @@ export default function LoadWalletPage() {
   if (loading || loadingExtras) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!load) return <div className="p-10 text-center">Carga no encontrada.</div>;
 
-  const balanceFinal = (load.budget?.initialAdvance || 0) - stats.approved;
+  const balanceFinal = stats.approved - (load.budget?.initialAdvance || 0);
 
   return (
     <div className="space-y-6 pb-20 print:bg-white print:p-0">
@@ -182,13 +183,12 @@ export default function LoadWalletPage() {
         </div>
         <div className="flex gap-2">
           <Button 
-            variant="outline" 
-            className="font-bold h-11 px-8 rounded-2xl shadow-xl bg-white border-blue-200 text-blue-700 hover:bg-blue-50" 
+            className="font-black h-11 px-8 rounded-2xl shadow-xl bg-blue-700 hover:bg-blue-800 text-white border-none" 
             onClick={downloadPdf}
             disabled={isGeneratingPdf}
           >
             {isGeneratingPdf ? <Loader2 className="animate-spin mr-2" /> : <Download size={18} className="mr-2" />} 
-            Generar Rendición (PDF)
+            DESCARGAR PDF
           </Button>
         </div>
       </div>
@@ -208,12 +208,12 @@ export default function LoadWalletPage() {
 
         <Card className="border-none shadow-sm rounded-[2rem] bg-white">
           <CardHeader className="pb-2">
-            <CardTitle className="text-[9px] uppercase text-slate-400 font-black tracking-widest">Tickets Verificados</CardTitle>
+            <CardTitle className="text-[9px] uppercase text-slate-400 font-black tracking-widest">Tickets Auditados</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-black italic text-slate-800 leading-none">${stats.approved.toLocaleString()}</div>
             <p className="text-[9px] text-orange-500 font-bold uppercase flex items-center gap-1 mt-2">
-               <AlertTriangle size={10} /> {stats.pending} tickets por auditar
+               <AlertTriangle size={10} /> {stats.pending} tickets por verificar
             </p>
           </CardContent>
         </Card>
@@ -223,10 +223,10 @@ export default function LoadWalletPage() {
             <CardTitle className="text-[9px] uppercase text-slate-400 font-black tracking-widest">Consumo de Presupuesto Global</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 pt-2">
-            <Progress value={load.budget?.totalBudget ? (stats.total / load.budget.totalBudget) * 100 : 0} className="h-2 rounded-full" />
+            <Progress value={load.budget?.totalBudget ? (stats.approved / load.budget.totalBudget) * 100 : 0} className="h-2 rounded-full" />
             <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-tighter">
-               <span>CONSUMO REAL: ${stats.total.toLocaleString()}</span>
-               <span>TOPE PRESUPUESTO: ${load.budget?.totalBudget?.toLocaleString() || '0'}</span>
+               <span>GASTO AUDITADO: ${stats.approved.toLocaleString()}</span>
+               <span>TOPE ESTIMADO: ${load.budget?.totalBudget?.toLocaleString() || '0'}</span>
             </div>
           </CardContent>
         </Card>
@@ -236,7 +236,7 @@ export default function LoadWalletPage() {
         <Card className="lg:col-span-2 overflow-hidden border-none shadow-xl rounded-[2.5rem] bg-white">
           <CardHeader className="bg-slate-50/50 border-b py-6 px-8">
              <CardTitle className="text-sm font-black flex items-center gap-2 uppercase italic">
-               <Receipt className="text-blue-600" /> Checklist de Tickets de Conductor
+               <Receipt className="text-blue-600" /> Checklist de Auditoría (Tickets)
              </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -244,9 +244,9 @@ export default function LoadWalletPage() {
                <TableHeader className="bg-slate-50/30">
                  <TableRow>
                    <TableHead className="px-8 text-[10px] font-black uppercase tracking-widest">Concepto / Lugar</TableHead>
-                   <TableHead className="text-[10px] font-black uppercase tracking-widest">N° Factura / Ticket</TableHead>
+                   <TableHead className="text-[10px] font-black uppercase tracking-widest">N° Comprobante</TableHead>
                    <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Monto</TableHead>
-                   <TableHead className="pr-8 text-right text-[10px] font-black uppercase tracking-widest">Audit.</TableHead>
+                   <TableHead className="pr-8 text-right text-[10px] font-black uppercase tracking-widest">Acción</TableHead>
                  </TableRow>
                </TableHeader>
                <TableBody>
@@ -264,7 +264,7 @@ export default function LoadWalletPage() {
                      </TableCell>
                      <TableCell>
                         <Input 
-                          placeholder="F-0001-0000..." 
+                          placeholder="N° de Ticket" 
                           className="h-8 text-[10px] font-mono font-bold bg-slate-50 border-none rounded-lg focus:ring-2 ring-blue-100"
                           defaultValue={exp.receiptNumber || ""}
                           onBlur={(e) => handleUpdateReceipt(exp.id, e.target.value)}
@@ -272,7 +272,7 @@ export default function LoadWalletPage() {
                      </TableCell>
                      <TableCell className="text-center font-black text-slate-900 text-sm italic">${exp.amount?.toLocaleString()}</TableCell>
                      <TableCell className="pr-8 text-right">
-                        <div className="flex justify-end gap-1.5 opacity-100">
+                        <div className="flex justify-end gap-1.5">
                           {exp.status === 'registered' ? (
                             <>
                               <Button 
@@ -338,7 +338,7 @@ export default function LoadWalletPage() {
                </CardTitle>
              </CardHeader>
              <CardContent className="space-y-5 pt-6 px-6 pb-8">
-               <p className="text-[11px] font-bold opacity-80 leading-relaxed uppercase italic">La liquidación final concilia los anticipos entregados contra los comprobantes auditados físicamente por administración.</p>
+               <p className="text-[11px] font-bold opacity-80 leading-relaxed uppercase italic">La planilla final concilia los fondos entregados contra los comprobantes auditados físicamente.</p>
                <Button 
                 variant="outline" 
                 className="w-full bg-white text-blue-800 hover:bg-slate-50 border-none font-black text-xs uppercase h-14 rounded-2xl tracking-widest shadow-xl" 
@@ -346,7 +346,7 @@ export default function LoadWalletPage() {
                 disabled={isGeneratingPdf}
                >
                  {isGeneratingPdf ? <Loader2 className="animate-spin mr-2" /> : <Download size={18} className="mr-2" />} 
-                 DESCARGAR PLANILLA PDF
+                 DESCARGAR RENDICIÓN PDF
                </Button>
              </CardContent>
            </Card>
@@ -360,7 +360,7 @@ export default function LoadWalletPage() {
             <div className="flex justify-between items-start border-b-[3px] border-black pb-6 mb-8">
                <div className="flex items-center gap-5">
                   {tenant?.settings?.logoUrl && (
-                    <img src={tenant.settings.logoUrl} className="h-16 w-auto object-contain" alt="Logo" />
+                    <img src={tenant.settings.logoUrl} className="h-20 w-auto object-contain" alt="Logo" />
                   )}
                   <div>
                     <h1 className="text-4xl font-black uppercase italic tracking-tighter text-blue-800 leading-none">{tenant?.name || 'LOGÍSTICA AR'}</h1>
@@ -406,7 +406,7 @@ export default function LoadWalletPage() {
                        <td className="p-3 text-center">
                           <div style={{ color: '#16a34a', fontSize: '18px', fontWeight: '900' }}>✓</div>
                        </td>
-                       <td className="p-3 text-[10px] font-mono font-bold">{exp.createdAt?.toDate ? new Date(exp.createdAt.toDate()).toLocaleDateString() : '---'}</td>
+                       <td className="p-3 text-[10px] font-mono font-bold">{exp.createdAt?.toDate ? format(exp.createdAt.toDate(), "dd/MM/yy") : '---'}</td>
                        <td className="p-3">
                           <p className="text-[11px] font-black uppercase italic leading-none">{CATEGORY_LABELS[exp.category] || exp.category}</p>
                           <p className="text-[8px] font-bold text-slate-400 uppercase mt-1">UBICACIÓN: {exp.location}</p>
@@ -426,8 +426,8 @@ export default function LoadWalletPage() {
                      <td className="p-2 text-right text-base font-black text-red-600">-${(load.budget?.initialAdvance || 0).toLocaleString()}</td>
                   </tr>
                   <tr className="border-t-2 border-black bg-blue-50/20">
-                     <td colSpan={4} className="p-5 text-right text-xs font-black uppercase italic tracking-widest text-blue-900">Balance Neto Final Liquidación:</td>
-                     <td className={cn("p-5 text-right text-2xl font-black italic tracking-tighter", balanceFinal >= 0 ? "text-green-700" : "text-red-700")}>
+                     <td colSpan={4} className="p-5 text-right text-xs font-black uppercase italic tracking-widest text-blue-900">Total Liquidación Final:</td>
+                     <td className={cn("p-5 text-right text-2xl font-black italic tracking-tighter", balanceFinal >= 0 ? "text-red-700" : "text-green-700")}>
                         ${Math.abs(balanceFinal).toLocaleString()}
                      </td>
                   </tr>
