@@ -14,8 +14,15 @@ import { Input } from "@/components/ui/input";
 import { 
   DollarSign, ArrowLeft, Loader2, CheckCircle2, 
   AlertTriangle, Receipt, Printer, FileText,
-  PieChart, CreditCard, Wallet, XCircle, MapPin, Download, Save, Truck, User
+  PieChart as PieChartIcon, CreditCard, Wallet, XCircle, MapPin, Download, Save, Truck, User
 } from "lucide-react";
+import { 
+  PieChart, 
+  Pie, 
+  Cell, 
+  ResponsiveContainer, 
+  Tooltip as RechartsTooltip 
+} from "recharts";
 import { Load, Expense, ExpenseStatus, Driver, Truck as TruckType, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
@@ -32,6 +39,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   maintenance: 'MANTENIMIENTO',
   other: 'OTROS'
 };
+
+const CHART_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#64748b'];
 
 export default function LoadWalletPage() {
   const { id } = useParams();
@@ -96,6 +105,16 @@ export default function LoadWalletPage() {
       pending: expenses.filter(e => e.status === 'registered').length,
       approved: expenses.reduce((acc, exp) => exp.status === 'approved' ? acc + exp.amount : acc, 0)
     };
+  }, [expenses]);
+
+  const pieData = useMemo(() => {
+    if (!expenses) return [];
+    const totals: Record<string, number> = {};
+    expenses.forEach(exp => {
+      const label = CATEGORY_LABELS[exp.category] || exp.category.toUpperCase();
+      totals[label] = (totals[label] || 0) + (exp.amount || 0);
+    });
+    return Object.entries(totals).map(([name, value]) => ({ name, value }));
   }, [expenses]);
 
   const handleUpdateStatus = (expenseId: string, status: ExpenseStatus) => {
@@ -325,9 +344,41 @@ export default function LoadWalletPage() {
              <CardHeader className="bg-slate-50/50 border-b py-4">
                <CardTitle className="text-xs font-black uppercase tracking-widest">Distribución de Costos</CardTitle>
              </CardHeader>
-             <CardContent className="space-y-6 pt-6 text-center">
-                <PieChart size={64} className="mx-auto text-blue-100 opacity-50" />
-                <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">Analítica de Reparto Mensual</p>
+             <CardContent className="space-y-6 pt-6 flex flex-col items-center">
+                <div className="h-[180px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={45}
+                        outerRadius={70}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {pieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip 
+                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', fontSize: '10px', fontWeight: 'bold' }}
+                        formatter={(val: number) => [`$${val.toLocaleString()}`, "Monto"]}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="space-y-2 w-full">
+                  <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                    {pieData.map((entry, index) => (
+                      <div key={entry.name} className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}></div>
+                        <span className="text-[8px] font-black text-slate-500 uppercase truncate">{entry.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest text-center mt-2 border-t pt-2">Analítica de Reparto del Viaje</p>
+                </div>
              </CardContent>
            </Card>
 
