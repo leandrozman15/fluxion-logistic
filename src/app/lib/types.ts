@@ -112,6 +112,15 @@ export interface LoadDocument {
   leg?: 'outbound' | 'return';
 }
 
+export interface ProofOfDelivery {
+  receiverName: string;
+  photoUrl?: string;
+  receiverSignatureUrl?: string;
+  driverSignatureUrl?: string;
+  confirmedAt: any;
+  notes?: string;
+}
+
 export interface LoadLegStop {
   id: string;
   locationId?: string;
@@ -137,6 +146,7 @@ export interface LoadLegStop {
 
   // Tracking
   deliveredAt?: any;
+  proofOfDelivery?: ProofOfDelivery;
 }
 
 export interface Expense {
@@ -497,14 +507,7 @@ export interface Load {
     estimatedFuelLiters?: number;
   };
 
-  proofOfDelivery?: {
-    receiverName: string;
-    photoUrl?: string;
-    receiverSignatureUrl?: string;
-    driverSignatureUrl?: string;
-    confirmedAt: any;
-    notes?: string;
-  };
+  proofOfDelivery?: ProofOfDelivery;
 }
 
 export interface OptimizedRouteProposal {

@@ -5,7 +5,7 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection, useUser } from "@/firebase";
-import { doc, updateDoc, serverTimestamp, collection, addDoc, increment, arrayUnion } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp, collection, addDoc, arrayUnion } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,13 +24,13 @@ import {
   Coffee, Moon, Car, Battery, Flame, CloudRain, Construction, FileWarning, HelpCircle,
   Siren, LifeBuoy, CirclePlay, CircleCheck, ListOrdered, XCircle
 } from "lucide-react";
-import { Load, Expense, ExpenseCategory, LoadStatus, TrackingPoint, Tenant, LoadLegStop } from "@/app/lib/types";
+import { Load, Expense, ExpenseCategory, LoadStatus, TrackingPoint, Tenant, LoadLegStop, ProofOfDelivery } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { calculateDistance, estimateFuelFactor } from "@/lib/utils/tracking-math";
 import { compressImage } from "@/lib/utils/image-compression";
 import React from 'react';
 import { formatSafeDate, toSafeDate } from "@/lib/utils/date-utils";
+import { SignaturePad } from "@/components/SignaturePad";
 
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
@@ -56,7 +56,7 @@ const INCIDENT_TYPES = [
   { id: 'battery', label: 'Batería', icon: Battery, color: 'bg-blue-600' },
   { id: 'weather', label: 'Clima Adverso', icon: CloudRain, color: 'bg-slate-600' },
   { id: 'traffic', label: 'Ruta Cortada', icon: Construction, color: 'bg-amber-600' },
-  { id: 'health', label: 'Salud Chofer', icon: Siren, color: 'bg-red-500' },
+  { id: 'health', label: 'Salud Chofer', icon: Siren, color: 'bg-red-50' },
   { id: 'other', label: 'Otro Problema', icon: HelpCircle, color: 'bg-slate-500' },
 ];
 
@@ -71,16 +71,25 @@ export default function RouteDetailPage() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isExpenseOpen, setIsExpenseOpen] = useState(false);
   const [isIncidentOpen, setIsIncidentOpen] = useState(false);
+  const [isPodOpen, setIsPodOpen] = useState(false);
   const [selectedIncidentType, setSelectedIncidentType] = useState<string | null>(null);
   
-  const [gpsActive, setGpsActive] = useState(false);
   const [L, setL] = useState<any>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   const [expenseData, setExpenseData] = useState<any>({
     category: 'fuel', amount: 0, description: "", location: "", liters: 0, odometerKm: 0, pricePerLiter: 0, fuelBrand: ""
   });
 
   const [incidentDescription, setIncidentDescription] = useState("");
+
+  const [podForm, setPodForm] = useState<Partial<ProofOfDelivery>>({
+    receiverName: "",
+    receiverSignatureUrl: "",
+    driverSignatureUrl: "",
+    photoUrl: "",
+    notes: ""
+  });
 
   useEffect(() => {
     import('leaflet').then((leaflet) => {
@@ -113,7 +122,6 @@ export default function RouteDetailPage() {
         "tracking.tripStartedAt": serverTimestamp(),
         updatedAt: serverTimestamp() 
       });
-      setGpsActive(true);
       toast({ title: "Viaje Iniciado", description: "Rastreo GPS activo y transmitiendo a central." });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al iniciar viaje" });
@@ -122,12 +130,39 @@ export default function RouteDetailPage() {
     }
   };
 
-  const handleConfirmDelivery = async (stopId: string) => {
-    if (!load || !loadRef) return;
+  const handlePhotoClick = () => {
+    photoInputRef.current?.click();
+  };
+
+  const onPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64 = event.target?.result as string;
+        const compressed = await compressImage(base64, 1024, 1024, 0.6);
+        setPodForm(prev => ({ ...prev, photoUrl: compressed }));
+        toast({ title: "Foto capturada", description: "Remito digitalizado." });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleConfirmDelivery = async () => {
+    if (!load || !loadRef || !currentStop) return;
+    if (!podForm.receiverName || !podForm.receiverSignatureUrl || !podForm.driverSignatureUrl) {
+      toast({ variant: "destructive", title: "Datos incompletos", description: "Firma y nombre de recepción obligatorios." });
+      return;
+    }
+
     setIsUpdating(true);
     try {
       const updatedStops = load.outboundStops.map(s => 
-        s.id === stopId ? { ...s, deliveredAt: new Date().toISOString() } : s
+        s.id === currentStop.id ? { 
+          ...s, 
+          deliveredAt: new Date().toISOString(),
+          proofOfDelivery: { ...podForm, confirmedAt: new Date().toISOString() }
+        } : s
       );
 
       const allDone = updatedStops.every(s => !!s.deliveredAt);
@@ -139,6 +174,8 @@ export default function RouteDetailPage() {
       });
 
       toast({ title: "Entrega Confirmada", description: "La central ha sido notificada del éxito." });
+      setIsPodOpen(false);
+      setPodForm({ receiverName: "", receiverSignatureUrl: "", driverSignatureUrl: "", photoUrl: "", notes: "" });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al confirmar entrega" });
     } finally {
@@ -169,7 +206,7 @@ export default function RouteDetailPage() {
       const incident = {
         type: 'critical',
         message: `INCIDENTE: ${INCIDENT_TYPES.find(t => t.id === selectedIncidentType)?.label}. ${incidentDescription}`,
-        timestamp: new Date()
+        timestamp: new Date().toISOString()
       };
 
       await updateDoc(loadRef, {
@@ -221,7 +258,6 @@ export default function RouteDetailPage() {
         </TabsList>
 
         <TabsContent value="mission" className="space-y-6 animate-in fade-in">
-          {/* ESTADO ACTUAL Y ACCIÓN PRINCIPAL */}
           <Card className={cn(
             "border-none rounded-[2.5rem] overflow-hidden shadow-2xl transition-all",
             load.status === 'on_route' ? "bg-blue-600 text-white" : 
@@ -244,7 +280,7 @@ export default function RouteDetailPage() {
                ) : load.status === 'on_route' && currentStop ? (
                  <div className="space-y-3">
                    <p className="text-[10px] font-bold text-white/70 uppercase">Destino Actual: {currentStop.name}</p>
-                   <Button className="w-full bg-green-500 hover:bg-green-600 text-white h-16 text-lg font-black rounded-2xl shadow-xl" onClick={() => handleConfirmDelivery(currentStop.id)} disabled={isUpdating}>
+                   <Button className="w-full bg-green-500 hover:bg-green-600 text-white h-16 text-lg font-black rounded-2xl shadow-xl" onClick={() => setIsPodOpen(true)} disabled={isUpdating}>
                      CONFIRMAR LLEGADA <CheckCircle2 className="ml-2" />
                    </Button>
                  </div>
@@ -257,7 +293,6 @@ export default function RouteDetailPage() {
             </CardContent>
           </Card>
 
-          {/* MAPA OPERATIVO COMPACTO */}
           <Card className="border-none shadow-xl h-64 relative rounded-[2rem] overflow-hidden mx-1">
              {L && (
                <MapContainer 
@@ -274,7 +309,6 @@ export default function RouteDetailPage() {
              </div>
           </Card>
 
-          {/* LISTA DE PARADAS */}
           <div className="space-y-4 px-1">
              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 ml-2">
                <ListOrdered size={14} className="text-blue-500" /> Hoja de Ruta Secuencial
@@ -309,7 +343,6 @@ export default function RouteDetailPage() {
         </TabsContent>
 
         <TabsContent value="incidents" className="space-y-6 animate-in fade-in">
-           {/* REPORTAR INCIDENTE */}
            <div className="px-1 space-y-6">
              <div className="text-center space-y-2 py-4">
                 <ShieldAlert className="w-12 h-12 text-red-600 mx-auto animate-pulse" />
@@ -350,7 +383,6 @@ export default function RouteDetailPage() {
                </div>
              )}
 
-             {/* HISTORIAL DE ALERTAS DE TELEMETRÍA */}
              <div className="space-y-4 pt-6">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-2">
                    <Gauge size={14} /> Diario de Seguridad
@@ -497,7 +529,76 @@ export default function RouteDetailPage() {
         </TabsContent>
       </Tabs>
 
-      {/* FOOTER PERSISTENTE DE COMUNICACIÓN */}
+      {/* DIALOG DE CONFIRMACIÓN DE ENTREGA (POD) */}
+      <Dialog open={isPodOpen} onOpenChange={setIsPodOpen}>
+         <DialogContent className="max-w-[95vw] rounded-[2.5rem] p-6 max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+               <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Confirmar Entrega</DialogTitle>
+               <DialogDescription className="text-xs">Complete la documentación de recepción para {currentStop?.name}.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-6 py-4">
+               <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400">Nombre de quien recibe</Label>
+                  <Input 
+                    placeholder="Nombre y Apellido" 
+                    className="h-12 bg-slate-50 border-none font-bold rounded-xl"
+                    value={podForm.receiverName}
+                    onChange={e => setPodForm({...podForm, receiverName: e.target.value})}
+                  />
+               </div>
+
+               <div className="space-y-4">
+                  <SignaturePad 
+                    title="Firma del Receptor" 
+                    onSave={(url) => setPodForm({...podForm, receiverSignatureUrl: url})} 
+                  />
+                  <SignaturePad 
+                    title="Firma del Chofer" 
+                    onSave={(url) => setPodForm({...podForm, driverSignatureUrl: url})} 
+                  />
+               </div>
+
+               <div className="space-y-3">
+                  <Label className="text-[10px] font-black uppercase text-slate-400">Foto del Remito / Comprobante</Label>
+                  <input type="file" ref={photoInputRef} className="hidden" accept="image/*" capture="environment" onChange={onPhotoChange} />
+                  <div 
+                    className="aspect-video bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-2 cursor-pointer overflow-hidden group hover:bg-blue-50 hover:border-blue-200 transition-all"
+                    onClick={handlePhotoClick}
+                  >
+                    {podForm.photoUrl ? (
+                      <img src={podForm.photoUrl} className="w-full h-full object-cover" alt="Remito" />
+                    ) : (
+                      <>
+                        <Camera size={32} className="text-slate-300 group-hover:text-blue-500" />
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Capturar Remito</p>
+                      </>
+                    )}
+                  </div>
+               </div>
+
+               <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400">Observaciones (Opcional)</Label>
+                  <Textarea 
+                    placeholder="Ej: Faltó un bulto, mercadería en buen estado..." 
+                    className="bg-slate-50 border-none rounded-xl text-xs"
+                    value={podForm.notes}
+                    onChange={e => setPodForm({...podForm, notes: e.target.value})}
+                  />
+               </div>
+            </div>
+            <DialogFooter>
+               <Button 
+                className="w-full h-16 bg-green-600 text-white font-black text-lg rounded-2xl shadow-xl shadow-green-200" 
+                onClick={handleConfirmDelivery} 
+                disabled={isUpdating || !podForm.receiverName}
+               >
+                 {isUpdating ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2" />}
+                 FINALIZAR ENTREGA
+               </Button>
+            </DialogFooter>
+         </DialogContent>
+      </Dialog>
+
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-xl border-t border-slate-100 flex justify-center z-50">
         <div className="max-w-md w-full grid grid-cols-2 gap-3 px-2">
            <Button variant="outline" className="h-14 rounded-2xl font-black text-[10px] uppercase tracking-widest bg-white border-slate-200 text-slate-600" onClick={() => window.open(`tel:0800-LOGISTICA`)}>
