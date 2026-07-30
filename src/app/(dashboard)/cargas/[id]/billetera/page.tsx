@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { 
   DollarSign, ArrowLeft, Loader2, CheckCircle2, 
   AlertTriangle, Receipt, Printer, FileText,
-  PieChart, CreditCard, Wallet, XCircle, Trash2, Save
+  PieChart, CreditCard, Wallet, XCircle, Trash2, Save, MapPin
 } from "lucide-react";
 import { Load, Expense, ExpenseStatus } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
