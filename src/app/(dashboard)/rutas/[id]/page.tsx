@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -31,6 +32,7 @@ import { compressImage } from "@/lib/utils/image-compression";
 import React from 'react';
 import { formatSafeDate, toSafeDate } from "@/lib/utils/date-utils";
 import { SignaturePad } from "@/components/SignaturePad";
+import { calculateDistance } from "@/lib/utils/tracking-math";
 
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
@@ -112,6 +114,64 @@ export default function RouteDetailPage() {
   const expensesQuery = useMemo(() => (db && id) ? collection(db, "loads", id as string, "expenses") : null, [db, id]);
   const { data: expenses } = useCollection<Expense>(expensesQuery);
 
+  // LOGICA DE RASTREO GPS REAL (SALTOS DE 1 MINUTO)
+  useEffect(() => {
+    if (!load || load.status !== 'on_route' || !loadRef) return;
+
+    const updateLocation = () => {
+      if (typeof window === 'undefined' || !navigator.geolocation) return;
+
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude, speed } = position.coords;
+          const currentSpeed = speed ? Math.round(speed * 3.6) : 0; // m/s a km/h
+
+          // Calculamos la distancia recorrida desde el último punto para telemetría
+          let distanceDelta = 0;
+          if (load.tracking?.currentLat && load.tracking?.currentLng) {
+            distanceDelta = calculateDistance(
+              load.tracking.currentLat,
+              load.tracking.currentLng,
+              latitude,
+              longitude
+            );
+          }
+
+          const newPoint = {
+            lat: latitude,
+            lng: longitude,
+            speed: currentSpeed,
+            timestamp: new Date().toISOString()
+          };
+
+          // Actualización atómica de Firestore para GPS
+          updateDoc(loadRef, {
+            "tracking.currentLat": latitude,
+            "tracking.currentLng": longitude,
+            "tracking.currentSpeed": currentSpeed,
+            "tracking.lastUpdateAt": serverTimestamp(),
+            "tracking.distanceTraveledKm": (load.tracking?.distanceTraveledKm || 0) + distanceDelta,
+            "tracking.history": arrayUnion(newPoint),
+            updatedAt: serverTimestamp()
+          });
+        },
+        (error) => {
+          console.error("GPS Error:", error);
+          // Omitimos toast recurrente para no molestar al chofer si hay micro-cortes
+        },
+        { enableHighAccuracy: true, timeout: 15000 }
+      );
+    };
+
+    // Primer disparo inmediato
+    updateLocation();
+
+    // Intervalo de 1 minuto (60000 ms)
+    const intervalId = setInterval(updateLocation, 60000);
+
+    return () => clearInterval(intervalId);
+  }, [load?.status, loadRef]);
+
   const currentStopIndex = useMemo(() => {
     if (!load?.outboundStops) return -1;
     return load.outboundStops.findIndex(s => !s.deliveredAt);
@@ -126,12 +186,12 @@ export default function RouteDetailPage() {
     if (!loadRef) return;
     setIsUpdating(true);
     try {
-      updateDoc(loadRef, { 
+      await updateDoc(loadRef, { 
         status: 'on_route',
         "tracking.tripStartedAt": serverTimestamp(),
         updatedAt: serverTimestamp() 
       });
-      toast({ title: "Viaje Iniciado", description: "Rastreo GPS activo y transmitiendo a central." });
+      toast({ title: "Viaje Iniciado", description: "Rastreo GPS activo y transmitiendo a central cada 1 minuto." });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al iniciar viaje" });
     } finally {
@@ -144,7 +204,7 @@ export default function RouteDetailPage() {
     setIsUpdating(true);
     const label = PAUSE_TYPES.find(p => p.id === typeId)?.label || "Pausa";
     try {
-      updateDoc(loadRef, {
+      await updateDoc(loadRef, {
         status: 'on_pause',
         "tracking.lastPauseType": label,
         "tracking.pauseStartedAt": serverTimestamp(),
@@ -162,7 +222,7 @@ export default function RouteDetailPage() {
     if (!loadRef) return;
     setIsUpdating(true);
     try {
-      updateDoc(loadRef, {
+      await updateDoc(loadRef, {
         status: 'on_route',
         "tracking.lastPauseType": null,
         "tracking.pauseStartedAt": null,
@@ -213,7 +273,7 @@ export default function RouteDetailPage() {
 
       const allDone = updatedStops.every(s => !!s.deliveredAt);
       
-      updateDoc(loadRef, {
+      await updateDoc(loadRef, {
         outboundStops: updatedStops,
         status: allDone ? 'delivered' : 'on_route',
         updatedAt: serverTimestamp()
@@ -245,15 +305,11 @@ export default function RouteDetailPage() {
         createdAt: serverTimestamp() 
       };
 
-      // 1. Guardar en gastos locales del flete
-      addDoc(expRef, payload);
+      await addDoc(expRef, payload);
+      await addDoc(globalExpRef, payload);
 
-      // 2. Guardar en gastos globales de flota
-      addDoc(globalExpRef, payload);
-
-      // 3. ACTUALIZACIÓN CRÍTICA: Sincronizar Odómetro si es combustible
       if (expenseData.category === 'fuel' && expenseData.odometerKm > 0 && load.assignedTruckId) {
-        updateDoc(doc(db, "trucks", load.assignedTruckId), {
+        await updateDoc(doc(db, "trucks", load.assignedTruckId), {
           odometerKm: expenseData.odometerKm,
           updatedAt: serverTimestamp()
         });
@@ -279,7 +335,7 @@ export default function RouteDetailPage() {
         timestamp: new Date().toISOString()
       };
 
-      updateDoc(loadRef, {
+      await updateDoc(loadRef, {
         status: 'incident',
         "tracking.alerts": arrayUnion(incident),
         updatedAt: serverTimestamp()
@@ -386,7 +442,9 @@ export default function RouteDetailPage() {
                </MapContainer>
              )}
              <div className="absolute top-4 left-4 z-[500]">
-                <Badge className="bg-white/90 backdrop-blur text-blue-600 border shadow-md text-[8px] font-black uppercase">Monitoreo GPS Activo</Badge>
+                <Badge className="bg-white/90 backdrop-blur text-blue-600 border shadow-md text-[8px] font-black uppercase">
+                  {load.status === 'on_route' ? 'Transmisión GPS Activa (1min)' : 'Monitoreo GPS Listo'}
+                </Badge>
              </div>
           </Card>
 
