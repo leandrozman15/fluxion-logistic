@@ -98,6 +98,24 @@ export interface Tenant {
   updatedAt?: any;
 }
 
+export interface PendingRemito {
+  id: string;
+  number: string;
+  cotNumber?: string;
+  clientId: string;
+  clientName: string;
+  address: string;
+  city?: string;
+  province?: string;
+  lat?: number;
+  lng?: number;
+  weightKg: number;
+  fileUrl?: string;
+  status: 'pending' | 'dispatched';
+  createdAt: any;
+  createdBy?: string;
+}
+
 export interface LoadDocument {
   id: string;
   type: LoadDocType;
@@ -514,7 +532,7 @@ export interface OptimizedRouteProposal {
   truckId: string;
   truckPlate: string;
   driverId?: string;
-  stops: Client[];
+  stops: PendingRemito[];
   totalDistanceKm: number;
   estimatedDurationMinutes: number;
 }

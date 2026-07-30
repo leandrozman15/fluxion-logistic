@@ -1,229 +1,322 @@
 
 'use client';
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, orderBy } from "firebase/firestore";
+import { collection, query, orderBy, addDoc, serverTimestamp, deleteDoc, doc, where } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
-  Files, Search, Loader2, Filter, 
+  Files, Search, Loader2, Plus, 
   CheckCircle2, Clock, MapPin, 
-  ArrowRight, FileText, ScanBarcode, Ship, Truck, User
+  ArrowRight, FileText, ScanBarcode, Ship, Truck, User, Scale, Receipt, Camera, Trash2, X
 } from "lucide-react";
-import { Load, Truck as TruckType, Driver } from "@/app/lib/types";
+import { PendingRemito, Client } from "@/app/lib/types";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+import { compressImage } from "@/lib/utils/image-compression";
 
 export default function RemitosDashboardPage() {
   const db = useFirestore();
   const router = useRouter();
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const [searchTerm, setSearchTerm] = useState("");
-  const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('all');
-  const [mounted, setMounted] = useState(false);
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isProcessingFile, setIsProcessingFile] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const [formData, setFormData] = useState<Partial<PendingRemito>>({
+    number: "",
+    cotNumber: "",
+    clientId: "",
+    weightKg: 0,
+    fileUrl: ""
+  });
 
-  const loadsQuery = useMemo(() => {
+  const remitosQuery = useMemo(() => {
     if (!db) return null;
-    // Simplificamos la consulta para no requerir índices compuestos manuales
-    return query(
-      collection(db, "loads"), 
-      orderBy("createdAt", "desc")
-    );
+    return query(collection(db, "pending_remitos"), where("status", "==", "pending"), orderBy("createdAt", "desc"));
   }, [db]);
 
-  const trucksQuery = useMemo(() => db ? collection(db, "trucks") : null, [db]);
-  const driversQuery = useMemo(() => db ? collection(db, "drivers") : null, [db]);
+  const clientsQuery = useMemo(() => db ? query(collection(db, "clients"), orderBy("name")) : null, [db]);
 
-  const { data: loads, loading } = useCollection<Load>(loadsQuery);
-  const { data: trucks } = useCollection<TruckType>(trucksQuery);
-  const { data: drivers } = useCollection<Driver>(driversQuery);
+  const { data: remitos, loading } = useCollection<PendingRemito>(remitosQuery);
+  const { data: clients } = useCollection<Client>(clientsQuery);
 
-  const filteredLoads = useMemo(() => {
-    if (!loads) return [];
-    
-    // Estados que requieren auditoría de remitos
-    const validStatuses = ["on_route", "delivered", "incident", "assigned"];
+  const filteredRemitos = useMemo(() => {
+    if (!remitos) return [];
+    return remitos.filter(r => 
+      r.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.clientName.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [remitos, searchTerm]);
 
-    return loads.filter(l => {
-      // 1. Filtro por estado operativo (Filtro base)
-      if (!validStatuses.includes(l.status)) return false;
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setIsProcessingFile(true);
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64 = event.target?.result as string;
+        try {
+          const compressed = await compressImage(base64, 1200, 1200, 0.6);
+          setFormData(prev => ({ ...prev, fileUrl: compressed }));
+          toast({ title: "Documento procesado" });
+        } catch (err) {
+          setFormData(prev => ({ ...prev, fileUrl: base64 }));
+        } finally {
+          setIsProcessingFile(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
-      // 2. Filtro por búsqueda de texto
-      const search = searchTerm.toLowerCase();
-      const matchesSearch = 
-        (l.orderNumber || "").toLowerCase().includes(search) ||
-        (l.clientName || "").toLowerCase().includes(search);
-      
-      if (!matchesSearch) return false;
+  const handleAddRemito = async () => {
+    if (!db || !formData.clientId || !formData.number) {
+      toast({ variant: "destructive", title: "Faltan datos", description: "Cliente y N° Remito son obligatorios." });
+      return;
+    }
 
-      // 3. Filtro de auditoría (Pendientes vs Completos)
-      const totalStops = (l.outboundStops?.length || 0);
-      const docsCount = l.outboundStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0;
-      const isComplete = docsCount >= totalStops && totalStops > 0;
+    setIsSubmitting(true);
+    try {
+      const client = clients?.find(c => c.id === formData.clientId);
+      if (!client) throw new Error("Cliente no encontrado");
 
-      if (filter === 'pending') return !isComplete;
-      if (filter === 'completed') return isComplete;
-      
-      return true;
-    });
-  }, [loads, searchTerm, filter]);
+      await addDoc(collection(db, "pending_remitos"), {
+        ...formData,
+        clientName: client.name,
+        address: `${client.address.street} ${client.address.number}`,
+        city: client.address.city,
+        province: client.address.province,
+        lat: client.address.lat,
+        lng: client.address.lng,
+        status: 'pending',
+        createdAt: serverTimestamp()
+      });
 
-  if (!mounted) return <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
+      toast({ title: "Remito Ingresado", description: "Ya está disponible para que Tráfico lo asigne a una ruta." });
+      setIsAddOpen(false);
+      setFormData({ number: "", cotNumber: "", clientId: "", weightKg: 0, fileUrl: "" });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al guardar" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!db || !confirm("¿Eliminar este remito pendiente?")) return;
+    try {
+      await deleteDoc(doc(db, "pending_remitos", id));
+      toast({ title: "Remito eliminado" });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error" });
+    }
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black text-slate-900 italic tracking-tighter uppercase leading-none">Gestión de Remitos</h1>
-          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Centro de auditoría y digitalización de documentos de carga.</p>
+          <h1 className="text-3xl font-black text-slate-900 italic tracking-tighter uppercase leading-none">Buzón de Remitos</h1>
+          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Área de Ventas y Administración: Ingrese los documentos para despacho.</p>
         </div>
-        <div className="flex gap-2">
-           <button 
-            className={cn(
-              "px-4 h-9 rounded-xl text-[9px] font-black uppercase transition-all border",
-              filter === 'all' ? "bg-slate-900 text-white border-slate-900 shadow-md" : "bg-white text-slate-400 border-slate-200 hover:bg-slate-50"
-            )}
-            onClick={() => setFilter('all')}
-           >
-             Todos
-           </button>
-           <button 
-            className={cn(
-              "px-4 h-9 rounded-xl text-[9px] font-black uppercase transition-all border",
-              filter === 'pending' ? "bg-orange-600 text-white border-orange-600 shadow-md" : "bg-white text-orange-600 border-orange-200 hover:bg-orange-50"
-            )}
-            onClick={() => setFilter('pending')}
-           >
-             Pendientes
-           </button>
-           <button 
-            className={cn(
-              "px-4 h-9 rounded-xl text-[9px] font-black uppercase transition-all border",
-              filter === 'completed' ? "bg-green-600 text-white border-green-600 shadow-md" : "bg-white text-green-600 border-green-200 hover:bg-green-50"
-            )}
-            onClick={() => setFilter('completed')}
-           >
-             Completos
-           </button>
-        </div>
+        
+        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-indigo-600 hover:bg-indigo-700 shadow-xl shadow-indigo-100 font-black uppercase text-[11px] h-12 px-6 rounded-2xl">
+              <Plus className="w-5 h-5 mr-2" /> Ingresar Nuevo Remito
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl rounded-[2rem]">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-black uppercase italic">Nuevo Remito Administrativo</DialogTitle>
+              <DialogDescription>Cargue los datos para que Tráfico pueda organizar el reparto.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-6 py-4">
+               <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-black text-slate-400">1. Cliente / Destino Final</Label>
+                  <Select value={formData.clientId} onValueChange={v => setFormData({...formData, clientId: v})}>
+                    <SelectTrigger className="h-12 bg-slate-50 rounded-xl border-none font-bold">
+                       <SelectValue placeholder="Seleccionar Cliente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients?.map(c => <SelectItem key={c.id} value={c.id}>{c.name} ({c.address.city})</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+               </div>
+
+               <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-black text-slate-400">N° Remito / Guía</Label>
+                    <Input placeholder="0001-000XXXXX" className="h-12 bg-slate-50 border-none font-mono font-bold rounded-xl" value={formData.number} onChange={e => setFormData({...formData, number: e.target.value.toUpperCase()})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-black text-slate-400">N° COT (Opcional)</Label>
+                    <Input placeholder="8877665544" className="h-12 bg-slate-50 border-none font-mono font-bold rounded-xl" value={formData.cotNumber} onChange={e => setFormData({...formData, cotNumber: e.target.value})} />
+                  </div>
+               </div>
+
+               <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-black text-slate-400">Peso de la Carga (KG)</Label>
+                    <div className="relative">
+                      <Scale className="absolute left-3 top-3.5 h-5 w-5 text-slate-400" />
+                      <Input type="number" className="pl-10 h-12 bg-slate-50 border-none font-black rounded-xl" value={formData.weightKg} onChange={e => setFormData({...formData, weightKg: parseFloat(e.target.value) || 0})} />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                     <Label className="text-[10px] uppercase font-black text-slate-400">Adjuntar Digitalización</Label>
+                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={onFileChange} />
+                     <Button 
+                      variant="outline" 
+                      className={cn(
+                        "w-full h-12 rounded-xl border-dashed border-2 transition-all",
+                        formData.fileUrl ? "bg-green-50 border-green-200 text-green-700" : "bg-slate-50 border-slate-200 text-slate-400"
+                      )}
+                      onClick={() => fileInputRef.current?.click()}
+                     >
+                        {isProcessingFile ? <Loader2 className="animate-spin" /> : formData.fileUrl ? <CheckCircle2 className="mr-2" /> : <Camera className="mr-2" />}
+                        {formData.fileUrl ? 'ARCHIVO LISTO' : 'SUBIR FOTO/PDF'}
+                     </Button>
+                  </div>
+               </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setIsAddOpen(false)} className="font-bold text-slate-400">CANCELAR</Button>
+              <Button onClick={handleAddRemito} disabled={isSubmitting || !formData.clientId || !formData.number} className="bg-indigo-600 font-black h-12 px-8 rounded-xl shadow-lg shadow-indigo-100">
+                {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />}
+                CONFIRMAR INGRESO
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="border-none shadow-md bg-indigo-600 text-white rounded-[2rem]">
+          <CardContent className="p-6 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase text-white/50 tracking-widest">Remitos en Espera</p>
+              <p className="text-4xl font-black italic">{remitos?.length || 0}</p>
+            </div>
+            <Files size={40} className="text-white/20" />
+          </CardContent>
+        </Card>
+        
+        <Card className="border-none shadow-md bg-white rounded-[2rem]">
+          <CardContent className="p-6 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Tonelaje Pendiente</p>
+              <p className="text-4xl font-black italic text-slate-800">
+                {((remitos?.reduce((acc, r) => acc + (r.weightKg || 0), 0) || 0) / 1000).toFixed(1)} <span className="text-sm font-normal text-slate-400">TN</span>
+              </p>
+            </div>
+            <Scale size={40} className="text-slate-100" />
+          </CardContent>
+        </Card>
+
+        <Card className="border-none shadow-md bg-slate-900 text-white rounded-[2rem]">
+          <CardContent className="p-6 flex items-center justify-between">
+             <div className="space-y-1">
+                <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Acción de Tráfico</p>
+                <p className="text-sm font-bold leading-tight">Vaya a "Despacho Inteligente" para agrupar estos remitos en camiones.</p>
+             </div>
+             <Button variant="outline" size="icon" className="rounded-full bg-white/10 border-white/20 text-white" onClick={() => router.push('/despacho')}><ArrowRight /></Button>
+          </CardContent>
+        </Card>
       </div>
 
       <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-white">
-        <div className="p-6 bg-slate-50/50 border-b">
+        <div className="p-6 bg-slate-50/50 border-b flex items-center justify-between">
           <div className="relative w-full max-w-xl">
             <Search className="absolute left-4 top-3 h-5 w-5 text-slate-400" />
             <Input 
               type="search" 
-              placeholder="Buscar por flete o cliente..." 
+              placeholder="Buscar por N° Remito o Cliente..." 
               className="bg-white pl-12 h-12 text-sm font-bold border-none shadow-inner rounded-2xl"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
           </div>
+          <Badge variant="outline" className="bg-white text-[10px] font-black uppercase h-8 px-4 border-slate-200">Buzón Administrativo</Badge>
         </div>
 
         <CardContent className="p-0">
           {loading ? (
-            <div className="p-32 flex justify-center"><Loader2 className="animate-spin text-blue-600 w-10 h-10" /></div>
+            <div className="p-32 flex justify-center"><Loader2 className="animate-spin text-indigo-600 w-10 h-10" /></div>
           ) : (
             <Table>
               <TableHeader className="bg-slate-50/30">
                 <TableRow>
-                  <TableHead className="px-8 text-[10px] font-black uppercase tracking-widest">Orden / Operación</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase tracking-widest">Transporte y Personal</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase tracking-widest">Progreso de Digitalización</TableHead>
-                  <TableHead className="pr-8 text-right text-[10px] font-black uppercase tracking-widest">Acción</TableHead>
+                  <TableHead className="px-8 text-[10px] font-black uppercase tracking-widest">N° Remito / Fecha</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest">Destino / Cliente</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Peso Declarado</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Estado</TableHead>
+                  <TableHead className="pr-8 text-right text-[10px] font-black uppercase tracking-widest">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredLoads.length === 0 ? (
-                  <TableRow><TableCell colSpan={4} className="text-center py-32 text-slate-400 italic font-bold uppercase text-xs">No hay documentos pendientes de auditoría.</TableCell></TableRow>
+                {filteredRemitos.length === 0 ? (
+                  <TableRow><TableCell colSpan={5} className="text-center py-32 text-slate-400 italic font-bold uppercase text-xs">No hay remitos pendientes de despacho.</TableCell></TableRow>
                 ) : (
-                  filteredLoads.map((load) => {
-                    const totalStops = load.outboundStops?.length || 0;
-                    const docsCount = load.outboundStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0;
-                    const progress = totalStops > 0 ? (docsCount / totalStops) * 100 : 0;
-                    
-                    const truck = trucks?.find(t => t.id === load.assignedTruckId);
-                    const driver = drivers?.find(d => d.id === load.assignedDriverId);
-
-                    return (
-                      <TableRow key={load.id} className="hover:bg-slate-50/50 transition-all group">
-                        <TableCell className="px-8 py-6">
-                           <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100 group-hover:bg-indigo-600 group-hover:text-white transition-all">
-                                 <FileText size={24} />
-                              </div>
-                              <div>
-                                 <p className="text-sm font-black text-slate-900 tracking-tighter uppercase italic">{load.orderNumber}</p>
-                                 <p className="text-[10px] text-slate-400 font-black uppercase truncate max-w-[180px]">{load.clientName}</p>
-                                 {load.international?.containerNumber && (
-                                   <Badge variant="outline" className="mt-1 bg-white text-[7px] font-mono border-slate-200">
-                                      <ScanBarcode size={8} className="mr-1" /> {load.international.containerNumber}
-                                   </Badge>
-                                 )}
-                              </div>
+                  filteredRemitos.map((remito) => (
+                    <TableRow key={remito.id} className="hover:bg-slate-50/50 transition-all group">
+                      <TableCell className="px-8 py-6">
+                        <div className="flex items-center gap-4">
+                           <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100">
+                              <Receipt size={20} />
                            </div>
-                        </TableCell>
-                        <TableCell>
-                           <div className="space-y-1">
-                              <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-700 uppercase">
-                                 <Truck size={12} className="text-blue-500" /> {truck?.plate || 'S/D'}
-                              </div>
-                              <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase">
-                                 <User size={12} /> {driver ? `${driver.lastName}, ${driver.firstName[0]}.` : 'S/D'}
-                              </div>
+                           <div>
+                              <p className="font-mono font-black text-slate-900 text-sm">{remito.number}</p>
+                              <p className="text-[9px] text-slate-400 font-bold uppercase">{remito.createdAt?.toDate ? remito.createdAt.toDate().toLocaleDateString() : 'Hoy'}</p>
                            </div>
-                        </TableCell>
-                        <TableCell>
-                           <div className="w-full max-w-[200px] space-y-2">
-                              <div className="flex justify-between items-center text-[9px] font-black uppercase">
-                                 <span className={cn(progress === 100 ? "text-green-600" : "text-indigo-600")}>
-                                    {progress === 100 ? <CheckCircle2 size={10} className="inline mr-1" /> : <Clock size={10} className="inline mr-1" />}
-                                    {docsCount} de {totalStops} remitos
-                                 </span>
-                                 <span className="text-slate-400">{Math.round(progress)}%</span>
-                              </div>
-                              <Progress value={progress} className="h-1.5 bg-slate-100" />
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="min-w-0">
+                           <p className="text-sm font-black text-slate-800 truncate uppercase">{remito.clientName}</p>
+                           <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-bold uppercase mt-1">
+                              <MapPin size={10} className="text-blue-500" /> {remito.city}, {remito.province}
                            </div>
-                        </TableCell>
-                        <TableCell className="pr-8 text-right">
-                           <Button 
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-black text-[10px] uppercase rounded-xl h-10 px-6 shadow-lg shadow-indigo-100"
-                            onClick={() => router.push(`/cargas/${load.id}/documentos`)}
-                           >
-                              Digitalizar <ArrowRight size={14} className="ml-2" />
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                         <Badge className="bg-slate-100 text-slate-700 border-none font-black px-3">{remito.weightKg.toLocaleString()} KG</Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                         <Badge variant="outline" className="bg-orange-50 text-orange-600 border-orange-100 text-[8px] font-black uppercase animate-pulse">ESPERANDO TRÁFICO</Badge>
+                      </TableCell>
+                      <TableCell className="pr-8 text-right">
+                        <div className="flex justify-end gap-2">
+                           {remito.fileUrl && (
+                             <Button variant="ghost" size="icon" className="h-9 w-9 text-blue-600" onClick={() => window.open(remito.fileUrl, '_blank')}>
+                               <FileText size={18} />
+                             </Button>
+                           )}
+                           <Button variant="ghost" size="icon" className="h-9 w-9 text-red-500 hover:bg-red-50" onClick={() => handleDelete(remito.id)}>
+                             <Trash2 size={18} />
                            </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
                 )}
               </TableBody>
             </Table>
           )}
         </CardContent>
       </Card>
-
-      <div className="p-6 bg-indigo-50 border-2 border-indigo-100 rounded-[2.5rem] flex items-start gap-4 mx-1 shadow-sm">
-         <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shrink-0 shadow-sm">
-            <Ship size={24} />
-         </div>
-         <div className="space-y-1">
-            <p className="text-xs font-black text-indigo-800 uppercase tracking-tight italic">Protocolo de Digitalización Certificada</p>
-            <p className="text-[10px] text-indigo-600 leading-relaxed font-medium">
-               Esta pantalla centraliza la auditoría de remitos de toda la flota activa. Los documentos cargados aquí por los choferes o administrativos son validados automáticamente para la liquidación final del transporte y el cumplimiento de las normativas de aduana y COT.
-            </p>
-         </div>
-      </div>
     </div>
   );
 }
