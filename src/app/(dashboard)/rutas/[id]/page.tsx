@@ -22,7 +22,7 @@ import {
   Zap, Satellite, SignalHigh, Loader2, Compass, Gauge, History, 
   Coffee, Moon, Car, Battery, Flame, CloudRain, Construction, FileWarning, HelpCircle,
   Siren, LifeBuoy, CirclePlay, CircleCheck, ListOrdered, XCircle, User,
-  Signature
+  Signature, Timer, Play, Pause
 } from "lucide-react";
 import { Load, Expense, ExpenseCategory, LoadStatus, TrackingPoint, Tenant, LoadLegStop, ProofOfDelivery } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -58,6 +58,15 @@ const INCIDENT_TYPES = [
   { id: 'traffic', label: 'Ruta Cortada', icon: Construction, color: 'bg-amber-600' },
   { id: 'health', label: 'Salud Chofer', icon: Siren, color: 'bg-red-50' },
   { id: 'other', label: 'Otro Problema', icon: HelpCircle, color: 'bg-slate-500' },
+];
+
+const PAUSE_TYPES = [
+  { id: 'lunch', label: 'Almuerzo', icon: Utensils, color: 'bg-blue-600' },
+  { id: 'rest', label: 'Descanso', icon: Coffee, color: 'bg-green-600' },
+  { id: 'sleep', label: 'Dormir / Noche', icon: Moon, color: 'bg-slate-800' },
+  { id: 'fuel', label: 'Combustible', icon: Fuel, color: 'bg-orange-600' },
+  { id: 'paperwork', label: 'Trámites', icon: FileText, color: 'bg-indigo-600' },
+  { id: 'other', label: 'Otras', icon: Clock, color: 'bg-slate-500' },
 ];
 
 export default function RouteDetailPage() {
@@ -125,6 +134,43 @@ export default function RouteDetailPage() {
       toast({ title: "Viaje Iniciado", description: "Rastreo GPS activo y transmitiendo a central." });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al iniciar viaje" });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleStartPause = async (typeId: string) => {
+    if (!loadRef) return;
+    setIsUpdating(true);
+    const label = PAUSE_TYPES.find(p => p.id === typeId)?.label || "Pausa";
+    try {
+      await updateDoc(loadRef, {
+        status: 'on_pause',
+        "tracking.lastPauseType": label,
+        "tracking.pauseStartedAt": serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      toast({ title: `Modo ${label} Activo`, description: "La central ha sido notificada de la parada." });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al iniciar pausa" });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleEndPause = async () => {
+    if (!loadRef) return;
+    setIsUpdating(true);
+    try {
+      await updateDoc(loadRef, {
+        status: 'on_route',
+        "tracking.lastPauseType": null,
+        "tracking.pauseStartedAt": null,
+        updatedAt: serverTimestamp()
+      });
+      toast({ title: "Viaje Reanudado", description: "Rastreo activo." });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al reanudar" });
     } finally {
       setIsUpdating(false);
     }
@@ -242,6 +288,10 @@ export default function RouteDetailPage() {
              <div className="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center text-green-600 border border-green-100 shadow-sm animate-pulse">
                 <Satellite size={18} />
              </div>
+           ) : load.status === 'on_pause' ? (
+             <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-600 border border-amber-100 shadow-sm">
+                <Timer size={18} />
+             </div>
            ) : (
              <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 border border-slate-100">
                 <Satellite size={18} />
@@ -251,23 +301,26 @@ export default function RouteDetailPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 bg-slate-100 p-1 rounded-2xl h-12">
-          <TabsTrigger value="mission" className="text-[10px] uppercase font-black rounded-xl">Misión</TabsTrigger>
-          <TabsTrigger value="incidents" className="text-[10px] uppercase font-black rounded-xl">Alertas</TabsTrigger>
-          <TabsTrigger value="wallet" className="text-[10px] uppercase font-black rounded-xl">Gastos</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-4 bg-slate-100 p-1 rounded-2xl h-12">
+          <TabsTrigger value="mission" className="text-[9px] uppercase font-black rounded-xl">Misión</TabsTrigger>
+          <TabsTrigger value="pauses" className="text-[9px] uppercase font-black rounded-xl">Pausas</TabsTrigger>
+          <TabsTrigger value="incidents" className="text-[9px] uppercase font-black rounded-xl">Alertas</TabsTrigger>
+          <TabsTrigger value="wallet" className="text-[9px] uppercase font-black rounded-xl">Gastos</TabsTrigger>
         </TabsList>
 
         <TabsContent value="mission" className="space-y-6 animate-in fade-in">
           <Card className={cn(
             "border-none rounded-[2.5rem] overflow-hidden shadow-2xl transition-all",
             load.status === 'on_route' ? "bg-blue-600 text-white" : 
-            load.status === 'delivered' ? "bg-green-600 text-white" : "bg-slate-900 text-white"
+            load.status === 'delivered' ? "bg-green-600 text-white" : 
+            load.status === 'on_pause' ? "bg-amber-500 text-white" : "bg-slate-900 text-white"
           )}>
             <CardContent className="p-8 text-center space-y-4">
                <div className="space-y-1">
                  <p className="text-[10px] font-black uppercase text-white/50 tracking-widest">Estado de Jornada</p>
                  <h2 className="text-3xl font-black uppercase italic tracking-tighter">
                    {load.status === 'on_route' ? 'En Tránsito' : 
+                    load.status === 'on_pause' ? `Pausa: ${load.tracking?.lastPauseType || 'Descanso'}` :
                     load.status === 'delivered' ? 'Viaje Finalizado' : 
                     load.status === 'incident' ? 'Incidencia' : 'Listo para Salir'}
                  </h2>
@@ -276,6 +329,10 @@ export default function RouteDetailPage() {
                {load.status === 'pending' || load.status === 'assigned' ? (
                  <Button className="w-full bg-white text-slate-900 hover:bg-slate-50 h-16 text-lg font-black rounded-2xl shadow-xl animate-pulse" onClick={handleStartTrip} disabled={isUpdating}>
                    INICIAR VIAJE <ChevronRight className="ml-2" />
+                 </Button>
+               ) : load.status === 'on_pause' ? (
+                 <Button className="w-full bg-white text-amber-600 hover:bg-slate-50 h-16 text-lg font-black rounded-2xl shadow-xl" onClick={handleEndPause} disabled={isUpdating}>
+                   REANUDAR VIAJE <Play className="ml-2 fill-current" />
                  </Button>
                ) : load.status === 'on_route' && currentStop ? (
                  <div className="space-y-3">
@@ -340,6 +397,57 @@ export default function RouteDetailPage() {
                 ))}
              </div>
           </div>
+        </TabsContent>
+
+        <TabsContent value="pauses" className="space-y-6 animate-in fade-in">
+           <div className="px-1 space-y-6">
+             <div className="text-center space-y-2 py-4">
+                <Timer className="w-12 h-12 text-blue-600 mx-auto" />
+                <h3 className="text-xl font-black italic uppercase text-slate-900">Pausas y Descansos</h3>
+                <p className="text-xs text-slate-500 font-medium">Registre sus paradas obligatorias u operativas.</p>
+             </div>
+
+             {load.status === 'on_pause' ? (
+                <Card className="bg-amber-50 border-2 border-amber-200 rounded-[2rem] p-8 text-center space-y-6 shadow-xl">
+                   <div className="space-y-1">
+                      <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">En Pausa por</p>
+                      <h4 className="text-2xl font-black text-amber-700 uppercase italic">{load.tracking?.lastPauseType}</h4>
+                   </div>
+                   <div className="flex flex-col items-center gap-2">
+                      <p className="text-[10px] font-bold text-amber-500 uppercase">Iniciado hace</p>
+                      <p className="text-4xl font-black text-amber-700 font-mono tracking-tighter italic">
+                         {load.tracking?.pauseStartedAt ? formatSafeDate(load.tracking.pauseStartedAt, "HH:mm") : '--:--'} hs
+                      </p>
+                   </div>
+                   <Button className="w-full bg-amber-600 hover:bg-amber-700 text-white h-16 text-lg font-black rounded-2xl shadow-xl shadow-amber-200" onClick={handleEndPause} disabled={isUpdating}>
+                      TERMINAR PAUSA <Play className="ml-2 fill-current" />
+                   </Button>
+                </Card>
+             ) : (
+                <div className="grid grid-cols-2 gap-4">
+                   {PAUSE_TYPES.map(pause => (
+                     <button 
+                        key={pause.id}
+                        className="p-6 rounded-3xl border-2 bg-white border-slate-100 hover:border-blue-300 hover:bg-blue-50 transition-all active:scale-95 group shadow-sm"
+                        onClick={() => handleStartPause(pause.id)}
+                        disabled={isUpdating || load.status === 'delivered' || load.status === 'pending' || load.status === 'assigned'}
+                     >
+                        <pause.icon size={32} className="text-slate-400 group-hover:text-blue-600 mx-auto mb-2" />
+                        <span className="text-[10px] font-black uppercase text-slate-800">{pause.label}</span>
+                     </button>
+                   ))}
+                </div>
+             )}
+             
+             {(load.status === 'pending' || load.status === 'assigned') && (
+               <div className="p-6 bg-blue-50 border border-blue-100 rounded-2xl flex items-start gap-3">
+                  <Info size={20} className="text-blue-600 shrink-0" />
+                  <p className="text-[10px] text-blue-700 leading-relaxed font-bold uppercase italic">
+                     Debe INICIAR EL VIAJE en la pestaña Misión antes de poder registrar pausas.
+                  </p>
+               </div>
+             )}
+           </div>
         </TabsContent>
 
         <TabsContent value="incidents" className="space-y-6 animate-in fade-in">
@@ -529,7 +637,6 @@ export default function RouteDetailPage() {
         </TabsContent>
       </Tabs>
 
-      {/* DIALOG DE CONFIRMACIÓN DE ENTREGA (POD) - DISEÑO MOBILE FIRST */}
       <Dialog open={isPodOpen} onOpenChange={setIsPodOpen}>
          <DialogContent className="max-w-full sm:max-w-md h-[95vh] sm:h-auto rounded-t-[2.5rem] sm:rounded-[2.5rem] p-0 overflow-hidden flex flex-col border-none shadow-2xl">
             <div className="bg-slate-900 text-white p-6 pb-8 shrink-0">
@@ -544,7 +651,6 @@ export default function RouteDetailPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-slate-50">
-               {/* Sección 1: Receptor */}
                <div className="space-y-3">
                   <Label className="text-[11px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-2">
                      <User size={14} className="text-blue-600" /> 1. Quién recibe la carga
@@ -557,7 +663,6 @@ export default function RouteDetailPage() {
                   />
                </div>
 
-               {/* Sección 2: Firmas Digitales */}
                <div className="space-y-6">
                   <SignaturePad 
                     title="Firma del Receptor" 
@@ -569,7 +674,6 @@ export default function RouteDetailPage() {
                   />
                </div>
 
-               {/* Sección 3: Evidencia Fotográfica */}
                <div className="space-y-3">
                   <Label className="text-[11px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-2">
                      <Camera size={14} className="text-blue-600" /> 2. Evidencia de Remito
@@ -603,7 +707,6 @@ export default function RouteDetailPage() {
                   </div>
                </div>
 
-               {/* Sección 4: Observaciones */}
                <div className="space-y-3">
                   <Label className="text-[11px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-2">
                      <MessageSquare size={14} className="text-blue-600" /> 3. Novedades / Observaciones
