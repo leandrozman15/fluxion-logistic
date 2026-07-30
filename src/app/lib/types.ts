@@ -105,6 +105,7 @@ export interface PendingRemitoItem {
   quantity: number;
   weightKg: number;
   volumeM3: number;
+  photoUrl?: string;
 }
 
 export interface PendingRemito {

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useRef } from "react";
@@ -105,7 +106,8 @@ export default function NewRemitoPage() {
           sku: selectedProduct.sku,
           quantity: currentQuantity,
           weightKg: currentQuantity * selectedProduct.unitWeightKg,
-          volumeM3: currentQuantity * selectedProduct.unitVolumeM3
+          volumeM3: currentQuantity * selectedProduct.unitVolumeM3,
+          photoUrl: selectedProduct.photoUrl || ""
         }]
       }));
     }
@@ -286,8 +288,12 @@ export default function NewRemitoPage() {
                    {formData.items.map(item => (
                      <div key={item.productId} className="p-6 flex items-center justify-between hover:bg-slate-50 transition-colors">
                         <div className="flex items-center gap-4 min-w-0">
-                           <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 border border-slate-100 shrink-0">
-                              <Package size={20} />
+                           <div className="w-12 h-12 rounded-xl bg-white border-2 border-slate-100 flex items-center justify-center text-blue-600 shrink-0 shadow-sm overflow-hidden">
+                              {item.photoUrl ? (
+                                 <img src={item.photoUrl} className="w-full h-full object-cover" alt={item.productName} />
+                              ) : (
+                                 <Package size={24} className="text-slate-300" />
+                              )}
                            </div>
                            <div className="min-w-0">
                               <p className="text-sm font-black text-slate-800 truncate uppercase">{item.productName}</p>
