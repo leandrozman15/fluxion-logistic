@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useRef } from "react";
@@ -14,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   Plus, ArrowLeft, Loader2, Save, Camera, CheckCircle2, 
   Trash2, Package, Scale, ShoppingCart, Search, Box, Receipt, Layers,
-  ChevronRight, ArrowRight
+  ChevronRight, ArrowRight, Info
 } from "lucide-react";
 import { Client, Product, PendingRemitoItem } from "@/app/lib/types";
 import { cn } from "@/lib/utils";
