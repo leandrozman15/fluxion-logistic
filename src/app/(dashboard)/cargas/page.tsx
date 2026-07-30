@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
@@ -29,6 +28,7 @@ import { Load, LoadStatus, Truck as TruckType, Driver } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 export default function CargasPage() {
   const db = useFirestore();
