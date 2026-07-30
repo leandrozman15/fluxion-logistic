@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
@@ -138,6 +139,12 @@ export default function LoadWalletPage() {
   const budgetUsed = load.budget?.totalBudget ? (stats.total / load.budget.totalBudget) * 100 : 0;
   const balanceFinal = (load.budget?.initialAdvance || 0) - stats.total;
 
+  const handlePrint = () => {
+    if (typeof window !== 'undefined') {
+      window.print();
+    }
+  };
+
   return (
     <div className="space-y-6 pb-20">
       {/* HEADER WEB */}
@@ -150,7 +157,7 @@ export default function LoadWalletPage() {
           </div>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
-          <Button variant="outline" className="flex-1 sm:flex-none font-bold" onClick={() => window.print()}>
+          <Button variant="outline" className="flex-1 sm:flex-none font-bold" onClick={handlePrint}>
             <Printer size={16} className="mr-2" /> Imprimir Reporte
           </Button>
           <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-100 uppercase px-4 h-10 font-black">
@@ -365,7 +372,11 @@ export default function LoadWalletPage() {
              </CardHeader>
              <CardContent className="space-y-4 pt-6">
                <p className="text-[10px] font-bold opacity-80 leading-relaxed uppercase">La liquidación final concilia los anticipos entregados contra los comprobantes auditados.</p>
-               <Button variant="outline" className="w-full bg-white/10 border-white/20 text-white hover:bg-white hover:text-blue-700 font-black text-[10px] uppercase h-12 rounded-xl tracking-widest" onClick={() => window.print()}>
+               <Button 
+                variant="outline" 
+                className="w-full bg-white/10 border-white/20 text-white hover:bg-white hover:text-blue-700 font-black text-[10px] uppercase h-12 rounded-xl tracking-widest" 
+                onClick={handlePrint}
+               >
                  <Printer size={14} className="mr-2" /> GENERAR PDF DE CIERRE
                </Button>
              </CardContent>
@@ -410,3 +421,4 @@ export default function LoadWalletPage() {
     </div>
   );
 }
+
