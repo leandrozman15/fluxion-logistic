@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection } from "@/firebase";
 import { doc, updateDoc, serverTimestamp, collection, query, orderBy } from "firebase/firestore";
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,12 +22,12 @@ import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 
 const CATEGORY_LABELS: Record<string, string> = {
-  fuel: 'Combustible',
-  toll: 'Peaje',
-  meal: 'Comida',
-  lodging: 'Hospedaje',
-  maintenance: 'Mantenimiento',
-  other: 'Otros'
+  fuel: 'COMBUSTIBLE',
+  toll: 'PEAJE',
+  meal: 'COMIDA',
+  lodging: 'HOSPEDAJE',
+  maintenance: 'MANTENIMIENTO',
+  other: 'OTROS'
 };
 
 export default function LoadWalletPage() {
@@ -58,32 +60,50 @@ export default function LoadWalletPage() {
     };
   }, [expenses]);
 
-  const handleUpdateStatus = async (expenseId: string, status: ExpenseStatus) => {
+  const handleUpdateStatus = (expenseId: string, status: ExpenseStatus) => {
     if (!db || !id) return;
     setIsUpdatingId(expenseId);
-    try {
-      await updateDoc(doc(db, "loads", id as string, "expenses", expenseId), {
-        status,
-        updatedAt: serverTimestamp()
+    
+    const docRef = doc(db, "loads", id as string, "expenses", expenseId);
+    const updateData = {
+      status,
+      updatedAt: serverTimestamp()
+    };
+
+    // NO usar await aquí para permitir actualizaciones optimistas en la UI
+    updateDoc(docRef, updateData)
+      .then(() => {
+        toast({ title: `Gasto ${status === 'approved' ? 'Aprobado' : 'Rechazado'}` });
+      })
+      .catch(async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: docRef.path,
+          operation: 'update',
+          requestResourceData: updateData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      })
+      .finally(() => {
+        setIsUpdatingId(null);
       });
-      toast({ title: `Gasto ${status === 'approved' ? 'Aprobado' : 'Rechazado'}` });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Error" });
-    } finally {
-      setIsUpdatingId(null);
-    }
   };
 
-  const handleUpdateReceipt = async (expenseId: string, value: string) => {
+  const handleUpdateReceipt = (expenseId: string, value: string) => {
     if (!db || !id) return;
-    try {
-      await updateDoc(doc(db, "loads", id as string, "expenses", expenseId), {
-        receiptNumber: value,
-        updatedAt: serverTimestamp()
+    const docRef = doc(db, "loads", id as string, "expenses", expenseId);
+    const updateData = {
+      receiptNumber: value,
+      updatedAt: serverTimestamp()
+    };
+
+    updateDoc(docRef, updateData).catch(async (serverError) => {
+      const permissionError = new FirestorePermissionError({
+        path: docRef.path,
+        operation: 'update',
+        requestResourceData: updateData,
       });
-    } catch (e) {
-      console.error(e);
-    }
+      errorEmitter.emit('permission-error', permissionError);
+    });
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
@@ -205,7 +225,7 @@ export default function LoadWalletPage() {
                      <TableCell>
                        <div className="space-y-1">
                          <div className="font-black text-slate-800 text-xs uppercase italic">
-                           {CATEGORY_LABELS[exp.category] || exp.category}
+                           {CATEGORY_LABELS[exp.category] || exp.category.toUpperCase()}
                          </div>
                          <div className="text-[9px] text-slate-400 uppercase font-bold flex items-center gap-1">
                             <MapPin size={8}/> {exp.location}
@@ -231,7 +251,7 @@ export default function LoadWalletPage() {
                         </Badge>
                      </TableCell>
                      <TableCell className="text-right print:hidden">
-                        <div className="flex justify-end gap-1 transition-opacity">
+                        <div className="flex justify-end gap-1">
                           {exp.status === 'registered' && (
                             <>
                               <Button 
@@ -242,7 +262,7 @@ export default function LoadWalletPage() {
                                 title="Aprobar Gasto"
                                 disabled={isUpdatingId === exp.id}
                               >
-                                <CheckCircle2 size={16} />
+                                {isUpdatingId === exp.id ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
                               </Button>
                               <Button 
                                 size="icon" 
@@ -252,7 +272,7 @@ export default function LoadWalletPage() {
                                 title="Rechazar Gasto"
                                 disabled={isUpdatingId === exp.id}
                               >
-                                <XCircle size={16} />
+                                {isUpdatingId === exp.id ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={16} />}
                               </Button>
                             </>
                           )}
@@ -284,7 +304,7 @@ export default function LoadWalletPage() {
                    <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">Análisis por Categoría</p>
                 </div>
                 <div className="space-y-2">
-                   {['Combustible', 'Peajes', 'Viáticos'].map(cat => (
+                   {['COMBUSTIBLE', 'PEAJES', 'VIÁTICOS'].map(cat => (
                      <div key={cat} className="flex justify-between items-center text-[10px] font-black uppercase text-slate-500">
                        <span className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div> {cat}</span>
                        <span className="text-slate-900 italic">33%</span>
