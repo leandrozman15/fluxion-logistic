@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from "react";
@@ -16,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   Files, Search, Loader2, Plus, 
   CheckCircle2, Clock, MapPin, 
-  ArrowRight, FileText, ScanBarcode, Ship, Truck, User, Scale, Receipt, Camera, Trash2, X
+  ArrowRight, FileText, ScanBarcode, Ship, Truck, User, Scale, Receipt, Camera, Trash2, X, Save
 } from "lucide-react";
 import { PendingRemito, Client } from "@/app/lib/types";
 import { cn } from "@/lib/utils";
