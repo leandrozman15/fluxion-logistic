@@ -91,7 +91,7 @@ export default function DespachoInteligentePage() {
 
   const hubIcon = (isMain: boolean) => L ? L.divIcon({
     className: 'custom-hub-icon',
-    html: `<div class="${isMain ? 'bg-amber-500' : 'bg-slate-900'} text-white p-1 rounded shadow-lg border border-white flex items-center justify-center">${isMain ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' : '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>'}</div>`,
+    html: `<div class="${isMain ? 'bg-amber-500' : 'bg-slate-900'} text-white p-1 rounded shadow-lg border border-white flex items-center justify-center">${isMain ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' : '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>'}</div>`,
     iconSize: [20, 20],
     iconAnchor: [10, 10]
   }) : null;
@@ -403,11 +403,17 @@ export default function DespachoInteligentePage() {
             <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {proposals.map((prop, idx) => {
-                    const routePoints = mounted && activeHub && endHub ? [
-                      [activeHub.lat, activeHub.lng] as [number, number],
-                      ...prop.stops.map(s => [s.lat!, s.lng!] as [number, number]),
-                      [endHub.lat, endHub.lng] as [number, number]
+                    const rawPoints = mounted && activeHub && endHub ? [
+                      [activeHub.lat, activeHub.lng],
+                      ...prop.stops.map(s => [s.lat, s.lng]),
+                      [endHub.lat, endHub.lng]
                     ] : [];
+                    
+                    const routePoints = rawPoints.filter(p => 
+                      p[0] !== undefined && p[1] !== undefined && 
+                      p[0] !== null && p[1] !== null &&
+                      !isNaN(p[0] as number) && !isNaN(p[1] as number)
+                    ) as [number, number][];
 
                     return (
                       <Card key={prop.truckId} className="border-none shadow-xl overflow-hidden flex flex-col rounded-3xl">
@@ -417,7 +423,10 @@ export default function DespachoInteligentePage() {
                                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                                <Polyline positions={routePoints} color="#4f46e5" weight={4} dashArray="5, 10" />
                                <Marker position={routePoints[0]} icon={hubIcon(true)} />
-                               {prop.stops.map((s, sIdx) => (<Marker key={s.id} position={[s.lat!, s.lng!]} icon={clientIcon(sIdx + 1)} />))}
+                               {prop.stops.map((s, sIdx) => {
+                                 if (s.lat === undefined || s.lng === undefined) return null;
+                                 return (<Marker key={s.id} position={[s.lat, s.lng]} icon={clientIcon(sIdx + 1)} />);
+                               })}
                                <Marker position={routePoints[routePoints.length - 1]} icon={hubIcon(activeHub?.id === endHub?.id)} />
                              </MapContainer>
                            )}
