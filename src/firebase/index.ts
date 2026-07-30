@@ -1,7 +1,13 @@
 'use client';
 
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getFirestore, Firestore, enableIndexedDbPersistence } from 'firebase/firestore';
+import { 
+  getFirestore, 
+  Firestore, 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager 
+} from 'firebase/firestore';
 import { getAuth, Auth } from 'firebase/auth';
 import { firebaseConfig, isFirebaseConfigValid } from './config';
 
@@ -9,11 +15,10 @@ import { firebaseConfig, isFirebaseConfigValid } from './config';
 let appInstance: FirebaseApp | undefined;
 let firestoreInstance: Firestore | undefined;
 let authInstance: Auth | undefined;
-let persistenceAttempted = false;
 
 /**
  * Initializes Firebase services with a singleton pattern.
- * Ensures that persistence is enabled exactly once and before any other operations.
+ * Enables persistent local cache to allow the app to work offline.
  */
 export function initializeFirebase(): {
   firebaseApp: FirebaseApp | null;
@@ -32,23 +37,16 @@ export function initializeFirebase(): {
   try {
     if (!appInstance) {
       appInstance = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-      firestoreInstance = getFirestore(appInstance);
+      
+      // Modern way to enable persistent cache in Firestore
+      // Allows the driver app to open and work without internet
+      firestoreInstance = initializeFirestore(appInstance, {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager()
+        })
+      });
+      
       authInstance = getAuth(appInstance);
-
-      // Persistence must be enabled BEFORE any other Firestore methods are called.
-      // We initiate it immediately after the Firestore instance is created.
-      if (!persistenceAttempted) {
-        persistenceAttempted = true;
-        enableIndexedDbPersistence(firestoreInstance).catch((err) => {
-          if (err.code === 'failed-precondition') {
-            // Probably multiple tabs open at once.
-            console.warn('Persistencia fallida: Múltiples pestañas abiertas.');
-          } else if (err.code === 'unimplemented') {
-            // The current browser does not support all of the features required to enable persistence.
-            console.warn('Persistencia fallida: Navegador no compatible.');
-          }
-        });
-      }
     }
 
     return { 

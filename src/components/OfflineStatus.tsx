@@ -5,6 +5,10 @@ import { WifiOff, Wifi, AlertCircle, RefreshCw, Cloud } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 
+/**
+ * Componente que monitorea la conexión a internet.
+ * Crucial para que el chofer sepa cuando está en zona sin señal.
+ */
 export function OfflineStatus() {
   const [isOnline, setIsOnline] = useState(true);
   const [showSyncing, setShowSyncing] = useState(false);
@@ -15,6 +19,7 @@ export function OfflineStatus() {
     const handleOnline = () => {
       setIsOnline(true);
       setShowSyncing(true);
+      // Ocultar el mensaje de sincronización después de unos segundos
       setTimeout(() => setShowSyncing(false), 3000);
     };
     const handleOffline = () => setIsOnline(false);
@@ -22,6 +27,7 @@ export function OfflineStatus() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     
+    // Estado inicial
     setIsOnline(navigator.onLine);
 
     return () => {
