@@ -21,7 +21,8 @@ import {
   Wallet, Plus, DollarSign, Camera, Fuel, Utensils, Bed, Wrench, Receipt,
   Zap, Satellite, SignalHigh, Loader2, Compass, Gauge, History, 
   Coffee, Moon, Car, Battery, Flame, CloudRain, Construction, FileWarning, HelpCircle,
-  Siren, LifeBuoy, CirclePlay, CircleCheck, ListOrdered, XCircle
+  Siren, LifeBuoy, CirclePlay, CircleCheck, ListOrdered, XCircle, User,
+  Signature
 } from "lucide-react";
 import { Load, Expense, ExpenseCategory, LoadStatus, TrackingPoint, Tenant, LoadLegStop, ProofOfDelivery } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -528,73 +529,110 @@ export default function RouteDetailPage() {
         </TabsContent>
       </Tabs>
 
-      {/* DIALOG DE CONFIRMACIÓN DE ENTREGA (POD) */}
+      {/* DIALOG DE CONFIRMACIÓN DE ENTREGA (POD) - DISEÑO MOBILE FIRST */}
       <Dialog open={isPodOpen} onOpenChange={setIsPodOpen}>
-         <DialogContent className="max-w-[95vw] rounded-[2.5rem] p-6 max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-               <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Confirmar Entrega</DialogTitle>
-               <DialogDescription className="text-xs">Complete la documentación de recepción para {currentStop?.name}.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-6 py-4">
-               <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-400">Nombre de quien recibe</Label>
+         <DialogContent className="max-w-full sm:max-w-md h-[95vh] sm:h-auto rounded-t-[2.5rem] sm:rounded-[2.5rem] p-0 overflow-hidden flex flex-col border-none shadow-2xl">
+            <div className="bg-slate-900 text-white p-6 pb-8 shrink-0">
+               <div className="flex justify-between items-start mb-4">
+                  <Badge className="bg-green-500 text-white border-none text-[8px] uppercase font-black tracking-widest">Protocolo de Entrega</Badge>
+                  <Button variant="ghost" size="icon" onClick={() => setIsPodOpen(false)} className="text-white/40 hover:text-white -mr-2"><XCircle /></Button>
+               </div>
+               <h2 className="text-2xl font-black uppercase italic tracking-tighter leading-none">Confirmar Recepción</h2>
+               <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest mt-2 flex items-center gap-1.5">
+                  <MapPin size={10} className="text-blue-400" /> {currentStop?.name}
+               </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-slate-50">
+               {/* Sección 1: Receptor */}
+               <div className="space-y-3">
+                  <Label className="text-[11px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-2">
+                     <User size={14} className="text-blue-600" /> 1. Quién recibe la carga
+                  </Label>
                   <Input 
-                    placeholder="Nombre y Apellido" 
-                    className="h-12 bg-slate-50 border-none font-bold rounded-xl"
+                    placeholder="Nombre Completo del Receptor" 
+                    className="h-14 bg-white border-slate-200 shadow-sm font-bold text-slate-900 rounded-2xl px-5 focus:ring-4 ring-blue-100 transition-all"
                     value={podForm.receiverName}
                     onChange={e => setPodForm({...podForm, receiverName: e.target.value})}
                   />
                </div>
 
-               <div className="space-y-4">
+               {/* Sección 2: Firmas Digitales */}
+               <div className="space-y-6">
                   <SignaturePad 
                     title="Firma del Receptor" 
                     onSave={(url) => setPodForm({...podForm, receiverSignatureUrl: url})} 
                   />
                   <SignaturePad 
-                    title="Firma del Chofer" 
+                    title="Firma del Chofer (Conformidad)" 
                     onSave={(url) => setPodForm({...podForm, driverSignatureUrl: url})} 
                   />
                </div>
 
+               {/* Sección 3: Evidencia Fotográfica */}
                <div className="space-y-3">
-                  <Label className="text-[10px] font-black uppercase text-slate-400">Foto del Remito / Comprobante</Label>
+                  <Label className="text-[11px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-2">
+                     <Camera size={14} className="text-blue-600" /> 2. Evidencia de Remito
+                  </Label>
                   <input type="file" ref={photoInputRef} className="hidden" accept="image/*" capture="environment" onChange={onPhotoChange} />
                   <div 
-                    className="aspect-video bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-2 cursor-pointer overflow-hidden group hover:bg-blue-50 hover:border-blue-200 transition-all"
+                    className={cn(
+                      "aspect-video rounded-[2rem] border-3 border-dashed flex flex-col items-center justify-center gap-3 cursor-pointer overflow-hidden transition-all shadow-sm",
+                      podForm.photoUrl ? "border-green-500 bg-white" : "border-slate-300 bg-slate-100 hover:bg-blue-50 hover:border-blue-300"
+                    )}
                     onClick={handlePhotoClick}
                   >
                     {podForm.photoUrl ? (
-                      <img src={podForm.photoUrl} className="w-full h-full object-cover" alt="Remito" />
+                      <div className="relative w-full h-full group">
+                         <img src={podForm.photoUrl} className="w-full h-full object-cover" alt="Remito" />
+                         <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Badge className="bg-white text-black font-black">CAMBIAR FOTO</Badge>
+                         </div>
+                      </div>
                     ) : (
                       <>
-                        <Camera size={32} className="text-slate-300 group-hover:text-blue-500" />
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Capturar Remito</p>
+                        <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-blue-600 shadow-md">
+                           <Camera size={32} />
+                        </div>
+                        <div className="text-center">
+                           <p className="text-[11px] font-black text-slate-600 uppercase">Capturar Foto del Remito</p>
+                           <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Obligatorio para Auditoría</p>
+                        </div>
                       </>
                     )}
                   </div>
                </div>
 
-               <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-400">Observaciones (Opcional)</Label>
+               {/* Sección 4: Observaciones */}
+               <div className="space-y-3">
+                  <Label className="text-[11px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-2">
+                     <MessageSquare size={14} className="text-blue-600" /> 3. Novedades / Observaciones
+                  </Label>
                   <Textarea 
-                    placeholder="Ej: Faltó un bulto, mercadería en buen estado..." 
-                    className="bg-slate-50 border-none rounded-xl text-xs"
+                    placeholder="Ej: Entrega parcial, bultos mojados, etc..." 
+                    className="bg-white border-slate-200 rounded-2xl text-sm min-h-[100px] p-5 shadow-sm"
                     value={podForm.notes}
                     onChange={e => setPodForm({...podForm, notes: e.target.value})}
                   />
                </div>
             </div>
-            <DialogFooter>
+
+            <div className="p-6 bg-white border-t shrink-0">
                <Button 
-                className="w-full h-16 bg-green-600 text-white font-black text-lg rounded-2xl shadow-xl shadow-green-200" 
+                className={cn(
+                  "w-full h-18 text-lg font-black uppercase italic tracking-tighter rounded-[1.5rem] shadow-2xl transition-all active:scale-95 py-8",
+                  isUpdating || !podForm.receiverName || !podForm.receiverSignatureUrl || !podForm.driverSignatureUrl || !podForm.photoUrl
+                    ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                    : "bg-green-600 text-white hover:bg-green-700 shadow-green-200 animate-pulse"
+                )} 
                 onClick={handleConfirmDelivery} 
-                disabled={isUpdating || !podForm.receiverName}
+                disabled={isUpdating || !podForm.receiverName || !podForm.receiverSignatureUrl || !podForm.driverSignatureUrl || !podForm.photoUrl}
                >
-                 {isUpdating ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2" />}
+                 {isUpdating ? <Loader2 className="animate-spin mr-3" size={24} /> : <CircleCheck className="mr-3" size={24} />}
                  FINALIZAR ENTREGA
                </Button>
-            </DialogFooter>
+               <p className="text-[8px] text-center text-slate-400 font-bold uppercase mt-4 tracking-[0.2em]">Sincronización Digital Certificada por LogísticaAr</p>
+            </div>
          </DialogContent>
       </Dialog>
 
