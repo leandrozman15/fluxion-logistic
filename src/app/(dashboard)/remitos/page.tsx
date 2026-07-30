@@ -41,23 +41,27 @@ export default function RemitosDashboardPage() {
     fileUrl: ""
   });
 
+  // Consulta simplificada para evitar errores de índice
   const remitosQuery = useMemo(() => {
     if (!db) return null;
-    return query(collection(db, "pending_remitos"), where("status", "==", "pending"), orderBy("createdAt", "desc"));
+    return query(collection(db, "pending_remitos"), orderBy("createdAt", "desc"));
   }, [db]);
 
   const clientsQuery = useMemo(() => db ? query(collection(db, "clients"), orderBy("name")) : null, [db]);
 
-  const { data: remitos, loading } = useCollection<PendingRemito>(remitosQuery);
+  const { data: allRemitos, loading } = useCollection<PendingRemito>(remitosQuery);
   const { data: clients } = useCollection<Client>(clientsQuery);
 
   const filteredRemitos = useMemo(() => {
-    if (!remitos) return [];
-    return remitos.filter(r => 
-      r.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.clientName.toLowerCase().includes(searchTerm.toLowerCase())
+    if (!allRemitos) return [];
+    // Filtramos por estado 'pending' en el cliente
+    return allRemitos.filter(r => 
+      r.status === 'pending' && (
+        r.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.clientName.toLowerCase().includes(searchTerm.toLowerCase())
+      )
     );
-  }, [remitos, searchTerm]);
+  }, [allRemitos, searchTerm]);
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -207,7 +211,7 @@ export default function RemitosDashboardPage() {
           <CardContent className="p-6 flex items-center justify-between">
             <div>
               <p className="text-[10px] font-black uppercase text-white/50 tracking-widest">Remitos en Espera</p>
-              <p className="text-4xl font-black italic">{remitos?.length || 0}</p>
+              <p className="text-4xl font-black italic">{filteredRemitos.length}</p>
             </div>
             <Files size={40} className="text-white/20" />
           </CardContent>
@@ -218,7 +222,7 @@ export default function RemitosDashboardPage() {
             <div>
               <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Tonelaje Pendiente</p>
               <p className="text-4xl font-black italic text-slate-800">
-                {((remitos?.reduce((acc, r) => acc + (r.weightKg || 0), 0) || 0) / 1000).toFixed(1)} <span className="text-sm font-normal text-slate-400">TN</span>
+                {((filteredRemitos.reduce((acc, r) => acc + (r.weightKg || 0), 0) || 0) / 1000).toFixed(1)} <span className="text-sm font-normal text-slate-400">TN</span>
               </p>
             </div>
             <Scale size={40} className="text-slate-100" />

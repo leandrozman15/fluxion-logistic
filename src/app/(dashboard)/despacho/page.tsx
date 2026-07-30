@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
@@ -72,17 +71,23 @@ export default function DespachoInteligentePage() {
     });
   }, []);
 
+  // Consulta simplificada para evitar errores de índice
   const remitosQuery = useMemo(() => {
     if (!db) return null;
-    return query(collection(db, "pending_remitos"), where("status", "==", "pending"), orderBy("createdAt", "desc"));
+    return query(collection(db, "pending_remitos"), orderBy("createdAt", "desc"));
   }, [db]);
 
   const trucksQuery = useMemo(() => db ? query(collection(db, "trucks"), orderBy("plate")) : null, [db]);
   const hubsQuery = useMemo(() => db ? query(collection(db, "hubs"), orderBy("name")) : null, [db]);
 
-  const { data: remitos, loading: loadingRemitos } = useCollection<PendingRemito>(remitosQuery);
+  const { data: allRemitos, loading: loadingRemitos } = useCollection<PendingRemito>(remitosQuery);
   const { data: trucks, loading: loadingTrucks } = useCollection<TruckType>(trucksQuery);
   const { data: hubs, loading: loadingHubs } = useCollection<Hub>(hubsQuery);
+
+  // Filtramos remitos pendientes en el cliente
+  const remitos = useMemo(() => {
+    return allRemitos?.filter(r => r.status === 'pending') || [];
+  }, [allRemitos]);
 
   const hubIcon = (isMain: boolean) => L ? L.divIcon({
     className: 'custom-hub-icon',
