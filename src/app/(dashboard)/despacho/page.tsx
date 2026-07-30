@@ -134,18 +134,28 @@ export default function DespachoInteligentePage() {
 
     setIsOptimizing(true);
     try {
+      // 1. Sanitizar remitos para pasar solo objetos planos
       const sanitizedStops = remitos
         ?.filter(r => selectedRemitoIds.includes(r.id))
         .map(r => ({
           id: r.id,
           name: r.clientName,
           number: r.number,
-          cotNumber: r.cotNumber,
+          cotNumber: r.cotNumber || "",
           weightKg: r.weightKg,
-          fileUrl: r.fileUrl,
-          address: { street: r.address, number: "", city: r.city || "", province: r.province || "", country: "Argentina", lat: r.lat, lng: r.lng }
+          fileUrl: r.fileUrl || "",
+          address: { 
+            street: r.address, 
+            number: "", 
+            city: r.city || "", 
+            province: r.province || "", 
+            country: "Argentina", 
+            lat: r.lat || 0, 
+            lng: r.lng || 0 
+          }
         })) || [];
 
+      // 2. Sanitizar camiones
       const sanitizedTrucks = trucks
         ?.filter(t => selectedTrucks.includes(t.id))
         .map(t => ({
@@ -155,17 +165,43 @@ export default function DespachoInteligentePage() {
           avgConsumption: t.avgConsumption || 32
         })) || [];
 
-      // Reutilizamos el motor pero pasándole Remitos
+      // 3. Sanitizar sedes (Hubs) para eliminar Timestamps de Firebase que no son serializables
+      const plainActiveHub = {
+        id: activeHub.id,
+        name: activeHub.name,
+        lat: activeHub.lat,
+        lng: activeHub.lng,
+        address: activeHub.address,
+        city: activeHub.city,
+        province: activeHub.province,
+        country: activeHub.country,
+        phone: activeHub.phone || ""
+      };
+
+      const plainEndHub = {
+        id: endHub.id,
+        name: endHub.name,
+        lat: endHub.lat,
+        lng: endHub.lng,
+        address: endHub.address,
+        city: endHub.city,
+        province: endHub.province,
+        country: endHub.country,
+        phone: endHub.phone || ""
+      };
+
+      // 4. Llamar al motor de optimización en el servidor
       const result = await optimizeDistribution(
         sanitizedStops as any, 
         sanitizedTrucks as any, 
-        activeHub as any,
-        endHub as any
+        plainActiveHub as any,
+        plainEndHub as any
       );
       
       setProposals(result);
       toast({ title: "Plan de Rutas Generado", description: "Se han distribuido los remitos por cercanía geográfica." });
     } catch (e: any) {
+      console.error("Optimization Error:", e);
       toast({ variant: "destructive", title: "Error de Optimización" });
     } finally {
       setIsOptimizing(false);
