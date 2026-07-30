@@ -22,13 +22,12 @@ import {
   Wallet, Plus, DollarSign, Camera, Fuel, Utensils, Bed, Wrench, Receipt,
   Zap, Satellite, SignalHigh, Loader2, Compass, Gauge, History, 
   Coffee, Moon, Car, Battery, Flame, CloudRain, Construction, FileWarning, HelpCircle,
-  Siren, LifeBuoy, CirclePlay, CircleCheck, ListOrdered
+  Siren, LifeBuoy, CirclePlay, CircleCheck, ListOrdered, XCircle
 } from "lucide-react";
 import { Load, Expense, ExpenseCategory, LoadStatus, TrackingPoint, Tenant, LoadLegStop } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { calculateDistance, estimateFuelFactor } from "@/lib/utils/tracking-math";
-import { SignaturePad } from "@/components/SignaturePad";
 import { compressImage } from "@/lib/utils/image-compression";
 import React from 'react';
 import { formatSafeDate, toSafeDate } from "@/lib/utils/date-utils";
@@ -51,16 +50,14 @@ const EXPENSE_CATEGORIES: { id: ExpenseCategory; label: string; icon: any }[] = 
 ];
 
 const INCIDENT_TYPES = [
-  { id: 'accident', label: 'Accidente/Choque', icon: Car, color: 'bg-red-500' },
-  { id: 'mechanical', label: 'Avería Mecánica', icon: Wrench, color: 'bg-orange-500' },
+  { id: 'accident', label: 'Accidente/Choque', icon: Car, color: 'bg-red-600' },
+  { id: 'mechanical', label: 'Avería Mecánica', icon: Wrench, color: 'bg-orange-600' },
   { id: 'tire', label: 'Pinchadura', icon: Zap, color: 'bg-yellow-600' },
-  { id: 'battery', label: 'Batería', icon: Battery, color: 'bg-blue-500' },
-  { id: 'fire', label: 'Incendio', icon: Flame, color: 'bg-red-700' },
-  { id: 'weather', label: 'Clima/Inundación', icon: CloudRain, color: 'bg-slate-500' },
-  { id: 'traffic', label: 'Cierre de Ruta', icon: Construction, color: 'bg-amber-600' },
-  { id: 'doc', label: 'Documentación', icon: FileWarning, color: 'bg-purple-500' },
-  { id: 'health', label: 'Salud/Dolor', icon: Siren, color: 'bg-red-400' },
-  { id: 'other', label: 'Otro', icon: HelpCircle, color: 'bg-slate-400' },
+  { id: 'battery', label: 'Batería', icon: Battery, color: 'bg-blue-600' },
+  { id: 'weather', label: 'Clima Adverso', icon: CloudRain, color: 'bg-slate-600' },
+  { id: 'traffic', label: 'Ruta Cortada', icon: Construction, color: 'bg-amber-600' },
+  { id: 'health', label: 'Salud Chofer', icon: Siren, color: 'bg-red-500' },
+  { id: 'other', label: 'Otro Problema', icon: HelpCircle, color: 'bg-slate-500' },
 ];
 
 export default function RouteDetailPage() {
@@ -74,22 +71,16 @@ export default function RouteDetailPage() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isExpenseOpen, setIsExpenseOpen] = useState(false);
   const [isIncidentOpen, setIsIncidentOpen] = useState(false);
-  const [isPODOpen, setIsPODOpen] = useState(false);
   const [selectedIncidentType, setSelectedIncidentType] = useState<string | null>(null);
   
   const [gpsActive, setGpsActive] = useState(false);
   const [L, setL] = useState<any>(null);
-  
-  const lastUpdateRef = useRef<number>(0);
-  const lastPosRef = useRef<{lat: number, lng: number, timestamp: number} | null>(null);
-  const podPhotoInputRef = useRef<HTMLInputElement>(null);
 
   const [expenseData, setExpenseData] = useState<any>({
     category: 'fuel', amount: 0, description: "", location: "", liters: 0, odometerKm: 0, pricePerLiter: 0, fuelBrand: ""
   });
 
-  const [incidentForm, setIncidentForm] = useState({ description: "", severity: "medium", locationDesc: "", actionTaken: "" });
-  const [podData, setPodData] = useState({ receiverName: "", photoUrl: "", receiverSignatureUrl: "", driverSignatureUrl: "", notes: "" });
+  const [incidentDescription, setIncidentDescription] = useState("");
 
   useEffect(() => {
     import('leaflet').then((leaflet) => {
@@ -123,9 +114,33 @@ export default function RouteDetailPage() {
         updatedAt: serverTimestamp() 
       });
       setGpsActive(true);
-      toast({ title: "Viaje Iniciado" });
+      toast({ title: "Viaje Iniciado", description: "Rastreo GPS activo y transmitiendo a central." });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error" });
+      toast({ variant: "destructive", title: "Error al iniciar viaje" });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleConfirmDelivery = async (stopId: string) => {
+    if (!load || !loadRef) return;
+    setIsUpdating(true);
+    try {
+      const updatedStops = load.outboundStops.map(s => 
+        s.id === stopId ? { ...s, deliveredAt: new Date().toISOString() } : s
+      );
+
+      const allDone = updatedStops.every(s => !!s.deliveredAt);
+      
+      await updateDoc(loadRef, {
+        outboundStops: updatedStops,
+        status: allDone ? 'delivered' : 'on_route',
+        updatedAt: serverTimestamp()
+      });
+
+      toast({ title: "Entrega Confirmada", description: "La central ha sido notificada del éxito." });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al confirmar entrega" });
     } finally {
       setIsUpdating(false);
     }
@@ -137,108 +152,362 @@ export default function RouteDetailPage() {
     try {
       const expRef = collection(db, "loads", id as string, "expenses");
       await addDoc(expRef, { ...expenseData, driverId: user.uid, loadId: id, status: 'registered', createdAt: serverTimestamp() });
-      toast({ title: "Gasto Registrado" });
+      toast({ title: "Gasto Registrado", description: "Pendiente de aprobación por administración." });
       setIsExpenseOpen(false);
       setExpenseData({ category: 'fuel', amount: 0, description: "", location: "", liters: 0, odometerKm: 0, pricePerLiter: 0, fuelBrand: "" });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error" });
+      toast({ variant: "destructive", title: "Error al registrar gasto" });
     } finally {
       setIsUpdating(false);
     }
   };
 
-  const onPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setIsUpdating(true);
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const base64 = event.target?.result as string;
-        const compressed = await compressImage(base64, 1024, 1024, 0.6);
-        setPodData({ ...podData, photoUrl: compressed });
-        setIsUpdating(false);
+  const handleReportIncident = async () => {
+    if (!loadRef || !selectedIncidentType) return;
+    setIsUpdating(true);
+    try {
+      const incident = {
+        type: 'critical',
+        message: `INCIDENTE: ${INCIDENT_TYPES.find(t => t.id === selectedIncidentType)?.label}. ${incidentDescription}`,
+        timestamp: new Date()
       };
-      reader.readAsDataURL(file);
+
+      await updateDoc(loadRef, {
+        status: 'incident',
+        "tracking.alerts": arrayUnion(incident),
+        updatedAt: serverTimestamp()
+      });
+
+      toast({ title: "Alerta Enviada", description: "La central de monitoreo ha recibido tu aviso de emergencia." });
+      setIsIncidentOpen(false);
+      setSelectedIncidentType(null);
+      setIncidentDescription("");
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al enviar alerta" });
+    } finally {
+      setIsUpdating(false);
     }
   };
 
-  const truckIcon = L ? L.divIcon({
-    className: 'custom-truck-icon',
-    html: `<div class="bg-blue-600 text-white p-1.5 rounded-full shadow-lg border-2 border-white animate-bounce"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2M15 18H9V4M19 18h2a1 1 0 0 0 1-1v-4.24a2 2 0 0 0-.81-1.6l-3.19-2.39A2 2 0 0 0 17 8.17V18Z"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg></div>`,
-    iconSize: [28, 28], iconAnchor: [14, 14]
-  }) : null;
-
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
-  if (!load) return <div className="p-10 text-center">Viaje no encontrado.</div>;
+  if (!load) return <div className="p-10 text-center text-slate-400">Viaje no encontrado.</div>;
 
   return (
     <div className="max-w-md mx-auto space-y-6 pb-32 px-2">
-      <div className="flex items-center justify-between pt-4">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}><ArrowLeft /></Button>
+      <div className="flex items-center justify-between pt-4 px-2">
+        <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full bg-white shadow-sm border"><ArrowLeft size={18} /></Button>
         <div className="text-center">
-          <h1 className="font-bold text-lg">Asistente de Viaje</h1>
-          <p className="text-[10px] text-slate-500 font-mono uppercase tracking-widest">{load.orderNumber}</p>
+          <h1 className="font-black text-lg tracking-tighter italic uppercase text-slate-900 leading-none">Mi Viaje</h1>
+          <p className="text-[9px] text-slate-400 font-mono uppercase tracking-widest mt-1">{load.orderNumber}</p>
         </div>
         <div className="flex items-center gap-2">
-           {gpsActive ? <SignalHigh size={20} className="text-green-500 animate-pulse" /> : <Satellite size={20} className="text-slate-300" />}
+           {load.status === 'on_route' ? (
+             <div className="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center text-green-600 border border-green-100 shadow-sm animate-pulse">
+                <Satellite size={18} />
+             </div>
+           ) : (
+             <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 border border-slate-100">
+                <Satellite size={18} />
+             </div>
+           )}
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 bg-slate-100 p-1 rounded-xl">
-          <TabsTrigger value="mission" className="text-[10px] uppercase font-bold">Misión</TabsTrigger>
-          <TabsTrigger value="incidents" className="text-[10px] uppercase font-bold">Alertas</TabsTrigger>
-          <TabsTrigger value="wallet" className="text-[10px] uppercase font-bold">Gastos</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-3 bg-slate-100 p-1 rounded-2xl h-12">
+          <TabsTrigger value="mission" className="text-[10px] uppercase font-black rounded-xl">Misión</TabsTrigger>
+          <TabsTrigger value="incidents" className="text-[10px] uppercase font-black rounded-xl">Alertas</TabsTrigger>
+          <TabsTrigger value="wallet" className="text-[10px] uppercase font-black rounded-xl">Gastos</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="mission" className="space-y-6">
-          <Card className="bg-slate-900 text-white border-none rounded-3xl overflow-hidden">
-            <CardContent className="p-6 text-center space-y-4">
-               <h2 className="text-2xl font-black uppercase italic">{load.status.replace('_', ' ')}</h2>
-               <Button className="w-full bg-blue-600 h-14 text-lg font-bold" onClick={handleStartTrip} disabled={isUpdating}>INICIAR VIAJE</Button>
+        <TabsContent value="mission" className="space-y-6 animate-in fade-in">
+          {/* ESTADO ACTUAL Y ACCIÓN PRINCIPAL */}
+          <Card className={cn(
+            "border-none rounded-[2.5rem] overflow-hidden shadow-2xl transition-all",
+            load.status === 'on_route' ? "bg-blue-600 text-white" : 
+            load.status === 'delivered' ? "bg-green-600 text-white" : "bg-slate-900 text-white"
+          )}>
+            <CardContent className="p-8 text-center space-y-4">
+               <div className="space-y-1">
+                 <p className="text-[10px] font-black uppercase text-white/50 tracking-widest">Estado de Jornada</p>
+                 <h2 className="text-3xl font-black uppercase italic tracking-tighter">
+                   {load.status === 'on_route' ? 'En Tránsito' : 
+                    load.status === 'delivered' ? 'Viaje Finalizado' : 
+                    load.status === 'incident' ? 'Incidencia' : 'Listo para Salir'}
+                 </h2>
+               </div>
+               
+               {load.status === 'pending' || load.status === 'assigned' ? (
+                 <Button className="w-full bg-white text-slate-900 hover:bg-slate-50 h-16 text-lg font-black rounded-2xl shadow-xl animate-pulse" onClick={handleStartTrip} disabled={isUpdating}>
+                   INICIAR VIAJE <ChevronRight className="ml-2" />
+                 </Button>
+               ) : load.status === 'on_route' && currentStop ? (
+                 <div className="space-y-3">
+                   <p className="text-[10px] font-bold text-white/70 uppercase">Destino Actual: {currentStop.name}</p>
+                   <Button className="w-full bg-green-500 hover:bg-green-600 text-white h-16 text-lg font-black rounded-2xl shadow-xl" onClick={() => handleConfirmDelivery(currentStop.id)} disabled={isUpdating}>
+                     CONFIRMAR LLEGADA <CheckCircle2 className="ml-2" />
+                   </Button>
+                 </div>
+               ) : load.status === 'delivered' ? (
+                 <div className="flex flex-col items-center gap-2">
+                    <CircleCheck size={48} className="text-white/30" />
+                    <p className="text-xs font-bold opacity-70">Tarea cumplida. Central de despacho notificada.</p>
+                 </div>
+               ) : null}
             </CardContent>
           </Card>
 
-          <Card className="border-none shadow-sm h-64 relative rounded-3xl overflow-hidden">
-             {L && <MapContainer center={[load.tracking?.currentLat || load.origin.lat || -34.6, load.tracking?.currentLng || load.origin.lng || -58.3]} zoom={10} className="h-full w-full"><TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" /></MapContainer>}
+          {/* MAPA OPERATIVO COMPACTO */}
+          <Card className="border-none shadow-xl h-64 relative rounded-[2rem] overflow-hidden mx-1">
+             {L && (
+               <MapContainer 
+                center={[load.tracking?.currentLat || load.origin.lat || -34.6, load.tracking?.currentLng || load.origin.lng || -58.3]} 
+                zoom={10} 
+                className="h-full w-full"
+                zoomControl={false}
+               >
+                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+               </MapContainer>
+             )}
+             <div className="absolute top-4 left-4 z-[500]">
+                <Badge className="bg-white/90 backdrop-blur text-blue-600 border shadow-md text-[8px] font-black uppercase">Monitoreo GPS Activo</Badge>
+             </div>
           </Card>
 
-          <div className="space-y-4">
-             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><ListOrdered size={14} /> Itinerario</p>
-             {load.outboundStops.map((stop, idx) => (
-                <div key={stop.id} className="p-4 bg-white border rounded-2xl flex justify-between items-center">
-                   <div><p className="text-xs font-bold uppercase">{stop.name}</p><p className="text-[10px] text-slate-400">{stop.address}</p></div>
-                   {stop.deliveredAt ? <Badge className="bg-green-600">OK</Badge> : <Badge variant="outline">Pendiente</Badge>}
-                </div>
-             ))}
+          {/* LISTA DE PARADAS */}
+          <div className="space-y-4 px-1">
+             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 ml-2">
+               <ListOrdered size={14} className="text-blue-500" /> Hoja de Ruta Secuencial
+             </p>
+             <div className="space-y-3">
+                {load.outboundStops.map((stop, idx) => (
+                   <div key={stop.id} className={cn(
+                     "p-5 rounded-3xl border-2 flex justify-between items-center transition-all",
+                     stop.deliveredAt ? "bg-green-50 border-green-100" : "bg-white border-slate-100 shadow-sm"
+                   )}>
+                      <div className="flex items-center gap-4">
+                        <div className={cn(
+                          "w-8 h-8 rounded-full flex items-center justify-center font-black text-xs border shadow-inner",
+                          stop.deliveredAt ? "bg-green-600 text-white border-green-500" : "bg-slate-50 text-slate-400 border-slate-100"
+                        )}>
+                          {idx + 1}
+                        </div>
+                        <div>
+                           <p className={cn("text-sm font-black uppercase", stop.deliveredAt ? "text-green-700" : "text-slate-800")}>{stop.name}</p>
+                           <p className="text-[10px] text-slate-400 font-medium leading-tight mt-0.5">{stop.address}</p>
+                        </div>
+                      </div>
+                      {stop.deliveredAt ? (
+                        <Badge className="bg-green-600 border-none text-[8px] h-4 uppercase font-black">ENTREGADO</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[8px] h-4 uppercase font-black border-slate-200 text-slate-400">PENDIENTE</Badge>
+                      )}
+                   </div>
+                ))}
+             </div>
           </div>
         </TabsContent>
 
-        <TabsContent value="wallet" className="space-y-6">
-           <Dialog open={isExpenseOpen} onOpenChange={setIsExpenseOpen}>
-             <DialogTrigger asChild><Button className="w-full bg-blue-600 h-14 font-bold rounded-2xl"><Plus className="mr-2" /> NUEVO GASTO</Button></DialogTrigger>
-             <DialogContent className="max-w-[95vw] rounded-3xl">
-                <DialogHeader><DialogTitle>Registrar Gasto</DialogTitle></DialogHeader>
-                <div className="space-y-4 py-4">
-                   <div className="space-y-2">
-                      <Label className="text-[10px] font-bold uppercase text-slate-400">Categoría</Label>
-                      <div className="grid grid-cols-3 gap-2">{EXPENSE_CATEGORIES.map(cat => (<button key={cat.id} className={cn("flex flex-col items-center justify-center p-3 rounded-xl border", expenseData.category === cat.id ? "bg-blue-600 text-white" : "bg-white text-slate-500")} onClick={() => setExpenseData({...expenseData, category: cat.id})}><cat.icon size={18} /><span className="text-[8px] font-bold mt-1 uppercase">{cat.label}</span></button>))}</div>
-                   </div>
-                   <div className="grid grid-cols-2 gap-4"><div className="space-y-1"><Label className="text-[10px] font-bold uppercase">Monto</Label><Input type="number" value={expenseData.amount} onChange={e => setExpenseData({...expenseData, amount: parseFloat(e.target.value) || 0})} /></div><div className="space-y-1"><Label className="text-[10px] font-bold uppercase">Lugar</Label><Input placeholder="Ciudad" value={expenseData.location} onChange={e => setExpenseData({...expenseData, location: e.target.value})} /></div></div>
-                   {expenseData.category === 'fuel' && (
-                     <div className="p-4 bg-blue-50 rounded-2xl space-y-4">
-                        <Label className="text-[10px] font-bold text-blue-800 uppercase">Detalle Combustible</Label>
-                        <Select value={expenseData.fuelBrand} onValueChange={v => setExpenseData({...expenseData, fuelBrand: v})}><SelectTrigger className="bg-white"><SelectValue placeholder="Marca" /></SelectTrigger><SelectContent>{['YPF', 'Shell', 'Axion', 'Puma'].map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent></Select>
-                        <div className="grid grid-cols-2 gap-4"><Input type="number" placeholder="Litros" className="bg-white" value={expenseData.liters} onChange={e => setExpenseData({...expenseData, liters: parseFloat(e.target.value) || 0})} /><Input type="number" placeholder="Km" className="bg-white" value={expenseData.odometerKm} onChange={e => setExpenseData({...expenseData, odometerKm: parseFloat(e.target.value) || 0})} /></div>
+        <TabsContent value="incidents" className="space-y-6 animate-in fade-in">
+           {/* REPORTAR INCIDENTE */}
+           <div className="px-1 space-y-6">
+             <div className="text-center space-y-2 py-4">
+                <ShieldAlert className="w-12 h-12 text-red-600 mx-auto animate-pulse" />
+                <h3 className="text-xl font-black italic uppercase text-slate-900">Reportar Incidencia</h3>
+                <p className="text-xs text-slate-500 font-medium">Use estos botones solo en caso de problemas en ruta.</p>
+             </div>
+
+             <div className="grid grid-cols-2 gap-4">
+                {INCIDENT_TYPES.map(type => (
+                  <button 
+                    key={type.id} 
+                    className={cn(
+                      "p-6 rounded-3xl border-2 flex flex-col items-center gap-3 transition-all active:scale-95",
+                      selectedIncidentType === type.id ? "bg-red-600 text-white border-red-600 shadow-xl" : "bg-white text-slate-400 border-slate-100"
+                    )}
+                    onClick={() => setSelectedIncidentType(type.id)}
+                  >
+                    <type.icon size={32} className={cn(selectedIncidentType === type.id ? "text-white" : "text-slate-300")} />
+                    <span className="text-[10px] font-black uppercase text-center leading-tight">{type.label}</span>
+                  </button>
+                ))}
+             </div>
+
+             {selectedIncidentType && (
+               <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-300 bg-white p-6 rounded-[2rem] border-2 border-red-100 shadow-xl">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400">Detalle adicional (Opcional)</Label>
+                    <Textarea 
+                      placeholder="Ej: Kilómetro 150, ruta cortada por gendarmería..." 
+                      className="bg-slate-50 border-none rounded-xl"
+                      value={incidentDescription}
+                      onChange={e => setIncidentDescription(e.target.value)}
+                    />
+                  </div>
+                  <Button className="w-full h-14 bg-red-600 text-white font-black text-lg rounded-2xl shadow-xl shadow-red-200" onClick={handleReportIncident} disabled={isUpdating}>
+                    ENVIAR ALERTA A CENTRAL
+                  </Button>
+               </div>
+             )}
+
+             {/* HISTORIAL DE ALERTAS DE TELEMETRÍA */}
+             <div className="space-y-4 pt-6">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-2">
+                   <Gauge size={14} /> Diario de Seguridad
+                </p>
+                <div className="space-y-2">
+                   {load.tracking?.alerts?.map((alert, i) => (
+                     <div key={i} className={cn(
+                       "p-4 rounded-2xl flex gap-4 items-start border-l-4 shadow-sm",
+                       alert.type === 'critical' ? "bg-red-50 border-l-red-600" : "bg-amber-50 border-l-amber-500"
+                     )}>
+                        <div className="mt-1">
+                           {alert.type === 'critical' ? <Siren size={18} className="text-red-600" /> : <AlertTriangle size={18} className="text-amber-600" />}
+                        </div>
+                        <div>
+                           <p className="text-[9px] font-black opacity-40 uppercase">{formatSafeDate(alert.timestamp, "HH:mm")} hs</p>
+                           <p className="text-xs font-bold text-slate-800 leading-relaxed">{alert.message}</p>
+                        </div>
+                     </div>
+                   ))}
+                   {(!load.tracking?.alerts || load.tracking.alerts.length === 0) && (
+                     <div className="p-10 text-center bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                        <CheckCircle2 size={32} className="mx-auto text-slate-200 mb-2" />
+                        <p className="text-xs font-bold text-slate-400 uppercase italic">Conducción Segura Detectada</p>
                      </div>
                    )}
                 </div>
-                <DialogFooter><Button className="w-full h-14 bg-blue-600 font-bold rounded-2xl" onClick={handleAddExpense}>REGISTRAR</Button></DialogFooter>
-             </DialogContent>
-           </Dialog>
-           <div className="space-y-2">{expenses?.map(exp => (<Card key={exp.id} className="border-none shadow-sm"><CardContent className="p-3 flex justify-between items-center"><div className="flex items-center gap-3"><div><p className="text-xs font-bold capitalize">{exp.category}</p><p className="text-[9px] text-slate-400">{exp.location}</p></div></div><p className="text-xs font-black">${exp.amount.toLocaleString()}</p></CardContent></Card>))}</div>
+             </div>
+           </div>
+        </TabsContent>
+
+        <TabsContent value="wallet" className="space-y-6 animate-in fade-in">
+           <div className="px-1 space-y-6">
+             <Dialog open={isExpenseOpen} onOpenChange={setIsExpenseOpen}>
+               <DialogTrigger asChild>
+                 <Button className="w-full bg-blue-600 hover:bg-blue-700 h-16 font-black text-lg rounded-2xl shadow-xl shadow-blue-200">
+                   <Plus className="mr-2" /> REGISTRAR GASTO
+                 </Button>
+               </DialogTrigger>
+               <DialogContent className="max-w-[95vw] rounded-[2.5rem] p-8">
+                  <DialogHeader>
+                    <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Nuevo Gasto en Ruta</DialogTitle>
+                    <DialogDescription className="text-xs">Los tickets deben ser legibles para su aprobación.</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-6 py-4">
+                     <div className="space-y-3">
+                        <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Categoría</Label>
+                        <div className="grid grid-cols-3 gap-3">
+                          {EXPENSE_CATEGORIES.map(cat => (
+                            <button 
+                              key={cat.id} 
+                              className={cn(
+                                "flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all active:scale-95", 
+                                expenseData.category === cat.id ? "bg-blue-600 text-white border-blue-600 shadow-lg" : "bg-slate-50 text-slate-400 border-transparent"
+                              )} 
+                              onClick={() => setExpenseData({...expenseData, category: cat.id})}
+                            >
+                              <cat.icon size={20} />
+                              <span className="text-[8px] font-black mt-2 uppercase">{cat.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                     </div>
+                     <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                           <Label className="text-[10px] font-black uppercase text-slate-400">Monto Final</Label>
+                           <div className="relative">
+                              <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                              <Input type="number" className="pl-9 h-12 bg-slate-50 border-none font-black text-slate-900 rounded-xl" value={expenseData.amount} onChange={e => setExpenseData({...expenseData, amount: parseFloat(e.target.value) || 0})} />
+                           </div>
+                        </div>
+                        <div className="space-y-1.5">
+                           <Label className="text-[10px] font-black uppercase text-slate-400">Lugar / Ciudad</Label>
+                           <div className="relative">
+                              <MapPin className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                              <Input placeholder="Ej: San Pedro" className="pl-9 h-12 bg-slate-50 border-none text-xs font-bold rounded-xl" value={expenseData.location} onChange={e => setExpenseData({...expenseData, location: e.target.value})} />
+                           </div>
+                        </div>
+                     </div>
+                     {expenseData.category === 'fuel' && (
+                       <div className="p-6 bg-blue-50 border border-blue-100 rounded-3xl space-y-6 animate-in zoom-in-95">
+                          <Label className="text-[10px] font-black text-blue-800 uppercase tracking-widest flex items-center gap-2"><Fuel size={14}/> Detalle de Carga</Label>
+                          <Select value={expenseData.fuelBrand} onValueChange={v => setExpenseData({...expenseData, fuelBrand: v})}>
+                             <SelectTrigger className="bg-white h-12 rounded-xl border-none shadow-sm font-bold"><SelectValue placeholder="Marca de Estación" /></SelectTrigger>
+                             <SelectContent>
+                                {['YPF', 'Shell', 'Axion', 'Puma', 'Otra'].map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                             </SelectContent>
+                          </Select>
+                          <div className="grid grid-cols-2 gap-4">
+                             <div className="space-y-1">
+                                <Label className="text-[8px] uppercase font-bold text-blue-400 ml-1">Litros</Label>
+                                <Input type="number" placeholder="Lts" className="bg-white h-12 border-none font-black rounded-xl" value={expenseData.liters} onChange={e => setExpenseData({...expenseData, liters: parseFloat(e.target.value) || 0})} />
+                             </div>
+                             <div className="space-y-1">
+                                <Label className="text-[8px] uppercase font-bold text-blue-400 ml-1">Km Odómetro</Label>
+                                <Input type="number" placeholder="Km" className="bg-white h-12 border-none font-black rounded-xl" value={expenseData.odometerKm} onChange={e => setExpenseData({...expenseData, odometerKm: parseFloat(e.target.value) || 0})} />
+                             </div>
+                          </div>
+                       </div>
+                     )}
+                  </div>
+                  <DialogFooter>
+                    <Button className="w-full h-16 bg-blue-600 text-white font-black text-lg rounded-2xl shadow-xl shadow-blue-200" onClick={handleAddExpense} disabled={isUpdating || !expenseData.amount}>
+                      REGISTRAR COMPROBANTE
+                    </Button>
+                  </DialogFooter>
+               </DialogContent>
+             </Dialog>
+
+             <div className="space-y-3 pt-4">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Últimos Movimientos</p>
+                {expenses?.map(exp => (
+                  <Card key={exp.id} className="border-none shadow-sm rounded-3xl overflow-hidden active:scale-[0.98] transition-transform">
+                    <CardContent className="p-5 flex justify-between items-center bg-white">
+                       <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 border border-slate-100">
+                             {EXPENSE_CATEGORIES.find(c => c.id === exp.category)?.icon ? React.createElement(EXPENSE_CATEGORIES.find(c => c.id === exp.category)!.icon, { size: 20 }) : <DollarSign size={20} />}
+                          </div>
+                          <div>
+                             <p className="text-xs font-black uppercase text-slate-800 leading-tight">{exp.category}</p>
+                             <p className="text-[10px] text-slate-400 font-bold uppercase">{exp.location}</p>
+                          </div>
+                       </div>
+                       <div className="text-right">
+                          <p className="text-sm font-black text-slate-900 tracking-tighter">${exp.amount.toLocaleString()}</p>
+                          <Badge variant="outline" className={cn(
+                            "text-[8px] font-black h-4 px-2 mt-1 border-none shadow-sm",
+                            exp.status === 'approved' ? "bg-green-100 text-green-700" : 
+                            exp.status === 'rejected' ? "bg-red-100 text-red-700" : "bg-blue-50 text-blue-600"
+                          )}>
+                             {exp.status.toUpperCase()}
+                          </Badge>
+                       </div>
+                    </CardContent>
+                  </Card>
+                ))}
+                {(!expenses || expenses.length === 0) && (
+                  <div className="p-16 text-center bg-slate-50 rounded-[2.5rem] border-2 border-dashed border-slate-100">
+                     <Wallet size={32} className="mx-auto text-slate-200 mb-2" />
+                     <p className="text-xs font-bold text-slate-300 uppercase italic">Sin gastos registrados aún</p>
+                  </div>
+                )}
+             </div>
+           </div>
         </TabsContent>
       </Tabs>
+
+      {/* FOOTER PERSISTENTE DE COMUNICACIÓN */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-xl border-t border-slate-100 flex justify-center z-50">
+        <div className="max-w-md w-full grid grid-cols-2 gap-3 px-2">
+           <Button variant="outline" className="h-14 rounded-2xl font-black text-[10px] uppercase tracking-widest bg-white border-slate-200 text-slate-600" onClick={() => window.open(`tel:0800-LOGISTICA`)}>
+              <LifeBuoy size={18} className="mr-2 text-blue-600" /> Ayuda Central
+           </Button>
+           <Button className="h-14 rounded-2xl font-black text-[10px] uppercase tracking-widest bg-green-600 hover:bg-green-700 shadow-xl shadow-green-200" onClick={() => window.open(`https://wa.me/5491100000000`)}>
+              <MessageSquare size={18} className="mr-2 fill-current" /> Enviar Chat
+           </Button>
+        </div>
+      </div>
     </div>
   );
 }
