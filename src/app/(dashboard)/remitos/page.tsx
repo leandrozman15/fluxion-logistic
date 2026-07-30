@@ -4,7 +4,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, orderBy, where } from "firebase/firestore";
+import { collection, query, orderBy } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -32,10 +32,9 @@ export default function RemitosDashboardPage() {
 
   const loadsQuery = useMemo(() => {
     if (!db) return null;
-    // Solo mostramos fletes que ya están en curso o terminados, que son los que requieren remitos
+    // Simplificamos la consulta para no requerir índices compuestos manuales
     return query(
       collection(db, "loads"), 
-      where("status", "in", ["on_route", "delivered", "incident", "assigned"]),
       orderBy("createdAt", "desc")
     );
   }, [db]);
@@ -49,19 +48,31 @@ export default function RemitosDashboardPage() {
 
   const filteredLoads = useMemo(() => {
     if (!loads) return [];
+    
+    // Estados que requieren auditoría de remitos
+    const validStatuses = ["on_route", "delivered", "incident", "assigned"];
+
     return loads.filter(l => {
+      // 1. Filtro por estado operativo (Filtro base)
+      if (!validStatuses.includes(l.status)) return false;
+
+      // 2. Filtro por búsqueda de texto
       const search = searchTerm.toLowerCase();
       const matchesSearch = 
         (l.orderNumber || "").toLowerCase().includes(search) ||
         (l.clientName || "").toLowerCase().includes(search);
       
+      if (!matchesSearch) return false;
+
+      // 3. Filtro de auditoría (Pendientes vs Completos)
       const totalStops = (l.outboundStops?.length || 0);
       const docsCount = l.outboundStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0;
       const isComplete = docsCount >= totalStops && totalStops > 0;
 
-      if (filter === 'pending') return matchesSearch && !isComplete;
-      if (filter === 'completed') return matchesSearch && isComplete;
-      return matchesSearch;
+      if (filter === 'pending') return !isComplete;
+      if (filter === 'completed') return isComplete;
+      
+      return true;
     });
   }, [loads, searchTerm, filter]);
 
@@ -75,30 +86,33 @@ export default function RemitosDashboardPage() {
           <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Centro de auditoría y digitalización de documentos de carga.</p>
         </div>
         <div className="flex gap-2">
-           <Button 
-            variant={filter === 'all' ? 'default' : 'outline'} 
-            size="sm" 
-            className="text-[9px] font-black uppercase rounded-xl h-9"
+           <button 
+            className={cn(
+              "px-4 h-9 rounded-xl text-[9px] font-black uppercase transition-all border",
+              filter === 'all' ? "bg-slate-900 text-white border-slate-900 shadow-md" : "bg-white text-slate-400 border-slate-200 hover:bg-slate-50"
+            )}
             onClick={() => setFilter('all')}
            >
              Todos
-           </Button>
-           <Button 
-            variant={filter === 'pending' ? 'default' : 'outline'} 
-            size="sm" 
-            className="text-[9px] font-black uppercase rounded-xl h-9 border-orange-200 text-orange-700"
+           </button>
+           <button 
+            className={cn(
+              "px-4 h-9 rounded-xl text-[9px] font-black uppercase transition-all border",
+              filter === 'pending' ? "bg-orange-600 text-white border-orange-600 shadow-md" : "bg-white text-orange-600 border-orange-200 hover:bg-orange-50"
+            )}
             onClick={() => setFilter('pending')}
            >
              Pendientes
-           </Button>
-           <Button 
-            variant={filter === 'completed' ? 'default' : 'outline'} 
-            size="sm" 
-            className="text-[9px] font-black uppercase rounded-xl h-9 border-green-200 text-green-700"
+           </button>
+           <button 
+            className={cn(
+              "px-4 h-9 rounded-xl text-[9px] font-black uppercase transition-all border",
+              filter === 'completed' ? "bg-green-600 text-white border-green-600 shadow-md" : "bg-white text-green-600 border-green-200 hover:bg-green-50"
+            )}
             onClick={() => setFilter('completed')}
            >
              Completos
-           </Button>
+           </button>
         </div>
       </div>
 
