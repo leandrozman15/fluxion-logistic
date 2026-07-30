@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState } from "react";
@@ -19,6 +18,15 @@ import { Load, Expense, ExpenseStatus } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+
+const CATEGORY_LABELS: Record<string, string> = {
+  fuel: 'Combustible',
+  toll: 'Peaje',
+  meal: 'Comida',
+  lodging: 'Hospedaje',
+  maintenance: 'Mantenimiento',
+  other: 'Otros'
+};
 
 export default function LoadWalletPage() {
   const { id } = useParams();
@@ -196,7 +204,9 @@ export default function LoadWalletPage() {
                    <TableRow key={exp.id} className="hover:bg-slate-50/50 group transition-colors">
                      <TableCell>
                        <div className="space-y-1">
-                         <div className="font-black text-slate-800 text-xs uppercase italic">{exp.category}</div>
+                         <div className="font-black text-slate-800 text-xs uppercase italic">
+                           {CATEGORY_LABELS[exp.category] || exp.category}
+                         </div>
                          <div className="text-[9px] text-slate-400 uppercase font-bold flex items-center gap-1">
                             <MapPin size={8}/> {exp.location}
                          </div>
@@ -217,11 +227,11 @@ export default function LoadWalletPage() {
                           exp.status === 'approved' ? "bg-green-100 text-green-700" :
                           exp.status === 'rejected' ? "bg-red-100 text-red-700" : "bg-orange-100 text-orange-700"
                         )}>
-                          {exp.status === 'registered' ? 'PENDIENTE' : exp.status}
+                          {exp.status === 'registered' ? 'PENDIENTE' : exp.status === 'approved' ? 'APROBADO' : 'RECHAZADO'}
                         </Badge>
                      </TableCell>
                      <TableCell className="text-right print:hidden">
-                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex justify-end gap-1 transition-opacity">
                           {exp.status === 'registered' && (
                             <>
                               <Button 
@@ -229,6 +239,7 @@ export default function LoadWalletPage() {
                                 variant="ghost" 
                                 className="h-7 w-7 text-green-600 hover:bg-green-50 rounded-full"
                                 onClick={() => handleUpdateStatus(exp.id, 'approved')}
+                                title="Aprobar Gasto"
                                 disabled={isUpdatingId === exp.id}
                               >
                                 <CheckCircle2 size={16} />
@@ -238,6 +249,7 @@ export default function LoadWalletPage() {
                                 variant="ghost" 
                                 className="h-7 w-7 text-red-600 hover:bg-red-50 rounded-full"
                                 onClick={() => handleUpdateStatus(exp.id, 'rejected')}
+                                title="Rechazar Gasto"
                                 disabled={isUpdatingId === exp.id}
                               >
                                 <XCircle size={16} />
