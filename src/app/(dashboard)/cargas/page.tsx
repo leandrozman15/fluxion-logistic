@@ -15,7 +15,7 @@ import {
   Package, Plus, Search, Scale, 
   Loader2, MoreVertical, Trash2, CheckCircle2, 
   Clock, AlertTriangle, FileText, Printer, Wallet, Navigation, Edit, Calendar, Truck, User, History,
-  BarChart3, Ship, ScanBarcode, Receipt
+  BarChart3, Ship, ScanBarcode, Receipt, Files
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -229,6 +229,9 @@ export default function CargasPage() {
                               <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Análisis de Operación</DropdownMenuLabel>
                               <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/reporte`)} className="font-black text-blue-600 h-10 rounded-xl">
                                 <BarChart3 className="w-4 h-4 mr-2" /> Auditoría de Telemetría
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/documentos`)} className="font-black text-indigo-600 bg-indigo-50 h-10 rounded-xl my-1">
+                                <Files className="w-4 h-4 mr-2" /> Gestión de Remitos
                               </DropdownMenuItem>
                               <DropdownMenuSeparator className="my-1" />
                               <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Gestión Administrativa</DropdownMenuLabel>
