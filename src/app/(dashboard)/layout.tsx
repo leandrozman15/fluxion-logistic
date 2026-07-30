@@ -31,7 +31,8 @@ import {
   Smartphone,
   Wrench,
   Zap,
-  Box
+  Box,
+  Files
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth, useFirestore, useDoc } from "@/firebase";
@@ -67,6 +68,7 @@ function DashboardSidebar() {
     { title: "Cartera Clientes", icon: Briefcase, href: "/clientes" },
     { title: "Catálogo Productos", icon: Box, href: "/productos" },
     { title: "Cargas y Fletes", icon: Package, href: "/cargas" },
+    { title: "Gestión de Remitos", icon: Files, href: "/cargas" }, // Apunta a fletes para seleccionar cual gestionar
     { title: "Mantenimiento", icon: Wrench, href: "/mantenimiento" },
     { title: "Sedes Logísticas", icon: Building2, href: "/sedes" },
     { title: "Análisis de Datos", icon: BarChart3, href: "/analytics" },
@@ -111,7 +113,7 @@ function DashboardSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {adminMenu.map((item) => (
-                <SidebarMenuItem key={item.href}>
+                <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton 
                     asChild 
                     tooltip={item.title} 
@@ -119,8 +121,8 @@ function DashboardSidebar() {
                     onClick={handleLinkClick}
                   >
                     <Link href={item.href}>
-                      <item.icon />
-                      <span>{item.title}</span>
+                      <item.icon className={cn(item.title === "Gestión de Remitos" && "text-indigo-600")} />
+                      <span className={cn(item.title === "Gestión de Remitos" && "font-bold text-indigo-700")}>{item.title}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -242,3 +244,5 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     </SidebarProvider>
   );
 }
+
+import { cn } from '@/lib/utils';

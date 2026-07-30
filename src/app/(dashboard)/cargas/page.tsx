@@ -155,7 +155,7 @@ export default function CargasPage() {
                 <TableRow>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest">N° Orden / Cliente</TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest">Itinerario y Recursos</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase tracking-widest">Contenedor / Peso</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Remitos / Docs</TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest">Estado</TableHead>
                   <TableHead className="text-right text-[10px] font-black uppercase tracking-widest">Acciones</TableHead>
                 </TableRow>
@@ -206,17 +206,26 @@ export default function CargasPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="space-y-1.5">
-                            {load.international?.containerNumber ? (
-                               <Badge variant="secondary" className="bg-blue-900 text-white border-none font-mono text-[8px] h-4 gap-1.5 px-2">
-                                  <ScanBarcode size={10} /> {load.international.containerNumber}
-                               </Badge>
-                            ) : (
-                               <div className="flex items-center gap-1 text-[10px] font-black text-slate-700 italic"><Scale size={10} className="text-slate-300" /> {totalWeight.toLocaleString()} KG</div>
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className={cn(
+                                "h-10 px-3 rounded-xl border-dashed border-2 transition-all font-black text-[10px] uppercase",
+                                totalDocs > 0 ? "bg-indigo-50 border-indigo-200 text-indigo-700" : "border-slate-200 text-slate-400 hover:bg-slate-50"
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(`/cargas/${load.id}/documentos`);
+                              }}
+                            >
+                              <Files size={14} className="mr-2" /> {totalDocs} DOCS
+                            </Button>
+                            {load.international?.containerNumber && (
+                              <Badge variant="secondary" className="bg-blue-900 text-white border-none font-mono text-[8px] h-4 gap-1.5 px-2">
+                                <ScanBarcode size={10} /> {load.international.containerNumber}
+                              </Badge>
                             )}
-                            <div className="flex items-center gap-1.5 text-[8px] text-slate-400 font-black uppercase tracking-widest">
-                               <FileText size={10} /> {totalDocs} DOCUMENTOS
-                            </div>
                           </div>
                         </TableCell>
                         <TableCell>{getStatusBadge(load.status)}</TableCell>
