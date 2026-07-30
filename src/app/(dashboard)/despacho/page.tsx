@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
@@ -71,7 +72,6 @@ export default function DespachoInteligentePage() {
     });
   }, []);
 
-  // Consulta simplificada para evitar errores de índice
   const remitosQuery = useMemo(() => {
     if (!db) return null;
     return query(collection(db, "pending_remitos"), orderBy("createdAt", "desc"));
@@ -84,7 +84,6 @@ export default function DespachoInteligentePage() {
   const { data: trucks, loading: loadingTrucks } = useCollection<TruckType>(trucksQuery);
   const { data: hubs, loading: loadingHubs } = useCollection<Hub>(hubsQuery);
 
-  // Filtramos remitos pendientes en el cliente
   const remitos = useMemo(() => {
     return allRemitos?.filter(r => r.status === 'pending') || [];
   }, [allRemitos]);
@@ -134,39 +133,38 @@ export default function DespachoInteligentePage() {
 
     setIsOptimizing(true);
     try {
-      // 1. Sanitizar remitos para pasar solo objetos planos
+      // 1. Sanitización exhaustiva de Remitos para Server Action (Remover Timestamps de Firebase)
       const sanitizedStops = remitos
         ?.filter(r => selectedRemitoIds.includes(r.id))
         .map(r => ({
           id: r.id,
-          name: r.clientName,
           number: r.number,
-          cotNumber: r.cotNumber || "",
+          clientName: r.clientName,
+          address: r.address,
+          city: r.city || "",
+          province: r.province || "",
           weightKg: r.weightKg,
+          volumeM3: r.volumeM3 || 0,
+          lat: r.lat || 0,
+          lng: r.lng || 0,
+          cotNumber: r.cotNumber || "",
           fileUrl: r.fileUrl || "",
-          address: { 
-            street: r.address, 
-            number: "", 
-            city: r.city || "", 
-            province: r.province || "", 
-            country: "Argentina", 
-            lat: r.lat || 0, 
-            lng: r.lng || 0 
-          }
-        })) || [];
+          status: 'pending' as const
+        }));
 
-      // 2. Sanitizar camiones
+      // 2. Sanitización de Camiones
       const sanitizedTrucks = trucks
         ?.filter(t => selectedTrucks.includes(t.id))
         .map(t => ({
           id: t.id,
           plate: t.plate,
           assignedDriverId: t.assignedDriverId || 'none',
-          avgConsumption: t.avgConsumption || 32
-        })) || [];
+          avgConsumption: t.avgConsumption || 32,
+          capacityKg: t.capacityKg || 30000
+        }));
 
-      // 3. Sanitizar sedes (Hubs) para eliminar Timestamps de Firebase que no son serializables
-      const plainActiveHub = {
+      // 3. Sanitización de Hubs (Remover Timestamps)
+      const plainStartHub = {
         id: activeHub.id,
         name: activeHub.name,
         lat: activeHub.lat,
@@ -190,19 +188,19 @@ export default function DespachoInteligentePage() {
         phone: endHub.phone || ""
       };
 
-      // 4. Llamar al motor de optimización en el servidor
+      // 4. Llamada al motor de optimización (Server Action)
       const result = await optimizeDistribution(
         sanitizedStops as any, 
         sanitizedTrucks as any, 
-        plainActiveHub as any,
+        plainStartHub as any,
         plainEndHub as any
       );
       
       setProposals(result);
-      toast({ title: "Plan de Rutas Generado", description: "Se han distribuido los remitos por cercanía geográfica." });
+      toast({ title: "Optimización Completada", description: "La IA ha agrupado los remitos para minimizar km." });
     } catch (e: any) {
       console.error("Optimization Error:", e);
-      toast({ variant: "destructive", title: "Error de Optimización" });
+      toast({ variant: "destructive", title: "Error en el cálculo automático" });
     } finally {
       setIsOptimizing(false);
     }
@@ -259,7 +257,7 @@ export default function DespachoInteligentePage() {
             lng: r.lng,
             description: `Entrega Remito #${r.number}`,
             weightKg: r.weightKg,
-            volumeM3: 0,
+            volumeM3: r.volumeM3 || 0,
             units: 1,
             unitType: "Bulto",
             documents: [{
@@ -284,7 +282,6 @@ export default function DespachoInteligentePage() {
 
         batch.set(newLoadRef, loadData);
 
-        // Marcar remitos como despachados
         prop.stops.forEach(r => {
            batch.update(doc(db, "pending_remitos", r.id), { status: 'dispatched', updatedAt: serverTimestamp() });
         });
@@ -317,7 +314,7 @@ export default function DespachoInteligentePage() {
            </div>
            <Button className="bg-blue-600 shadow-lg h-9 w-full sm:w-auto font-bold" onClick={handleRunOptimization} disabled={isOptimizing || selectedRemitoIds.length === 0}>
              {isOptimizing ? <Loader2 className="animate-spin mr-2" /> : <RouteIcon className="mr-2" />}
-             Planificar Rutas
+             Calcular Mejores Rutas
            </Button>
         </div>
       </div>
@@ -395,25 +392,19 @@ export default function DespachoInteligentePage() {
             <div className="h-full min-h-[600px] flex flex-col items-center justify-center text-center space-y-6 bg-white rounded-[2.5rem] border-2 border-dashed border-slate-200">
                <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-300"><Layers size={40} /></div>
                <div className="space-y-2">
-                 <h3 className="text-lg font-bold text-slate-700 italic">Automatización de Repartos</h3>
-                 <p className="text-sm text-slate-400 max-w-sm">Ventas ya cargó los remitos. Usted solo elija cuáles despachar y qué camiones usar. La IA agrupará los pedidos por zona automáticamente.</p>
+                 <h3 className="text-lg font-bold text-slate-700 italic">Planificador de Rutas Automático</h3>
+                 <p className="text-sm text-slate-400 max-w-sm">Seleccione los remitos y las unidades. La IA calculará la ruta más corta y eficiente agrupando los pedidos por zona.</p>
                </div>
             </div>
           ) : (
             <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {proposals.map((prop, idx) => {
-                    const rawPoints = mounted && activeHub && endHub ? [
-                      [activeHub.lat, activeHub.lng],
-                      ...prop.stops.map(s => [s.lat, s.lng]),
-                      [endHub.lat, endHub.lng]
-                    ] : [];
-                    
-                    const routePoints = rawPoints.filter(p => 
-                      p[0] !== undefined && p[1] !== undefined && 
-                      p[0] !== null && p[1] !== null &&
-                      !isNaN(p[0] as number) && !isNaN(p[1] as number)
-                    ) as [number, number][];
+                    const routePoints = [
+                      [activeHub?.lat || 0, activeHub?.lng || 0],
+                      ...prop.stops.map(s => [s.lat || 0, s.lng || 0]),
+                      [endHub?.lat || 0, endHub?.lng || 0]
+                    ].filter(p => p[0] !== 0 && p[1] !== 0) as [number, number][];
 
                     return (
                       <Card key={prop.truckId} className="border-none shadow-xl overflow-hidden flex flex-col rounded-3xl">
@@ -424,7 +415,7 @@ export default function DespachoInteligentePage() {
                                <Polyline positions={routePoints} color="#4f46e5" weight={4} dashArray="5, 10" />
                                <Marker position={routePoints[0]} icon={hubIcon(true)} />
                                {prop.stops.map((s, sIdx) => {
-                                 if (s.lat === undefined || s.lng === undefined) return null;
+                                 if (!s.lat || !s.lng) return null;
                                  return (<Marker key={s.id} position={[s.lat, s.lng]} icon={clientIcon(sIdx + 1)} />);
                                })}
                                <Marker position={routePoints[routePoints.length - 1]} icon={hubIcon(activeHub?.id === endHub?.id)} />
@@ -433,13 +424,13 @@ export default function DespachoInteligentePage() {
                         </div>
                         <CardHeader className="pb-2">
                             <div className="flex justify-between items-start">
-                              <div><CardTitle className="text-lg font-black font-mono flex items-center gap-2"><Truck size={18} className="text-indigo-600" /> {prop.truckPlate}</CardTitle><CardDescription className="text-[10px] uppercase font-bold text-slate-400">Ruta Asignada #{idx + 1}</CardDescription></div>
+                              <div><CardTitle className="text-lg font-black font-mono flex items-center gap-2"><Truck size={18} className="text-indigo-600" /> {prop.truckPlate}</CardTitle><CardDescription className="text-[10px] uppercase font-bold text-slate-400">Ruta Sugerida #{idx + 1}</CardDescription></div>
                               <Badge className="bg-indigo-50 text-indigo-700 border-none">{prop.stops.length} Remitos</Badge>
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-4 flex-1">
                             <div className="space-y-3">
-                              <p className="text-[9px] font-black uppercase text-slate-400 flex items-center gap-1.5"><ListOrdered size={12}/> Hoja de Ruta Sugerida</p>
+                              <p className="text-[9px] font-black uppercase text-slate-400 flex items-center gap-1.5"><ListOrdered size={12}/> Secuencia de Entrega</p>
                               <div className="space-y-2 relative pl-4 border-l-2 border-dashed border-indigo-100 ml-1">
                                   {prop.stops.map((s, sIdx) => (
                                     <div key={s.id} className="relative">
@@ -459,7 +450,7 @@ export default function DespachoInteligentePage() {
                <div className="p-6 bg-slate-900 text-white rounded-[2.5rem] flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl">
                   <div className="flex items-center gap-4">
                      <div className="w-14 h-14 bg-indigo-500/20 rounded-2xl flex items-center justify-center text-indigo-400 border border-indigo-500/30"><RouteIcon size={32} /></div>
-                     <div><p className="text-xl font-black italic tracking-tighter">EMITIR ÓRDENES DE CARGA</p><p className="text-xs text-white/50">Se generarán {proposals.length} viajes. Los choferes recibirán los remitos en su App.</p></div>
+                     <div><p className="text-xl font-black italic tracking-tighter">CONFIRMAR PLAN DE RUTA</p><p className="text-xs text-white/50">Se crearán {proposals.length} fletes oficiales vinculados a estos remitos.</p></div>
                   </div>
                   <Button size="lg" className="bg-green-600 hover:bg-green-700 w-full md:w-auto font-black h-16 px-10 rounded-2xl shadow-xl shadow-green-900/40 text-lg italic" onClick={handleConfirmAndCreateLoads} disabled={isSaving}>
                     {isSaving ? <Loader2 className="animate-spin mr-2" /> : <Zap size={20} className="mr-2" />}
