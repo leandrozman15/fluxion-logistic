@@ -149,6 +149,7 @@ export interface Expense {
   description: string;
   location: string;
   status: 'registered' | 'approved' | 'rejected';
+  receiptNumber?: string; // NUEVO: N° de factura o ticket
   createdAt: any;
   
   // Fuel Specific Fields
