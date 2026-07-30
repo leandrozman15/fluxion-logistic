@@ -44,6 +44,7 @@ import { Button } from "@/components/ui/button";
 import { useMemo, useState, useEffect } from "react";
 import { doc } from "firebase/firestore";
 import { Tenant } from "@/app/lib/types";
+import { cn } from '@/lib/utils';
 
 function DashboardSidebar() {
   const { setOpenMobile, isMobile } = useSidebar();
@@ -68,7 +69,7 @@ function DashboardSidebar() {
     { title: "Cartera Clientes", icon: Briefcase, href: "/clientes" },
     { title: "Catálogo Productos", icon: Box, href: "/productos" },
     { title: "Cargas y Fletes", icon: Package, href: "/cargas" },
-    { title: "Gestión de Remitos", icon: Files, href: "/cargas" }, // Apunta a fletes para seleccionar cual gestionar
+    { title: "Gestión de Remitos", icon: Files, href: "/remitos" },
     { title: "Mantenimiento", icon: Wrench, href: "/mantenimiento" },
     { title: "Sedes Logísticas", icon: Building2, href: "/sedes" },
     { title: "Análisis de Datos", icon: BarChart3, href: "/analytics" },
@@ -244,5 +245,3 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     </SidebarProvider>
   );
 }
-
-import { cn } from '@/lib/utils';

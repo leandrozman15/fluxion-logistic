@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
@@ -166,8 +167,7 @@ export default function CargasPage() {
                 ) : (
                   filteredLoads.map((load) => {
                     const totalStops = (load.outboundStops?.length || 0) + (load.returnStops?.length || 0);
-                    const totalWeight = (load.outboundStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0) + (load.returnStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0);
-                    const totalDocs = (load.outboundStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0) + (load.returnStops?.reduce((acc, s) => acc + (load.returnStops?.length || 0), 0) || 0);
+                    const totalDocs = (load.outboundStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0) + (load.returnStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0);
                     
                     const truckObj = trucks?.find(t => t.id === load.assignedTruckId);
                     const driverObj = drivers?.find(d => d.id === load.assignedDriverId);
