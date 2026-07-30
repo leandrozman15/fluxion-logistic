@@ -298,6 +298,12 @@ export default function MonitorOperativoPage() {
     iconSize: [32, 32], iconAnchor: [16, 16]
   }) : null;
 
+  const clientIcon = L ? L.divIcon({
+    className: 'custom-client-icon',
+    html: `<div class="bg-green-600 text-white p-2 rounded-lg shadow-xl border-2 border-white flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"/><path d="M3 7v1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7H3"/><path d="M19 21V11"/><path d="M5 21V11"/><path d="M12 21V11"/></svg></div>`,
+    iconSize: [32, 32], iconAnchor: [16, 16]
+  }) : null;
+
   if (!mounted) return <div className="h-[80vh] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
@@ -389,6 +395,17 @@ export default function MonitorOperativoPage() {
               if (!icon) return null;
               return (<Marker key={hub.id} position={[hub.lat || -34.6, hub.lng || -58.3]} icon={icon}><Popup><div className="p-1"><div className="font-bold text-sm">{hub.name}</div><div className="text-xs text-slate-500">{hub.city}</div></div></Popup></Marker>);
             })}
+            {L && clientIcon && clients?.filter(c => c.address?.lat).map((client) => (
+              <Marker key={client.id} position={[client.address.lat!, client.address.lng!]} icon={clientIcon}>
+                <Popup>
+                  <div className="p-1">
+                    <div className="font-bold text-sm">{client.name}</div>
+                    <div className="text-[10px] text-slate-500 uppercase font-bold">{client.address.city}</div>
+                    <div className="text-[9px] text-blue-600 font-bold mt-1 uppercase tracking-tighter">Punto de Entrega</div>
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
             {L && truckIcon && filteredAgenda.filter(l => l.status === 'on_route' && l.tracking?.currentLat).map((load) => (
               <Marker key={load.id} position={[load.tracking!.currentLat, load.tracking!.currentLng]} icon={truckIcon}><Popup><div className="p-1 font-bold text-sm">Orden: {load.orderNumber}</div></Popup></Marker>
             ))}
