@@ -3,22 +3,16 @@
 import { useMemo, useState, useEffect } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useFirestore, useDoc, useCollection } from "@/firebase";
-import { doc, updateDoc, serverTimestamp, collection, query, orderBy, getDoc } from "firebase/firestore";
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+import { doc, collection, query, orderBy, getDoc } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { 
-  DollarSign, ArrowLeft, Loader2, CheckCircle2, 
-  AlertTriangle, Receipt, Download, Truck, User, MapPin, CreditCard, XCircle
+  ArrowLeft, Loader2, Receipt, Download, Truck, User, DollarSign
 } from "lucide-react";
-import { Load, Expense, ExpenseStatus, Driver, Truck as TruckType, Tenant } from "@/app/lib/types";
-import { useToast } from "@/hooks/use-toast";
-import { Progress } from "@/components/ui/progress";
-import { cn } from "@/lib/utils";
+import { Load, Expense, Driver, Truck as TruckType, Tenant } from "@/app/lib/types";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 const CATEGORY_LABELS: Record<string, string> = {
   fuel: 'COMBUSTIBLE',
@@ -34,9 +28,7 @@ export default function LoadWalletPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const db = useFirestore();
-  const { toast } = useToast();
   
-  const [isUpdatingId, setIsUpdatingId] = useState<string | null>(null);
   const [driver, setDriver] = useState<Driver | null>(null);
   const [truck, setTruck] = useState<TruckType | null>(null);
   const [loadingExtras, setLoadingExtras] = useState(false);
@@ -78,7 +70,7 @@ export default function LoadWalletPage() {
           if (tSnap.exists()) setTruck(tSnap.data() as TruckType);
         }
       } catch (e) {
-        console.error("Error fetching extras:", e);
+        console.error(e);
       } finally {
         setLoadingExtras(false);
       }
@@ -90,128 +82,106 @@ export default function LoadWalletPage() {
     if (autoPrint && !loading && !loadingExtras && expenses) {
       const timer = setTimeout(() => {
         window.print();
-      }, 1500);
+      }, 1000);
       return () => clearTimeout(timer);
     }
   }, [autoPrint, loading, loadingExtras, expenses]);
 
-  const downloadPdf = () => {
-    window.print();
-  };
-
-  if (loading || loadingExtras) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
+  if (loading || loadingExtras) return <div className="h-screen flex items-center justify-center gap-2 font-bold animate-pulse text-slate-500"><Loader2 className="animate-spin" /> GENERANDO RENDICIÓN A4...</div>;
   if (!load) return <div className="p-10 text-center">Carga no encontrada.</div>;
 
   const statsApproved = expenses?.filter(e => e.status === 'approved').reduce((acc, exp) => acc + (exp.amount || 0), 0) || 0;
   const balanceFinal = statsApproved - (load.budget?.initialAdvance || 0);
-  const budgetProgress = load.budget?.totalBudget ? (statsApproved / load.budget.totalBudget) * 100 : 0;
 
   return (
     <div className="min-h-screen bg-slate-800 py-8 print:bg-white print:py-0 overflow-y-auto">
-      {/* HEADER WEB - OCULTO EN IMPRESIÓN */}
-      <div className="max-w-[210mm] mx-auto mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-4 print:hidden">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={() => router.back()} className="rounded-full bg-slate-900/50 border-white/20 text-white"><ArrowLeft size={18} /></Button>
-          <div>
-            <h1 className="text-xl font-black text-white italic tracking-tighter uppercase leading-none">Rendición de Gastos</h1>
-            <p className="text-white/40 text-[9px] font-bold uppercase tracking-widest mt-1">Orden #{load.orderNumber}</p>
-          </div>
+      <div className="max-w-[210mm] mx-auto mb-6 flex justify-between items-center px-4 print:hidden">
+        <Button variant="outline" size="icon" onClick={() => router.back()} className="rounded-full bg-slate-900/50 border-white/20 text-white"><ArrowLeft size={18} /></Button>
+        <div className="flex gap-2">
+           <Badge className="bg-blue-600 text-white border-none">PREVIO A4 VECTORIAL</Badge>
+           <Button className="font-black h-11 px-8 rounded-xl shadow-2xl bg-white text-slate-900 hover:bg-blue-50" onClick={() => window.print()}>
+             <Download size={18} className="mr-2" /> GUARDAR PDF A4
+           </Button>
         </div>
-        <Button className="font-black h-11 px-8 rounded-xl shadow-2xl bg-white text-slate-900 hover:bg-blue-50" onClick={downloadPdf}>
-          <Download size={18} className="mr-2" /> GUARDAR PDF A4
-        </Button>
       </div>
 
-      {/* DOCUMENTO PARA IMPRESIÓN (TEXTO NATIVO A4) */}
-      <div className="bg-white shadow-[0_0_50px_rgba(0,0,0,0.5)] print:shadow-none w-[210mm] min-h-[297mm] mx-auto text-black p-12 font-sans border-[8px] border-double border-slate-900 print:border-none overflow-hidden">
-         <div className="flex flex-col h-full w-full">
-            <div className="flex justify-between items-start border-b-[4px] border-black pb-8 mb-8">
-               <div className="flex items-center gap-6">
-                  {tenant?.settings?.logoUrl && <img src={tenant.settings.logoUrl} className="h-20 w-auto" alt="Logo" />}
-                  <div>
-                    <h1 className="text-4xl font-black uppercase italic text-blue-800 leading-none">{tenant?.name || 'LOGÍSTICA AR'}</h1>
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mt-2">Planilla de Rendición Contable de Gastos (A4)</p>
-                    <p className="text-[8px] font-bold text-slate-400 uppercase italic mt-1">Audit Report v3.0 - Texto Vectorial</p>
-                  </div>
-               </div>
-               <div className="text-right">
-                  <div className="bg-black text-white px-5 py-2 text-[11px] font-black uppercase italic mb-3">FINANCIAL AUDIT</div>
-                  <p className="text-3xl font-mono font-black tracking-tighter">OT: {load.orderNumber}</p>
-                  <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">{format(new Date(), "dd/MM/yyyy HH:mm")}</p>
+      {/* DOCUMENTO A4 VECTORIAL */}
+      <div className="bg-white shadow-2xl print:shadow-none w-[210mm] min-h-[297mm] mx-auto text-black border-[12px] border-double border-slate-900 print:border-none p-12 print:p-10 font-sans flex flex-col overflow-hidden box-border">
+         <div className="flex justify-between items-start border-b-[5px] border-black pb-8 mb-8">
+            <div className="flex items-center gap-6">
+               {tenant?.settings?.logoUrl && <img src={tenant.settings.logoUrl} className="h-20 w-auto" alt="Logo" />}
+               <div>
+                 <h1 className="text-4xl font-black uppercase italic text-blue-800 leading-none">{tenant?.name || 'LOGÍSTICA AR'}</h1>
+                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mt-2">Planilla de Rendición Contable de Gastos</p>
+                 <p className="text-[8px] font-bold text-slate-400 uppercase italic mt-1">Audit Report v3.0 - Texto Vectorial A4</p>
                </div>
             </div>
-
-            <div className="grid grid-cols-2 border-[3px] border-black mb-10 bg-slate-50 rounded-sm overflow-hidden">
-               <div className="p-6 border-r-[3px] border-black space-y-1">
-                  <p className="text-[10px] font-black uppercase text-blue-800 tracking-widest">Personal de Conducción</p>
-                  <p className="text-2xl font-black uppercase italic tracking-tight">{driver ? `${driver.lastName}, ${driver.firstName}` : '---'}</p>
-                  <p className="text-xs font-mono font-bold text-slate-500">DNI N° {driver?.dni || '---'}</p>
-               </div>
-               <div className="p-6 space-y-1">
-                  <p className="text-[10px] font-black uppercase text-blue-800 tracking-widest">Unidad de Transporte</p>
-                  <p className="text-2xl font-black uppercase italic tracking-tight">DOMINIO: {truck?.plate || '---'}</p>
-                  <p className="text-xs font-bold text-slate-500 uppercase">{truck?.brand} {truck?.model}</p>
-               </div>
+            <div className="text-right">
+               <div className="bg-black text-white px-5 py-2 text-[11px] font-black uppercase italic mb-3 text-center">FINANCIAL AUDIT</div>
+               <p className="text-3xl font-mono font-black tracking-tighter">OT: {load.orderNumber}</p>
+               <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">{format(new Date(), "dd/MM/yyyy HH:mm")}</p>
             </div>
+         </div>
 
-            <table className="w-full border-[3px] border-black mb-10 text-left border-collapse table-fixed">
-               <thead>
-                  <tr className="bg-slate-200 border-b-[3px] border-black">
-                     <th className="p-4 text-[11px] font-black uppercase w-24">FECHA</th>
-                     <th className="p-4 text-[11px] font-black uppercase">CONCEPTO / LUGAR</th>
-                     <th className="p-4 text-[11px] font-black uppercase w-40">COMPROBANTE</th>
-                     <th className="p-4 text-right text-[11px] font-black uppercase w-32">MONTO (ARS)</th>
-                  </tr>
-               </thead>
-               <tbody className="divide-y-2 divide-black/10">
-                  {expenses?.filter(e => e.status === 'approved').map(exp => (
-                    <tr key={exp.id} className="hover:bg-slate-50/50">
-                       <td className="p-4 text-xs font-mono font-bold">{exp.createdAt?.toDate ? format(exp.createdAt.toDate(), "dd/MM/yy") : '---'}</td>
-                       <td className="p-4 overflow-hidden">
-                          <p className="text-sm font-black uppercase italic leading-none truncate">{CATEGORY_LABELS[exp.category] || exp.category}</p>
-                          <p className="text-[9px] text-slate-500 font-bold uppercase mt-1 truncate">LUGAR: {exp.location}</p>
-                       </td>
-                       <td className="p-4 text-xs font-mono font-black uppercase text-blue-800 truncate">{exp.receiptNumber || 'S/D'}</td>
-                       <td className="p-4 text-right text-sm font-black italic">${exp.amount.toLocaleString()}</td>
-                    </tr>
-                  ))}
-                  {(!expenses || expenses.filter(e => e.status === 'approved').length === 0) && (
-                    <tr>
-                       <td colSpan={4} className="p-10 text-center text-xs font-black text-slate-300 uppercase italic tracking-widest">No hay comprobantes aprobados para este viaje.</td>
-                    </tr>
-                  )}
-               </tbody>
-               <tfoot>
-                  <tr className="border-t-[4px] border-black bg-slate-50">
-                     <td colSpan={3} className="p-5 text-right text-xs font-black uppercase italic tracking-widest">Total Comprobantes Auditados:</td>
-                     <td className="p-5 text-right text-lg font-black italic">${statsApproved.toLocaleString()}</td>
-                  </tr>
-                  <tr>
-                     <td colSpan={3} className="p-3 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Fondos Iniciales (Anticipo):</td>
-                     <td className="p-3 text-right text-lg font-black text-red-600 italic">-${(load.budget?.initialAdvance || 0).toLocaleString()}</td>
-                  </tr>
-                  <tr className="border-t-[3px] border-black bg-blue-50/30">
-                     <td colSpan={3} className="p-6 text-right text-sm font-black uppercase italic tracking-[0.3em] text-blue-900">Total Liquidación Final:</td>
-                     <td className={cn("p-6 text-right text-3xl font-black italic tracking-tighter", balanceFinal >= 0 ? "text-red-700" : "text-green-700")}>
-                        ${Math.abs(balanceFinal).toLocaleString()}
-                     </td>
-                  </tr>
-               </tfoot>
-            </table>
+         <div className="grid grid-cols-2 border-[3px] border-black mb-10 bg-slate-50 rounded-sm overflow-hidden">
+            <div className="p-6 border-r-[3px] border-black space-y-1">
+               <p className="text-[10px] font-black uppercase text-blue-800 tracking-widest">Personal de Conducción</p>
+               <p className="text-2xl font-black uppercase italic tracking-tight">{driver ? `${driver.lastName}, ${driver.firstName}` : '---'}</p>
+               <p className="text-xs font-mono font-bold text-slate-500">DNI N° {driver?.dni || '---'}</p>
+            </div>
+            <div className="p-6 space-y-1">
+               <p className="text-[10px] font-black uppercase text-blue-800 tracking-widest">Unidad de Transporte</p>
+               <p className="text-2xl font-black uppercase italic tracking-tight">DOMINIO: {truck?.plate || '---'}</p>
+            </div>
+         </div>
 
-            <div className="mt-auto pt-16 border-t-[5px] border-black flex justify-between items-end">
-               <div className="text-center w-[42%] space-y-5">
-                  <div className="h-24 border-b-[3px] border-black border-dashed flex items-end justify-center">
-                     <p className="text-[10px] font-bold text-slate-300 pb-2">FIRMA DIGITAL / HOLÓGRAFA</p>
-                  </div>
-                  <p className="text-[10px] font-black uppercase tracking-widest">Conformidad Conductor</p>
+         <table className="w-full border-[3px] border-black mb-10 text-left border-collapse table-fixed">
+            <thead>
+               <tr className="bg-slate-200 border-b-[3px] border-black">
+                  <th className="p-4 text-[11px] font-black uppercase w-24">FECHA</th>
+                  <th className="p-4 text-[11px] font-black uppercase">CONCEPTO / LUGAR</th>
+                  <th className="p-4 text-right text-[11px] font-black uppercase w-32">MONTO (ARS)</th>
+               </tr>
+            </thead>
+            <tbody className="divide-y-2 divide-black/10">
+               {expenses?.filter(e => e.status === 'approved').map(exp => (
+                 <tr key={exp.id}>
+                    <td className="p-4 text-xs font-mono font-bold">{exp.createdAt?.toDate ? format(exp.createdAt.toDate(), "dd/MM/yy") : '---'}</td>
+                    <td className="p-4">
+                       <p className="text-sm font-black uppercase italic leading-none">{CATEGORY_LABELS[exp.category] || exp.category}</p>
+                       <p className="text-[9px] text-slate-500 font-bold uppercase mt-1">LUGAR: {exp.location}</p>
+                    </td>
+                    <td className="p-4 text-right text-sm font-black italic">${exp.amount.toLocaleString()}</td>
+                 </tr>
+               ))}
+               {(!expenses || expenses.filter(e => e.status === 'approved').length === 0) && (
+                 <tr><td colSpan={3} className="p-10 text-center text-xs font-black text-slate-300 uppercase italic tracking-widest">Sin comprobantes aprobados para este viaje.</td></tr>
+               )}
+            </tbody>
+            <tfoot>
+               <tr className="border-t-[4px] border-black bg-slate-50">
+                  <td colSpan={2} className="p-5 text-right text-xs font-black uppercase italic tracking-widest">Total Comprobantes Auditados:</td>
+                  <td className="p-5 text-right text-lg font-black italic">${statsApproved.toLocaleString()}</td>
+               </tr>
+               <tr className="border-t-[3px] border-black bg-blue-50/30">
+                  <td colSpan={2} className="p-6 text-right text-sm font-black uppercase italic tracking-[0.3em] text-blue-900">Total Liquidación Final:</td>
+                  <td className={cn("p-6 text-right text-3xl font-black italic tracking-tighter", balanceFinal >= 0 ? "text-red-700" : "text-green-700")}>
+                     ${Math.abs(balanceFinal).toLocaleString()}
+                  </td>
+               </tr>
+            </tfoot>
+         </table>
+
+         <div className="mt-auto pt-16 border-t-[5px] border-black flex justify-between items-end">
+            <div className="text-center w-[45%] space-y-4">
+               <div className="h-20 border-b-[3px] border-black border-dashed"></div>
+               <p className="text-[10px] font-black uppercase tracking-widest">Firma Conductor</p>
+            </div>
+            <div className="text-center w-[45%] space-y-4">
+               <div className="h-20 border-[3px] border-black flex items-center justify-center bg-slate-50 rotate-[-2deg] shadow-xl">
+                  <p className="text-xs font-black uppercase">AUDITADO OK</p>
                </div>
-               <div className="text-center w-[42%] space-y-5">
-                  <div className="h-24 border-b-[3px] border-black flex items-center justify-center">
-                     <div className="border-[4px] border-black px-8 py-3 text-sm font-black uppercase shadow-xl bg-slate-50 rotate-[-3deg]">AUDITADO OK</div>
-                  </div>
-                  <p className="text-[10px] font-black uppercase tracking-widest">Administración Central Logística Ar</p>
-               </div>
+               <p className="text-[10px] font-black uppercase tracking-widest">Administración Central</p>
             </div>
          </div>
       </div>
@@ -219,13 +189,12 @@ export default function LoadWalletPage() {
       <style jsx global>{`
         @media print {
           @page { size: A4 portrait; margin: 0mm; }
-          body { background: white !important; -webkit-print-color-adjust: exact; color: black !important; width: 210mm; height: 297mm; margin: 0; padding: 0; }
+          body { background: white !important; margin: 0; padding: 0; width: 210mm; height: 297mm; }
           .print\:hidden { display: none !important; }
-          header, nav, aside, footer, button, .sidebar-trigger { display: none !important; }
-          .min-h-screen { min-h-0 !important; padding: 0 !important; background: white !important; }
-          .bg-white { background: white !important; }
-          .w-\[210mm\], .max-w-\[210mm\] { width: 210mm !important; height: 297mm !important; max-width: none !important; margin: 0 !important; border: none !important; box-shadow: none !important; }
-          * { text-shadow: none !important; box-shadow: none !important; }
+          header, nav, aside, footer, button { display: none !important; }
+          .min-h-screen { min-h-0 !important; height: auto !important; padding: 0 !important; }
+          .w-\[210mm\] { width: 210mm !important; height: 297mm !important; max-width: none !important; margin: 0 !important; border: none !important; box-shadow: none !important; }
+          * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
       `}</style>
     </div>
