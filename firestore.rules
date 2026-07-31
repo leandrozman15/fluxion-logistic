@@ -3,17 +3,44 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    /*
-    =====================================================
-    MODO TESTE TOTALMENTE ABERTO (PRODUCTION UNLOCKED)
-    =====================================================
-    Este modo permite acesso irrestrito para facilitar 
-    testes e homologação rápida sem burocracia de perfis.
-    =====================================================
-    */
+    // Función auxiliar para identificar al Super Administrador
+    function isSuperAdmin() {
+      return request.auth != null && request.auth.token.email == 'leozman15@gmail.com';
+    }
 
+    // Reglas para la colección de organizaciones (Tenants)
+    match /tenants/{tenantId} {
+      // Cualquier usuario autenticado puede leer datos básicos de la organización
+      allow read: if request.auth != null;
+      // Solo el SuperAdmin puede crear o modificar organizaciones
+      allow write: if isSuperAdmin();
+
+      // Reglas para usuarios dentro de una organización
+      match /users/{userId} {
+        allow read: if request.auth != null;
+        allow write: if isSuperAdmin() || (request.auth != null && request.auth.uid == userId);
+      }
+
+      // Reglas para subcolecciones específicas de tenant (campañas, outbox, etc.)
+      match /{allSubcollections=**} {
+        allow read, write: if request.auth != null;
+      }
+    }
+
+    // Reglas para colecciones operativas globales (Protección básica por autenticación)
+    match /trucks/{docId} { allow read, write: if request.auth != null; }
+    match /drivers/{docId} { allow read, write: if request.auth != null; }
+    match /clients/{docId} { allow read, write: if request.auth != null; }
+    match /products/{docId} { allow read, write: if request.auth != null; }
+    match /loads/{docId} { allow read, write: if request.auth != null; }
+    match /hubs/{docId} { allow read, write: if request.auth != null; }
+    match /maintenance/{docId} { allow read, write: if request.auth != null; }
+    match /pending_remitos/{docId} { allow read, write: if request.auth != null; }
+    match /global_expenses/{docId} { allow read, write: if request.auth != null; }
+
+    // Bloqueo total para cualquier otra ruta no definida
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if isSuperAdmin();
     }
   }
 }
