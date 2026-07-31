@@ -346,6 +346,7 @@ export interface Driver {
   experienceYears: number;
   phone: string;
   email: string;
+  password?: string; // Contraseña provisoria
   emergencyContact: string;
   emergencyPhone: string;
   address: string;

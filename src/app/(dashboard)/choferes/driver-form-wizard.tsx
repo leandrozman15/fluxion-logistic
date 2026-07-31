@@ -16,7 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Users, ArrowLeft, ArrowRight, Save, Loader2, 
   ShieldCheck, CheckCircle2, User, FileText, 
-  Phone, HeartPulse, Info, X, Briefcase, Upload, AlertTriangle, FileCheck, Camera
+  Phone, HeartPulse, Info, X, Briefcase, Upload, AlertTriangle, FileCheck, Camera, Key, Sparkles
 } from "lucide-react";
 import { Driver, DriverRole } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -68,6 +68,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
     experienceYears: 0,
     phone: "",
     email: "",
+    password: "",
     emergencyContact: "",
     emergencyPhone: "",
     address: "",
@@ -144,6 +145,14 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
     reader.readAsDataURL(file);
   };
 
+  const generateProvisionalPassword = () => {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let pass = "";
+    for (let i = 0; i < 8; i++) pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    setFormData(prev => ({ ...prev, password: pass }));
+    toast({ title: "Contraseña Provisoria Generada" });
+  };
+
   const handleSubmit = async () => {
     if (!db) return;
     setIsSubmitting(true);
@@ -201,7 +210,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
           {[
             { id: 1, label: "Datos Personales", icon: User },
             { id: 2, label: "Habilitaciones", icon: FileText },
-            { id: 3, label: "Contacto", icon: Phone },
+            { id: 3, label: "Acceso y Contacto", icon: Key },
             { id: 4, label: "Documentación", icon: Briefcase }
           ].map((s) => (
             <div key={s.id} className="flex flex-col items-center gap-2 flex-1 relative">
@@ -334,43 +343,77 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
         )}
 
         {step === 3 && (
-          <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Contacto y Salud</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Teléfono Celular</Label>
-                  <Input placeholder="Ej: 11 5555-1234" value={formData.phone ?? ''} onChange={e => setFormData({...formData, phone: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Correo Electrónico</Label>
-                  <Input type="email" placeholder="juan.perez@email.com" value={formData.email ?? ''} onChange={e => setFormData({...formData, email: e.target.value})} />
-                </div>
-              </div>
-              <div className="space-y-4">
-                <div className="p-4 bg-red-50 border border-red-100 rounded-xl space-y-4">
-                  <div className="flex items-center gap-2 text-red-600 font-bold text-xs uppercase">
-                    <HeartPulse size={14} /> Ficha de Emergencia
+          <div className="space-y-6">
+            <Card className="border-none shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Key size={18} className="text-blue-600" /> Credenciales de Acceso al Sistema
+                </CardTitle>
+                <CardDescription>Defina el usuario para que el integrante pueda utilizar la App del Chofer.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label>Email de Login (Corporativo o Personal)</Label>
+                    <Input type="email" placeholder="chofer@logistica-ar.com" value={formData.email ?? ''} onChange={e => setFormData({...formData, email: e.target.value})} />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase font-bold text-red-400">Grupo Sanguíneo</Label>
-                      <Select value={formData.bloodType} onValueChange={(v) => setFormData({...formData, bloodType: v})}>
-                        <SelectTrigger className="bg-white h-8"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {BLOOD_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase font-bold text-red-400">Obra Social</Label>
-                      <Input className="bg-white h-8" value={formData.healthInsurance ?? ''} onChange={e => setFormData({...formData, healthInsurance: e.target.value})} />
+                  <div className="space-y-2">
+                    <Label>Contraseña Provisoria</Label>
+                    <div className="flex gap-2">
+                      <Input placeholder="••••••••" value={formData.password ?? ''} onChange={e => setFormData({...formData, password: e.target.value})} />
+                      <Button variant="secondary" size="icon" onClick={generateProvisionalPassword} title="Generar Contraseña">
+                        <Sparkles size={16} className="text-blue-600" />
+                      </Button>
                     </div>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+                <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-3">
+                   <Info size={18} className="text-blue-600 shrink-0 mt-0.5" />
+                   <p className="text-[10px] text-blue-700 leading-relaxed font-medium">
+                     El sistema registrará estas credenciales. Al finalizar el alta, informe al chofer su email y contraseña para que pueda sincronizar su hoja de ruta.
+                   </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-sm">
+              <CardHeader><CardTitle>Contacto de Emergencia y Salud</CardTitle></CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Teléfono Celular</Label>
+                    <Input placeholder="Ej: 11 5555-1234" value={formData.phone ?? ''} onChange={e => setFormData({...formData, phone: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Dirección Residencial</Label>
+                    <Input placeholder="Calle, Altura, Localidad" value={formData.address ?? ''} onChange={e => setFormData({...formData, address: e.target.value})} />
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <div className="p-4 bg-red-50 border border-red-100 rounded-xl space-y-4">
+                    <div className="flex items-center gap-2 text-red-600 font-bold text-xs uppercase">
+                      <HeartPulse size={14} /> Ficha de Emergencia
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase font-bold text-red-400">Grupo Sanguíneo</Label>
+                        <Select value={formData.bloodType} onValueChange={(v) => setFormData({...formData, bloodType: v})}>
+                          <SelectTrigger className="bg-white h-8"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {BLOOD_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase font-bold text-red-400">Obra Social</Label>
+                        <Input className="bg-white h-8" value={formData.healthInsurance ?? ''} onChange={e => setFormData({...formData, healthInsurance: e.target.value})} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {step === 4 && (
