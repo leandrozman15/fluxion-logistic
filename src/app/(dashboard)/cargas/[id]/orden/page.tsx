@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useMemo, useEffect, useState } from "react";
+import { useMemo, useEffect, useState, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useFirestore, useDoc } from "@/firebase";
 import { doc, getDoc } from "firebase/firestore";
@@ -14,7 +14,7 @@ import { Load, Driver, Truck as TruckType, Tenant } from "@/app/lib/types";
 import { QRCodeSVG } from "qrcode.react";
 import { format } from "date-fns";
 
-export default function LoadOrderDocumentPage() {
+function LoadOrderContent() {
   const { id } = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -235,5 +235,13 @@ export default function LoadOrderDocumentPage() {
         }
       `}</style>
     </div>
+  );
+}
+
+export default function LoadOrderDocumentPage() {
+  return (
+    <Suspense fallback={<div className="h-screen flex items-center justify-center gap-2 font-bold animate-pulse text-slate-500"><Loader2 className="animate-spin" /> GENERANDO HOJA DE RUTA A4...</div>}>
+      <LoadOrderContent />
+    </Suspense>
   );
 }

@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useFirestore, useDoc, useCollection } from "@/firebase";
 import { doc, collection, query, orderBy, getDoc } from "firebase/firestore";
@@ -24,7 +24,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   other: 'OTROS'
 };
 
-export default function LoadWalletPage() {
+function LoadWalletContent() {
   const { id } = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -106,7 +106,6 @@ export default function LoadWalletPage() {
         </div>
       </div>
 
-      {/* DOCUMENTO A4 VECTORIAL */}
       <div className="bg-white shadow-2xl print:shadow-none w-[210mm] min-h-[297mm] mx-auto text-black border-[12px] border-double border-slate-900 print:border-none p-12 print:p-10 font-sans flex flex-col overflow-hidden box-border">
          <div className="flex justify-between items-start border-b-[5px] border-black pb-8 mb-8">
             <div className="flex items-center gap-6">
@@ -204,5 +203,13 @@ export default function LoadWalletPage() {
         }
       `}</style>
     </div>
+  );
+}
+
+export default function LoadWalletPage() {
+  return (
+    <Suspense fallback={<div className="h-screen flex items-center justify-center gap-2 font-bold animate-pulse text-slate-500"><Loader2 className="animate-spin" /> GENERANDO RENDICIÓN A4...</div>}>
+      <LoadWalletContent />
+    </Suspense>
   );
 }

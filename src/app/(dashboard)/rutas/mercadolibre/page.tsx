@@ -1,10 +1,10 @@
 
 'use client';
 
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useFirestore, useUser } from "@/firebase";
-import { collection, serverTimestamp, doc, setDoc, updateDoc, getDoc } from "firebase/firestore";
+import { collection, serverTimestamp, doc, setDoc, updateDoc } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,10 +18,9 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { parseLogisticsLabel, type LabelOutput } from "@/ai/flows/parse-logistics-label-flow";
 import { cn } from "@/lib/utils";
-import { calculateDistance } from "@/lib/utils/tracking-math";
 import { format } from "date-fns";
 
-export default function MercadoLibreDriverPage() {
+function MercadoLibreScanner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const db = useFirestore();
@@ -288,5 +287,13 @@ export default function MercadoLibreDriverPage() {
          </div>
        )}
     </div>
+  );
+}
+
+export default function MercadoLibreDriverPage() {
+  return (
+    <Suspense fallback={<div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-yellow-500" /></div>}>
+      <MercadoLibreScanner />
+    </Suspense>
   );
 }

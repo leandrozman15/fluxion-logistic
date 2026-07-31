@@ -1,10 +1,10 @@
 
 'use client';
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, Suspense } from "react";
 import { useFirestore, useDoc, useCollection, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc, updateDoc, runTransaction, serverTimestamp, collection, query, orderBy, increment, addDoc, where, getDocs, limit } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp, collection, query, where, addDoc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,27 +12,24 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { 
-  Building2, Globe, MapPin, Mail, Phone, ExternalLink, 
-  Loader2, Send, BrainCircuit, MessageCircle, 
-  ArrowLeft, Clock, Cpu, FileSearch, RefreshCw, Plus, UserPlus, Trash2, Edit, Sparkles, SearchCode
+  Globe, MapPin, Mail, Phone, ExternalLink, 
+  Loader2, MessageCircle, 
+  ArrowLeft, SearchCode, RefreshCw, UserPlus, Trash2, Edit, Sparkles
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Prospect, ProspectStatus, Contact } from "@/app/lib/types";
-import { useParams, useSearchParams, useRouter } from "next/navigation";
+import { Prospect, Contact } from "@/app/lib/types";
+import { useParams, useRouter } from "next/navigation";
 import { analyzeWebsiteContent } from "@/ai/flows/analyze-website-content-flow";
 import { normalizePhoneBR, buildWaMeUrl, buildWhatsAppMessage } from "@/lib/utils/whatsapp";
-import { calculateNextAction } from "@/lib/utils/nba";
 import { calculateEffectiveScore } from "@/lib/utils/scoring";
 import Link from "next/link";
-import { getSegmentKey } from "@/lib/utils/learning-loop";
 import { fetchCnpjData } from "@/services/receita-ws";
 import { formatSafeDate, toSafeDate } from "@/lib/utils/date-utils";
 
-export default function ProspectDetailPage() {
+function ProspectDetailContent() {
   const { id } = useParams();
-  const searchParams = useSearchParams();
   const db = useFirestore();
   const { tenantId } = useTenant();
   const { user } = useUser();
@@ -56,7 +53,6 @@ export default function ProspectDetailPage() {
 
   const { data: prospect, loading } = useDoc<Prospect>(prospectRef);
 
-  // Consulta simplificada para evitar erro de índice
   const historyQuery = useMemo(() => {
     if (!db || !tenantId || !id) return null;
     return query(
@@ -65,9 +61,8 @@ export default function ProspectDetailPage() {
     );
   }, [db, tenantId, id]);
 
-  const { data: rawEvents, loading: eventsLoading } = useCollection<any>(historyQuery);
+  const { data: rawEvents } = useCollection<any>(historyQuery);
 
-  // Ordenação manual em memória
   const sortedEvents = useMemo(() => {
     if (!rawEvents) return [];
     return [...rawEvents].sort((a, b) => {
@@ -96,7 +91,7 @@ export default function ProspectDetailPage() {
       await updateDoc(prospectRef, updates);
       toast({ title: "Dados Sincronizados!" });
     } catch (e: any) {
-      toast({ variant: "destructive", title: "Erro na sincronização", description: e.message });
+      toast({ variant: "destructive", title: "Erro na sincronización", description: e.message });
     } finally {
       setIsSyncingReceita(false);
     }
@@ -119,7 +114,7 @@ export default function ProspectDetailPage() {
         updatedAt: new Date().toISOString()
       });
 
-      toast({ title: "Site Analisado!", description: "Inteligência extraída com sucesso." });
+      toast({ title: "Site Analisado!", description: "Inteligencia extraída com éxito." });
     } catch (e: any) {
       toast({ variant: "destructive", title: "Erro na análise web", description: e.message });
     } finally {
@@ -363,10 +358,6 @@ export default function ProspectDetailPage() {
       {/* Dialog para Contatos */}
       <Dialog open={isContactDialogOpen} onOpenChange={setIsContactDialogOpen}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editingContactIndex !== null ? "Editar Contato" : "Novo Contato"}</DialogTitle>
-            <DialogDescription>Cadastre o telefone com DDD para habilitar o WhatsApp.</DialogDescription>
-          </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label>Nome Completo</Label>
@@ -397,7 +388,6 @@ export default function ProspectDetailPage() {
       {/* Dialog para WhatsApp */}
       <Dialog open={isWhatsAppDialogOpen} onOpenChange={setIsWhatsAppDialogOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Mensagem para {prospect.companyName}</DialogTitle></DialogHeader>
           <Textarea className="min-h-[150px] mt-4" value={whatsAppDraft} onChange={e => setWhatsAppDraft(e.target.value)} />
           <DialogFooter>
             <Button onClick={handleFinalizeWhatsApp} className="bg-green-600 w-full">Abrir WhatsApp Web</Button>
@@ -405,5 +395,13 @@ export default function ProspectDetailPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function ProspectDetailPage() {
+  return (
+    <Suspense fallback={<div className="flex h-[60vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin" /></div>}>
+      <ProspectDetailContent />
+    </Suspense>
   );
 }
