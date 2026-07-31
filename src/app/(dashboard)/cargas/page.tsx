@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, orderBy, deleteDoc, doc } from "firebase/firestore";
+import { collection, query, orderBy, deleteDoc, doc, where, writeBatch, getDocs } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Load, LoadStatus, Truck as TruckType, Driver } from "@/app/lib/types";
+import { Load, LoadStatus, Truck as TruckType, Driver, PendingRemito } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -88,15 +88,34 @@ export default function CargasPage() {
   const handleDelete = async (id: string) => {
     if (!db || !id) return;
     
-    const ok = window.confirm("¿Está seguro de eliminar esta operación definitivamente? Esta acción no se puede deshacer.");
+    const ok = window.confirm("¿Está seguro de eliminar esta operación? Los remitos vinculados volverán a estar pendientes para ser reprogramados.");
     if (!ok) return;
 
     try {
-      await deleteDoc(doc(db, "loads", id));
-      toast({ title: "Operación eliminada con éxito" });
+      const batch = writeBatch(db);
+      
+      // 1. Buscar remitos asociados a este flete
+      const remitosQuery = query(collection(db, "pending_remitos"), where("loadId", "==", id));
+      const remitosSnap = await getDocs(remitosQuery);
+      
+      remitosSnap.docs.forEach(docSnap => {
+        // 2. Devolver remito a estado 'pending' y quitar vinculación
+        batch.update(docSnap.ref, {
+          status: 'pending',
+          loadId: null,
+          dispatchedDate: null,
+          updatedAt: serverTimestamp()
+        });
+      });
+
+      // 3. Eliminar el flete
+      batch.delete(doc(db, "loads", id));
+
+      await batch.commit();
+      toast({ title: "Operación eliminada", description: "Los remitos han sido devueltos al buzón de pendientes." });
     } catch (e) {
       console.error("Delete error:", e);
-      toast({ variant: "destructive", title: "Error al intentar eliminar el flete" });
+      toast({ variant: "destructive", title: "Error al eliminar la operación" });
     }
   };
 
