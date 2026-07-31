@@ -74,6 +74,7 @@ export interface TenantSettings {
   mapProvider?: MapProvider;
   mapApiKey?: string;
   fleetEngineEnabled?: boolean;
+  gpsIntervalSeconds?: number;
   scoringWeights?: { effective: number; ai: number };
   dailyTopLimit?: number;
   onboardingCompleted?: boolean;

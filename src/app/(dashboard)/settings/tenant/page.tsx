@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Save, Map as MapIcon, Globe, ShieldCheck, Key, Settings2, Building2, Phone, Camera, Image as ImageIcon } from "lucide-react";
+import { Loader2, Save, Map as MapIcon, Globe, ShieldCheck, Key, Settings2, Building2, Phone, Camera, Image as ImageIcon, Satellite } from "lucide-react";
 import { Tenant, TenantSettings, MapProvider } from "@/app/lib/types";
 import { compressImage } from "@/lib/utils/image-compression";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -45,6 +45,7 @@ export default function TenantSettingsPage() {
           mapProvider: tenantData.settings.mapProvider || 'google',
           mapApiKey: tenantData.settings.mapApiKey || '',
           fleetEngineEnabled: tenantData.settings.fleetEngineEnabled ?? false,
+          gpsIntervalSeconds: tenantData.settings.gpsIntervalSeconds || 60,
           centralPhone: tenantData.settings.centralPhone || '',
           logoUrl: tenantData.settings.logoUrl || '',
           cuit: tenantData.settings.cuit || ''
@@ -54,6 +55,7 @@ export default function TenantSettingsPage() {
           mapProvider: 'google',
           mapApiKey: '',
           fleetEngineEnabled: false,
+          gpsIntervalSeconds: 60,
           centralPhone: '',
           logoUrl: '',
           cuit: ''
@@ -158,6 +160,33 @@ export default function TenantSettingsPage() {
                       <Input value={settings.centralPhone} onChange={e => setSettings({...settings, centralPhone: e.target.value})} placeholder="Ej: 0800-555-1234" />
                       <p className="text-[10px] text-slate-400 italic">Este número aparecerá en la App del Chofer para comunicación directa.</p>
                    </div>
+                </div>
+             </div>
+          </CardContent>
+        </Card>
+
+        {/* Parámetros de Telemetría */}
+        <Card className="border-blue-100 shadow-sm">
+          <CardHeader>
+             <CardTitle className="flex items-center gap-2">
+               <Satellite className="w-5 h-5 text-blue-600" /> Parámetros de Telemetría
+             </CardTitle>
+             <CardDescription>Regule la intensidad del rastreo GPS para toda la flota.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                   <Label className="flex items-center gap-2">Intervalo de Disparo GPS (Segundos)</Label>
+                   <Input 
+                    type="number" 
+                    min="5" 
+                    max="300"
+                    placeholder="Estandar: 60" 
+                    className="bg-white font-bold"
+                    value={settings.gpsIntervalSeconds} 
+                    onChange={e => setSettings({...settings, gpsIntervalSeconds: parseInt(e.target.value) || 60})}
+                   />
+                   <p className="text-[10px] text-slate-400 italic">Menos segundos = mayor precisión pero más consumo de batería.</p>
                 </div>
              </div>
           </CardContent>

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -30,7 +31,7 @@ import {
   Coffee, Moon, Car, Battery, CloudRain, Construction, HelpCircle,
   Siren, CircleCheck, ListOrdered, XCircle,
   Timer, Play, Home
-} from "lucide-react";
+} from "lucide-center";
 import { Load, Expense, ExpenseCategory, ProofOfDelivery, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -132,6 +133,7 @@ export default function RouteDetailPage() {
     if (load) loadRefData.current = load;
   }, [load]);
 
+  // INTERVALO GPS REGULABLE SEGÚN CONFIGURACIÓN
   useEffect(() => {
     if (!load || (load.status !== 'on_route' && load.status !== 'on_pause') || !loadRef) return;
 
@@ -172,17 +174,17 @@ export default function RouteDetailPage() {
             updatedAt: serverTimestamp()
           });
         },
-        () => {
-          // Silently handle GPS errors to avoid blocking the UI
-        },
+        () => {},
         { enableHighAccuracy: true, timeout: 15000 }
       );
     };
 
+    const intervalSeconds = tenant?.settings?.gpsIntervalSeconds || 60;
     updateLocation();
-    const intervalId = setInterval(updateLocation, 60000);
+    const intervalId = setInterval(updateLocation, intervalSeconds * 1000);
+    
     return () => clearInterval(intervalId);
-  }, [load?.status, loadRef]);
+  }, [load?.status, loadRef, tenant?.settings?.gpsIntervalSeconds]);
 
   const allOutboundDone = useMemo(() => {
     return load?.outboundStops?.every(s => !!s.deliveredAt);
@@ -198,6 +200,10 @@ export default function RouteDetailPage() {
     return load.outboundStops[currentStopIndex];
   }, [load?.outboundStops, currentStopIndex]);
 
+  const isReturning = useMemo(() => {
+    return !!load?.tracking?.returnStartedAt;
+  }, [load?.tracking?.returnStartedAt]);
+
   const handleStartTrip = async () => {
     if (!loadRef || !load) return;
     setIsUpdating(true);
@@ -205,7 +211,6 @@ export default function RouteDetailPage() {
       const dest = load.outboundStops.find(s => !s.deliveredAt) || load.outboundStops[0];
       if (!dest) throw new Error("No hay destinos configurados");
 
-      // Abrir navegación nativa
       const lat = dest.lat || -34.6;
       const lng = dest.lng || -58.3;
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
@@ -213,7 +218,6 @@ export default function RouteDetailPage() {
         ? `maps://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`
         : `google.navigation:q=${lat},${lng}`;
       
-      // Intentar calcular distancia inicial si tenemos API KEY
       let distanceRemaining = 0;
       if (tenant?.settings?.mapApiKey && load.origin.lat) {
         const routeInfo = await calculateRouteDetails(
