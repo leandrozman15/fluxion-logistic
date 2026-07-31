@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection, useUser } from "@/firebase";
-import { doc, updateDoc, serverTimestamp, collection, query, addDoc, arrayUnion, increment, orderBy } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp, collection, query, addDoc, arrayUnion, increment, orderBy, getDoc } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,7 +31,7 @@ import {
   Siren, CircleCheck, ListOrdered, XCircle,
   Timer, Play, Home
 } from "lucide-react";
-import { Load, Expense, ExpenseCategory, ProofOfDelivery } from "@/app/lib/types";
+import { Load, Expense, ExpenseCategory, ProofOfDelivery, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { compressImage } from "@/lib/utils/image-compression";
@@ -39,6 +39,7 @@ import React from 'react';
 import { formatSafeDate, toSafeDate } from "@/lib/utils/date-utils";
 import { SignaturePad } from "@/components/SignaturePad";
 import { calculateDistance } from "@/lib/utils/tracking-math";
+import { calculateRouteDetails } from "@/services/google-maps";
 
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
@@ -117,6 +118,9 @@ export default function RouteDetailPage() {
   const loadRef = useMemo(() => (db && id) ? doc(db, "loads", id as string) : null, [db, id]);
   const { data: load, loading: loadLoading } = useDoc<Load>(loadRef);
 
+  const tenantRef = useMemo(() => (db) ? doc(db, "tenants", "default_tenant") : null, [db]);
+  const { data: tenant } = useDoc<Tenant>(tenantRef);
+
   const expensesQuery = useMemo(() => {
     if (!db || !id) return null;
     return query(collection(db, "loads", id as string, "expenses"), orderBy("createdAt", "desc"));
@@ -163,6 +167,7 @@ export default function RouteDetailPage() {
             "tracking.currentSpeed": currentSpeed,
             "tracking.lastUpdateAt": serverTimestamp(),
             "tracking.distanceTraveledKm": increment(distanceDelta),
+            "tracking.distanceRemainingKm": increment(-distanceDelta),
             "tracking.history": arrayUnion(newPoint),
             updatedAt: serverTimestamp()
           });
@@ -194,15 +199,39 @@ export default function RouteDetailPage() {
   }, [load?.outboundStops, currentStopIndex]);
 
   const handleStartTrip = async () => {
-    if (!loadRef) return;
+    if (!loadRef || !load) return;
     setIsUpdating(true);
     try {
+      const dest = load.outboundStops.find(s => !s.deliveredAt) || load.outboundStops[0];
+      if (!dest) throw new Error("No hay destinos configurados");
+
+      // Abrir navegación nativa
+      const lat = dest.lat || -34.6;
+      const lng = dest.lng || -58.3;
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      const url = isIOS 
+        ? `maps://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`
+        : `google.navigation:q=${lat},${lng}`;
+      
+      // Intentar calcular distancia inicial si tenemos API KEY
+      let distanceRemaining = 0;
+      if (tenant?.settings?.mapApiKey && load.origin.lat) {
+        const routeInfo = await calculateRouteDetails(
+          [`${load.origin.lat},${load.origin.lng}`, `${lat},${lng}`],
+          tenant.settings.mapApiKey
+        );
+        if (routeInfo) distanceRemaining = routeInfo.distanceKm;
+      }
+
       await updateDoc(loadRef, { 
         status: 'on_route',
         "tracking.tripStartedAt": serverTimestamp(),
+        "tracking.distanceRemainingKm": distanceRemaining || increment(0),
         updatedAt: serverTimestamp() 
       });
-      toast({ title: "Viaje Iniciado", description: "Rastreo GPS activo." });
+
+      window.location.href = url;
+      toast({ title: "Viaje Iniciado", description: "Navegación GPS activada." });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al iniciar viaje" });
     } finally {
@@ -214,20 +243,31 @@ export default function RouteDetailPage() {
     if (!load || !loadRef) return;
     setIsUpdating(true);
     try {
-      await updateDoc(loadRef, {
-        "tracking.returnStartedAt": serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-      toast({ title: "Retorno a Base Iniciado", description: "Kilometraje de vuelta en seguimiento." });
-      
       const lat = load.returnDestination?.lat || load.origin.lat || -34.6;
       const lng = load.returnDestination?.lng || load.origin.lng || -58.3;
+
+      let distanceRemaining = 0;
+      if (tenant?.settings?.mapApiKey && load.tracking?.currentLat) {
+        const routeInfo = await calculateRouteDetails(
+          [`${load.tracking.currentLat},${load.tracking.currentLng}`, `${lat},${lng}`],
+          tenant.settings.mapApiKey
+        );
+        if (routeInfo) distanceRemaining = routeInfo.distanceKm;
+      }
+
+      await updateDoc(loadRef, {
+        "tracking.returnStartedAt": serverTimestamp(),
+        "tracking.distanceRemainingKm": distanceRemaining || increment(0),
+        updatedAt: serverTimestamp()
+      });
+
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
       const url = isIOS 
         ? `maps://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`
         : `google.navigation:q=${lat},${lng}`;
       
       window.location.href = url;
+      toast({ title: "Retorno Iniciado", description: "Navegación hacia base activa." });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al iniciar retorno" });
     } finally {
@@ -404,8 +444,6 @@ export default function RouteDetailPage() {
   if (loadLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!load) return <div className="p-10 text-center">Viaje no encontrado.</div>;
 
-  const isReturning = !!load.tracking?.returnStartedAt;
-
   return (
     <div className="max-w-md mx-auto space-y-6 pb-32 px-2">
       <div className="flex items-center justify-between pt-4 px-2">
@@ -508,7 +546,8 @@ export default function RouteDetailPage() {
                      </div>
                   </div>
                   <div className="text-right">
-                     <Badge variant="outline" className="bg-white text-blue-600 border-blue-100 text-[8px] font-black uppercase">Sensor Vivo</Badge>
+                     <p className="text-[9px] font-black text-slate-400 uppercase leading-none">Restante</p>
+                     <p className="text-sm font-black text-blue-600 mt-1">{load.tracking?.distanceRemainingKm?.toFixed(1) || '--'} KM</p>
                   </div>
                </CardContent>
             </Card>
