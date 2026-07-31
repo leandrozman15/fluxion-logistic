@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -29,22 +29,14 @@ import {
   Trash2, 
   Globe, 
   Lock, 
-  Users,
-  ExternalLink,
-  ChevronRight,
-  TrendingUp,
-  DollarSign,
   MoreVertical,
-  Settings,
   UserPlus,
-  BarChart3,
   CreditCard,
-  Calendar,
-  Power,
-  Key,
   AlertTriangle,
   Save,
-  CheckCircle2
+  CheckCircle2,
+  TrendingUp,
+  DollarSign
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tenant, AppUser } from "@/app/lib/types";
@@ -87,7 +79,7 @@ export default function SuperAdminTenantsPage() {
 
   // Form states for Bootstrap Admin
   const [adminEmail, setAdminEmail] = useState("");
-  const [adminPass, setAdminPass] = useState("LogisticaAr2026");
+  const [adminPass] = useState("LogisticaAr2026");
 
   // Form states for Subscription
   const [subStatus, setSubStatus] = useState<'active' | 'suspended'>('active');
@@ -128,10 +120,10 @@ export default function SuperAdminTenantsPage() {
         expirationDate: expDate,
         updatedAt: serverTimestamp()
       });
-      toast({ title: "Suscripción Actualizada", description: "Los cambios han sido aplicados globalmente." });
+      toast({ title: "Suscripción Actualizada" });
       setIsSubsDialogOpen(false);
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al actualizar suscripción" });
+      toast({ variant: "destructive", title: "Error al actualizar" });
     } finally {
       setIsSubmitting(false);
     }
@@ -155,7 +147,7 @@ export default function SuperAdminTenantsPage() {
       };
 
       await setDoc(userRef, newAdmin);
-      toast({ title: "Usuario Creado", description: `Se ha habilitado acceso manager para ${adminEmail}` });
+      toast({ title: "Usuario Creado", description: `Acceso manager habilitado para ${adminEmail}` });
       setIsAdminDialogOpen(false);
       setAdminEmail("");
     } catch (e) {
@@ -250,10 +242,10 @@ export default function SuperAdminTenantsPage() {
             <TableHeader className="bg-slate-50/30">
               <TableRow>
                 <TableHead className="px-8 text-[10px] font-black uppercase tracking-widest h-14">Organización</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Estado</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Usuarios</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest">Plan</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest">Vencimiento</TableHead>
+                <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Plan</TableHead>
+                <TableHead className="text-[10px] font-black uppercase tracking-widest text-right">Mensualidad</TableHead>
+                <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Vencimiento</TableHead>
                 <TableHead className="text-right pr-8 text-[10px] font-black uppercase tracking-widest">Gestión</TableHead>
               </TableRow>
             </TableHeader>
@@ -280,17 +272,9 @@ export default function SuperAdminTenantsPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-center">
-                       <Badge className={cn(
-                         "text-[8px] font-black uppercase italic border-none",
-                         tenant.subscriptionStatus === 'suspended' ? "bg-red-600 text-white" : "bg-green-600 text-white"
-                       )}>
-                         {tenant.subscriptionStatus === 'suspended' ? 'SUSPENDIDO' : 'ACTIVO'}
-                       </Badge>
-                    </TableCell>
-                    <TableCell className="text-center">
                       <TenantUserCount tenantId={tenant.id} />
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="text-center">
                       <Badge className={cn(
                         "text-[9px] font-black uppercase px-4 py-1.5 border-none shadow-sm italic",
                         tenant.plan === 'pro' ? "bg-slate-900 text-blue-400" : "bg-slate-200 text-slate-600"
@@ -298,10 +282,25 @@ export default function SuperAdminTenantsPage() {
                         {tenant.plan === 'pro' ? 'Industrial PRO' : 'Free Tier'}
                       </Badge>
                     </TableCell>
-                    <TableCell>
-                       <div className="flex flex-col">
-                          <span className="font-black text-slate-700 text-xs">{tenant.expirationDate || 'Ilimitado'}</span>
-                          {tenant.activationDate && <span className="text-[8px] text-slate-400 font-bold">ACT: {tenant.activationDate}</span>}
+                    <TableCell className="text-right">
+                       <span className="font-black text-slate-900 text-sm italic">
+                         ${(tenant.monthlyFee || 0).toLocaleString()}
+                       </span>
+                    </TableCell>
+                    <TableCell className="text-center">
+                       <div className="flex flex-col items-center">
+                          <span className={cn(
+                            "font-black text-xs",
+                            tenant.subscriptionStatus === 'suspended' ? "text-red-600" : "text-slate-700"
+                          )}>
+                            {tenant.expirationDate || 'Ilimitado'}
+                          </span>
+                          <Badge variant="outline" className={cn(
+                            "text-[7px] font-black uppercase px-1 h-3 mt-1",
+                            tenant.subscriptionStatus === 'suspended' ? "bg-red-50 text-red-600" : "bg-green-50 text-green-600"
+                          )}>
+                             {tenant.subscriptionStatus === 'suspended' ? 'SUSPENDIDO' : 'ACTIVO'}
+                          </Badge>
                        </div>
                     </TableCell>
                     <TableCell className="text-right pr-8">
@@ -314,11 +313,11 @@ export default function SuperAdminTenantsPage() {
                         <DropdownMenuContent align="end" className="w-64 p-2 rounded-2xl shadow-2xl border-none">
                           <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Acciones Rápidas</DropdownMenuLabel>
                           
-                          <DropdownMenuItem onClick={() => openAdminModal(tenant)} className="font-bold h-11 rounded-xl">
+                          <DropdownMenuItem onSelect={(e) => { e.preventDefault(); openAdminModal(tenant); }} className="font-bold h-11 rounded-xl cursor-pointer">
                             <UserPlus size={16} className="mr-3 text-blue-600" /> Crear Primer Usuario
                           </DropdownMenuItem>
 
-                          <DropdownMenuItem onClick={() => openSubsModal(tenant)} className="font-bold h-11 rounded-xl">
+                          <DropdownMenuItem onSelect={(e) => { e.preventDefault(); openSubsModal(tenant); }} className="font-bold h-11 rounded-xl cursor-pointer">
                             <CreditCard size={16} className="mr-3 text-blue-600" /> Gestionar Suscripción
                           </DropdownMenuItem>
                           
@@ -326,8 +325,8 @@ export default function SuperAdminTenantsPage() {
                           
                           <DropdownMenuLabel className="text-[10px] font-black uppercase text-red-400 tracking-widest p-2">Zona de Peligro</DropdownMenuLabel>
                           <DropdownMenuItem 
-                            className="text-red-600 focus:bg-red-50 focus:text-red-600 font-bold h-11 rounded-xl"
-                            onClick={() => handleDeleteTenant(tenant.id, tenant.name)}
+                            className="text-red-600 focus:bg-red-50 focus:text-red-600 font-bold h-11 rounded-xl cursor-pointer"
+                            onSelect={() => handleDeleteTenant(tenant.id, tenant.name)}
                           >
                             <Trash2 size={16} className="mr-3" /> Eliminar Definitiva
                           </DropdownMenuItem>
@@ -344,7 +343,7 @@ export default function SuperAdminTenantsPage() {
 
       {/* DIALOG: GESTIÓN DE SUSCRIPCIÓN */}
       <Dialog open={isSubsDialogOpen} onOpenChange={setIsSubsDialogOpen}>
-        <DialogContent className="max-w-md rounded-[2.5rem]">
+        <DialogContent className="max-w-md rounded-[2.5rem] outline-none">
            <DialogHeader>
               <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Control de Servicio</DialogTitle>
               <DialogDescription className="text-[10px] font-bold uppercase">{selectedTenant?.name}</DialogDescription>
@@ -363,12 +362,12 @@ export default function SuperAdminTenantsPage() {
 
               <div className="grid grid-cols-2 gap-4">
                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-400">Fecha Activación</Label>
-                    <Input type="date" value={actDate} onChange={e => setActDate(e.target.value)} className="bg-slate-50 border-none rounded-xl" />
+                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Fecha Activación</Label>
+                    <Input type="date" value={actDate} onChange={e => setActDate(e.target.value)} className="bg-slate-50 border-none rounded-xl h-10" />
                  </div>
                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-400">Fecha Vencimiento</Label>
-                    <Input type="date" value={expDate} onChange={e => setExpDate(e.target.value)} className="bg-slate-50 border-none rounded-xl" />
+                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Fecha Vencimiento</Label>
+                    <Input type="date" value={expDate} onChange={e => setExpDate(e.target.value)} className="bg-slate-50 border-none rounded-xl h-10" />
                  </div>
               </div>
 
@@ -381,10 +380,10 @@ export default function SuperAdminTenantsPage() {
                 </div>
               )}
            </div>
-           <DialogFooter>
-              <Button variant="ghost" onClick={() => setIsSubsDialogOpen(false)} className="font-bold text-slate-400 uppercase">Cerrar</Button>
-              <Button onClick={handleUpdateSubscription} disabled={isSubmitting} className="bg-blue-600 h-12 px-8 rounded-xl font-black uppercase">
-                 {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />}
+           <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="ghost" onClick={() => setIsSubsDialogOpen(false)} className="font-bold text-slate-400 uppercase text-xs">Cerrar</Button>
+              <Button onClick={handleUpdateSubscription} disabled={isSubmitting} className="bg-blue-600 h-12 px-8 rounded-xl font-black uppercase shadow-lg shadow-blue-100">
+                 {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" size={16} />}
                  GUARDAR CAMBIOS
               </Button>
            </DialogFooter>
@@ -393,14 +392,14 @@ export default function SuperAdminTenantsPage() {
 
       {/* DIALOG: BOOTSTRAP ADMIN */}
       <Dialog open={isAdminDialogOpen} onOpenChange={setIsAdminDialogOpen}>
-        <DialogContent className="max-w-md rounded-[2.5rem]">
+        <DialogContent className="max-w-md rounded-[2.5rem] outline-none">
            <DialogHeader>
               <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Habilitar Primer Usuario</DialogTitle>
               <DialogDescription className="text-[10px] font-bold uppercase">Creación manual de Manager para {selectedTenant?.name}</DialogDescription>
            </DialogHeader>
            <div className="space-y-6 py-6">
               <div className="space-y-2">
-                 <Label className="text-[10px] font-black uppercase text-slate-400">Email del Usuario (Root)</Label>
+                 <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Email del Usuario (Root)</Label>
                  <Input 
                    type="email" 
                    className="h-12 bg-slate-50 border-none rounded-xl font-bold" 
@@ -410,38 +409,22 @@ export default function SuperAdminTenantsPage() {
                  />
               </div>
               <div className="space-y-2">
-                 <Label className="text-[10px] font-black uppercase text-slate-400">Contraseña Sugerida</Label>
+                 <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contraseña Sugerida</Label>
                  <div className="h-12 bg-slate-900 text-blue-400 flex items-center px-4 rounded-xl font-mono text-sm border border-blue-500/20 shadow-inner">
                    {adminPass}
                  </div>
                  <p className="text-[9px] text-slate-400 italic">Informe esta contraseña al cliente para su primer ingreso.</p>
               </div>
            </div>
-           <DialogFooter>
-              <Button variant="ghost" onClick={() => setIsAdminDialogOpen(false)} className="font-bold text-slate-400 uppercase">Cancelar</Button>
-              <Button onClick={handleCreateTenantAdmin} disabled={isSubmitting || !adminEmail} className="bg-green-600 h-12 px-8 rounded-xl font-black uppercase">
-                 {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2" />}
+           <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="ghost" onClick={() => setIsAdminDialogOpen(false)} className="font-bold text-slate-400 uppercase text-xs">Cancelar</Button>
+              <Button onClick={handleCreateTenantAdmin} disabled={isSubmitting || !adminEmail} className="bg-green-600 h-12 px-8 rounded-xl font-black uppercase shadow-lg shadow-green-100">
+                 {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2" size={16} />}
                  HABILITAR ACCESO
               </Button>
            </DialogFooter>
         </DialogContent>
       </Dialog>
-      
-      <div className="p-10 bg-blue-50 rounded-[3rem] border-2 border-blue-100 flex flex-col md:flex-row items-center gap-8 mx-2 relative overflow-hidden">
-         <div className="absolute top-0 right-0 p-10 opacity-5 rotate-12"><Lock size={120}/></div>
-         <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center text-blue-600 shadow-2xl border border-blue-100 shrink-0">
-            <Lock size={40} />
-         </div>
-         <div className="space-y-3 flex-1">
-            <p className="text-sm font-black text-blue-800 uppercase italic tracking-widest">Protocolo de Seguridad del Fundador</p>
-            <p className="text-[12px] text-blue-600 leading-relaxed font-medium">
-               Como Super Administrador, usted controla la creación de instancias aisladas. Cada empresa que dé de alta aquí tendrá un entorno de datos completamente independiente. Una vez creada la empresa, el administrador designado podrá realizar el proceso de Onboarding para configurar su propia marca, logo y parámetros logísticos.
-            </p>
-            <div className="flex items-center gap-2 text-[10px] font-black text-blue-400 uppercase">
-              <ShieldCheck size={14}/> Acceso verificado para leozman15@gmail.com
-            </div>
-         </div>
-      </div>
     </div>
   );
 }
