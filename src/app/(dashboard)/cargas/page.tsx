@@ -3,8 +3,8 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, orderBy, deleteDoc, doc, where, writeBatch, getDocs, serverTimestamp } from "firebase/firestore";
+import { useFirestore, useCollection, useDoc } from "@/firebase";
+import { collection, query, orderBy, deleteDoc, doc, where, writeBatch, getDocs, serverTimestamp, getDoc } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -25,11 +25,12 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Load, LoadStatus, Truck as TruckType, Driver, PendingRemito } from "@/app/lib/types";
+import { Load, LoadStatus, Truck as TruckType, Driver, Expense, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { generateLoadOrderPDF, generateLoadWalletPDF } from "@/lib/pdf-service";
 
 export default function CargasPage() {
   const db = useFirestore();
@@ -63,6 +64,9 @@ export default function CargasPage() {
   const { data: trucks } = useCollection<TruckType>(trucksQuery);
   const { data: drivers } = useCollection<Driver>(driversQuery);
 
+  const tenantRef = useMemo(() => (db) ? doc(db, "tenants", "default_tenant") : null, [db]);
+  const { data: tenant } = useDoc<Tenant>(tenantRef);
+
   const filteredLoads = useMemo(() => {
     if (!loads) return [];
     return loads.filter(l => {
@@ -77,33 +81,31 @@ export default function CargasPage() {
   }, [loads, searchTerm, statusFilter]);
 
   /**
-   * PREPARACIÓN DE DOCUMENTO A4 VECTORIAL
-   * Abre el diálogo de impresión del navegador con el documento preparado.
+   * DESCARGA DIRECTA DE DOCUMENTOS (Programática jsPDF)
    */
-  const handleDownloadDirect = (loadId: string, type: 'orden' | 'billetera') => {
-    setIsDownloadingId(`${loadId}-${type}`);
-    const printUrl = `/cargas/${loadId}/${type}?print=true`;
+  const handleDownloadDirect = async (load: Load, type: 'orden' | 'billetera') => {
+    if (!db) return;
+    setIsDownloadingId(`${load.id}-${type}`);
     
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = 'none';
-    iframe.style.visibility = 'hidden';
-    iframe.src = printUrl;
-    document.body.appendChild(iframe);
-    
-    // Tiempo de espera aumentado para asegurar que el navegador cargue todo antes de imprimir
-    setTimeout(() => {
-      document.body.removeChild(iframe);
+    try {
+      const driver = drivers?.find(d => d.id === load.assignedDriverId) || null;
+      const truck = trucks?.find(t => t.id === load.assignedTruckId) || null;
+
+      if (type === 'orden') {
+        await generateLoadOrderPDF(load, driver, truck, tenant || undefined);
+      } else {
+        // Para la billetera necesitamos los gastos aprobados
+        const expSnap = await getDocs(query(collection(db, "loads", load.id, "expenses"), where("status", "==", "approved")));
+        const expenses = expSnap.docs.map(d => ({ ...d.data(), id: d.id } as Expense));
+        await generateLoadWalletPDF(load, expenses, driver, truck, tenant || undefined);
+      }
+      
+      toast({ title: "Archivo descargado con éxito" });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al generar documento" });
+    } finally {
       setIsDownloadingId(null);
-      toast({ 
-        title: "Documento preparado", 
-        description: "Se ha abierto el diálogo de impresión del navegador en formato A4 vectorial. Seleccione 'Guardar como PDF' o imprima directamente." 
-      });
-    }, 4500);
+    }
   };
 
   const getStatusBadge = (status: LoadStatus) => {
@@ -120,7 +122,7 @@ export default function CargasPage() {
   const handleDelete = async (id: string) => {
     if (!db || !id) return;
     
-    const ok = window.confirm("¿Está seguro de eliminar esta operación? Los remitos vinculados volverán a estar pendientes para ser reprogramados.");
+    const ok = window.confirm("¿Está seguro de eliminar esta operación? Los remitos vinculados volverán a estar pendientes.");
     if (!ok) return;
 
     try {
@@ -141,7 +143,6 @@ export default function CargasPage() {
       await batch.commit();
       toast({ title: "Operación eliminada" });
     } catch (e) {
-      console.error("Delete error:", e);
       toast({ variant: "destructive", title: "Error al eliminar" });
     }
   };
@@ -205,7 +206,6 @@ export default function CargasPage() {
                     const totalDocs = (load.outboundStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0) + (load.returnStops?.reduce((acc, s) => acc + (s.documents?.length || 0), 0) || 0);
                     
                     const truckObj = trucks?.find(t => t.id === load.assignedTruckId);
-                    const driverObj = drivers?.find(d => d.id === load.assignedDriverId);
 
                     return (
                       <TableRow key={load.id} className="hover:bg-slate-50 transition-colors group cursor-pointer" onClick={() => router.push(`/cargas/${load.id}/reporte`)}>
@@ -261,24 +261,24 @@ export default function CargasPage() {
                               <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-slate-100 transition-all"><MoreVertical size={16} /></Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-72 p-2 rounded-2xl shadow-2xl border-none">
-                              <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Preparar para Impresión (A4 Vectorial)</DropdownMenuLabel>
+                              <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Exportación Directa PDF (Vectorial)</DropdownMenuLabel>
                               
                               <DropdownMenuItem 
-                                onClick={() => handleDownloadDirect(load.id, 'orden')} 
+                                onClick={() => handleDownloadDirect(load, 'orden')} 
                                 className="font-black text-blue-700 bg-blue-50 h-12 rounded-xl mb-1"
                                 disabled={isDownloadingId === `${load.id}-orden`}
                               >
-                                {isDownloadingId === `${load.id}-orden` ? <Loader2 className="w-5 h-5 animate-spin mr-3" /> : <Printer className="w-5 h-5 mr-3" />}
-                                Preparar Hoja de Ruta
+                                {isDownloadingId === `${load.id}-orden` ? <Loader2 className="w-5 h-5 animate-spin mr-3" /> : <Download className="w-5 h-5 mr-3" />}
+                                Bajar Hoja de Ruta
                               </DropdownMenuItem>
                               
                               <DropdownMenuItem 
-                                onClick={() => handleDownloadDirect(load.id, 'billetera')} 
+                                onClick={() => handleDownloadDirect(load, 'billetera')} 
                                 className="font-black text-green-700 bg-green-50 h-12 rounded-xl mb-1"
                                 disabled={isDownloadingId === `${load.id}-billetera`}
                               >
-                                {isDownloadingId === `${load.id}-billetera` ? <Loader2 className="w-5 h-5 animate-spin mr-3" /> : <Printer className="w-5 h-5 mr-3" />}
-                                Preparar Rendición
+                                {isDownloadingId === `${load.id}-billetera` ? <Loader2 className="w-5 h-5 animate-spin mr-3" /> : <Download className="w-5 h-5 mr-3" />}
+                                Bajar Rendición Gastos
                               </DropdownMenuItem>
 
                               <DropdownMenuSeparator className="my-1" />

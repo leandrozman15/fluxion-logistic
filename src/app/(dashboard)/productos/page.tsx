@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useCollection } from "@/firebase";
+import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { collection, query, orderBy, deleteDoc, doc } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -23,10 +23,11 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Product } from "@/app/lib/types";
+import { Product, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { generateProductPDF } from "@/lib/pdf-service";
 
 export default function ProductosPage() {
   const db = useFirestore();
@@ -42,6 +43,9 @@ export default function ProductosPage() {
 
   const { data: products, loading } = useCollection<Product>(productsQuery);
 
+  const tenantRef = useMemo(() => (db) ? doc(db, "tenants", "default_tenant") : null, [db]);
+  const { data: tenant } = useDoc<Tenant>(tenantRef);
+
   const filteredProducts = useMemo(() => {
     if (!products) return [];
     return products.filter(p => 
@@ -53,34 +57,21 @@ export default function ProductosPage() {
   }, [products, searchTerm]);
 
   /**
-   * PREPARACIÓN DE FICHA A4 VECTORIAL
-   * Abre el diálogo de impresión con el documento preparado.
+   * DESCARGA DIRECTA DE FICHA TÉCNICA (Programática jsPDF)
    */
-  const handleDownloadDirect = (productId: string) => {
-    setIsDownloadingId(productId);
-    const printUrl = `/productos/${productId}/ficha?print=true`;
-    
-    // Usamos un iframe con visibilidad oculta en lugar de display:none para mejor compatibilidad
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = 'none';
-    iframe.style.visibility = 'hidden';
-    iframe.src = printUrl;
-    document.body.appendChild(iframe);
-    
-    // Mayor tiempo de espera para asegurar carga completa de fuentes y estilos
-    setTimeout(() => {
-      document.body.removeChild(iframe);
-      setIsDownloadingId(null);
+  const handleDownloadDirect = async (product: Product) => {
+    setIsDownloadingId(product.id);
+    try {
+      await generateProductPDF(product, tenant || undefined);
       toast({ 
-        title: "Documento preparado", 
-        description: "Se ha abierto el diálogo de impresión del navegador en formato A4 vectorial. Seleccione 'Guardar como PDF'." 
+        title: "PDF Descargado", 
+        description: `Se ha generado la ficha técnica de ${product.sku}.` 
       });
-    }, 4500);
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al generar PDF" });
+    } finally {
+      setIsDownloadingId(null);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -214,12 +205,12 @@ export default function ProductosPage() {
                             <DropdownMenuLabel className="text-[10px] uppercase font-bold text-slate-400 px-2 py-1">Documentación A4</DropdownMenuLabel>
                             
                             <DropdownMenuItem 
-                              onClick={() => handleDownloadDirect(product.id)}
+                              onClick={() => handleDownloadDirect(product)}
                               className="font-black text-blue-700 bg-blue-50 h-10 rounded-lg mb-1"
                               disabled={isDownloadingId === product.id}
                             >
-                              {isDownloadingId === product.id ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <Printer className="w-4 h-4 mr-2" />}
-                              Preparar Ficha Técnica
+                              {isDownloadingId === product.id ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <Download className="w-4 h-4 mr-2" />}
+                              Descargar Ficha Técnica
                             </DropdownMenuItem>
 
                             <DropdownMenuSeparator className="my-1" />
