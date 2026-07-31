@@ -45,9 +45,6 @@ import Link from "next/link";
 
 const SUPER_ADMIN_EMAIL = "leozman15@gmail.com";
 
-/**
- * Componente auxiliar para contar usuarios de un tenant específico.
- */
 function TenantUserCount({ tenantId }: { tenantId: string }) {
   const db = useFirestore();
   const usersQuery = useMemo(() => {
@@ -77,16 +74,13 @@ export default function SuperAdminTenantsPage() {
   const [isAdminDialogOpen, setIsAdminDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form states for Bootstrap Admin
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPass] = useState("LogisticaAr2026");
 
-  // Form states for Subscription
   const [subStatus, setSubStatus] = useState<'active' | 'suspended'>('active');
   const [actDate, setActDate] = useState("");
   const [expDate, setExpDate] = useState("");
 
-  // Seguridad: Si no es el SuperAdmin, redirigir
   useEffect(() => {
     if (!userLoading && user?.email !== SUPER_ADMIN_EMAIL) {
       router.replace("/dashboard");
@@ -228,7 +222,7 @@ export default function SuperAdminTenantsPage() {
         </Card>
       </div>
 
-      <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-white">
+      <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-white">
         <CardHeader className="bg-slate-50/50 border-b p-8">
            <div className="flex justify-between items-center">
              <CardTitle className="text-base font-black uppercase italic tracking-tighter flex items-center gap-2">

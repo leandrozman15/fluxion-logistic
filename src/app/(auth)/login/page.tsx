@@ -33,28 +33,32 @@ export default function LoginPage() {
     setErrorMessage(null);
     
     try {
+      // Intento de inicio de sesión real contra Firebase Auth
       await signInWithEmailAndPassword(auth, email, password);
+      
       toast({
-        title: "Bienvenido al Sistema",
-        description: "Iniciando sesión en el Panel de Control.",
+        title: "Acceso Concedido",
+        description: "Bienvenido al Panel de Control de LogísticaAr.",
       });
+      
       router.push("/dashboard");
     } catch (error: any) {
-      console.error("Login Error:", error);
-      let message = "Verifique sus credenciales e intente nuevamente.";
+      // Capturamos el error para mostrarlo en el UI y evitar el Red Screen
+      let message = "Error de conexión. Verifique su internet.";
       
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential' || error.code === 'auth/invalid-email') {
-        message = "Email o contraseña incorrectos. Por favor, asegúrese de que el usuario haya sido creado en la Consola de Firebase (Authentication).";
+      if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+        message = "El email o la contraseña son incorrectos. Asegúrese de haber creado este usuario (leozman15@gmail.com) en la Consola de Firebase -> Authentication.";
+      } else if (error.code === 'auth/invalid-email') {
+        message = "El formato del correo electrónico no es válido.";
       } else if (error.code === 'auth/too-many-requests') {
-        message = "Demasiados intentos fallidos. Su cuenta ha sido bloqueada temporalmente. Intente más tarde.";
-      } else if (error.code === 'auth/network-request-failed') {
-        message = "Error de red. Verifique su conexión a internet.";
+        message = "Demasiados intentos fallidos. Su acceso ha sido bloqueado temporalmente.";
       }
 
       setErrorMessage(message);
+      
       toast({
         variant: "destructive",
-        title: "Error de Acceso",
+        title: "Fallo de Ingreso",
         description: message,
       });
     } finally {
@@ -80,17 +84,17 @@ export default function LoginPage() {
         <Card className="border-none shadow-2xl rounded-[2rem] overflow-hidden">
           <CardHeader className="bg-slate-900 text-white p-8">
             <CardTitle className="text-lg font-black uppercase italic tracking-tight flex items-center gap-2">
-              <Lock size={18} className="text-blue-400" /> Ingreso de Personal
+              <Lock size={18} className="text-blue-400" /> Acceso al Sistema
             </CardTitle>
             <CardDescription className="text-white/40 text-[10px] uppercase font-bold tracking-widest">
-              Identifíquese para acceder a la red operativa
+              Ingrese sus credenciales de personal autorizado
             </CardDescription>
           </CardHeader>
           <CardContent className="p-8 space-y-6">
             {errorMessage && (
               <Alert variant="destructive" className="bg-red-50 border-red-100 text-red-800 rounded-xl">
                 <AlertCircle className="h-4 w-4" />
-                <AlertTitle className="text-xs font-black uppercase">Fallo de Autenticación</AlertTitle>
+                <AlertTitle className="text-xs font-black uppercase">Error de Autenticación</AlertTitle>
                 <AlertDescription className="text-[10px] font-medium leading-tight">
                   {errorMessage}
                 </AlertDescription>
@@ -103,7 +107,7 @@ export default function LoginPage() {
                 <Input 
                   id="email" 
                   type="email" 
-                  placeholder="usuario@logistica-ar.com" 
+                  placeholder="leozman15@gmail.com" 
                   className="h-12 rounded-xl bg-slate-50 border-none font-bold"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -144,10 +148,10 @@ export default function LoginPage() {
           <CardFooter className="bg-slate-50 p-6 flex flex-col gap-4 text-center">
              <div className="flex items-center gap-2 justify-center text-[10px] font-bold text-slate-400 uppercase">
                 <ShieldCheck size={14} className="text-blue-500" />
-                Acceso encriptado y auditado
+                Conexión segura y encriptada
              </div>
              <p className="text-[9px] text-slate-300 italic">
-               Si olvidó su contraseña o requiere acceso, contacte con el Administrador de Sistemas.
+               Si no puede ingresar, verifique que el usuario esté habilitado en la consola de administración.
              </p>
           </CardFooter>
         </Card>
