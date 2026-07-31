@@ -1,15 +1,49 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { useUser, useFirestore } from '@/firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
 
 /**
- * Hook simplificado para Modo Livre.
- * Retorna sempre a organização padrão para evitar erros de permissão e "N/A".
+ * Hook Dinámico de Organización (Tenant).
+ * Identifica a qué empresa pertenece el usuario logueado.
  */
 export function useTenant() {
-  // Em produção/modo livre, não precisamos de listeners complexos
-  const [tenantId] = useState<string>("default_tenant");
-  const [loading] = useState(false);
+  const { user } = useUser();
+  const db = useFirestore();
+  const [tenantId, setTenantId] = useState<string>("default_tenant");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Si no hay usuario, mantenemos el default (o redireccionamos)
+    if (!user || !db) {
+      setLoading(false);
+      return;
+    }
+
+    // El Super Administrador siempre opera sobre la base maestra o default
+    if (user.email === "leozman15@gmail.com") {
+      setTenantId("default_tenant");
+      setLoading(false);
+      return;
+    }
+
+    // Para el resto, buscamos su mapeo en la colección global /users/{email}
+    const userRef = doc(db, "users", user.email!);
+    
+    const unsubscribe = onSnapshot(userRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        setTenantId(data.tenantId || "default_tenant");
+      }
+      setLoading(false);
+    }, (error) => {
+      console.error("Error al obtener tenant del usuario:", error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user, db]);
 
   return { tenantId, loading };
 }

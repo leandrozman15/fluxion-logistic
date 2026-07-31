@@ -3,31 +3,41 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Función auxiliar para identificar al Super Administrador
+    // Función para identificar al Super Administrador global
     function isSuperAdmin() {
       return request.auth != null && request.auth.token.email == 'leozman15@gmail.com';
     }
 
+    // Obtiene los datos del perfil del usuario (vinculado por email para pre-registro)
+    function getUserProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.token.email)).data;
+    }
+
+    // Valida si el usuario pertenece al tenant que intenta acceder
+    function belongsToTenant(tenantId) {
+      return request.auth != null && (isSuperAdmin() || getUserProfile().tenantId == tenantId);
+    }
+
+    // Reglas para la colección global de mapeo de usuarios
+    match /users/{email} {
+      allow read: if request.auth != null;
+      allow write: if isSuperAdmin();
+    }
+
     // Reglas para la colección de organizaciones (Tenants)
     match /tenants/{tenantId} {
-      // Cualquier usuario autenticado puede leer datos básicos de la organización
-      allow read: if request.auth != null;
-      // Solo el SuperAdmin puede crear o modificar organizaciones
+      // Solo miembros de la empresa o SuperAdmin pueden leer la config del tenant
+      allow read: if belongsToTenant(tenantId);
       allow write: if isSuperAdmin();
 
-      // Reglas para usuarios dentro de una organización
-      match /users/{userId} {
-        allow read: if request.auth != null;
-        allow write: if isSuperAdmin() || (request.auth != null && request.auth.uid == userId);
-      }
-
-      // Reglas para subcolecciones específicas de tenant (campañas, outbox, etc.)
+      // Reglas para subcolecciones de la empresa (aislamiento total)
       match /{allSubcollections=**} {
-        allow read, write: if request.auth != null;
+        allow read, write: if belongsToTenant(tenantId);
       }
     }
 
-    // Reglas para colecciones operativas globales (Protección básica por autenticación)
+    // Reglas para colecciones operativas (Compatibilidad con modo actual mientras se migran a subcolecciones)
+    // Para una seguridad total, estas deberían estar dentro de /tenants/{tenantId}/...
     match /trucks/{docId} { allow read, write: if request.auth != null; }
     match /drivers/{docId} { allow read, write: if request.auth != null; }
     match /clients/{docId} { allow read, write: if request.auth != null; }

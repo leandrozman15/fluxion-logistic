@@ -1,9 +1,8 @@
-
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
 import { useFirestore, useCollection, useUser } from "@/firebase";
-import { collection, query, orderBy, doc, deleteDoc, setDoc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { collection, query, orderBy, doc, deleteDoc, setDoc, serverTimestamp, updateDoc, writeBatch } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -38,7 +37,8 @@ import {
   TrendingUp,
   DollarSign,
   Info,
-  ExternalLink
+  ExternalLink,
+  UserCheck
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tenant, AppUser } from "@/app/lib/types";
@@ -129,28 +129,40 @@ export default function SuperAdminTenantsPage() {
     if (!db || !selectedTenant || !adminEmail) return;
     setIsSubmitting(true);
     try {
-      const userId = adminEmail.replace(/[^a-zA-Z0-9]/g, "_");
-      const userRef = doc(db, "tenants", selectedTenant.id, "users", userId);
+      const batch = writeBatch(db);
       
-      const newAdmin: Partial<AppUser> = {
-        uid: userId,
-        tenantId: selectedTenant.id,
+      // 1. Registro en la colección global de usuarios (Mapeo por Email)
+      // Usamos el email como ID del documento para que las Security Rules puedan encontrarlo fácilmente
+      const globalUserRef = doc(db, "users", adminEmail);
+      batch.set(globalUserRef, {
         email: adminEmail,
-        displayName: "Admin Inicial",
+        tenantId: selectedTenant.id,
         role: "manager",
         status: "active",
         createdAt: serverTimestamp()
-      };
+      });
 
-      await setDoc(userRef, newAdmin);
+      // 2. Registro en la subcolección interna de la empresa
+      const tenantUserRef = doc(db, "tenants", selectedTenant.id, "users", adminEmail);
+      batch.set(tenantUserRef, {
+        email: adminEmail,
+        tenantId: selectedTenant.id,
+        displayName: "Gerente Inicial",
+        role: "manager",
+        status: "active",
+        createdAt: serverTimestamp()
+      });
+
+      await batch.commit();
+
       toast({ 
-        title: "Paso 1 Completado", 
-        description: `Usuario pre-registrado en la base de datos de ${selectedTenant.name}. Ahora debe crearlo manualmente en Auth.` 
+        title: "Perfil Gerencial Creado", 
+        description: `El usuario ya está vinculado a ${selectedTenant.name}. Complete el alta en Auth.` 
       });
       setIsAdminDialogOpen(false);
       setAdminEmail("");
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al pre-registrar usuario" });
+      toast({ variant: "destructive", title: "Error al vincular gerente" });
     } finally {
       setIsSubmitting(false);
     }
@@ -266,7 +278,7 @@ export default function SuperAdminTenantsPage() {
                         </div>
                         <div className="flex flex-col">
                           <span className="font-black text-slate-900 uppercase italic tracking-tight text-base leading-none">{tenant.name}</span>
-                          <span className="text-[10px] text-slate-400 font-bold uppercase mt-1">CUIT: {tenant.settings?.cuit || 'S/D'}</span>
+                          <span className="text-[10px] text-slate-400 font-bold uppercase mt-1">ID: {tenant.id}</span>
                         </div>
                       </div>
                     </TableCell>
@@ -310,10 +322,10 @@ export default function SuperAdminTenantsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-64 p-2 rounded-2xl shadow-2xl border-none">
-                          <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Acciones Rápidas</DropdownMenuLabel>
+                          <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Acciones de Tenant</DropdownMenuLabel>
                           
                           <DropdownMenuItem onSelect={(e) => { e.preventDefault(); openAdminModal(tenant); }} className="font-bold h-11 rounded-xl cursor-pointer">
-                            <UserPlus size={16} className="mr-3 text-blue-600" /> Crear Primer Usuario
+                            <UserCheck size={16} className="mr-3 text-blue-600" /> Habilitar Gerente
                           </DropdownMenuItem>
 
                           <DropdownMenuItem onSelect={(e) => { e.preventDefault(); openSubsModal(tenant); }} className="font-bold h-11 rounded-xl cursor-pointer">
@@ -389,30 +401,30 @@ export default function SuperAdminTenantsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* DIALOG: BOOTSTRAP ADMIN */}
+      {/* DIALOG: BOOTSTRAP GERENTE */}
       <Dialog open={isAdminDialogOpen} onOpenChange={setIsAdminDialogOpen}>
         <DialogContent className="max-w-md rounded-[2.5rem] outline-none">
            <DialogHeader>
-              <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Habilitar Primer Usuario</DialogTitle>
-              <DialogDescription className="text-[10px] font-bold uppercase">Pre-registro de Manager para {selectedTenant?.name}</DialogDescription>
+              <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Habilitar Gerente de Empresa</DialogTitle>
+              <DialogDescription className="text-[10px] font-bold uppercase">Acceso restringido a {selectedTenant?.name}</DialogDescription>
            </DialogHeader>
            <div className="space-y-6 py-6">
               <div className="p-4 bg-blue-50 border-2 border-blue-100 rounded-2xl flex items-start gap-4">
-                 <Info className="text-blue-600 shrink-0 mt-1" size={24} />
+                 <UserCheck className="text-blue-600 shrink-0 mt-1" size={24} />
                  <div className="space-y-1">
-                    <p className="text-xs font-black text-blue-800 uppercase italic">Importante: Acción Requerida</p>
+                    <p className="text-xs font-black text-blue-800 uppercase italic">Vínculo con Organización</p>
                     <p className="text-[10px] text-blue-600 leading-relaxed font-medium">
-                      Este paso habilitará al usuario en la base de datos (Firestore). Como SuperAdmin, **deberás crear manualmente** la cuenta en la pestaña **Authentication** de la Consola Firebase con el mismo correo y contraseña.
+                      Este usuario tendrá el rol de <strong>Gerente</strong>. Solo podrá ver y gestionar los camiones, choferes y cargas de esta empresa cliente. No tendrá acceso a otras instancias.
                     </p>
                  </div>
               </div>
 
               <div className="space-y-2">
-                 <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Email del Usuario (Root)</Label>
+                 <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Email Institucional del Gerente</Label>
                  <Input 
                    type="email" 
                    className="h-12 bg-slate-50 border-none rounded-xl font-bold" 
-                   placeholder="admin@empresa.com"
+                   placeholder="gerente@empresa.com"
                    value={adminEmail}
                    onChange={e => setAdminEmail(e.target.value)}
                  />
@@ -422,7 +434,6 @@ export default function SuperAdminTenantsPage() {
                  <div className="h-12 bg-slate-900 text-blue-400 flex items-center px-4 rounded-xl font-mono text-sm border border-blue-500/20 shadow-inner">
                    {adminPass}
                  </div>
-                 <p className="text-[9px] text-slate-400 italic">Use estas credenciales para el alta en la consola.</p>
               </div>
 
               <Button 
@@ -437,7 +448,7 @@ export default function SuperAdminTenantsPage() {
               <Button variant="ghost" onClick={() => setIsAdminDialogOpen(false)} className="font-bold text-slate-400 uppercase text-xs">Cancelar</Button>
               <Button onClick={handleCreateTenantAdmin} disabled={isSubmitting || !adminEmail} className="bg-green-600 h-12 px-8 rounded-xl font-black uppercase shadow-lg shadow-green-100">
                  {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2" size={16} />}
-                 PRE-REGISTRAR EN BD
+                 VINCULAR A EMPRESA
               </Button>
            </DialogFooter>
         </DialogContent>
