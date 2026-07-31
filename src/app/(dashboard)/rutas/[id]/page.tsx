@@ -163,7 +163,7 @@ export default function RouteDetailPage() {
           });
         },
         (error) => {
-          // Se elimina el console.error para evitar reportes de NextJS en zonas de baja señal
+          // Silent GPS errors to prevent NextJS Error Overlay in low signal areas
         },
         { enableHighAccuracy: true, timeout: 15000 }
       );
@@ -405,7 +405,7 @@ export default function RouteDetailPage() {
             "border-none rounded-[2.5rem] overflow-hidden shadow-2xl transition-all",
             load.status === 'on_route' ? "bg-blue-600 text-white" : 
             load.status === 'delivered' ? "bg-green-600 text-white" : 
-            load.status === 'on_pause' ? "bg-amber-500 text-white" : "bg-slate-900 text-white"
+            load.status === 'on_pause' ? "bg-amber-50 text-white" : "bg-slate-900 text-white"
           )}>
             <CardContent className="p-8 text-center space-y-4">
                <div className="space-y-1">
@@ -573,6 +573,7 @@ export default function RouteDetailPage() {
                <DialogContent className="max-w-[95vw] rounded-[2.5rem] p-8">
                   <DialogHeader>
                     <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Nuevo Gasto</DialogTitle>
+                    <DialogDescription className="sr-only">Registrar un nuevo gasto operativo durante el viaje.</DialogDescription>
                   </DialogHeader>
                   <div className="space-y-6 py-4">
                      <div className="space-y-3">
@@ -641,12 +642,14 @@ export default function RouteDetailPage() {
       <Dialog open={isPodOpen} onOpenChange={setIsPodOpen}>
          <DialogContent className="max-w-full sm:max-w-md h-[95vh] sm:h-auto rounded-t-[2.5rem] sm:rounded-[2.5rem] p-0 overflow-hidden flex flex-col border-none shadow-2xl">
             <div className="bg-slate-900 text-white p-6 pb-8 shrink-0">
-               <div className="flex justify-between items-start mb-4">
-                  <Badge className="bg-green-500 text-white border-none text-[8px] uppercase font-black">Entrega</Badge>
-                  <Button variant="ghost" size="icon" onClick={() => setIsPodOpen(false)} className="text-white/40"><XCircle /></Button>
-               </div>
-               <h2 className="text-2xl font-black uppercase italic tracking-tighter">Confirmar Recepción</h2>
-               <p className="text-white/40 text-[10px] font-bold uppercase mt-2">{currentStop?.name}</p>
+               <DialogHeader className="text-left space-y-0">
+                  <div className="flex justify-between items-start mb-4">
+                     <Badge className="bg-green-500 text-white border-none text-[8px] uppercase font-black">Entrega</Badge>
+                     <Button variant="ghost" size="icon" onClick={() => setIsPodOpen(false)} className="text-white/40"><XCircle /></Button>
+                  </div>
+                  <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter">Confirmar Recepción</DialogTitle>
+                  <DialogDescription className="text-white/40 text-[10px] font-bold uppercase mt-2">{currentStop?.name}</DialogDescription>
+               </DialogHeader>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-slate-50">

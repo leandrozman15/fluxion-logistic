@@ -556,12 +556,14 @@ export default function AnalyticsPage() {
            <div className="bg-slate-900 text-white p-8 pb-6 relative overflow-hidden">
               <div className="absolute top-0 right-0 p-8 opacity-5"><TrendingUp size={160} /></div>
               <div className="relative z-10">
-                <h2 className="text-2xl font-black italic uppercase tracking-tighter flex items-center gap-3">
-                  <TrendingUp className="text-blue-400" size={28} /> Auditoría Interanual Consolidada
-                </h2>
-                <p className="text-white/50 text-[10px] uppercase font-bold tracking-widest mt-1">
-                  Comparativa de rendimiento financiero y operativo 2025 vs 2026 (Proyectado)
-                </p>
+                <DialogHeader className="space-y-1">
+                  <DialogTitle className="text-2xl font-black italic uppercase tracking-tighter flex items-center gap-3">
+                    <TrendingUp className="text-blue-400" size={28} /> Auditoría Interanual Consolidada
+                  </DialogTitle>
+                  <DialogDescription className="text-white/50 text-[10px] uppercase font-bold tracking-widest">
+                    Comparativa de rendimiento financiero y operativo 2025 vs 2026 (Proyectado)
+                  </DialogDescription>
+                </DialogHeader>
               </div>
            </div>
            

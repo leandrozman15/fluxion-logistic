@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { 
   Truck as TruckIcon, FileText, Calendar, AlertTriangle, 
   CheckCircle2, Clock, Upload, ArrowLeft, ShieldCheck, 
@@ -273,16 +273,16 @@ export default function TruckDetailPage() {
                  <div className="grid grid-cols-2 gap-4 mt-2">
                     <div className="p-3 bg-slate-50 rounded-xl">
                        <p className="text-[8px] font-bold text-slate-400 uppercase">PBTC Máx.</p>
-                       <p className="text-sm font-black text-slate-700">{(truck.grossCombinedWeightKg || 0).toLocaleString()} KG</p>
+                       <p className="text-sm font-black text-slate-700">{ (truck.grossCombinedWeightKg || 0).toLocaleString()} KG</p>
                     </div>
                     <div className="p-3 bg-slate-50 rounded-xl">
                        <p className="text-[8px] font-bold text-slate-400 uppercase">Tara Real</p>
-                       <p className="text-sm font-black text-slate-700">{(truck.unladenWeightKg || 0).toLocaleString()} KG</p>
+                       <p className="text-sm font-black text-slate-700">{ (truck.unladenWeightKg || 0).toLocaleString()} KG</p>
                     </div>
                  </div>
                  <div className="p-4 bg-green-50 border border-green-100 rounded-xl mt-2">
                     <p className="text-[10px] font-black text-green-700 uppercase">Carga Útil Habilitada</p>
-                    <p className="text-2xl font-black text-green-600 italic">{(truck.capacityKg || 0).toLocaleString()} KG</p>
+                    <p className="text-2xl font-black text-green-600 italic">{ (truck.capacityKg || 0).toLocaleString()} KG</p>
                  </div>
               </div>
 
@@ -542,6 +542,10 @@ export default function TruckDetailPage() {
       <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={onFileChange} />
       <Dialog open={!!viewerUrl} onOpenChange={(o) => !o && setViewerUrl(null)}>
         <DialogContent className="max-w-4xl h-[80vh] flex flex-col rounded-xl overflow-hidden p-0 gap-0">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Visor de Documentos</DialogTitle>
+            <DialogDescription>Visualización de archivos adjuntos del vehículo</DialogDescription>
+          </DialogHeader>
           <div className="flex-1 bg-slate-100 flex items-center justify-center overflow-hidden relative">{viewerUrl && (viewerUrl.startsWith('data:application/pdf') ? <iframe src={viewerUrl} className="w-full h-full border-none" /> : <img src={viewerUrl} className="max-w-full max-h-full object-contain" />)}</div>
           <DialogFooter className="p-4 border-t bg-slate-50"><Button variant="outline" size="sm" onClick={() => setViewerUrl(null)}>CERRAR</Button></DialogFooter>
         </DialogContent>
