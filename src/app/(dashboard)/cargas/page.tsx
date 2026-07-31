@@ -1,9 +1,10 @@
+
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, orderBy, deleteDoc, doc, where, writeBatch, getDocs } from "firebase/firestore";
+import { collection, query, orderBy, deleteDoc, doc, where, writeBatch, getDocs, serverTimestamp } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -94,7 +95,7 @@ export default function CargasPage() {
     try {
       const batch = writeBatch(db);
       
-      // 1. Buscar remitos asociados a este flete
+      // 1. Buscar remitos asociados a este flete usando el loadId como ancla
       const remitosQuery = query(collection(db, "pending_remitos"), where("loadId", "==", id));
       const remitosSnap = await getDocs(remitosQuery);
       
@@ -306,3 +307,4 @@ export default function CargasPage() {
     </div>
   );
 }
+

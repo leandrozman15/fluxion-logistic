@@ -14,7 +14,7 @@ import {
   Files, Search, Loader2, Plus, 
   CheckCircle2, Clock, MapPin, 
   ArrowRight, FileText, Scale, Receipt, Trash2, Archive, ShoppingBag, Calendar,
-  MoreVertical, ArchiveRestore
+  MoreVertical, ArchiveRestore, RefreshCw
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -37,6 +37,7 @@ export default function RemitosDashboardPage() {
   
   const [searchTerm, setSearchTerm] = useState("");
   const [isArchivingId, setIsArchivingId] = useState<string | null>(null);
+  const [isResettingId, setIsResettingId] = useState<string | null>(null);
 
   const remitosQuery = useMemo(() => {
     if (!db) return null;
@@ -69,6 +70,24 @@ export default function RemitosDashboardPage() {
       toast({ variant: "destructive", title: "Error al archivar" });
     } finally {
       setIsArchivingId(null);
+    }
+  };
+
+  const handleResetToPending = async (id: string) => {
+    if (!db || !confirm("¿Liberar este remito? Volverá a estar disponible para ser programado en un nuevo viaje.")) return;
+    setIsResettingId(id);
+    try {
+      await updateDoc(doc(db, "pending_remitos", id), {
+        status: 'pending',
+        loadId: null,
+        dispatchedDate: null,
+        updatedAt: serverTimestamp()
+      });
+      toast({ title: "Remito Liberado", description: "El documento ya puede ser reasignado a otra unidad." });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al liberar remito" });
+    } finally {
+      setIsResettingId(null);
     }
   };
 
@@ -229,7 +248,7 @@ export default function RemitosDashboardPage() {
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full hover:bg-slate-100"><MoreVertical size={18} /></Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-56 p-2 rounded-2xl shadow-2xl border-none">
+                          <DropdownMenuContent align="end" className="w-64 p-2 rounded-2xl shadow-2xl border-none">
                             <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Acciones Administrativas</DropdownMenuLabel>
                             
                             {remito.status === 'delivered' && (
@@ -241,6 +260,17 @@ export default function RemitosDashboardPage() {
                                 {isArchivingId === remito.id ? <Loader2 size={16} className="animate-spin mr-2" /> : <ArchiveRestore className="w-4 h-4 mr-2" />}
                                 ENVIAR A ARCHIVO
                               </DropdownMenuItem>
+                            )}
+
+                            {remito.status === 'dispatched' && (
+                               <DropdownMenuItem 
+                                onClick={() => handleResetToPending(remito.id)}
+                                className="font-black text-blue-700 bg-blue-50 h-10 rounded-xl mb-1"
+                                disabled={isResettingId === remito.id}
+                               >
+                                 {isResettingId === remito.id ? <Loader2 size={16} className="animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                                 LIBERAR PARA REPROGRAMAR
+                               </DropdownMenuItem>
                             )}
 
                             {remito.fileUrl && (
@@ -272,3 +302,4 @@ export default function RemitosDashboardPage() {
     </div>
   );
 }
+
