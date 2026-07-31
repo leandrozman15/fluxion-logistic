@@ -71,7 +71,6 @@ function DashboardSidebar() {
     { title: "Catálogo Productos", icon: Box, href: "/productos" },
     { title: "Cargas y Fletes", icon: Package, href: "/cargas" },
     { title: "Buzón de Remitos", icon: Files, href: "/remitos" },
-    { title: "Archivo de Remitos", icon: Archive, href: "/remitos/archivo" },
     { title: "Mantenimiento", icon: Wrench, href: "/mantenimiento" },
     { title: "Sedes Logísticas", icon: Building2, href: "/sedes" },
     { title: "Análisis de Datos", icon: BarChart3, href: "/analytics" },
