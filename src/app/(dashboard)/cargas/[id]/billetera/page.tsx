@@ -86,7 +86,6 @@ export default function LoadWalletPage() {
     fetchExtras();
   }, [db, load]);
 
-  // Lógica de descarga directa/impresión automática
   useEffect(() => {
     if (autoPrint && !loading && !loadingExtras && expenses) {
       const timer = setTimeout(() => {
@@ -103,8 +102,8 @@ export default function LoadWalletPage() {
   if (loading || loadingExtras) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!load) return <div className="p-10 text-center">Carga no encontrada.</div>;
 
-  const balanceFinal = (expenses?.filter(e => e.status === 'approved').reduce((acc, exp) => acc + (exp.amount || 0), 0) || 0) - (load.budget?.initialAdvance || 0);
   const statsApproved = expenses?.filter(e => e.status === 'approved').reduce((acc, exp) => acc + (exp.amount || 0), 0) || 0;
+  const balanceFinal = statsApproved - (load.budget?.initialAdvance || 0);
   const budgetProgress = load.budget?.totalBudget ? (statsApproved / load.budget.totalBudget) * 100 : 0;
 
   return (
@@ -114,50 +113,25 @@ export default function LoadWalletPage() {
         <div className="flex items-center gap-4">
           <Button variant="outline" size="icon" onClick={() => router.back()} className="rounded-full bg-slate-900/50 border-white/20 text-white"><ArrowLeft size={18} /></Button>
           <div>
-            <h1 className="text-xl font-black text-white italic tracking-tighter uppercase leading-none">Auditoría de Gastos</h1>
-            <p className="text-white/40 text-[9px] font-bold uppercase tracking-widest mt-1">Orden #{load.orderNumber} | {load.clientName}</p>
+            <h1 className="text-xl font-black text-white italic tracking-tighter uppercase leading-none">Rendición de Gastos</h1>
+            <p className="text-white/40 text-[9px] font-bold uppercase tracking-widest mt-1">Orden #{load.orderNumber}</p>
           </div>
         </div>
-        <div className="flex gap-3">
-           <Badge className="bg-green-600 text-white border-none">VISTA PREVIA TEXTO NATIVO</Badge>
-           <Button className="font-black h-11 px-8 rounded-xl shadow-2xl bg-white text-slate-900 hover:bg-blue-50" onClick={downloadPdf}>
-             <Download size={18} className="mr-2" /> GUARDAR REPORTE (PDF)
-           </Button>
-        </div>
+        <Button className="font-black h-11 px-8 rounded-xl shadow-2xl bg-white text-slate-900 hover:bg-blue-50" onClick={downloadPdf}>
+          <Download size={18} className="mr-2" /> GUARDAR PDF A4
+        </Button>
       </div>
 
-      {/* DASHBOARD WEB - OCULTO EN IMPRESIÓN */}
-      <div className="max-w-[210mm] mx-auto grid gap-4 md:grid-cols-4 px-4 mb-8 print:hidden">
-        <Card className="bg-slate-900 text-white border-white/10 shadow-xl rounded-2xl">
-          <CardHeader className="pb-2"><CardTitle className="text-[9px] uppercase text-white/40 font-black tracking-widest">Anticipo</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-black italic text-green-400">${load.budget?.initialAdvance?.toLocaleString()}</div></CardContent>
-        </Card>
-        <Card className="bg-white border-none shadow-sm rounded-2xl">
-          <CardHeader className="pb-2"><CardTitle className="text-[9px] uppercase text-slate-400 font-black tracking-widest">Auditado</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-black italic text-slate-800">${statsApproved.toLocaleString()}</div></CardContent>
-        </Card>
-        <Card className="md:col-span-2 bg-white border-none shadow-sm rounded-2xl">
-          <CardHeader className="pb-2"><CardTitle className="text-[9px] uppercase text-slate-400 font-black tracking-widest">Consumo Presupuesto</CardTitle></CardHeader>
-          <CardContent className="space-y-3 pt-1">
-            <Progress value={budgetProgress} className="h-1.5 rounded-full" />
-            <div className="flex justify-between text-[8px] font-black text-slate-400 uppercase">
-               <span>CONSUMIDO: ${statsApproved.toLocaleString()}</span>
-               <span>DISPONIBLE: ${load.budget?.totalBudget?.toLocaleString() || '0'}</span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* DOCUMENTO PARA IMPRESIÓN (TEXTO NATIVO VECTORIAL) */}
-      <div className="bg-white shadow-[0_0_50px_rgba(0,0,0,0.5)] print:shadow-none w-[210mm] min-h-[297mm] mx-auto text-black p-12 font-sans border-[8px] border-double border-slate-900 print:border-none">
-         <div className="flex flex-col h-full">
+      {/* DOCUMENTO PARA IMPRESIÓN (TEXTO NATIVO A4) */}
+      <div className="bg-white shadow-[0_0_50px_rgba(0,0,0,0.5)] print:shadow-none w-[210mm] min-h-[297mm] mx-auto text-black p-12 font-sans border-[8px] border-double border-slate-900 print:border-none overflow-hidden">
+         <div className="flex flex-col h-full w-full">
             <div className="flex justify-between items-start border-b-[4px] border-black pb-8 mb-8">
                <div className="flex items-center gap-6">
                   {tenant?.settings?.logoUrl && <img src={tenant.settings.logoUrl} className="h-20 w-auto" alt="Logo" />}
                   <div>
                     <h1 className="text-4xl font-black uppercase italic text-blue-800 leading-none">{tenant?.name || 'LOGÍSTICA AR'}</h1>
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mt-2">Planilla de Rendición Contable de Gastos (NATIVA)</p>
-                    <p className="text-[8px] font-bold text-slate-400 uppercase italic mt-1">Audit Report v3.0 - Texto Seleccionable</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mt-2">Planilla de Rendición Contable de Gastos (A4)</p>
+                    <p className="text-[8px] font-bold text-slate-400 uppercase italic mt-1">Audit Report v3.0 - Texto Vectorial</p>
                   </div>
                </div>
                <div className="text-right">
@@ -180,7 +154,7 @@ export default function LoadWalletPage() {
                </div>
             </div>
 
-            <table className="w-full border-[3px] border-black mb-10 text-left border-collapse">
+            <table className="w-full border-[3px] border-black mb-10 text-left border-collapse table-fixed">
                <thead>
                   <tr className="bg-slate-200 border-b-[3px] border-black">
                      <th className="p-4 text-[11px] font-black uppercase w-24">FECHA</th>
@@ -193,11 +167,11 @@ export default function LoadWalletPage() {
                   {expenses?.filter(e => e.status === 'approved').map(exp => (
                     <tr key={exp.id} className="hover:bg-slate-50/50">
                        <td className="p-4 text-xs font-mono font-bold">{exp.createdAt?.toDate ? format(exp.createdAt.toDate(), "dd/MM/yy") : '---'}</td>
-                       <td className="p-4">
-                          <p className="text-sm font-black uppercase italic leading-none">{CATEGORY_LABELS[exp.category] || exp.category}</p>
-                          <p className="text-[9px] text-slate-500 font-bold uppercase mt-1">LUGAR: {exp.location}</p>
+                       <td className="p-4 overflow-hidden">
+                          <p className="text-sm font-black uppercase italic leading-none truncate">{CATEGORY_LABELS[exp.category] || exp.category}</p>
+                          <p className="text-[9px] text-slate-500 font-bold uppercase mt-1 truncate">LUGAR: {exp.location}</p>
                        </td>
-                       <td className="p-4 text-xs font-mono font-black uppercase text-blue-800">{exp.receiptNumber || 'S/D'}</td>
+                       <td className="p-4 text-xs font-mono font-black uppercase text-blue-800 truncate">{exp.receiptNumber || 'S/D'}</td>
                        <td className="p-4 text-right text-sm font-black italic">${exp.amount.toLocaleString()}</td>
                     </tr>
                   ))}
@@ -244,14 +218,13 @@ export default function LoadWalletPage() {
 
       <style jsx global>{`
         @media print {
-          @page { size: A4; margin: 0mm; }
-          body { background: white !important; -webkit-print-color-adjust: exact; color: black !important; width: 210mm; height: 297mm; }
+          @page { size: A4 portrait; margin: 0mm; }
+          body { background: white !important; -webkit-print-color-adjust: exact; color: black !important; width: 210mm; height: 297mm; margin: 0; padding: 0; }
           .print\:hidden { display: none !important; }
           header, nav, aside, footer, button, .sidebar-trigger { display: none !important; }
           .min-h-screen { min-h-0 !important; padding: 0 !important; background: white !important; }
           .bg-white { background: white !important; }
-          .border-\[8px\] { border: none !important; }
-          .shadow-\[0_0_50px_rgba\(0\,0\,0\,0\.5\)\] { box-shadow: none !important; }
+          .w-\[210mm\], .max-w-\[210mm\] { width: 210mm !important; height: 297mm !important; max-width: none !important; margin: 0 !important; border: none !important; box-shadow: none !important; }
           * { text-shadow: none !important; box-shadow: none !important; }
         }
       `}</style>

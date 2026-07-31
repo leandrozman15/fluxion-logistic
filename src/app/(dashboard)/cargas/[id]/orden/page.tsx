@@ -14,8 +14,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { format } from "date-fns";
 
 /**
- * Pantalla de Hoja de Ruta / OT en formato PDF Nativo.
- * Utiliza CSS especializado para garantizar texto vectorial y nitidez absoluta.
+ * Pantalla de Hoja de Ruta / OT en formato PDF Nativo A4.
  */
 export default function LoadOrderDocumentPage() {
   const { id } = useParams();
@@ -64,12 +63,11 @@ export default function LoadOrderDocumentPage() {
     if (load) fetchExtras();
   }, [db, load]);
 
-  // Lógica de impresión automática si se solicita por parámetro
   useEffect(() => {
     if (autoPrint && !loadLoading && !loadingExtras && load) {
       const timer = setTimeout(() => {
         window.print();
-      }, 1500); // Pequeño delay para asegurar renderizado de fuentes y QR
+      }, 1500);
       return () => clearTimeout(timer);
     }
   }, [autoPrint, loadLoading, loadingExtras, load]);
@@ -78,7 +76,7 @@ export default function LoadOrderDocumentPage() {
     window.print();
   };
 
-  if (loadLoading || loadingExtras) return <div className="h-screen flex items-center justify-center gap-2 text-slate-500 font-bold animate-pulse"><Loader2 className="animate-spin" /> GENERANDO DOCUMENTACIÓN OFICIAL (TEXTO NATIVO)...</div>;
+  if (loadLoading || loadingExtras) return <div className="h-screen flex items-center justify-center gap-2 text-slate-500 font-bold animate-pulse"><Loader2 className="animate-spin" /> GENERANDO DOCUMENTACIÓN A4...</div>;
   if (!load) return <div className="p-20 text-center">Orden no encontrada.</div>;
 
   const confirmationUrl = typeof window !== 'undefined' ? `${window.location.origin}/rutas/${load.id}` : '';
@@ -91,20 +89,20 @@ export default function LoadOrderDocumentPage() {
         {/* BARRA DE HERRAMIENTAS - OCULTA EN IMPRESIÓN */}
         <div className="flex justify-between items-center px-4 print:hidden sticky top-0 z-50 py-4 bg-slate-800/80 backdrop-blur">
           <Button variant="outline" onClick={() => router.back()} className="text-white border-white/20 hover:bg-white/10 rounded-xl bg-slate-900/50">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Volver al Sistema
+            <ArrowLeft className="mr-2 h-4 w-4" /> Volver
           </Button>
           <div className="flex gap-3">
-             <Badge className="bg-blue-600 text-white border-none animate-pulse">VISTA PREVIA PDF NATIVO</Badge>
+             <Badge className="bg-blue-600 text-white border-none">PREVIO A4 NATIVO</Badge>
              <Button onClick={handlePrint} className="bg-white text-slate-900 hover:bg-blue-50 rounded-xl font-black shadow-2xl px-10 h-12">
-               <Download className="mr-2 h-5 w-5" /> GUARDAR PDF (TEXTO REAL)
+               <Download className="mr-2 h-5 w-5" /> GUARDAR PDF A4
              </Button>
           </div>
         </div>
 
-        {/* DOCUMENTO PROFESIONAL - FORMATO A4 NATIVO */}
-        <div className="bg-white shadow-[0_0_50px_rgba(0,0,0,0.5)] print:shadow-none w-full min-h-[297mm] flex flex-col font-sans text-black border-[12px] border-double border-slate-900 print:border-none mx-auto">
+        {/* DOCUMENTO PROFESIONAL - FORMATO A4 ESTRICTO */}
+        <div className="bg-white shadow-[0_0_50px_rgba(0,0,0,0.5)] print:shadow-none w-[210mm] min-h-[297mm] flex flex-col font-sans text-black border-[12px] border-double border-slate-900 print:border-none mx-auto overflow-hidden">
           
-          <div className="p-12 print:p-8 flex flex-col h-full">
+          <div className="p-12 print:p-10 flex flex-col h-full w-full box-border">
             {/* CABECERA */}
             <div className="flex justify-between items-start border-b-[5px] border-black pb-8 mb-8">
               <div className="flex items-center gap-6">
@@ -187,13 +185,13 @@ export default function LoadOrderDocumentPage() {
                   <div className="p-4 bg-slate-100 border-b-[3px] border-black/20">
                     <h3 className="text-[11px] font-black uppercase flex items-center gap-2 text-blue-900">4. SECUENCIA DE ENTREGAS (DESTINOS Y DOCUMENTACIÓN)</h3>
                   </div>
-                  <table className="w-full text-xs border-collapse">
+                  <table className="w-full text-xs border-collapse table-fixed">
                     <thead>
                         <tr className="border-b-[3px] border-black bg-slate-200">
                           <th className="py-3 px-4 text-center font-black uppercase w-12">POS</th>
-                          <th className="py-3 px-4 text-left font-black uppercase w-1/3">DESTINATARIO / REMITOS</th>
-                          <th className="py-3 px-4 text-left font-black uppercase">DIRECCIÓN COMPLETA DE DESCARGA</th>
-                          <th className="py-3 px-4 text-right font-black uppercase w-28">PESO</th>
+                          <th className="py-3 px-4 text-left font-black uppercase w-48">DESTINATARIO / REMITOS</th>
+                          <th className="py-3 px-4 text-left font-black uppercase">DIRECCIÓN COMPLETA</th>
+                          <th className="py-3 px-4 text-right font-black uppercase w-24">PESO</th>
                           <th className="py-3 px-4 text-center font-black uppercase w-24">ESTADO</th>
                         </tr>
                     </thead>
@@ -202,24 +200,24 @@ export default function LoadOrderDocumentPage() {
                           <tr key={stop.id} className="hover:bg-slate-50/50">
                             <td className="py-5 px-4 font-black text-center border-r-2 border-slate-200 bg-slate-50/30 text-base">{i+1}</td>
                             <td className="py-5 px-4 border-r-2 border-slate-200">
-                                <p className="font-black uppercase text-slate-900 text-sm leading-tight">{stop.name}</p>
+                                <p className="font-black uppercase text-slate-900 text-sm leading-tight truncate">{stop.name}</p>
                                 <div className="mt-3 space-y-1.5">
                                   {stop.documents?.map(doc => (
-                                    <div key={doc.id} className="flex items-center gap-2 text-blue-800 font-mono font-black text-[11px] bg-blue-50 px-2 py-1 rounded border-2 border-blue-200 w-fit">
-                                      <Receipt size={12} /> REM: {doc.number}
+                                    <div key={doc.id} className="flex items-center gap-2 text-blue-800 font-mono font-black text-[10px] bg-blue-50 px-2 py-1 rounded border-2 border-blue-200 w-fit">
+                                      <Receipt size={10} /> REM: {doc.number}
                                     </div>
                                   ))}
                                   {(!stop.documents || stop.documents.length === 0) && (
-                                    <p className="text-[9px] text-slate-300 italic font-black uppercase">SIN REMITO VINCULADO</p>
+                                    <p className="text-[9px] text-slate-300 italic font-black uppercase">SIN REMITO</p>
                                   )}
                                 </div>
                             </td>
                             <td className="py-5 px-4 border-r-2 border-slate-200">
                                 <div className="flex items-start gap-2">
                                   <MapPinned size={14} className="text-slate-400 mt-1 shrink-0" />
-                                  <div>
-                                    <p className="font-black text-slate-800 uppercase text-sm leading-none">{stop.address}</p>
-                                    <p className="text-[11px] text-slate-500 font-bold italic mt-2 uppercase">{stop.city || '---'}, {stop.province}, ARGENTINA</p>
+                                  <div className="min-w-0">
+                                    <p className="font-black text-slate-800 uppercase text-xs leading-tight">{stop.address}</p>
+                                    <p className="text-[10px] text-slate-500 font-bold italic mt-2 uppercase">{stop.city || '---'}, {stop.province}</p>
                                   </div>
                                 </div>
                             </td>
@@ -233,7 +231,7 @@ export default function LoadOrderDocumentPage() {
                                     <span className="text-[9px] font-black text-green-700 uppercase">ENTREGADO</span>
                                   </div>
                                 ) : (
-                                  <span className="text-[10px] text-slate-300 font-black uppercase tracking-tighter italic">EN TRÁNSITO</span>
+                                  <span className="text-[9px] text-slate-300 font-black uppercase tracking-tighter italic">EN TRÁNSITO</span>
                                 )}
                             </td>
                           </tr>
@@ -305,8 +303,8 @@ export default function LoadOrderDocumentPage() {
               {/* QR Y TRAZABILIDAD */}
               <div className="mt-10 flex justify-between items-end">
                   <div className="space-y-2">
-                    <p className="text-[11px] font-black text-slate-900 uppercase italic tracking-tight">Protocolo de Documentación Digital Nativa (PDF Texto)</p>
-                    <p className="text-[9px] text-slate-400 font-bold leading-tight max-w-sm uppercase">Este documento contiene texto vectorial y puede ser indexado por sistemas de gestión documental. El código QR permite la validación de estados de entrega en tiempo real desde la central.</p>
+                    <p className="text-[11px] font-black text-slate-900 uppercase italic tracking-tight">Protocolo de Documentación Digital Nativa (A4)</p>
+                    <p className="text-[9px] text-slate-400 font-bold leading-tight max-w-sm uppercase">Este documento contiene texto vectorial y puede ser indexado por sistemas de gestión documental. El código QR permite la validación de estados de entrega en tiempo real.</p>
                   </div>
                   <div className="flex flex-col items-center gap-3">
                     <div className="p-2 border-[3px] border-black bg-white shadow-md">
@@ -323,7 +321,7 @@ export default function LoadOrderDocumentPage() {
       <style jsx global>{`
         @media print {
           @page {
-            size: A4;
+            size: A4 portrait;
             margin: 0mm;
           }
           body {
@@ -332,6 +330,8 @@ export default function LoadOrderDocumentPage() {
             color: black !important;
             width: 210mm;
             height: 297mm;
+            margin: 0;
+            padding: 0;
           }
           .print\:hidden {
             display: none !important;
@@ -344,14 +344,12 @@ export default function LoadOrderDocumentPage() {
             padding: 0 !important;
             background: white !important;
           }
-          .max-w-\[210mm\] {
+          .max-w-\[210mm\], .w-\[210mm\] {
             max-width: none !important;
-            width: 100% !important;
-          }
-          .border-\[12px\] {
+            width: 210mm !important;
+            height: 297mm !important;
             border: none !important;
-          }
-          .shadow-\[0_0_50px_rgba\(0\,0\,0\,0\.5\)\] {
+            margin: 0 !important;
             box-shadow: none !important;
           }
           * {
