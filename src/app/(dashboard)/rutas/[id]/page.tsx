@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -31,7 +30,7 @@ import {
   Coffee, Moon, Car, Battery, CloudRain, Construction, HelpCircle,
   Siren, CircleCheck, ListOrdered, XCircle,
   Timer, Play, Home
-} from "lucide-center";
+} from "lucide-react";
 import { Load, Expense, ExpenseCategory, ProofOfDelivery, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
