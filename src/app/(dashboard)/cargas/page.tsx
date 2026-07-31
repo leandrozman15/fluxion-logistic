@@ -38,6 +38,7 @@ export default function CargasPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [mounted, setMounted] = useState(false);
+  const [isDownloadingId, setIsDownloadingId] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -75,6 +76,26 @@ export default function CargasPage() {
     });
   }, [loads, searchTerm, statusFilter]);
 
+  /**
+   * DESCARGA DIRECTA VECTORIAL
+   * Usa un iframe oculto para disparar el diálogo de guardado PDF
+   */
+  const handleDownloadDirect = (loadId: string, type: 'orden' | 'billetera') => {
+    setIsDownloadingId(`${loadId}-${type}`);
+    const printUrl = `/cargas/${loadId}/${type}?print=true`;
+    
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = printUrl;
+    document.body.appendChild(iframe);
+    
+    setTimeout(() => {
+      document.body.removeChild(iframe);
+      setIsDownloadingId(null);
+      toast({ title: "Documento generado", description: `La ${type === 'orden' ? 'Hoja de Ruta' : 'Rendición'} está lista para guardar.` });
+    }, 3500);
+  };
+
   const getStatusBadge = (status: LoadStatus) => {
     switch (status) {
       case 'pending': return <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 uppercase text-[9px] font-black italic">Pendiente</Badge>;
@@ -94,13 +115,10 @@ export default function CargasPage() {
 
     try {
       const batch = writeBatch(db);
-      
-      // 1. Buscar remitos asociados a este flete usando el loadId como ancla
       const remitosQuery = query(collection(db, "pending_remitos"), where("loadId", "==", id));
       const remitosSnap = await getDocs(remitosQuery);
       
       remitosSnap.docs.forEach(docSnap => {
-        // 2. Devolver remito a estado 'pending' y quitar vinculación
         batch.update(docSnap.ref, {
           status: 'pending',
           loadId: null,
@@ -109,28 +127,16 @@ export default function CargasPage() {
         });
       });
 
-      // 3. Eliminar el flete
       batch.delete(doc(db, "loads", id));
-
       await batch.commit();
-      toast({ title: "Operación eliminada", description: "Los remitos han sido devueltos al buzón de pendientes." });
+      toast({ title: "Operación eliminada" });
     } catch (e) {
       console.error("Delete error:", e);
-      toast({ variant: "destructive", title: "Error al eliminar la operación" });
+      toast({ variant: "destructive", title: "Error al eliminar" });
     }
   };
 
-  if (!mounted) return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-slate-900 italic tracking-tighter uppercase leading-none">Cargas y Fletes</h1>
-          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Cargando sistema centralizado...</p>
-        </div>
-      </div>
-      <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>
-    </div>
-  );
+  if (!mounted) return <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
     <div className="space-y-6">
@@ -144,7 +150,7 @@ export default function CargasPage() {
         </Button>
       </div>
 
-      <Card className="border-none shadow-xl rounded-[2rem] overflow-hidden bg-white">
+      <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-white">
         <div className="p-6 bg-slate-50/50 border-b flex flex-col lg:flex-row gap-6 items-center justify-between">
           <div className="relative w-full max-w-md">
             <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
@@ -182,7 +188,7 @@ export default function CargasPage() {
               </TableHeader>
               <TableBody>
                 {filteredLoads.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-center py-32 text-slate-400 italic font-bold uppercase text-xs">No hay operaciones registradas en este período.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={5} className="text-center py-32 text-slate-400 italic font-bold uppercase text-xs">No hay operaciones registradas.</TableCell></TableRow>
                 ) : (
                   filteredLoads.map((load) => {
                     const totalStops = (load.outboundStops?.length || 0) + (load.returnStops?.length || 0);
@@ -202,7 +208,7 @@ export default function CargasPage() {
                               <div className="font-black text-slate-900 tracking-tighter text-sm uppercase italic leading-none">{load.orderNumber}</div>
                               <div className="text-[10px] text-slate-400 uppercase font-black truncate max-w-[150px] mt-1">{load.clientName}</div>
                               <div className="flex items-center gap-2 text-[9px] text-blue-600 font-black mt-1 uppercase">
-                                <Calendar size={10} /> {load.pickupDate ? format(parseISO(load.pickupDate), "dd/MM") : '-'} • {load.pickupTime}hs
+                                <Calendar size={10} /> {load.pickupDate ? format(parseISO(load.pickupDate), "dd/MM") : '-'}
                               </div>
                             </div>
                           </div>
@@ -212,14 +218,10 @@ export default function CargasPage() {
                             <div className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-800">
                                <Navigation size={12} className="text-blue-500" />
                                <span>{totalStops} Puntos</span>
-                               {load.isRoundTrip && <Badge className="bg-orange-100 text-orange-700 border-none text-[7px] h-3 px-1 font-black">IDA + VTA</Badge>}
                             </div>
                             <div className="space-y-0.5">
                               <div className="flex items-center gap-1.5 text-[9px] font-black text-slate-500 uppercase">
                                 <Truck size={10} className="text-slate-300" /> {truckObj?.plate || 'SIN UNIDAD'}
-                              </div>
-                              <div className="flex items-center gap-1.5 text-[9px] font-black text-slate-500 uppercase">
-                                <User size={10} className="text-slate-300" /> {driverObj ? `${driverObj.lastName}, ${driverObj.firstName}` : 'SIN CHOFER'}
                               </div>
                             </div>
                           </div>
@@ -240,11 +242,6 @@ export default function CargasPage() {
                             >
                               <Files size={14} className="mr-2" /> {totalDocs} DOCS
                             </Button>
-                            {load.international?.containerNumber && (
-                              <Badge variant="secondary" className="bg-blue-900 text-white border-none font-mono text-[8px] h-4 gap-1.5 px-2">
-                                <ScanBarcode size={10} /> {load.international.containerNumber}
-                              </Badge>
-                            )}
                           </div>
                         </TableCell>
                         <TableCell>{getStatusBadge(load.status)}</TableCell>
@@ -254,35 +251,34 @@ export default function CargasPage() {
                               <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-slate-100 transition-all"><MoreVertical size={16} /></Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-72 p-2 rounded-2xl shadow-2xl border-none">
-                              <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Análisis de Operación</DropdownMenuLabel>
-                              <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/reporte`)} className="font-black text-blue-600 h-10 rounded-xl">
-                                <BarChart3 className="w-4 h-4 mr-2" /> Auditoría de Telemetría
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/documentos`)} className="font-black text-indigo-600 bg-indigo-50 h-10 rounded-xl my-1">
-                                <Files className="w-4 h-4 mr-2" /> Gestión de Remitos
-                              </DropdownMenuItem>
-                              
-                              <DropdownMenuSeparator className="my-1" />
-                              <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Documentación PDF (Texto Real)</DropdownMenuLabel>
+                              <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Descargas Directas (A4 Vectorial)</DropdownMenuLabel>
                               
                               <DropdownMenuItem 
-                                onClick={() => router.push(`/cargas/${load.id}/orden?print=true`)} 
+                                onClick={() => handleDownloadDirect(load.id, 'orden')} 
                                 className="font-black text-blue-700 bg-blue-50 h-12 rounded-xl mb-1"
+                                disabled={isDownloadingId === `${load.id}-orden`}
                               >
-                                <Download className="w-5 h-5 mr-3" /> Descargar Hoja de Ruta
+                                {isDownloadingId === `${load.id}-orden` ? <Loader2 className="w-5 h-5 animate-spin mr-3" /> : <Download className="w-5 h-5 mr-3" />}
+                                Descargar Hoja de Ruta
                               </DropdownMenuItem>
                               
                               <DropdownMenuItem 
-                                onClick={() => router.push(`/cargas/${load.id}/billetera?print=true`)} 
+                                onClick={() => handleDownloadDirect(load.id, 'billetera')} 
                                 className="font-black text-green-700 bg-green-50 h-12 rounded-xl mb-1"
+                                disabled={isDownloadingId === `${load.id}-billetera`}
                               >
-                                <Download className="w-5 h-5 mr-3" /> Descargar Rendición
+                                {isDownloadingId === `${load.id}-billetera` ? <Loader2 className="w-5 h-5 animate-spin mr-3" /> : <Download className="w-5 h-5 mr-3" />}
+                                Descargar Rendición
                               </DropdownMenuItem>
 
                               <DropdownMenuSeparator className="my-1" />
-                              <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Gestión Administrativa</DropdownMenuLabel>
+                              <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Acciones</DropdownMenuLabel>
+                              <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/reporte`)} className="font-bold h-10 rounded-xl">
+                                <BarChart3 className="w-4 h-4 mr-2" /> Auditoría Telemetría
+                              </DropdownMenuItem>
+                              
                               <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/editar`)} className="font-bold h-10 rounded-xl">
-                                <Edit className="w-4 h-4 mr-2" /> Editar Flete
+                                <Edit className="w-4 h-4 mr-2" /> Editar Operación
                               </DropdownMenuItem>
                               
                               <DropdownMenuSeparator className="my-1" />
@@ -290,7 +286,7 @@ export default function CargasPage() {
                                 className="text-red-600 focus:bg-red-50 focus:text-red-600 font-bold h-10 rounded-xl" 
                                 onSelect={() => handleDelete(load.id)}
                               >
-                                <Trash2 className="w-4 h-4 mr-2" /> Eliminar Flete Definitivo
+                                <Trash2 className="w-4 h-4 mr-2" /> Eliminar Definitivo
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -307,4 +303,3 @@ export default function CargasPage() {
     </div>
   );
 }
-

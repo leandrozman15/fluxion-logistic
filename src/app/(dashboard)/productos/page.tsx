@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
@@ -32,6 +33,7 @@ export default function ProductosPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
+  const [isDownloadingId, setIsDownloadingId] = useState<string | null>(null);
 
   const productsQuery = useMemo(() => {
     if (!db) return null;
@@ -49,6 +51,30 @@ export default function ProductosPage() {
       (p.ncmCode || "").toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [products, searchTerm]);
+
+  /**
+   * MÉTODO DE DESCARGA DIRECTA A4 VECTORIAL
+   * Crea un iframe oculto para disparar la impresión sin navegar
+   */
+  const handleDownloadDirect = (productId: string) => {
+    setIsDownloadingId(productId);
+    const printUrl = `/productos/${productId}/ficha?print=true`;
+    
+    // Crear iframe oculto
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = printUrl;
+    
+    document.body.appendChild(iframe);
+    
+    // El diálogo de impresión se dispara dentro del iframe automáticamente por el parámetro ?print=true
+    // Limpiamos el iframe después de un tiempo prudencial
+    setTimeout(() => {
+      document.body.removeChild(iframe);
+      setIsDownloadingId(null);
+      toast({ title: "Documento generado", description: "El diálogo de impresión A4 se ha abierto." });
+    }, 3000);
+  };
 
   const handleDelete = async (id: string) => {
     if (!db || !confirm("¿Eliminar este producto del catálogo definitivamente?")) return;
@@ -147,7 +173,7 @@ export default function ProductosPage() {
                             <Scale size={12} className="text-slate-400" /> {product.unitWeightKg?.toLocaleString()} KG
                           </div>
                           <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500">
-                            <Box size={12} className="text-slate-400" /> {product.unitsPerPallet} u. x Pallet
+                            <Box size={12} className="text-slate-400" /> {product.unitsPerBox || 0} u. x Caja
                           </div>
                         </div>
                       </TableCell>
@@ -177,17 +203,33 @@ export default function ProductosPage() {
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical size={16} /></Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-56">
-                            <DropdownMenuLabel>Gestión de Producto</DropdownMenuLabel>
-                            <DropdownMenuItem onClick={() => router.push(`/productos/${product.id}/ficha`)}>
-                              <FileText className="w-4 h-4 mr-2" /> Descargar Ficha Técnica
+                          <DropdownMenuContent align="end" className="w-56 p-2 rounded-xl">
+                            <DropdownMenuLabel className="text-[10px] uppercase font-bold text-slate-400 px-2 py-1">Documentación A4</DropdownMenuLabel>
+                            
+                            <DropdownMenuItem 
+                              onClick={() => handleDownloadDirect(product.id)}
+                              className="font-black text-blue-700 bg-blue-50 h-10 rounded-lg mb-1"
+                              disabled={isDownloadingId === product.id}
+                            >
+                              {isDownloadingId === product.id ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <Download className="w-4 h-4 mr-2" />}
+                              Descargar Ficha Técnica
                             </DropdownMenuItem>
+
+                            <DropdownMenuSeparator className="my-1" />
+                            <DropdownMenuLabel className="text-[10px] uppercase font-bold text-slate-400 px-2 py-1">Acciones</DropdownMenuLabel>
+                            
                             <DropdownMenuItem asChild>
-                              <Link href={`/productos/${product.id}/editar`}><Edit2 className="w-4 h-4 mr-2" /> Editar Ficha Completa</Link>
+                              <Link href={`/productos/${product.id}/editar`} className="font-bold"><Edit2 className="w-4 h-4 mr-2" /> Editar Ficha</Link>
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-red-600 focus:bg-red-50 focus:text-red-600" onClick={() => handleDelete(product.id)}>
-                              <Trash2 className="w-4 h-4 mr-2" /> Quitar del Catálogo
+                            
+                            <DropdownMenuItem onClick={() => router.push(`/productos/${product.id}/ficha`)} className="font-bold">
+                              <Eye className="w-4 h-4 mr-2" /> Vista Previa App
+                            </DropdownMenuItem>
+
+                            <DropdownMenuSeparator className="my-1" />
+                            
+                            <DropdownMenuItem className="text-red-600 focus:bg-red-50 focus:text-red-600 font-bold" onClick={() => handleDelete(product.id)}>
+                              <Trash2 className="w-4 h-4 mr-2" /> Eliminar
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

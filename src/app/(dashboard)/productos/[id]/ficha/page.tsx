@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useEffect, useState } from "react";
@@ -21,7 +22,8 @@ import {
   Globe,
   Info as InfoIcon,
   Box,
-  Download
+  Download,
+  FileText
 } from "lucide-react";
 import { Product, Tenant } from "@/app/lib/types";
 import { QRCodeSVG } from "qrcode.react";
@@ -57,9 +59,10 @@ export default function ProductTechnicalSheetPage() {
 
   useEffect(() => {
     if (autoPrint && !loading && product) {
+      // Pequeño delay para asegurar renderizado vectorial
       const timer = setTimeout(() => {
         window.print();
-      }, 1000);
+      }, 800);
       return () => clearTimeout(timer);
     }
   }, [autoPrint, loading, product]);
@@ -96,7 +99,7 @@ export default function ProductTechnicalSheetPage() {
                 <h1 className="text-4xl font-black uppercase italic tracking-tighter leading-none text-blue-800">{orgName}</h1>
                 <p className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-500 mt-2">Ficha Técnica Certificada - LogísticaAr</p>
                 <div className="pt-3 text-[10px] font-bold space-y-0.5 text-slate-400">
-                    <p>CUIT: {tenant?.settings?.cuit || '30-XXXXXXXX-X'}</p>
+                    <p className="flex items-center gap-1"><FileText size={10} /> CUIT: {tenant?.settings?.cuit || '30-XXXXXXXX-X'}</p>
                     <p className="flex items-center gap-1"><Globe size={10}/> Argentina | Control de Cargas v3.0</p>
                 </div>
               </div>
