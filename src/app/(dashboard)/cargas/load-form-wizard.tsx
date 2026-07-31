@@ -578,7 +578,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                 <CardTitle className="text-sm font-black flex items-center gap-2 uppercase italic">
                   <ShieldCheck className="text-blue-400" /> Control Técnico y Vial
                 </CardTitle>
-              </Header>
+              </CardHeader>
               <CardContent className="p-8 space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-4">
