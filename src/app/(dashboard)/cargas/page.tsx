@@ -77,8 +77,8 @@ export default function CargasPage() {
   }, [loads, searchTerm, statusFilter]);
 
   /**
-   * DESCARGA DIRECTA VECTORIAL
-   * Usa un iframe oculto para disparar el diálogo de guardado PDF
+   * PREPARACIÓN DE DOCUMENTO A4 VECTORIAL
+   * Abre el diálogo de impresión del navegador con el documento listo.
    */
   const handleDownloadDirect = (loadId: string, type: 'orden' | 'billetera') => {
     setIsDownloadingId(`${loadId}-${type}`);
@@ -89,10 +89,14 @@ export default function CargasPage() {
     iframe.src = printUrl;
     document.body.appendChild(iframe);
     
+    // Esperamos a que el motor de impresión se dispare
     setTimeout(() => {
       document.body.removeChild(iframe);
       setIsDownloadingId(null);
-      toast({ title: "Documento generado", description: `La ${type === 'orden' ? 'Hoja de Ruta' : 'Rendición'} está lista para guardar.` });
+      toast({ 
+        title: "Documento preparado", 
+        description: "Se ha abierto el diálogo de impresión del navegador en formato A4 vectorial." 
+      });
     }, 3500);
   };
 
@@ -251,15 +255,15 @@ export default function CargasPage() {
                               <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-slate-100 transition-all"><MoreVertical size={16} /></Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-72 p-2 rounded-2xl shadow-2xl border-none">
-                              <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Descargas Directas (A4 Vectorial)</DropdownMenuLabel>
+                              <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Preparar para Impresión (A4 Vectorial)</DropdownMenuLabel>
                               
                               <DropdownMenuItem 
                                 onClick={() => handleDownloadDirect(load.id, 'orden')} 
                                 className="font-black text-blue-700 bg-blue-50 h-12 rounded-xl mb-1"
                                 disabled={isDownloadingId === `${load.id}-orden`}
                               >
-                                {isDownloadingId === `${load.id}-orden` ? <Loader2 className="w-5 h-5 animate-spin mr-3" /> : <Download className="w-5 h-5 mr-3" />}
-                                Descargar Hoja de Ruta
+                                {isDownloadingId === `${load.id}-orden` ? <Loader2 className="w-5 h-5 animate-spin mr-3" /> : <Printer className="w-5 h-5 mr-3" />}
+                                Preparar Hoja de Ruta
                               </DropdownMenuItem>
                               
                               <DropdownMenuItem 
@@ -267,8 +271,8 @@ export default function CargasPage() {
                                 className="font-black text-green-700 bg-green-50 h-12 rounded-xl mb-1"
                                 disabled={isDownloadingId === `${load.id}-billetera`}
                               >
-                                {isDownloadingId === `${load.id}-billetera` ? <Loader2 className="w-5 h-5 animate-spin mr-3" /> : <Download className="w-5 h-5 mr-3" />}
-                                Descargar Rendición
+                                {isDownloadingId === `${load.id}-billetera` ? <Loader2 className="w-5 h-5 animate-spin mr-3" /> : <Printer className="w-5 h-5 mr-3" />}
+                                Preparar Rendición
                               </DropdownMenuItem>
 
                               <DropdownMenuSeparator className="my-1" />

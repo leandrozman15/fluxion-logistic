@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Box, Plus, Search, MoreVertical, Trash2, Edit2, 
   Loader2, Scale, AlertTriangle, ThermometerSnowflake, 
-  FileText, Ship, Package, Eye, Download
+  FileText, Ship, Package, Eye, Download, Printer
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -53,26 +53,25 @@ export default function ProductosPage() {
   }, [products, searchTerm]);
 
   /**
-   * MÉTODO DE DESCARGA DIRECTA A4 VECTORIAL
-   * Crea un iframe oculto para disparar la impresión sin navegar
+   * PREPARACIÓN DE FICHA A4 VECTORIAL
+   * Abre el diálogo de impresión con el documento preparado.
    */
   const handleDownloadDirect = (productId: string) => {
     setIsDownloadingId(productId);
     const printUrl = `/productos/${productId}/ficha?print=true`;
     
-    // Crear iframe oculto
     const iframe = document.createElement('iframe');
     iframe.style.display = 'none';
     iframe.src = printUrl;
-    
     document.body.appendChild(iframe);
     
-    // El diálogo de impresión se dispara dentro del iframe automáticamente por el parámetro ?print=true
-    // Limpiamos el iframe después de un tiempo prudencial
     setTimeout(() => {
       document.body.removeChild(iframe);
       setIsDownloadingId(null);
-      toast({ title: "Documento generado", description: "El diálogo de impresión A4 se ha abierto." });
+      toast({ 
+        title: "Documento preparado", 
+        description: "Se ha abierto el diálogo de impresión del navegador en formato A4 vectorial." 
+      });
     }, 3000);
   };
 
@@ -211,8 +210,8 @@ export default function ProductosPage() {
                               className="font-black text-blue-700 bg-blue-50 h-10 rounded-lg mb-1"
                               disabled={isDownloadingId === product.id}
                             >
-                              {isDownloadingId === product.id ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <Download className="w-4 h-4 mr-2" />}
-                              Descargar Ficha Técnica
+                              {isDownloadingId === product.id ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <Printer className="w-4 h-4 mr-2" />}
+                              Preparar Ficha Técnica
                             </DropdownMenuItem>
 
                             <DropdownMenuSeparator className="my-1" />
