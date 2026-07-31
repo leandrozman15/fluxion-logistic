@@ -33,7 +33,8 @@ import {
   Zap,
   Box,
   Files,
-  Archive
+  Archive,
+  ShoppingBag
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth, useFirestore, useDoc } from "@/firebase";
@@ -64,6 +65,7 @@ function DashboardSidebar() {
 
   const adminMenu = [
     { title: "Monitor Operativo", icon: LayoutDashboard, href: "/dashboard" },
+    { title: "Mercado Libre", icon: ShoppingBag, href: "/mercadolibre" },
     { title: "Despacho Inteligente", icon: Zap, href: "/despacho" },
     { title: "Flota de Camiones", icon: Truck, href: "/flota" },
     { title: "Gestión Choferes", icon: Users, href: "/choferes" },
@@ -123,8 +125,14 @@ function DashboardSidebar() {
                     onClick={handleLinkClick}
                   >
                     <Link href={item.href}>
-                      <item.icon className={cn(item.title.includes("Remitos") && "text-indigo-600")} />
-                      <span className={cn(item.title.includes("Remitos") && "font-bold text-indigo-700")}>{item.title}</span>
+                      <item.icon className={cn(
+                        item.title.includes("Remitos") && "text-indigo-600",
+                        item.title === "Mercado Libre" && "text-yellow-500"
+                      )} />
+                      <span className={cn(
+                        item.title.includes("Remitos") && "font-bold text-indigo-700",
+                        item.title === "Mercado Libre" && "font-black text-slate-900"
+                      )}>{item.title}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
