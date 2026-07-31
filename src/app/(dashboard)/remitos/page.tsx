@@ -92,12 +92,12 @@ export default function RemitosDashboardPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!db || !confirm("¿Eliminar este remito definitivamente?")) return;
+    if (!db || !confirm("¿Eliminar este remito definitivamente? Esta acción no se puede deshacer.")) return;
     try {
       await deleteDoc(doc(db, "pending_remitos", id));
       toast({ title: "Remito eliminado" });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error" });
+      toast({ variant: "destructive", title: "Error al eliminar remito" });
     }
   };
 
@@ -284,7 +284,6 @@ export default function RemitosDashboardPage() {
                             <DropdownMenuItem 
                               className="text-red-600 focus:bg-red-50 focus:text-red-600 font-bold h-10 rounded-xl" 
                               onSelect={() => handleDelete(remito.id)}
-                              disabled={remito.status === 'dispatched'}
                             >
                               <Trash2 className="w-4 h-4 mr-2" /> Eliminar Definitivo
                             </DropdownMenuItem>
@@ -302,4 +301,3 @@ export default function RemitosDashboardPage() {
     </div>
   );
 }
-
