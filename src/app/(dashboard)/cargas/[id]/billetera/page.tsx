@@ -11,14 +11,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
 import { 
   DollarSign, ArrowLeft, Loader2, CheckCircle2, 
-  AlertTriangle, Receipt, Download, Truck, User, MapPin, CreditCard, XCircle, PieChart as PieChartIcon
+  AlertTriangle, Receipt, Download, Truck, User, MapPin, CreditCard, XCircle
 } from "lucide-react";
-import { 
-  PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip 
-} from "recharts";
 import { Load, Expense, ExpenseStatus, Driver, Truck as TruckType, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
@@ -33,8 +29,6 @@ const CATEGORY_LABELS: Record<string, string> = {
   maintenance: 'MANTENIMIENTO',
   other: 'OTROS'
 };
-
-const CHART_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#64748b'];
 
 export default function LoadWalletPage() {
   const { id } = useParams();
@@ -98,43 +92,6 @@ export default function LoadWalletPage() {
       approved: expenses.reduce((acc, exp) => exp.status === 'approved' ? acc + exp.amount : acc, 0)
     };
   }, [expenses]);
-
-  const pieData = useMemo(() => {
-    if (!expenses) return [];
-    const totals: Record<string, number> = {};
-    expenses.forEach(exp => {
-      const label = CATEGORY_LABELS[exp.category] || exp.category.toUpperCase();
-      totals[label] = (totals[label] || 0) + (exp.amount || 0);
-    });
-    return Object.entries(totals)
-      .map(([name, value]) => ({ name, value }))
-      .filter(item => item.value > 0);
-  }, [expenses]);
-
-  const handleUpdateStatus = (expenseId: string, status: ExpenseStatus) => {
-    if (!db || !id) return;
-    setIsUpdatingId(expenseId);
-    
-    const docRef = doc(db, "loads", id as string, "expenses", expenseId);
-    const updateData = { status, updatedAt: serverTimestamp() };
-
-    updateDoc(docRef, updateData)
-      .catch(async (serverError) => {
-        const permissionError = new FirestorePermissionError({
-          path: docRef.path,
-          operation: 'update',
-          requestResourceData: updateData,
-        });
-        errorEmitter.emit('permission-error', permissionError);
-      })
-      .finally(() => setIsUpdatingId(null));
-  };
-
-  const handleUpdateReceipt = (expenseId: string, value: string) => {
-    if (!db || !id) return;
-    const docRef = doc(db, "loads", id as string, "expenses", expenseId);
-    updateDoc(docRef, { receiptNumber: value, updatedAt: serverTimestamp() });
-  };
 
   const downloadPdf = () => {
     window.print();

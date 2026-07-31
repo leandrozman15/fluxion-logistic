@@ -14,6 +14,10 @@ import { Load, Driver, Truck as TruckType, Tenant } from "@/app/lib/types";
 import { QRCodeSVG } from "qrcode.react";
 import { format } from "date-fns";
 
+/**
+ * Pantalla de Hoja de Ruta / OT en formato PDF Nativo.
+ * Utiliza CSS especializado para garantizar texto vectorial y nitidez absoluta.
+ */
 export default function LoadOrderDocumentPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -124,7 +128,7 @@ export default function LoadOrderDocumentPage() {
                     </div>
                     <div className="space-y-1">
                         <p className="text-[9px] font-bold text-slate-400 uppercase">Tipo de Servicio:</p>
-                        <Badge variant="outline" className="text-[10px] font-black uppercase border-black px-2">{load.serviceType}</Badge>
+                        <span className="text-[10px] font-black uppercase border border-black px-2 py-0.5 inline-block">{load.serviceType}</span>
                     </div>
                   </div>
                   <div className="space-y-1">
