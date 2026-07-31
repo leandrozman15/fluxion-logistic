@@ -7,10 +7,23 @@ import { doc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
-  Printer, ArrowLeft, Loader2, Package, Scale, 
-  Layers, Ship, ThermometerSnowflake, AlertTriangle, 
-  QrCode, ShieldCheck, Box, CheckCircle2, Info, LayoutGrid, FileText,
-  Tag, Compass, Info as InfoIcon
+  Printer, 
+  ArrowLeft, 
+  Loader2, 
+  Package, 
+  Scale, 
+  Layers, 
+  Ship, 
+  ThermometerSnowflake, 
+  AlertTriangle, 
+  ShieldCheck, 
+  Box, 
+  CheckCircle2, 
+  LayoutGrid, 
+  FileText,
+  Building2,
+  Globe,
+  Info as InfoIcon
 } from "lucide-react";
 import { Product, Tenant } from "@/app/lib/types";
 import { QRCodeSVG } from "qrcode.react";
