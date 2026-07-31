@@ -114,6 +114,7 @@ export interface Tenant {
   name: string;
   settings?: TenantSettings;
   plan?: 'free' | 'pro';
+  monthlyFee?: number;
   createdAt?: any;
   updatedAt?: any;
 }

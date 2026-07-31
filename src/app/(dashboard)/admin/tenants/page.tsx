@@ -20,7 +20,8 @@ import {
   Users,
   ExternalLink,
   ChevronRight,
-  TrendingUp
+  TrendingUp,
+  DollarSign
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tenant } from "@/app/lib/types";
@@ -156,8 +157,8 @@ export default function SuperAdminTenantsPage() {
               <TableRow>
                 <TableHead className="px-8 text-[10px] font-black uppercase tracking-widest h-14">Organización</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Usuarios</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest">ID de Instancia</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Plan</TableHead>
+                <TableHead className="text-[10px] font-black uppercase tracking-widest">Mensualidad</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Alta</TableHead>
                 <TableHead className="text-right pr-8 text-[10px] font-black uppercase tracking-widest">Control</TableHead>
               </TableRow>
@@ -177,14 +178,13 @@ export default function SuperAdminTenantsPage() {
                         </div>
                         <div className="flex flex-col">
                           <span className="font-black text-slate-900 uppercase italic tracking-tight text-base leading-none">{tenant.name}</span>
-                          <span className="text-[10px] text-slate-400 font-bold uppercase mt-1">Cono Sur / Regional</span>
+                          <span className="text-[10px] text-slate-400 font-bold uppercase mt-1">ID: {tenant.id}</span>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell className="text-center">
                       <TenantUserCount tenantId={tenant.id} />
                     </TableCell>
-                    <TableCell className="font-mono text-[10px] text-blue-600 font-bold bg-blue-50/30 px-3 py-1 rounded-lg w-fit">{tenant.id}</TableCell>
                     <TableCell>
                       <Badge className={cn(
                         "text-[9px] font-black uppercase px-4 py-1.5 border-none shadow-sm italic",
@@ -192,6 +192,12 @@ export default function SuperAdminTenantsPage() {
                       )}>
                         {tenant.plan === 'pro' ? 'Industrial PRO' : 'Free Tier'}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                       <div className="flex items-center gap-1 font-black text-slate-700">
+                          <DollarSign size={14} className="text-green-600" />
+                          <span>{tenant.monthlyFee?.toLocaleString() || '0'}</span>
+                       </div>
                     </TableCell>
                     <TableCell className="text-center font-bold text-slate-500 text-xs">
                       {tenant.createdAt?.toDate ? tenant.createdAt.toDate().toLocaleDateString() : '-'}

@@ -27,7 +27,8 @@ import {
   MapPin,
   Phone,
   User,
-  CreditCard
+  CreditCard,
+  DollarSign
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -46,6 +47,7 @@ export default function NewTenantPage() {
     cuit: "",
     country: "Argentina",
     plan: "free" as "free" | "pro",
+    monthlyFee: 0,
     adminEmail: "",
     legalAddress: "",
     legalCityState: "",
@@ -69,6 +71,7 @@ export default function NewTenantPage() {
         id: newRef.id,
         name: formData.name,
         plan: formData.plan,
+        monthlyFee: formData.monthlyFee,
         createdAt: serverTimestamp(),
         settings: {
           onboardingCompleted: false,
@@ -231,14 +234,14 @@ export default function NewTenantPage() {
             </CardContent>
           </Card>
 
-          {/* 3. PLAN DE SERVICIO */}
+          {/* 3. ACUERDO COMERCIAL Y PLAN */}
           <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-white">
             <CardHeader className="bg-slate-50/50 border-b p-8">
               <CardTitle className="text-sm font-black uppercase italic tracking-tighter flex items-center gap-2">
-                <Zap size={18} className="text-blue-600" /> 3. Selección de Plan de Servicio
+                <Zap size={18} className="text-blue-600" /> 3. Selección de Plan y Mensualidad
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-8">
+            <CardContent className="p-8 space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <button 
                   onClick={() => setFormData({...formData, plan: 'free'})}
@@ -274,6 +277,21 @@ export default function NewTenantPage() {
                    </div>
                 </button>
               </div>
+
+              <div className="pt-6 border-t space-y-4">
+                 <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Valor de Mensualidad Acordado (ARS)</Label>
+                 <div className="relative">
+                    <DollarSign className="absolute left-4 top-3.5 h-5 w-5 text-blue-600" />
+                    <Input 
+                      type="number"
+                      placeholder="0.00" 
+                      className="h-14 bg-slate-50 border-none rounded-2xl font-black text-xl pl-12"
+                      value={formData.monthlyFee}
+                      onChange={e => setFormData({...formData, monthlyFee: parseFloat(e.target.value) || 0})}
+                    />
+                 </div>
+                 <p className="text-[10px] text-slate-400 italic">Este valor se utilizará como base para la generación automática de facturas.</p>
+              </div>
             </CardContent>
             <CardFooter className="bg-slate-50 border-t p-8">
               <div className="flex items-start gap-4">
@@ -304,6 +322,10 @@ export default function NewTenantPage() {
                     <div className="space-y-1">
                        <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Nivel de Servicio</p>
                        <p className="text-base font-bold text-blue-400 uppercase italic">{formData.plan === 'pro' ? '🚀 Industrial PRO' : '📦 Free tier'}</p>
+                    </div>
+                    <div className="space-y-1">
+                       <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Mensualidad</p>
+                       <p className="text-xl font-black italic text-green-400">${formData.monthlyFee.toLocaleString()}</p>
                     </div>
                     <div className="space-y-1">
                        <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Responsable</p>

@@ -70,6 +70,8 @@
       "type": "object",
       "properties": {
         "name": { "type": "string" },
+        "plan": { "type": "string", "enum": ["free", "pro"] },
+        "monthlyFee": { "type": "number" },
         "settings": { "type": "object" }
       }
     },
