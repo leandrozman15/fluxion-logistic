@@ -10,6 +10,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuLabel, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
+import { 
   ShieldCheck, 
   Plus, 
   Building2, 
@@ -21,7 +29,12 @@ import {
   ExternalLink,
   ChevronRight,
   TrendingUp,
-  DollarSign
+  DollarSign,
+  MoreVertical,
+  Settings,
+  UserPlus,
+  BarChart3,
+  CreditCard
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tenant } from "@/app/lib/types";
@@ -160,7 +173,7 @@ export default function SuperAdminTenantsPage() {
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Plan</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Mensualidad</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Alta</TableHead>
-                <TableHead className="text-right pr-8 text-[10px] font-black uppercase tracking-widest">Control</TableHead>
+                <TableHead className="text-right pr-8 text-[10px] font-black uppercase tracking-widest">Gestión</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -203,11 +216,33 @@ export default function SuperAdminTenantsPage() {
                       {tenant.createdAt?.toDate ? tenant.createdAt.toDate().toLocaleDateString() : '-'}
                     </TableCell>
                     <TableCell className="text-right pr-8">
-                      <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button variant="ghost" size="icon" className="h-10 w-10 text-red-500 hover:bg-red-50" onClick={() => handleDeleteTenant(tenant.id, tenant.name)}>
-                          <Trash2 size={20} />
-                        </Button>
-                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full hover:bg-slate-100">
+                            <MoreVertical size={20} className="text-slate-400" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-64 p-2 rounded-2xl shadow-2xl border-none">
+                          <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Administración de Instancia</DropdownMenuLabel>
+                          <DropdownMenuItem className="font-bold h-11 rounded-xl">
+                            <ExternalLink size={16} className="mr-3 text-blue-600" /> Ver Detalles Fiscales
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="font-bold h-11 rounded-xl">
+                            <CreditCard size={16} className="mr-3 text-blue-600" /> Gestionar Suscripción
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="font-bold h-11 rounded-xl">
+                            <Users size={16} className="mr-3 text-blue-600" /> Auditar Usuarios
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator className="my-2" />
+                          <DropdownMenuLabel className="text-[10px] font-black uppercase text-red-400 tracking-widest p-2">Zona de Peligro</DropdownMenuLabel>
+                          <DropdownMenuItem 
+                            className="text-red-600 focus:bg-red-50 focus:text-red-600 font-bold h-11 rounded-xl"
+                            onClick={() => handleDeleteTenant(tenant.id, tenant.name)}
+                          >
+                            <Trash2 size={16} className="mr-3" /> Eliminar Definitiva
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))
