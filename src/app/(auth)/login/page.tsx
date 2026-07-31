@@ -9,9 +9,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Truck, ShieldCheck, Lock } from "lucide-react";
+import { Loader2, ShieldCheck, Lock, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Image from "next/image";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -21,12 +22,15 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!auth) return;
 
     setIsLoading(true);
+    setErrorMessage(null);
+    
     try {
       await signInWithEmailAndPassword(auth, email, password);
       toast({
@@ -39,11 +43,14 @@ export default function LoginPage() {
       let message = "Verifique sus credenciales e intente nuevamente.";
       
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        message = "Email o contraseña incorrectos.";
+        message = "Email o contraseña incorrectos. Si es su primer ingreso, asegúrese de haber creado el usuario en la Consola de Firebase.";
       } else if (error.code === 'auth/too-many-requests') {
-        message = "Demasiados intentos. Intente más tarde.";
+        message = "Demasiados intentos fallidos. Intente más tarde.";
+      } else if (error.code === 'auth/network-request-failed') {
+        message = "Error de red. Verifique su conexión a internet.";
       }
 
+      setErrorMessage(message);
       toast({
         variant: "destructive",
         title: "Error de Acceso",
@@ -78,7 +85,17 @@ export default function LoginPage() {
               Identifíquese para acceder a la red operativa
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-8">
+          <CardContent className="p-8 space-y-6">
+            {errorMessage && (
+              <Alert variant="destructive" className="bg-red-50 border-red-100 text-red-800 rounded-xl">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle className="text-xs font-black uppercase">Fallo de Autenticación</AlertTitle>
+                <AlertDescription className="text-[10px] font-medium leading-tight">
+                  {errorMessage}
+                </AlertDescription>
+              </Alert>
+            )}
+
             <form onSubmit={handleLogin} className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-[10px] font-black uppercase text-slate-400 ml-1">Correo Electrónico</Label>
