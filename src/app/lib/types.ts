@@ -16,6 +16,19 @@ export type MaintenanceStatus = 'scheduled' | 'in_progress' | 'completed' | 'can
 
 export type DriverRole = 'driver' | 'companion';
 
+export type UserRole = 'admin' | 'sales_admin' | 'purchasing_admin' | 'coordinator' | 'manager' | 'warehouse' | 'driver' | 'viewer';
+
+export interface AppUser {
+  uid: string;
+  tenantId: string;
+  email: string;
+  displayName?: string;
+  role: UserRole;
+  status: 'active' | 'invited' | 'disabled';
+  lastLogin?: any;
+  createdAt: any;
+}
+
 export interface Product {
   id: string;
   sku: string;
