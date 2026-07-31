@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
@@ -15,7 +14,7 @@ import {
   Package, Plus, Search, Scale, 
   Loader2, MoreVertical, Trash2, CheckCircle2, 
   Clock, AlertTriangle, FileText, Printer, Wallet, Navigation, Edit, Calendar, Truck, User, History,
-  BarChart3, Ship, ScanBarcode, Receipt, Files
+  BarChart3, Ship, ScanBarcode, Receipt, Files, Download
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -242,17 +241,30 @@ export default function CargasPage() {
                               <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/documentos`)} className="font-black text-indigo-600 bg-indigo-50 h-10 rounded-xl my-1">
                                 <Files className="w-4 h-4 mr-2" /> Gestión de Remitos
                               </DropdownMenuItem>
+                              
+                              <DropdownMenuSeparator className="my-1" />
+                              <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Documentación PDF (Texto Real)</DropdownMenuLabel>
+                              
+                              <DropdownMenuItem 
+                                onClick={() => router.push(`/cargas/${load.id}/orden?print=true`)} 
+                                className="font-black text-blue-700 bg-blue-50 h-12 rounded-xl mb-1"
+                              >
+                                <Download className="w-5 h-5 mr-3" /> Descargar Hoja de Ruta
+                              </DropdownMenuItem>
+                              
+                              <DropdownMenuItem 
+                                onClick={() => router.push(`/cargas/${load.id}/billetera?print=true`)} 
+                                className="font-black text-green-700 bg-green-50 h-12 rounded-xl mb-1"
+                              >
+                                <Download className="w-5 h-5 mr-3" /> Descargar Rendición
+                              </DropdownMenuItem>
+
                               <DropdownMenuSeparator className="my-1" />
                               <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Gestión Administrativa</DropdownMenuLabel>
                               <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/editar`)} className="font-bold h-10 rounded-xl">
-                                <Edit className="w-4 h-4 mr-2" /> Ver Detalle / Editar
+                                <Edit className="w-4 h-4 mr-2" /> Editar Flete
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/orden`)} className="font-bold h-10 rounded-xl">
-                                <Printer className="w-4 h-4 mr-2" /> Ver Orden (PDF)
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/billetera`)} className="font-black text-green-700 bg-green-50 h-12 rounded-xl mb-1">
-                                <Receipt className="w-5 h-5 mr-3" /> Rendición de Gastos (Tickets)
-                              </DropdownMenuItem>
+                              
                               <DropdownMenuSeparator className="my-1" />
                               <DropdownMenuItem 
                                 className="text-red-600 focus:bg-red-50 focus:text-red-600 font-bold h-10 rounded-xl" 

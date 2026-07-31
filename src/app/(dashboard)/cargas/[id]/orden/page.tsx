@@ -1,14 +1,13 @@
-
 'use client';
 
 import { useMemo, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useFirestore, useDoc } from "@/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
-  Printer, ArrowLeft, Loader2, ClipboardCheck, ShieldCheck, Truck, User, MapPin, Receipt, MapPinned, CheckCircle2
+  Printer, ArrowLeft, Loader2, ClipboardCheck, ShieldCheck, Truck, User, MapPin, Receipt, MapPinned, CheckCircle2, Download
 } from "lucide-react";
 import { Load, Driver, Truck as TruckType, Tenant } from "@/app/lib/types";
 import { QRCodeSVG } from "qrcode.react";
@@ -21,11 +20,14 @@ import { format } from "date-fns";
 export default function LoadOrderDocumentPage() {
   const { id } = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const db = useFirestore();
   
   const [driver, setDriver] = useState<Driver | null>(null);
   const [truck, setTruck] = useState<TruckType | null>(null);
   const [loadingExtras, setLoadingExtras] = useState(true);
+
+  const autoPrint = searchParams.get('print') === 'true';
 
   const loadRef = useMemo(() => {
     if (!db || !id) return null;
@@ -62,6 +64,16 @@ export default function LoadOrderDocumentPage() {
     if (load) fetchExtras();
   }, [db, load]);
 
+  // Lógica de impresión automática si se solicita por parámetro
+  useEffect(() => {
+    if (autoPrint && !loadLoading && !loadingExtras && load) {
+      const timer = setTimeout(() => {
+        window.print();
+      }, 1500); // Pequeño delay para asegurar renderizado de fuentes y QR
+      return () => clearTimeout(timer);
+    }
+  }, [autoPrint, loadLoading, loadingExtras, load]);
+
   const handlePrint = () => {
     window.print();
   };
@@ -84,7 +96,7 @@ export default function LoadOrderDocumentPage() {
           <div className="flex gap-3">
              <Badge className="bg-blue-600 text-white border-none animate-pulse">VISTA PREVIA PDF NATIVO</Badge>
              <Button onClick={handlePrint} className="bg-white text-slate-900 hover:bg-blue-50 rounded-xl font-black shadow-2xl px-10 h-12">
-               <Printer className="mr-2 h-5 w-5" /> GENERAR PDF (TEXTO REAL)
+               <Download className="mr-2 h-5 w-5" /> GUARDAR PDF (TEXTO REAL)
              </Button>
           </div>
         </div>

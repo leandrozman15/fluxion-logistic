@@ -1,8 +1,7 @@
-
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useFirestore, useDoc, useCollection } from "@/firebase";
 import { doc, updateDoc, serverTimestamp, collection, query, orderBy, getDoc } from "firebase/firestore";
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -33,6 +32,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 export default function LoadWalletPage() {
   const { id } = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const db = useFirestore();
   const { toast } = useToast();
   
@@ -40,6 +40,8 @@ export default function LoadWalletPage() {
   const [driver, setDriver] = useState<Driver | null>(null);
   const [truck, setTruck] = useState<TruckType | null>(null);
   const [loadingExtras, setLoadingExtras] = useState(false);
+
+  const autoPrint = searchParams.get('print') === 'true';
 
   const loadRef = useMemo(() => {
     if (!db || !id) return null;
@@ -84,14 +86,15 @@ export default function LoadWalletPage() {
     fetchExtras();
   }, [db, load]);
 
-  const stats = useMemo(() => {
-    if (!expenses) return { total: 0, pending: 0, approved: 0 };
-    return {
-      total: expenses.reduce((acc, exp) => acc + (exp.amount || 0), 0),
-      pending: expenses.filter(e => e.status === 'registered').length,
-      approved: expenses.reduce((acc, exp) => exp.status === 'approved' ? acc + exp.amount : acc, 0)
-    };
-  }, [expenses]);
+  // Lógica de descarga directa/impresión automática
+  useEffect(() => {
+    if (autoPrint && !loading && !loadingExtras && expenses) {
+      const timer = setTimeout(() => {
+        window.print();
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [autoPrint, loading, loadingExtras, expenses]);
 
   const downloadPdf = () => {
     window.print();
@@ -100,8 +103,9 @@ export default function LoadWalletPage() {
   if (loading || loadingExtras) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!load) return <div className="p-10 text-center">Carga no encontrada.</div>;
 
-  const balanceFinal = stats.approved - (load.budget?.initialAdvance || 0);
-  const budgetProgress = load.budget?.totalBudget ? (stats.approved / load.budget.totalBudget) * 100 : 0;
+  const balanceFinal = (expenses?.filter(e => e.status === 'approved').reduce((acc, exp) => acc + (exp.amount || 0), 0) || 0) - (load.budget?.initialAdvance || 0);
+  const statsApproved = expenses?.filter(e => e.status === 'approved').reduce((acc, exp) => acc + (exp.amount || 0), 0) || 0;
+  const budgetProgress = load.budget?.totalBudget ? (statsApproved / load.budget.totalBudget) * 100 : 0;
 
   return (
     <div className="min-h-screen bg-slate-800 py-8 print:bg-white print:py-0 overflow-y-auto">
@@ -117,7 +121,7 @@ export default function LoadWalletPage() {
         <div className="flex gap-3">
            <Badge className="bg-green-600 text-white border-none">VISTA PREVIA TEXTO NATIVO</Badge>
            <Button className="font-black h-11 px-8 rounded-xl shadow-2xl bg-white text-slate-900 hover:bg-blue-50" onClick={downloadPdf}>
-             <Download size={18} className="mr-2" /> GENERAR REPORTE (PDF TEXTO)
+             <Download size={18} className="mr-2" /> GUARDAR REPORTE (PDF)
            </Button>
         </div>
       </div>
@@ -130,14 +134,14 @@ export default function LoadWalletPage() {
         </Card>
         <Card className="bg-white border-none shadow-sm rounded-2xl">
           <CardHeader className="pb-2"><CardTitle className="text-[9px] uppercase text-slate-400 font-black tracking-widest">Auditado</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-black italic text-slate-800">${stats.approved.toLocaleString()}</div></CardContent>
+          <CardContent><div className="text-2xl font-black italic text-slate-800">${statsApproved.toLocaleString()}</div></CardContent>
         </Card>
         <Card className="md:col-span-2 bg-white border-none shadow-sm rounded-2xl">
           <CardHeader className="pb-2"><CardTitle className="text-[9px] uppercase text-slate-400 font-black tracking-widest">Consumo Presupuesto</CardTitle></CardHeader>
           <CardContent className="space-y-3 pt-1">
             <Progress value={budgetProgress} className="h-1.5 rounded-full" />
             <div className="flex justify-between text-[8px] font-black text-slate-400 uppercase">
-               <span>CONSUMIDO: ${stats.approved.toLocaleString()}</span>
+               <span>CONSUMIDO: ${statsApproved.toLocaleString()}</span>
                <span>DISPONIBLE: ${load.budget?.totalBudget?.toLocaleString() || '0'}</span>
             </div>
           </CardContent>
@@ -206,7 +210,7 @@ export default function LoadWalletPage() {
                <tfoot>
                   <tr className="border-t-[4px] border-black bg-slate-50">
                      <td colSpan={3} className="p-5 text-right text-xs font-black uppercase italic tracking-widest">Total Comprobantes Auditados:</td>
-                     <td className="p-5 text-right text-lg font-black italic">${stats.approved.toLocaleString()}</td>
+                     <td className="p-5 text-right text-lg font-black italic">${statsApproved.toLocaleString()}</td>
                   </tr>
                   <tr>
                      <td colSpan={3} className="p-3 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Fondos Iniciales (Anticipo):</td>
