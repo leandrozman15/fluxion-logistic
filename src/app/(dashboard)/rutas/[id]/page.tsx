@@ -23,7 +23,7 @@ import {
   Zap, Satellite, SignalHigh, Loader2, Compass, Gauge, History, 
   Coffee, Moon, Car, Battery, Flame, CloudRain, Construction, FileWarning, HelpCircle,
   Siren, LifeBuoy, CirclePlay, CircleCheck, ListOrdered, XCircle, User,
-  Signature, Timer, Play, Pause
+  Timer, Play, Pause, Home, MoveLeft
 } from "lucide-react";
 import { Load, Expense, ExpenseCategory, LoadStatus, TrackingPoint, Tenant, LoadLegStop, ProofOfDelivery } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -124,7 +124,7 @@ export default function RouteDetailPage() {
   }, [load]);
 
   useEffect(() => {
-    if (!load || load.status !== 'on_route' || !loadRef) return;
+    if (!load || (load.status !== 'on_route' && load.status !== 'on_pause') || !loadRef) return;
 
     const updateLocation = () => {
       if (typeof window === 'undefined' || !navigator.geolocation) return;
@@ -163,7 +163,7 @@ export default function RouteDetailPage() {
           });
         },
         (error) => {
-          // Silent GPS errors to prevent NextJS Error Overlay in low signal areas
+          // GPS silent error
         },
         { enableHighAccuracy: true, timeout: 15000 }
       );
@@ -173,6 +173,10 @@ export default function RouteDetailPage() {
     const intervalId = setInterval(updateLocation, 60000);
     return () => clearInterval(intervalId);
   }, [load?.status, loadRef]);
+
+  const allOutboundDone = useMemo(() => {
+    return load?.outboundStops.every(s => !!s.deliveredAt);
+  }, [load?.outboundStops]);
 
   const currentStopIndex = useMemo(() => {
     if (!load?.outboundStops) return -1;
@@ -196,6 +200,49 @@ export default function RouteDetailPage() {
       toast({ title: "Viaje Iniciado", description: "Rastreo GPS activo." });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al iniciar viaje" });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleStartReturn = async () => {
+    if (!load || !loadRef) return;
+    setIsUpdating(true);
+    try {
+      await updateDoc(loadRef, {
+        "tracking.returnStartedAt": serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      toast({ title: "Retorno a Base Iniciado", description: "Kilometraje de vuelta en seguimiento." });
+      
+      // Lanzar navegación a la base
+      const lat = load.returnDestination?.lat || load.origin.lat || -34.6;
+      const lng = load.returnDestination?.lng || load.origin.lng || -58.3;
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      const url = isIOS 
+        ? `maps://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`
+        : `google.navigation:q=${lat},${lng}`;
+      
+      window.location.href = url;
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al iniciar retorno" });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleFinishAtBase = async () => {
+    if (!loadRef) return;
+    setIsUpdating(true);
+    try {
+      await updateDoc(loadRef, {
+        status: 'delivered',
+        "tracking.tripEndedAt": serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      toast({ title: "Jornada Finalizada", description: "Vehículo en base y reporte cerrado." });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al finalizar" });
     } finally {
       setIsUpdating(false);
     }
@@ -250,7 +297,6 @@ export default function RouteDetailPage() {
         const base64 = event.target?.result as string;
         const compressed = await compressImage(base64, 1024, 1024, 0.6);
         setPodForm(prev => ({ ...prev, photoUrl: compressed }));
-        toast({ title: "Foto capturada" });
       };
       reader.readAsDataURL(file);
     }
@@ -259,7 +305,7 @@ export default function RouteDetailPage() {
   const handleConfirmDelivery = async () => {
     if (!load || !loadRef || !currentStop || !db) return;
     if (!podForm.receiverName || !podForm.receiverSignatureUrl || !podForm.driverSignatureUrl) {
-      toast({ variant: "destructive", title: "Datos incompletos", description: "Firma y nombre obligatorios." });
+      toast({ variant: "destructive", title: "Datos incompletos", description: "Firmas y nombre obligatorios." });
       return;
     }
 
@@ -283,15 +329,14 @@ export default function RouteDetailPage() {
         } : s
       );
 
-      const allDone = updatedStops.every(s => !!s.deliveredAt);
-      
+      // We stay in 'on_route' even if all done to allow the 'Return to Base' phase
       await updateDoc(loadRef, {
         outboundStops: updatedStops,
-        status: allDone ? 'delivered' : 'on_route',
+        status: 'on_route',
         updatedAt: serverTimestamp()
       });
 
-      toast({ title: "Entrega Confirmada", description: "Remito archivado y central notificada." });
+      toast({ title: "Entrega Confirmada", description: "Punto de descarga registrado." });
       setIsPodOpen(false);
       setPodForm({ receiverName: "", receiverSignatureUrl: "", driverSignatureUrl: "", photoUrl: "", notes: "" });
     } catch (e) {
@@ -319,13 +364,6 @@ export default function RouteDetailPage() {
 
       await addDoc(expRef, payload);
       await addDoc(globalExpRef, payload);
-
-      if (expenseData.category === 'fuel' && expenseData.odometerKm > 0 && load.assignedTruckId) {
-        await updateDoc(doc(db, "trucks", load.assignedTruckId), {
-          odometerKm: expenseData.odometerKm,
-          updatedAt: serverTimestamp()
-        });
-      }
 
       toast({ title: "Gasto Registrado" });
       setIsExpenseOpen(false);
@@ -364,8 +402,7 @@ export default function RouteDetailPage() {
     }
   };
 
-  if (loadLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
-  if (!load) return <div className="p-10 text-center text-slate-400">Viaje no encontrado.</div>;
+  const isReturning = !!load?.tracking?.returnStartedAt;
 
   return (
     <div className="max-w-md mx-auto space-y-6 pb-32 px-2">
@@ -376,13 +413,9 @@ export default function RouteDetailPage() {
           <p className="text-[9px] text-slate-400 font-mono uppercase tracking-widest mt-1">{load.orderNumber}</p>
         </div>
         <div className="flex items-center gap-2">
-           {load.status === 'on_route' ? (
+           {(load.status === 'on_route' || load.status === 'on_pause') ? (
              <div className="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center text-green-600 border border-green-100 shadow-sm animate-pulse">
                 <Satellite size={18} />
-             </div>
-           ) : load.status === 'on_pause' ? (
-             <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-600 border border-amber-100 shadow-sm">
-                <Timer size={18} />
              </div>
            ) : (
              <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 border border-slate-100">
@@ -403,7 +436,7 @@ export default function RouteDetailPage() {
         <TabsContent value="mission" className="space-y-6 animate-in fade-in">
           <Card className={cn(
             "border-none rounded-[2.5rem] overflow-hidden shadow-2xl transition-all",
-            load.status === 'on_route' ? "bg-blue-600 text-white" : 
+            load.status === 'on_route' ? (isReturning ? "bg-indigo-600 text-white" : "bg-blue-600 text-white") : 
             load.status === 'delivered' ? "bg-green-600 text-white" : 
             load.status === 'on_pause' ? "bg-amber-50 text-white" : "bg-slate-900 text-white"
           )}>
@@ -411,7 +444,7 @@ export default function RouteDetailPage() {
                <div className="space-y-1">
                  <p className="text-[10px] font-black uppercase text-white/50 tracking-widest">Estado de Jornada</p>
                  <h2 className="text-3xl font-black uppercase italic tracking-tighter">
-                   {load.status === 'on_route' ? 'En Tránsito' : 
+                   {load.status === 'on_route' ? (isReturning ? 'Volviendo a Base' : 'En Tránsito') : 
                     load.status === 'on_pause' ? `Pausa: ${load.tracking?.lastPauseType || 'Descanso'}` :
                     load.status === 'delivered' ? 'Viaje Finalizado' : 
                     load.status === 'incident' ? 'Incidencia' : 'Listo para Salir'}
@@ -426,12 +459,30 @@ export default function RouteDetailPage() {
                  <Button className="w-full bg-white text-amber-600 hover:bg-slate-50 h-16 text-lg font-black rounded-2xl shadow-xl" onClick={handleEndPause} disabled={isUpdating}>
                    REANUDAR VIAJE <Play className="ml-2 fill-current" />
                  </Button>
-               ) : load.status === 'on_route' && currentStop ? (
+               ) : load.status === 'on_route' && !allOutboundDone && currentStop ? (
                  <div className="space-y-3">
                    <p className="text-[10px] font-bold text-white/70 uppercase">Destino {currentStopIndex + 1} de {load.outboundStops.length}: {currentStop.name}</p>
                    <Button className="w-full bg-green-500 hover:bg-green-600 text-white h-16 text-lg font-black rounded-2xl shadow-xl" onClick={() => setIsPodOpen(true)} disabled={isUpdating}>
                      CONFIRMAR LLEGADA <CheckCircle2 className="ml-2" />
                    </Button>
+                 </div>
+               ) : load.status === 'on_route' && allOutboundDone ? (
+                 <div className="space-y-4 animate-in zoom-in-95">
+                    {!isReturning ? (
+                      <>
+                        <p className="text-xs font-bold text-white/70 uppercase italic">Entregas completadas. Inicie el retorno para registrar el kilometraje final.</p>
+                        <Button className="w-full bg-white text-indigo-600 hover:bg-slate-50 h-16 text-lg font-black rounded-2xl shadow-xl" onClick={handleStartReturn} disabled={isUpdating}>
+                           VOLVER A BASE <Home className="ml-2" />
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-xs font-bold text-white/70 uppercase">Destino: {load.returnDestination?.name || load.origin.name}</p>
+                        <Button className="w-full bg-green-500 hover:bg-green-600 text-white h-16 text-lg font-black rounded-2xl shadow-xl" onClick={handleFinishAtBase} disabled={isUpdating}>
+                           FINALIZAR EN BASE <CheckCircle2 className="ml-2" />
+                        </Button>
+                      </>
+                    )}
                  </div>
                ) : load.status === 'delivered' ? (
                  <div className="flex flex-col items-center gap-2">
@@ -441,6 +492,25 @@ export default function RouteDetailPage() {
                ) : null}
             </CardContent>
           </Card>
+
+          {load.status === 'on_route' && (
+            <Card className="border-none shadow-md bg-slate-50 rounded-3xl mx-1">
+               <CardContent className="p-5 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                     <div className="w-10 h-10 rounded-2xl bg-white border flex items-center justify-center text-blue-600">
+                        <Gauge size={20} />
+                     </div>
+                     <div>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Distancia Auditada</p>
+                        <p className="text-xl font-black text-slate-800 italic mt-1">{load.tracking?.distanceTraveledKm?.toFixed(1) || 0} <span className="text-xs font-normal opacity-50">KM</span></p>
+                     </div>
+                  </div>
+                  <div className="text-right">
+                     <Badge variant="outline" className="bg-white text-blue-600 border-blue-100 text-[8px] font-black uppercase">Sensor Vivo</Badge>
+                  </div>
+               </CardContent>
+            </Card>
+          )}
 
           <Card className="border-none shadow-xl h-64 relative rounded-[2rem] overflow-hidden mx-1">
              {L && (
@@ -457,7 +527,7 @@ export default function RouteDetailPage() {
 
           <div className="space-y-4 px-1">
              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 ml-2">
-               <ListOrdered size={14} className="text-blue-500" /> Hoja de Ruta Secuencial
+               <ListOrdered size={14} className="text-blue-500" /> Hoja de Ruta
              </p>
              <div className="space-y-3">
                 {load.outboundStops.map((stop, idx) => (
@@ -484,6 +554,28 @@ export default function RouteDetailPage() {
                       )}
                    </div>
                 ))}
+                
+                {/* Visualización del Punto de Retorno */}
+                {(isReturning || allOutboundDone) && (
+                   <div className={cn(
+                     "p-5 rounded-3xl border-2 flex justify-between items-center border-dashed transition-all",
+                     load.status === 'delivered' ? "bg-green-50 border-green-200" : "bg-indigo-50 border-indigo-200"
+                   )}>
+                      <div className="flex items-center gap-4">
+                         <div className={cn(
+                           "w-8 h-8 rounded-full flex items-center justify-center text-white border shadow-inner",
+                           load.status === 'delivered' ? "bg-green-600 border-green-500" : "bg-indigo-600 border-indigo-500"
+                         )}>
+                           <Home size={14} />
+                         </div>
+                         <div>
+                            <p className="text-sm font-black uppercase text-indigo-700">Retorno a Base</p>
+                            <p className="text-[10px] text-slate-500 font-medium">{load.returnDestination?.name || load.origin.name}</p>
+                         </div>
+                      </div>
+                      <Badge className="bg-indigo-600 text-white border-none text-[8px] font-black uppercase">Base Final</Badge>
+                   </div>
+                )}
              </div>
           </div>
         </TabsContent>
