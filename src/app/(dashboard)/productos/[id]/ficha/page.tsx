@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo } from "react";
@@ -16,14 +17,13 @@ import {
   Ship, 
   ThermometerSnowflake, 
   AlertTriangle, 
-  ShieldCheck, 
-  Box, 
   CheckCircle2, 
   LayoutGrid, 
   FileText,
   Building2,
   Globe,
-  Info as InfoIcon
+  Info as InfoIcon,
+  Box
 } from "lucide-react";
 import { Product, Tenant } from "@/app/lib/types";
 import { QRCodeSVG } from "qrcode.react";
@@ -143,26 +143,31 @@ export default function ProductTechnicalSheetPage() {
              {/* SECCIÓN 2: ESPECIFICACIONES TÉCNICAS (GRIDS) */}
              <div className="space-y-6">
                 <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-slate-400 border-b-2 border-slate-100 pb-2">Configuración Logística</h3>
-                <div className="grid grid-cols-4 gap-4">
-                   <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-2">
-                      <Scale size={20} className="text-blue-600" />
-                      <p className="text-[9px] font-black text-slate-400 uppercase">Peso Bruto</p>
-                      <p className="text-2xl font-black italic">{product.unitWeightKg} <span className="text-xs font-normal">KG</span></p>
+                <div className="grid grid-cols-5 gap-4">
+                   <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+                      <Scale size={18} className="text-blue-600" />
+                      <p className="text-[8px] font-black text-slate-400 uppercase">Peso Bruto</p>
+                      <p className="text-xl font-black italic">{product.unitWeightKg} <span className="text-[10px] font-normal">KG</span></p>
                    </div>
-                   <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-2">
-                      <LayoutGrid size={20} className="text-blue-600" />
-                      <p className="text-[9px] font-black text-slate-400 uppercase">Volumen</p>
-                      <p className="text-2xl font-black italic">{product.unitVolumeM3} <span className="text-xs font-normal">M³</span></p>
+                   <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+                      <Box size={18} className="text-blue-600" />
+                      <p className="text-[8px] font-black text-slate-400 uppercase">Volumen</p>
+                      <p className="text-xl font-black italic">{product.unitVolumeM3} <span className="text-[10px] font-normal">M³</span></p>
                    </div>
-                   <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-2">
-                      <Layers size={20} className="text-blue-600" />
-                      <p className="text-[9px] font-black text-slate-400 uppercase">u. x Pallet</p>
-                      <p className="text-2xl font-black italic">{product.unitsPerPallet || '--'} <span className="text-xs font-normal">Un.</span></p>
+                   <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+                      <LayoutGrid size={18} className="text-blue-600" />
+                      <p className="text-[8px] font-black text-slate-400 uppercase">u. por Caja</p>
+                      <p className="text-xl font-black italic">{product.unitsPerBox || '--'} <span className="text-[10px] font-normal">Un.</span></p>
                    </div>
-                   <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-2">
-                      <Box size={20} className="text-blue-600" />
-                      <p className="text-[9px] font-black text-slate-400 uppercase">Embalaje</p>
-                      <p className="text-xl font-black uppercase italic truncate">{product.packagingType}</p>
+                   <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+                      <Layers size={18} className="text-blue-600" />
+                      <p className="text-[8px] font-black text-slate-400 uppercase">u. por Pallet</p>
+                      <p className="text-xl font-black italic">{product.unitsPerPallet || '--'} <span className="text-[10px] font-normal">Un.</span></p>
+                   </div>
+                   <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+                      <Package size={18} className="text-blue-600" />
+                      <p className="text-[8px] font-black text-slate-400 uppercase">Embalaje</p>
+                      <p className="text-lg font-black uppercase italic truncate">{product.packagingType}</p>
                    </div>
                 </div>
              </div>

@@ -18,7 +18,7 @@ import {
   Scale, Layers, ShieldCheck, CheckCircle2, 
   Info, Tag, Ship, ThermometerSnowflake, 
   AlertTriangle, ScanBarcode, Camera, Image as ImageIcon, 
-  ChevronRight, ChevronLeft, Package
+  ChevronRight, ChevronLeft, Package, LayoutGrid
 } from "lucide-react";
 import { Product } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -42,7 +42,8 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
 
   const [formData, setFormData] = useState<Partial<Product>>({
     sku: "", name: "", brand: "", description: "", category: "Alimentos y Bebidas",
-    unitWeightKg: 0, unitVolumeM3: 0, packagingType: 'pallet', status: 'active', photoUrl: ""
+    unitWeightKg: 0, unitVolumeM3: 0, packagingType: 'pallet', status: 'active', photoUrl: "",
+    unitsPerBox: 0, unitsPerPallet: 0
   });
 
   const productRef = useMemo(() => productId && db ? doc(db, "products", productId) : null, [db, productId]);
@@ -104,22 +105,72 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
       <div className="animate-in fade-in duration-300">
         <Card className="border-none shadow-sm">
           <CardHeader><CardTitle>Ficha del Artículo</CardTitle></CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="flex flex-col items-center justify-center p-6 bg-slate-50 border-2 border-dashed rounded-2xl space-y-4">
-              <div className="relative w-40 h-40 bg-white rounded-2xl border-2 border-slate-200 shadow-md flex items-center justify-center overflow-hidden">
-                {formData.photoUrl ? <img src={formData.photoUrl} className="w-full h-full object-cover" /> : <Package size={48} className="text-slate-300" />}
-                {isProcessingPhoto && <div className="absolute inset-0 bg-white/80 flex items-center justify-center"><Loader2 className="animate-spin" /></div>}
+          <CardContent className="space-y-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="flex flex-col items-center justify-center p-6 bg-slate-50 border-2 border-dashed rounded-2xl space-y-4">
+                <div className="relative w-40 h-40 bg-white rounded-2xl border-2 border-slate-200 shadow-md flex items-center justify-center overflow-hidden">
+                  {formData.photoUrl ? <img src={formData.photoUrl} className="w-full h-full object-cover" /> : <Package size={48} className="text-slate-300" />}
+                  {isProcessingPhoto && <div className="absolute inset-0 bg-white/80 flex items-center justify-center"><Loader2 className="animate-spin" /></div>}
+                </div>
+                <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handlePhotoChange} />
+                <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}><Camera size={14} className="mr-2" /> SUBIR FOTO</Button>
               </div>
-              <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handlePhotoChange} />
-              <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}><Camera size={14} className="mr-2" /> SUBIR FOTO</Button>
+              <div className="space-y-4">
+                <div className="space-y-1"><Label>SKU / Código</Label><Input value={formData.sku} onChange={e => setFormData({...formData, sku: e.target.value.toUpperCase()})} /></div>
+                <div className="space-y-1"><Label>Nombre del Producto</Label><Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
+                <div className="space-y-1"><Label>Marca</Label><Input value={formData.brand} onChange={e => setFormData({...formData, brand: e.target.value})} /></div>
+              </div>
             </div>
-            <div className="space-y-4">
-              <div className="space-y-1"><Label>SKU</Label><Input value={formData.sku} onChange={e => setFormData({...formData, sku: e.target.value.toUpperCase()})} /></div>
-              <div className="space-y-1"><Label>Nombre</Label><Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
-              <div className="space-y-1"><Label>Descripción Técnica</Label><Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} /></div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t">
+              <div className="space-y-1">
+                <Label>Peso Unitario (KG)</Label>
+                <div className="relative">
+                  <Scale className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                  <Input type="number" className="pl-9" value={formData.unitWeightKg} onChange={e => setFormData({...formData, unitWeightKg: parseFloat(e.target.value) || 0})} />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>Volumen Unitario (M³)</Label>
+                <div className="relative">
+                  <Box className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                  <Input type="number" step="0.001" className="pl-9" value={formData.unitVolumeM3} onChange={e => setFormData({...formData, unitVolumeM3: parseFloat(e.target.value) || 0})} />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>Categoría</Label>
+                <Select value={formData.category} onValueChange={v => setFormData({...formData, category: v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t">
+               <div className="space-y-1">
+                  <Label>Unidades por Caja</Label>
+                  <div className="relative">
+                    <LayoutGrid className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                    <Input type="number" className="pl-9" value={formData.unitsPerBox} onChange={e => setFormData({...formData, unitsPerBox: parseInt(e.target.value) || 0})} />
+                  </div>
+               </div>
+               <div className="space-y-1">
+                  <Label>Unidades por Pallet</Label>
+                  <div className="relative">
+                    <Layers className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                    <Input type="number" className="pl-9" value={formData.unitsPerPallet} onChange={e => setFormData({...formData, unitsPerPallet: parseInt(e.target.value) || 0})} />
+                  </div>
+               </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label>Descripción Técnica</Label>
+              <Textarea placeholder="Detalle los materiales, usos y cuidados..." className="min-h-[120px]" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
             </div>
           </CardContent>
-          <CardFooter className="flex justify-end pt-6 border-t"><Button onClick={handleSubmit} disabled={isSubmitting} className="bg-blue-600">{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} GUARDAR PRODUCTO</Button></CardFooter>
+          <CardFooter className="flex justify-end pt-6 border-t"><Button onClick={handleSubmit} disabled={isSubmitting} className="bg-blue-600 h-12 px-10 font-bold">{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} GUARDAR PRODUCTO</Button></CardFooter>
         </Card>
       </div>
     </div>

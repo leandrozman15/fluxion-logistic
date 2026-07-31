@@ -32,6 +32,7 @@ export interface Product {
   
   // Packaging
   packagingType: 'box' | 'bag' | 'drum' | 'pallet' | 'loose' | 'container';
+  unitsPerBox?: number;
   unitsPerPallet?: number;
   
   // Compliance / Argentina
