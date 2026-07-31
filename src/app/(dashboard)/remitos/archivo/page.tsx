@@ -35,10 +35,10 @@ export default function RemitosArchivePage() {
 
   const { data: allRemitos, loading } = useCollection<PendingRemito>(remitosQuery);
 
-  const deliveredRemitos = useMemo(() => {
+  const archivedRemitos = useMemo(() => {
     if (!allRemitos) return [];
     return allRemitos.filter(r => 
-      r.status === 'delivered' && (
+      r.status === 'archived' && (
         r.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
         r.clientName.toLowerCase().includes(searchTerm.toLowerCase())
       )
@@ -51,7 +51,7 @@ export default function RemitosArchivePage() {
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full bg-white shadow-sm border"><ArrowLeft /></Button>
         <div>
           <h1 className="text-3xl font-black text-slate-900 italic tracking-tighter uppercase leading-none">Archivo de Remitos</h1>
-          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Historial de entregas finalizadas y auditadas.</p>
+          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Historial de entregas finalizadas, auditadas y archivadas manualmente.</p>
         </div>
       </div>
 
@@ -61,15 +61,15 @@ export default function RemitosArchivePage() {
             <Search className="absolute left-4 top-3 h-5 w-5 text-white/30" />
             <Input 
               type="search" 
-              placeholder="Buscar en el historial..." 
+              placeholder="Buscar en el archivo histórico..." 
               className="bg-white/10 border-white/20 text-white pl-12 h-12 text-sm font-bold rounded-2xl focus:bg-white/20 transition-all"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
           </div>
           <div className="flex items-center gap-2">
-             <CheckCircle2 className="text-green-400" />
-             <span className="text-sm font-black uppercase italic">{deliveredRemitos.length} Entregas Auditadas</span>
+             <Archive className="text-blue-400" />
+             <span className="text-sm font-black uppercase italic">{archivedRemitos.length} Documentos Archivados</span>
           </div>
         </div>
 
@@ -80,23 +80,23 @@ export default function RemitosArchivePage() {
             <Table>
               <TableHeader className="bg-slate-50/30">
                 <TableRow>
-                  <TableHead className="px-8 text-[10px] font-black uppercase tracking-widest">N° Remito / Entrega</TableHead>
+                  <TableHead className="px-8 text-[10px] font-black uppercase tracking-widest">N° Remito / Fecha</TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest">Destinatario</TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Bultos / Peso</TableHead>
-                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Estado</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Estado Final</TableHead>
                   <TableHead className="pr-8 text-right text-[10px] font-black uppercase tracking-widest">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {deliveredRemitos.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-center py-32 text-slate-400 italic font-bold uppercase text-xs">No hay registros entregados aún.</TableCell></TableRow>
+                {archivedRemitos.length === 0 ? (
+                  <TableRow><TableCell colSpan={5} className="text-center py-32 text-slate-400 italic font-bold uppercase text-xs">No hay documentos en el archivo.</TableCell></TableRow>
                 ) : (
-                  deliveredRemitos.map((remito) => (
+                  archivedRemitos.map((remito) => (
                     <TableRow key={remito.id} className="hover:bg-slate-50/50 transition-all group">
                       <TableCell className="px-8 py-6">
                         <div className="flex items-center gap-4">
-                           <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center text-green-600 border border-green-100">
-                              <CheckCircle2 size={20} />
+                           <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white border border-slate-700">
+                              <Archive size={20} />
                            </div>
                            <div>
                               <p className="font-mono font-black text-slate-900 text-sm">{remito.number}</p>
@@ -121,15 +121,17 @@ export default function RemitosArchivePage() {
                          </div>
                       </TableCell>
                       <TableCell className="text-center">
-                         <Badge className="bg-green-600 text-white border-none text-[8px] font-black uppercase">AUDITADO OK</Badge>
+                         <Badge className="bg-blue-600 text-white border-none text-[8px] font-black uppercase">ARCHIVADO</Badge>
                       </TableCell>
                       <TableCell className="pr-8 text-right">
                         <div className="flex justify-end gap-2">
-                           <Button variant="outline" size="sm" className="h-9 px-4 rounded-xl font-bold text-[10px] uppercase gap-2" asChild>
-                             <Link href={`/cargas/${remito.loadId}/reporte`}>
-                               <Eye size={14} /> Ver Viaje
-                             </Link>
-                           </Button>
+                           {remito.loadId && (
+                             <Button variant="outline" size="sm" className="h-9 px-4 rounded-xl font-bold text-[10px] uppercase gap-2" asChild>
+                               <Link href={`/cargas/${remito.loadId}/reporte`}>
+                                 <Eye size={14} /> Ver Viaje
+                               </Link>
+                             </Button>
+                           )}
                            {remito.fileUrl && (
                              <Button variant="ghost" size="icon" className="h-9 w-9 text-blue-600" onClick={() => window.open(remito.fileUrl, '_blank')}>
                                <FileText size={18} />

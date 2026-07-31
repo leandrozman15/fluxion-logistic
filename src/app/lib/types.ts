@@ -123,7 +123,7 @@ export interface PendingRemito {
   volumeM3: number;
   items?: PendingRemitoItem[];
   fileUrl?: string;
-  status: 'pending' | 'dispatched' | 'delivered';
+  status: 'pending' | 'dispatched' | 'delivered' | 'archived';
   loadId?: string;
   dispatchedDate?: string;
   deliveredAt?: any;
