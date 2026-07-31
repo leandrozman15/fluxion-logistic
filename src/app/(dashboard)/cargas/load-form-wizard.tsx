@@ -87,6 +87,14 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
         returnStops: existingLoad.returnStops || [],
         assignedCompanionIds: existingLoad.assignedCompanionIds || []
       });
+      // Initialize selected remitos from existing stops
+      const remitoIds: string[] = [];
+      existingLoad.outboundStops?.forEach(s => {
+        s.documents?.forEach(d => {
+          if (d.pendingRemitoId) remitoIds.push(d.pendingRemitoId);
+        });
+      });
+      setSelectedRemitoIds(remitoIds);
     }
   }, [existingLoad]);
 
@@ -94,13 +102,18 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
   const driversQuery = useMemo(() => db ? query(collection(db, "drivers"), orderBy("lastName")) : null, [db]);
   const clientsQuery = useMemo(() => db ? query(collection(db, "clients"), orderBy("name")) : null, [db]);
   const hubsQuery = useMemo(() => db ? query(collection(db, "hubs"), orderBy("name")) : null, [db]);
-  const remitosQuery = useMemo(() => db ? query(collection(db, "pending_remitos"), where("status", "==", "pending")) : null, [db]);
+  const remitosQuery = useMemo(() => db ? query(collection(db, "pending_remitos"), where("status", "in", ["pending", "dispatched"])) : null, [db]);
 
   const { data: trucks } = useCollection<TruckType>(trucksQuery);
   const { data: drivers } = useCollection<Driver>(driversQuery);
   const { data: clients } = useCollection<Client>(clientsQuery);
   const { data: hubs } = useCollection<Hub>(hubsQuery);
-  const { data: remitos } = useCollection<PendingRemito>(remitosQuery);
+  const { data: allRemitos } = useCollection<PendingRemito>(remitosQuery);
+
+  // Filter remitos that are either pending or belong to this specific load
+  const remitos = useMemo(() => {
+    return allRemitos?.filter(r => r.status === 'pending' || r.loadId === loadId) || [];
+  }, [allRemitos, loadId]);
 
   const driversOnly = useMemo(() => drivers?.filter(d => d.role === 'driver' || !d.role) || [], [drivers]);
   const companionsOnly = useMemo(() => drivers?.filter(d => d.role === 'companion') || [], [drivers]);
@@ -174,7 +187,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     }));
   };
 
-  // AUTOMATION: Map Remito to Stop
   const handleToggleRemito = (remitoId: string) => {
     const isSelected = selectedRemitoIds.includes(remitoId);
     const remito = remitos?.find(r => r.id === remitoId);
@@ -182,14 +194,12 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     if (!remito) return;
 
     if (isSelected) {
-      // Remove stop associated with this remito
       setSelectedRemitoIds(prev => prev.filter(id => id !== remitoId));
       setFormData(prev => ({
         ...prev,
         outboundStops: prev.outboundStops?.filter(s => !s.documents.some(d => d.pendingRemitoId === remitoId))
       }));
     } else {
-      // Add stop associated with this remito
       setSelectedRemitoIds(prev => [...prev, remitoId]);
       
       const newStop: LoadLegStop = {
@@ -244,17 +254,38 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     setIsSubmitting(true);
     try {
       const batch = writeBatch(db);
-      
       let finalLoadId = loadId;
+      let finalOrderNumber = formData.orderNumber;
+
+      // 1. AUTO-GENERACIÓN DE NÚMERO DE ORDEN (FL-YEAR-XXXX)
+      if (!finalOrderNumber) {
+        const loadsSnap = await getDocs(query(collection(db, "loads"), orderBy("orderNumber", "desc"), limit(1)));
+        let nextSeq = 1;
+        if (!loadsSnap.empty) {
+          const lastOrderStr = (loadsSnap.docs[0].data() as Load).orderNumber;
+          const parts = lastOrderStr.split("-");
+          const lastNum = parseInt(parts[parts.length - 1]);
+          if (!isNaN(lastNum)) nextSeq = lastNum + 1;
+        }
+        finalOrderNumber = `FL-${new Date().getFullYear()}-${String(nextSeq).padStart(4, '0')}`;
+      }
+      
+      const cleanFormData = {
+        ...formData,
+        orderNumber: finalOrderNumber,
+        clientName: formData.clientName || (formData.outboundStops?.[0]?.name || "Reparto Multi-Remito"),
+        updatedAt: serverTimestamp()
+      };
+
       if (!loadId) {
         const newRef = doc(collection(db, "loads"));
         finalLoadId = newRef.id;
-        batch.set(newRef, { ...formData, id: finalLoadId, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+        batch.set(newRef, { ...cleanFormData, id: finalLoadId, createdAt: serverTimestamp() });
       } else {
-        batch.update(doc(db, "loads", loadId), { ...formData, updatedAt: serverTimestamp() });
+        batch.update(doc(db, "loads", loadId), cleanFormData);
       }
 
-      // Mark remitos as dispatched
+      // 2. ACTUALIZACIÓN DE REMITOS EN EL BUZÓN
       for (const rid of selectedRemitoIds) {
         batch.update(doc(db, "pending_remitos", rid), {
           status: 'dispatched',
@@ -264,11 +295,33 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
         });
       }
 
+      // 3. DESvincular remitos que ya no están seleccionados (si se editó)
+      if (existingLoad) {
+        const removedRemitoIds = [];
+        existingLoad.outboundStops?.forEach(s => {
+           s.documents?.forEach(d => {
+             if (d.pendingRemitoId && !selectedRemitoIds.includes(d.pendingRemitoId)) {
+               removedRemitoIds.push(d.pendingRemitoId);
+             }
+           });
+        });
+        
+        for (const rid of removedRemitoIds) {
+          batch.update(doc(db, "pending_remitos", rid), {
+            status: 'pending',
+            loadId: null,
+            dispatchedDate: null,
+            updatedAt: serverTimestamp()
+          });
+        }
+      }
+
       await batch.commit();
-      toast({ title: "Operación Guardada" });
+      toast({ title: "Flete Guardado", description: `Orden ${finalOrderNumber} emitida con éxito.` });
       router.push('/cargas');
-    } catch (e) {
-      toast({ variant: "destructive", title: "Error al guardar" });
+    } catch (e: any) {
+      console.error(e);
+      toast({ variant: "destructive", title: "Error al guardar", description: e.message });
     } finally {
       setIsSubmitting(false);
     }
@@ -286,6 +339,15 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
             <p className="text-sm text-slate-500">Gestión de pesos e itinerario COMEX.</p>
           </div>
         </div>
+        <div className="flex items-center gap-2">
+           <Label className="text-[10px] font-black uppercase text-slate-400">N° Orden:</Label>
+           <Input 
+             className="w-40 font-mono font-black h-9 text-blue-600 bg-blue-50 border-blue-100" 
+             placeholder="Auto-Generar" 
+             value={formData.orderNumber} 
+             onChange={e => setFormData({...formData, orderNumber: e.target.value.toUpperCase()})}
+           />
+        </div>
       </div>
 
       <div className="bg-white p-4 rounded-xl border shadow-sm overflow-x-auto">
@@ -300,7 +362,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
             <div key={s.id} className="flex flex-col items-center gap-1.5 flex-1 relative">
               <div className={cn(
                 "w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold z-10 transition-all",
-                step > s.id ? "bg-green-500 text-white" : step === s.id ? "bg-blue-600 text-white shadow-md shadow-blue-100" : "bg-slate-50 text-slate-300 border"
+                step > s.id ? "bg-green-50 text-white" : step === s.id ? "bg-blue-600 text-white shadow-md shadow-blue-100" : "bg-slate-50 text-slate-300 border"
               )}>
                 {step > s.id ? <CheckCircle2 size={18} /> : <s.icon size={16} />}
               </div>
