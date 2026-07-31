@@ -5,7 +5,7 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection, useUser } from "@/firebase";
-import { doc, updateDoc, serverTimestamp, collection, addDoc, arrayUnion, increment } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp, collection, query, addDoc, arrayUnion, increment, orderBy } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -110,7 +110,14 @@ export default function RouteDetailPage() {
   }, []);
 
   const loadRef = useMemo(() => (db && id) ? doc(db, "loads", id as string) : null, [db, id]);
-  const { data: load, loading } = useDoc<Load>(loadRef);
+  const { data: load, loading: loadLoading } = useDoc<Load>(loadRef);
+
+  const expensesQuery = useMemo(() => {
+    if (!db || !id) return null;
+    return query(collection(db, "loads", id as string, "expenses"), orderBy("createdAt", "desc"));
+  }, [db, id]);
+
+  const { data: expenses } = useCollection<Expense>(expensesQuery);
 
   useEffect(() => {
     if (load) loadRefData.current = load;
@@ -360,7 +367,7 @@ export default function RouteDetailPage() {
     }
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
+  if (loadLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!load) return <div className="p-10 text-center text-slate-400">Viaje no encontrado.</div>;
 
   return (
