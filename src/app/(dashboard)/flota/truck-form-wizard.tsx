@@ -223,8 +223,8 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                   </Button>
                 </div>
                 <div className="space-y-4">
-                  <div className="space-y-1"><Label>Patente / Dominio</Label><Input value={formData.plate} onChange={e => setFormData({...formData, plate: e.target.value.toUpperCase()})} /></div>
-                  <div className="space-y-1"><Label>Marca / Modelo</Label><Input value={formData.brand} onChange={e => setFormData({...formData, brand: e.target.value})} /></div>
+                  <div className="space-y-1"><Label>Patente / Dominio</Label><Input value={formData.plate ?? ''} onChange={e => setFormData({...formData, plate: e.target.value.toUpperCase()})} /></div>
+                  <div className="space-y-1"><Label>Marca / Modelo</Label><Input value={formData.brand ?? ''} onChange={e => setFormData({...formData, brand: e.target.value})} /></div>
                 </div>
               </CardContent>
             </Card>
@@ -296,11 +296,11 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <Label className="text-[10px] uppercase font-bold text-blue-400">Patente 1er Semi</Label>
-                      <Input className="bg-white" value={formData.bitren?.firstSemiPlate} onChange={e => setFormData({...formData, bitren: {...(formData.bitren || {} as any), firstSemiPlate: e.target.value.toUpperCase()}})} />
+                      <Input className="bg-white" value={formData.bitren?.firstSemiPlate ?? ''} onChange={e => setFormData({...formData, bitren: {...(formData.bitren || {} as any), firstSemiPlate: e.target.value.toUpperCase()}})} />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-[10px] uppercase font-bold text-blue-400">Patente 2do Semi</Label>
-                      <Input className="bg-white" value={formData.bitren?.secondSemiPlate} onChange={e => setFormData({...formData, bitren: {...(formData.bitren || {} as any), secondSemiPlate: e.target.value.toUpperCase()}})} />
+                      <Input className="bg-white" value={formData.bitren?.secondSemiPlate ?? ''} onChange={e => setFormData({...formData, bitren: {...(formData.bitren || {} as any), secondSemiPlate: e.target.value.toUpperCase()}})} />
                     </div>
                   </div>
                 </div>
@@ -315,11 +315,11 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-1">
                  <Label className="text-xs uppercase font-bold text-slate-400">PBTC Máx (kg)</Label>
-                 <Input type="number" value={formData.grossCombinedWeightKg} onChange={e => setFormData({...formData, grossCombinedWeightKg: parseFloat(e.target.value) || 0})} />
+                 <Input type="number" value={formData.grossCombinedWeightKg ?? 45000} onChange={e => setFormData({...formData, grossCombinedWeightKg: parseFloat(e.target.value) || 0})} />
               </div>
               <div className="space-y-1">
                  <Label className="text-xs uppercase font-bold text-slate-400">Tara Real (kg)</Label>
-                 <Input type="number" value={formData.unladenWeightKg} onChange={e => setFormData({...formData, unladenWeightKg: parseFloat(e.target.value) || 0})} />
+                 <Input type="number" value={formData.unladenWeightKg ?? 15000} onChange={e => setFormData({...formData, unladenWeightKg: parseFloat(e.target.value) || 0})} />
               </div>
               <div className="md:col-span-2 p-6 bg-green-50 border border-green-100 rounded-3xl text-center">
                  <p className="text-[10px] uppercase font-black text-green-700 tracking-widest mb-1">Capacidad de Carga Útil</p>
@@ -327,7 +327,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
               </div>
               <div className="md:col-span-2 space-y-2 pt-4">
                  <Label>Consumo Promedio (L/100km)</Label>
-                 <Input type="number" value={formData.avgConsumption} onChange={e => setFormData({...formData, avgConsumption: parseFloat(e.target.value) || 32})} />
+                 <Input type="number" value={formData.avgConsumption ?? 32} onChange={e => setFormData({...formData, avgConsumption: parseFloat(e.target.value) || 32})} />
                  <p className="text-[10px] text-slate-400 italic">Este valor se utiliza para la asignación inteligente de viajes largos.</p>
               </div>
             </CardContent>
@@ -370,30 +370,30 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                   <CardContent className="pt-6 space-y-4">
                     <div className="space-y-1">
                       <Label className="text-[10px] uppercase font-bold text-slate-400">Sueldo + Cargas (Chofer)</Label>
-                      <Input type="number" value={formData.costs?.fixed.salaryWithSocial || ''} onChange={e => handleCostChange('fixed', 'salaryWithSocial', e.target.value)} />
+                      <Input type="number" value={formData.costs?.fixed.salaryWithSocial ?? 0} onChange={e => handleCostChange('fixed', 'salaryWithSocial', e.target.value)} />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-[10px] uppercase font-bold text-slate-400">Seguro Total Unidad</Label>
-                      <Input type="number" value={formData.costs?.fixed.insuranceTotal || ''} onChange={e => handleCostChange('fixed', 'insuranceTotal', e.target.value)} />
+                      <Input type="number" value={formData.costs?.fixed.insuranceTotal ?? 0} onChange={e => handleCostChange('fixed', 'insuranceTotal', e.target.value)} />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <Label className="text-[10px] uppercase font-bold text-slate-400">Patente (Cuota)</Label>
-                        <Input type="number" value={formData.costs?.fixed.patenteMonthly || ''} onChange={e => handleCostChange('fixed', 'patenteMonthly', e.target.value)} />
+                        <Input type="number" value={formData.costs?.fixed.patenteMonthly ?? 0} onChange={e => handleCostChange('fixed', 'patenteMonthly', e.target.value)} />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] uppercase font-bold text-slate-400">GPS / Satelital</Label>
-                        <Input type="number" value={formData.costs?.fixed.satelliteGps || ''} onChange={e => handleCostChange('fixed', 'satelliteGps', e.target.value)} />
+                        <Input type="number" value={formData.costs?.fixed.satelliteGps ?? 0} onChange={e => handleCostChange('fixed', 'satelliteGps', e.target.value)} />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <Label className="text-[10px] uppercase font-bold text-slate-400">Amortización</Label>
-                        <Input type="number" value={formData.costs?.fixed.amortization || ''} onChange={e => handleCostChange('fixed', 'amortization', e.target.value)} />
+                        <Input type="number" value={formData.costs?.fixed.amortization ?? 0} onChange={e => handleCostChange('fixed', 'amortization', e.target.value)} />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] uppercase font-bold text-slate-400">Habilitaciones</Label>
-                        <Input type="number" value={formData.costs?.fixed.taxesHabilitations || ''} onChange={e => handleCostChange('fixed', 'taxesHabilitations', e.target.value)} />
+                        <Input type="number" value={formData.costs?.fixed.taxesHabilitations ?? 0} onChange={e => handleCostChange('fixed', 'taxesHabilitations', e.target.value)} />
                       </div>
                     </div>
                   </CardContent>
@@ -409,11 +409,11 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                     <CardContent className="pt-6 grid grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <Label className="text-[10px] uppercase font-bold text-slate-400">Costo Service</Label>
-                        <Input type="number" value={formData.costs?.variable.preventiveMaintenance?.cost || ''} onChange={e => handleCostChange('variable', 'preventiveMaintenance', e.target.value, 'cost')} />
+                        <Input type="number" value={formData.costs?.variable.preventiveMaintenance?.cost ?? 0} onChange={e => handleCostChange('variable', 'preventiveMaintenance', e.target.value, 'cost')} />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] uppercase font-bold text-slate-400">Frecuencia (KM)</Label>
-                        <Input type="number" value={formData.costs?.variable.preventiveMaintenance?.frequencyKm || ''} onChange={e => handleCostChange('variable', 'preventiveMaintenance', e.target.value, 'frequencyKm')} />
+                        <Input type="number" value={formData.costs?.variable.preventiveMaintenance?.frequencyKm ?? 20000} onChange={e => handleCostChange('variable', 'preventiveMaintenance', e.target.value, 'frequencyKm')} />
                       </div>
                     </CardContent>
                 </Card>
@@ -428,16 +428,16 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
                           <Label className="text-[10px] uppercase font-bold text-slate-400">Costo Juego Completo</Label>
-                          <Input type="number" value={formData.costs?.variable.tires.costFullSet || ''} onChange={e => handleCostChange('variable', 'tires', e.target.value, 'costFullSet')} />
+                          <Input type="number" value={formData.costs?.variable.tires.costFullSet ?? 0} onChange={e => handleCostChange('variable', 'tires', e.target.value, 'costFullSet')} />
                         </div>
                         <div className="space-y-1">
                           <Label className="text-[10px] uppercase font-bold text-slate-400">Vida Útil (KM)</Label>
-                          <Input type="number" value={formData.costs?.variable.tires.lifeSpanKm || ''} onChange={e => handleCostChange('variable', 'tires', e.target.value, 'lifeSpanKm')} />
+                          <Input type="number" value={formData.costs?.variable.tires.lifeSpanKm ?? 100000} onChange={e => handleCostChange('variable', 'tires', e.target.value, 'lifeSpanKm')} />
                         </div>
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] uppercase font-bold text-slate-400">Reserva Imprevistos x KM</Label>
-                        <Input type="number" step="0.01" value={formData.costs?.variable.unforeseenReservePerKm || ''} onChange={e => handleCostChange('variable', 'unforeseenReservePerKm', e.target.value)} />
+                        <Input type="number" step="0.01" value={formData.costs?.variable.unforeseenReservePerKm ?? 0} onChange={e => handleCostChange('variable', 'unforeseenReservePerKm', e.target.value)} />
                       </div>
                     </CardContent>
                 </Card>
@@ -449,7 +449,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                   <CardContent className="pt-4 space-y-2">
                     <div className="space-y-1">
                       <Label className="text-[10px] uppercase font-bold text-blue-400">KM Mensuales Proyectados</Label>
-                      <Input type="number" className="bg-white" value={formData.costs?.operational.estimatedMonthlyKm || ''} onChange={e => handleCostChange('operational', 'estimatedMonthlyKm', e.target.value)} />
+                      <Input type="number" className="bg-white" value={formData.costs?.operational.estimatedMonthlyKm ?? 10000} onChange={e => handleCostChange('operational', 'estimatedMonthlyKm', e.target.value)} />
                       <p className="text-[8px] text-blue-400 italic">Crucial para prorratear los costos fijos sobre el kilometraje real.</p>
                     </div>
                   </CardContent>

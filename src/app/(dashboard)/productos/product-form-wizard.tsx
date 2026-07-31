@@ -116,9 +116,9 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
                 <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}><Camera size={14} className="mr-2" /> SUBIR FOTO</Button>
               </div>
               <div className="space-y-4">
-                <div className="space-y-1"><Label>SKU / Código</Label><Input value={formData.sku} onChange={e => setFormData({...formData, sku: e.target.value.toUpperCase()})} /></div>
-                <div className="space-y-1"><Label>Nombre del Producto</Label><Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
-                <div className="space-y-1"><Label>Marca</Label><Input value={formData.brand} onChange={e => setFormData({...formData, brand: e.target.value})} /></div>
+                <div className="space-y-1"><Label>SKU / Código</Label><Input value={formData.sku ?? ''} onChange={e => setFormData({...formData, sku: e.target.value.toUpperCase()})} /></div>
+                <div className="space-y-1"><Label>Nombre del Producto</Label><Input value={formData.name ?? ''} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
+                <div className="space-y-1"><Label>Marca</Label><Input value={formData.brand ?? ''} onChange={e => setFormData({...formData, brand: e.target.value})} /></div>
               </div>
             </div>
 
@@ -127,14 +127,14 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
                 <Label>Peso Unitario (KG)</Label>
                 <div className="relative">
                   <Scale className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                  <Input type="number" className="pl-9" value={formData.unitWeightKg} onChange={e => setFormData({...formData, unitWeightKg: parseFloat(e.target.value) || 0})} />
+                  <Input type="number" className="pl-9" value={formData.unitWeightKg ?? 0} onChange={e => setFormData({...formData, unitWeightKg: parseFloat(e.target.value) || 0})} />
                 </div>
               </div>
               <div className="space-y-1">
                 <Label>Volumen Unitario (M³)</Label>
                 <div className="relative">
                   <Box className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                  <Input type="number" step="0.001" className="pl-9" value={formData.unitVolumeM3} onChange={e => setFormData({...formData, unitVolumeM3: parseFloat(e.target.value) || 0})} />
+                  <Input type="number" step="0.001" className="pl-9" value={formData.unitVolumeM3 ?? 0} onChange={e => setFormData({...formData, unitVolumeM3: parseFloat(e.target.value) || 0})} />
                 </div>
               </div>
               <div className="space-y-1">
@@ -153,21 +153,21 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
                   <Label>Unidades por Caja</Label>
                   <div className="relative">
                     <LayoutGrid className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                    <Input type="number" className="pl-9" value={formData.unitsPerBox} onChange={e => setFormData({...formData, unitsPerBox: parseInt(e.target.value) || 0})} />
+                    <Input type="number" className="pl-9" value={formData.unitsPerBox ?? 0} onChange={e => setFormData({...formData, unitsPerBox: parseInt(e.target.value) || 0})} />
                   </div>
                </div>
                <div className="space-y-1">
                   <Label>Unidades por Pallet</Label>
                   <div className="relative">
                     <Layers className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                    <Input type="number" className="pl-9" value={formData.unitsPerPallet} onChange={e => setFormData({...formData, unitsPerPallet: parseInt(e.target.value) || 0})} />
+                    <Input type="number" className="pl-9" value={formData.unitsPerPallet ?? 0} onChange={e => setFormData({...formData, unitsPerPallet: parseInt(e.target.value) || 0})} />
                   </div>
                </div>
             </div>
 
             <div className="space-y-1">
               <Label>Descripción Técnica</Label>
-              <Textarea placeholder="Detalle los materiales, usos y cuidados..." className="min-h-[120px]" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
+              <Textarea placeholder="Detalle los materiales, usos y cuidados..." className="min-h-[120px]" value={formData.description ?? ''} onChange={e => setFormData({...formData, description: e.target.value})} />
             </div>
           </CardContent>
           <CardFooter className="flex justify-end pt-6 border-t"><Button onClick={handleSubmit} disabled={isSubmitting} className="bg-blue-600 h-12 px-10 font-bold">{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} GUARDAR PRODUCTO</Button></CardFooter>
