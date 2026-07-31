@@ -1,9 +1,8 @@
-
 'use client';
 
-import { useState, useRef, useMemo, Suspense } from "react";
+import { useState, useRef, useMemo, Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useFirestore, useUser } from "@/firebase";
+import { useFirestore, useUser, useDoc } from "@/firebase";
 import { collection, serverTimestamp, doc, setDoc, updateDoc } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,12 +12,14 @@ import { Label } from "@/components/ui/label";
 import { 
   ShoppingBag, Camera, MapPin, CheckCircle2, 
   ArrowLeft, Loader2, Trash2, Edit2, Zap, 
-  Navigation, ListOrdered, Play, XCircle, AlertTriangle, Search, QrCode, ChevronRight, Save, Info
+  Navigation, ListOrdered, Play, XCircle, AlertTriangle, Search, QrCode, ChevronRight, Save, Info, Crosshair
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { parseLogisticsLabel, type LabelOutput } from "@/ai/flows/parse-logistics-label-flow";
+import { geocodeAddress } from "@/services/google-maps";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { Tenant } from "@/app/lib/types";
 
 function MercadoLibreScanner() {
   const router = useRouter();
@@ -31,10 +32,12 @@ function MercadoLibreScanner() {
   const preAssignedLoadId = searchParams.get('loadId');
 
   const [step, setStep] = useState(1); // 1: Home, 2: Camera/Processing, 3: Validation, 4: Summary/Optimize
-  const [scannedDestinations, setScannedDestinations] = useState<LabelOutput[]>([]);
-  const [currentLabel, setCurrentLabel] = useState<LabelOutput | null>(null);
+  const [scannedDestinations, setScannedDestinations] = useState<(LabelOutput & { lat?: number, lng?: number })[]>([]);
+  const [currentLabel, setCurrentLabel] = useState<(LabelOutput & { lat?: number, lng?: number }) | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { data: tenant } = useDoc<Tenant>(useMemo(() => (db ? doc(db, "tenants", "default_tenant") : null), [db]));
 
   const handleOpenScanner = () => {
     fileInputRef.current?.click();
@@ -51,8 +54,21 @@ function MercadoLibreScanner() {
     reader.onload = async (event) => {
       const base64 = event.target?.result as string;
       try {
+        // 1. Extraer datos con IA
         const result = await parseLogisticsLabel(base64);
-        setCurrentLabel(result);
+        
+        // 2. Geocodificar automáticamente si hay API Key
+        let geo = null;
+        if (tenant?.settings?.mapApiKey) {
+          const fullAddress = `${result.address.street} ${result.address.number}, ${result.address.city}, ${result.address.province}, Argentina`;
+          geo = await geocodeAddress(fullAddress, tenant.settings.mapApiKey);
+        }
+
+        setCurrentLabel({
+          ...result,
+          lat: geo?.lat,
+          lng: geo?.lng
+        });
         setStep(3);
       } catch (err) {
         toast({ variant: "destructive", title: "Lectura fallida", description: "Reintente con mejor iluminación." });
@@ -69,8 +85,9 @@ function MercadoLibreScanner() {
       setScannedDestinations(prev => [...prev, currentLabel]);
       setCurrentLabel(null);
       toast({ title: "Paquete registrado" });
-      // REAPERTURA AUTOMÁTICA PARA ESCANEO CONTINUO
-      setTimeout(() => handleOpenScanner(), 500);
+      
+      // MODO RÁFAGA: Reabrir cámara automáticamente
+      setTimeout(() => handleOpenScanner(), 300);
       setStep(1);
     }
   };
@@ -86,6 +103,8 @@ function MercadoLibreScanner() {
         city: d.address.city,
         province: d.address.province,
         country: "Argentina" as const,
+        lat: d.lat || null,
+        lng: d.lng || null,
         weightKg: 1,
         description: `Tracking: ${d.tracking.id} | Barrio: ${d.address.barrio || 'S/D'}`,
         documents: [{ 
@@ -103,7 +122,7 @@ function MercadoLibreScanner() {
           status: 'on_route',
           updatedAt: serverTimestamp()
         });
-        toast({ title: "Reparto Iniciado", description: "Hoja de ruta sincronizada con Central." });
+        toast({ title: "Reparto Iniciado", description: "Hoja de ruta sincronizada." });
         router.push(`/rutas/${preAssignedLoadId}`);
       } else {
         const orderNum = `ML-${new Date().getFullYear()}-${Math.floor(Math.random() * 9000)}`;
@@ -160,24 +179,11 @@ function MercadoLibreScanner() {
                      </p>
                   </div>
                   <input type="file" ref={fileInputRef} className="hidden" accept="image/*" capture="environment" onChange={onFileChange} />
-                  <Button className="w-full h-20 bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-black text-xl rounded-2xl shadow-xl" onClick={handleOpenScanner}>
+                  <Button className="w-full h-20 bg-yellow-400 hover:bg-yellow-50 text-slate-900 font-black text-xl rounded-2xl shadow-xl" onClick={handleOpenScanner}>
                      INICIAR CÁMARA
                   </Button>
                </CardContent>
             </Card>
-
-            <div className="grid grid-cols-2 gap-4">
-               <Card className="border-none shadow-sm bg-white rounded-2xl p-4 flex flex-col items-center text-center gap-1">
-                  <MapPin className="text-blue-500 mb-1" size={20} />
-                  <p className="text-[9px] font-black text-slate-400 uppercase">Cargados</p>
-                  <p className="text-2xl font-black">{scannedDestinations.length}</p>
-               </Card>
-               <Card className="border-none shadow-sm bg-white rounded-2xl p-4 flex flex-col items-center text-center gap-1">
-                  <Zap className="text-yellow-500 mb-1" size={20} />
-                  <p className="text-[9px] font-black text-slate-400 uppercase">Estado</p>
-                  <p className="text-[10px] font-black text-green-600 uppercase">Listo</p>
-               </Card>
-            </div>
 
             {scannedDestinations.length > 0 && (
                <div className="space-y-4 animate-in slide-in-from-bottom-4">
@@ -195,7 +201,7 @@ function MercadoLibreScanner() {
                                 <p className="text-[9px] text-slate-400 font-medium mt-1 truncate max-w-[150px]">{dest.address.street} {dest.address.number}</p>
                              </div>
                           </div>
-                          <Badge variant="outline" className="text-[8px] h-4 font-mono">{dest.tracking.id.substring(0, 8)}</Badge>
+                          {dest.lat ? <CheckCircle2 className="text-green-500" size={16} /> : <AlertTriangle className="text-red-400" size={16} />}
                        </div>
                      ))}
                   </div>
@@ -228,7 +234,7 @@ function MercadoLibreScanner() {
             </div>
             <div className="space-y-1">
                <h3 className="text-2xl font-black italic uppercase tracking-tighter">Analizando Paquete</h3>
-               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">IA extrayendo datos logísticos...</p>
+               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">IA + GPS: Localizando Destino...</p>
             </div>
          </div>
        )}
@@ -236,9 +242,15 @@ function MercadoLibreScanner() {
        {step === 3 && currentLabel && (
          <div className="space-y-6 animate-in slide-in-from-bottom-4">
             <div className="text-center space-y-1">
-               <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto" />
-               <h3 className="text-2xl font-black italic uppercase text-slate-900 leading-none">Datos Leídos</h3>
-               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Validación de Dirección Exitosa</p>
+               {currentLabel.lat ? (
+                 <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto" />
+               ) : (
+                 <AlertTriangle className="w-16 h-16 text-amber-500 mx-auto" />
+               )}
+               <h3 className="text-2xl font-black italic uppercase text-slate-900 leading-none">
+                 {currentLabel.lat ? 'Localizado OK' : 'Dirección Ambigua'}
+               </h3>
+               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Revisión de Datos Extraídos</p>
             </div>
 
             <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden">
@@ -248,7 +260,9 @@ function MercadoLibreScanner() {
                         <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest">Destinatario</p>
                         <CardTitle className="text-xl font-black uppercase italic tracking-tighter leading-tight">{currentLabel.recipient.name}</CardTitle>
                      </div>
-                     <Badge className="bg-blue-600 text-white border-none px-3 font-black text-[10px]">✓</Badge>
+                     <Badge className={cn("text-white border-none px-3 font-black text-[10px]", currentLabel.lat ? "bg-green-600" : "bg-amber-500")}>
+                        {currentLabel.lat ? 'GPS OK' : 'SIN GPS'}
+                     </Badge>
                   </div>
                </CardHeader>
                <CardContent className="p-8 space-y-8">
@@ -262,7 +276,11 @@ function MercadoLibreScanner() {
                         </p>
                         <div className="flex items-center gap-2 mt-2">
                            <Badge variant="outline" className="bg-white border-slate-200 text-blue-600 font-mono">CP: {currentLabel.address.zipCode}</Badge>
-                           {currentLabel.address.floor && <Badge variant="outline" className="bg-white">PISO {currentLabel.address.floor}</Badge>}
+                           {currentLabel.lat && (
+                             <Badge className="bg-blue-50 text-blue-700 border-blue-100 font-black text-[8px] h-4">
+                                <Crosshair size={10} className="mr-1" /> COORDENADAS VINCULADAS
+                             </Badge>
+                           )}
                         </div>
                      </div>
                   </div>
