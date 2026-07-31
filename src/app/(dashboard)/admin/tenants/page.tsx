@@ -36,7 +36,9 @@ import {
   Save,
   CheckCircle2,
   TrendingUp,
-  DollarSign
+  DollarSign,
+  Info,
+  ExternalLink
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tenant, AppUser } from "@/app/lib/types";
@@ -141,11 +143,14 @@ export default function SuperAdminTenantsPage() {
       };
 
       await setDoc(userRef, newAdmin);
-      toast({ title: "Usuario Creado", description: `Acceso manager habilitado para ${adminEmail}` });
+      toast({ 
+        title: "Paso 1 Completado", 
+        description: `Usuario pre-registrado en la base de datos de ${selectedTenant.name}. Ahora debe crearlo manualmente en Auth.` 
+      });
       setIsAdminDialogOpen(false);
       setAdminEmail("");
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al crear usuario" });
+      toast({ variant: "destructive", title: "Error al pre-registrar usuario" });
     } finally {
       setIsSubmitting(false);
     }
@@ -389,9 +394,19 @@ export default function SuperAdminTenantsPage() {
         <DialogContent className="max-w-md rounded-[2.5rem] outline-none">
            <DialogHeader>
               <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Habilitar Primer Usuario</DialogTitle>
-              <DialogDescription className="text-[10px] font-bold uppercase">Creación manual de Manager para {selectedTenant?.name}</DialogDescription>
+              <DialogDescription className="text-[10px] font-bold uppercase">Pre-registro de Manager para {selectedTenant?.name}</DialogDescription>
            </DialogHeader>
            <div className="space-y-6 py-6">
+              <div className="p-4 bg-blue-50 border-2 border-blue-100 rounded-2xl flex items-start gap-4">
+                 <Info className="text-blue-600 shrink-0 mt-1" size={24} />
+                 <div className="space-y-1">
+                    <p className="text-xs font-black text-blue-800 uppercase italic">Importante: Acción Requerida</p>
+                    <p className="text-[10px] text-blue-600 leading-relaxed font-medium">
+                      Este paso habilitará al usuario en la base de datos (Firestore). Como SuperAdmin, **deberás crear manualmente** la cuenta en la pestaña **Authentication** de la Consola Firebase con el mismo correo y contraseña.
+                    </p>
+                 </div>
+              </div>
+
               <div className="space-y-2">
                  <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Email del Usuario (Root)</Label>
                  <Input 
@@ -407,14 +422,22 @@ export default function SuperAdminTenantsPage() {
                  <div className="h-12 bg-slate-900 text-blue-400 flex items-center px-4 rounded-xl font-mono text-sm border border-blue-500/20 shadow-inner">
                    {adminPass}
                  </div>
-                 <p className="text-[9px] text-slate-400 italic">Informe esta contraseña al cliente para su primer ingreso.</p>
+                 <p className="text-[9px] text-slate-400 italic">Use estas credenciales para el alta en la consola.</p>
               </div>
+
+              <Button 
+                variant="outline" 
+                className="w-full h-10 border-slate-200 text-slate-500 text-[10px] font-bold uppercase gap-2"
+                onClick={() => window.open('https://console.firebase.google.com/', '_blank')}
+              >
+                <ExternalLink size={14} /> Abrir Consola de Firebase
+              </Button>
            </div>
            <DialogFooter className="gap-2 sm:gap-0">
               <Button variant="ghost" onClick={() => setIsAdminDialogOpen(false)} className="font-bold text-slate-400 uppercase text-xs">Cancelar</Button>
               <Button onClick={handleCreateTenantAdmin} disabled={isSubmitting || !adminEmail} className="bg-green-600 h-12 px-8 rounded-xl font-black uppercase shadow-lg shadow-green-100">
                  {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2" size={16} />}
-                 HABILITAR ACCESO
+                 PRE-REGISTRAR EN BD
               </Button>
            </DialogFooter>
         </DialogContent>
