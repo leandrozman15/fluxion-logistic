@@ -416,7 +416,7 @@ export interface DrivingAlert {
 export interface Load {
   id: string;
   orderNumber: string;
-  serviceType: 'FTL' | 'LTL' | 'reefer' | 'dangerous' | 'oversized' | 'customs' | 'standard';
+  serviceType: 'FTL' | 'LTL' | 'reefer' | 'dangerous' | 'oversized' | 'customs' | 'standard' | 'meli';
   clientName: string;
   clientId?: string;
   assignedDriverId?: string;

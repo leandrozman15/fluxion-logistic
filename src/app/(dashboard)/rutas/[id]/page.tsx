@@ -30,7 +30,7 @@ import {
   Zap, Satellite, Loader2, Gauge, 
   Coffee, Moon, Car, Battery, CloudRain, Construction, HelpCircle,
   Siren, CircleCheck, ListOrdered, XCircle,
-  Timer, Play, Home
+  Timer, Play, Home, ShoppingBag, QrCode
 } from "lucide-react";
 import { Load, Expense, ExpenseCategory, ProofOfDelivery, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -186,7 +186,7 @@ export default function RouteDetailPage() {
   }, [load?.status, loadRef, tenant?.settings?.gpsIntervalSeconds]);
 
   const allOutboundDone = useMemo(() => {
-    return load?.outboundStops?.every(s => !!s.deliveredAt);
+    return load?.outboundStops?.length > 0 && load.outboundStops.every(s => !!s.deliveredAt);
   }, [load?.outboundStops]);
 
   const currentStopIndex = useMemo(() => {
@@ -494,22 +494,37 @@ export default function RouteDetailPage() {
                  </h2>
                </div>
                
-               {load.status === 'pending' || load.status === 'assigned' ? (
+               {load.serviceType === 'meli' && load.outboundStops.length === 0 && (
+                 <Button 
+                   className="w-full bg-yellow-400 text-slate-900 hover:bg-yellow-500 h-16 text-lg font-black rounded-2xl shadow-xl animate-pulse"
+                   onClick={() => router.push(`/rutas/mercadolibre?loadId=${load.id}`)}
+                 >
+                   <QrCode className="mr-2" /> INICIAR ESCANEO ML
+                 </Button>
+               )}
+
+               {(load.status === 'pending' || load.status === 'assigned') && (load.serviceType !== 'meli' || load.outboundStops.length > 0) && (
                  <Button className="w-full bg-white text-slate-900 hover:bg-slate-50 h-16 text-lg font-black rounded-2xl shadow-xl animate-pulse" onClick={handleStartTrip} disabled={isUpdating}>
                    INICIAR VIAJE <ChevronRight className="ml-2" />
                  </Button>
-               ) : load.status === 'on_pause' ? (
+               )}
+
+               {load.status === 'on_pause' && (
                  <Button className="w-full bg-white text-amber-600 hover:bg-slate-50 h-16 text-lg font-black rounded-2xl shadow-xl" onClick={handleEndPause} disabled={isUpdating}>
                    REANUDAR VIAJE <Play className="ml-2 fill-current" />
                  </Button>
-               ) : load.status === 'on_route' && !allOutboundDone && currentStop ? (
+               )}
+
+               {load.status === 'on_route' && !allOutboundDone && currentStop && (
                  <div className="space-y-3">
                    <p className="text-[10px] font-bold text-white/70 uppercase">Destino {currentStopIndex + 1} de {load.outboundStops.length}: {currentStop.name}</p>
                    <Button className="w-full bg-green-500 hover:bg-green-600 text-white h-16 text-lg font-black rounded-2xl shadow-xl" onClick={() => setIsPodOpen(true)} disabled={isUpdating}>
                      CONFIRMAR LLEGADA <CheckCircle2 className="ml-2" />
                    </Button>
                  </div>
-               ) : load.status === 'on_route' && allOutboundDone ? (
+               )}
+
+               {load.status === 'on_route' && allOutboundDone && (
                  <div className="space-y-4 animate-in zoom-in-95">
                     {!isReturning ? (
                       <>
@@ -527,12 +542,14 @@ export default function RouteDetailPage() {
                       </>
                     )}
                  </div>
-               ) : load.status === 'delivered' ? (
+               )}
+               
+               {load.status === 'delivered' && (
                  <div className="flex flex-col items-center gap-2">
                     <CircleCheck size={48} className="text-white/30" />
                     <p className="text-xs font-bold opacity-70">Tarea cumplida. Central de despacho notificada.</p>
                  </div>
-               ) : null}
+               )}
             </CardContent>
           </Card>
 
@@ -571,35 +588,42 @@ export default function RouteDetailPage() {
 
           <div className="space-y-4 px-1">
              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 ml-2">
-               <ListOrdered size={14} className="text-blue-500" /> Hoja de Ruta
+               {load.serviceType === 'meli' ? <ShoppingBag size={14} className="text-yellow-500" /> : <ListOrdered size={14} className="text-blue-500" />} 
+               {load.serviceType === 'meli' ? 'Colecta Mercado Libre' : 'Hoja de Ruta'}
              </p>
              <div className="space-y-3">
-                {load.outboundStops?.map((stop, idx) => (
-                   <div key={stop.id} className={cn(
-                     "p-5 rounded-3xl border-2 flex justify-between items-center transition-all",
-                     stop.deliveredAt ? "bg-green-50 border-green-100" : "bg-white border-slate-100 shadow-sm"
-                   )}>
-                      <div className="flex items-center gap-4">
-                        <div className={cn(
-                          "w-8 h-8 rounded-full flex items-center justify-center font-black text-xs border shadow-inner",
-                          stop.deliveredAt ? "bg-green-600 text-white border-green-500" : "bg-slate-50 text-slate-400 border-slate-100"
-                        )}>
-                          {idx + 1}
-                        </div>
-                        <div>
-                           <p className={cn("text-sm font-black uppercase", stop.deliveredAt ? "text-green-700" : "text-slate-800")}>{stop.name}</p>
-                           <p className="text-[10px] text-slate-400 font-medium leading-tight mt-0.5">{stop.address}</p>
-                        </div>
-                      </div>
-                      {stop.deliveredAt ? (
-                        <Badge className="bg-green-600 border-none text-[8px] h-4 uppercase font-black">ENTREGADO</Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-[8px] h-4 uppercase font-black border-slate-200 text-slate-400">PENDIENTE</Badge>
-                      )}
-                   </div>
-                ))}
+                {load.outboundStops?.length > 0 ? (
+                  load.outboundStops.map((stop, idx) => (
+                    <div key={stop.id} className={cn(
+                      "p-5 rounded-3xl border-2 flex justify-between items-center transition-all",
+                      stop.deliveredAt ? "bg-green-50 border-green-100" : "bg-white border-slate-100 shadow-sm"
+                    )}>
+                       <div className="flex items-center gap-4">
+                         <div className={cn(
+                           "w-8 h-8 rounded-full flex items-center justify-center font-black text-xs border shadow-inner",
+                           stop.deliveredAt ? "bg-green-600 text-white border-green-500" : "bg-slate-50 text-slate-400 border-slate-100"
+                         )}>
+                           {idx + 1}
+                         </div>
+                         <div>
+                            <p className={cn("text-sm font-black uppercase", stop.deliveredAt ? "text-green-700" : "text-slate-800")}>{stop.name}</p>
+                            <p className="text-[10px] text-slate-400 font-medium leading-tight mt-0.5">{stop.address}</p>
+                         </div>
+                       </div>
+                       {stop.deliveredAt ? (
+                         <Badge className="bg-green-600 border-none text-[8px] h-4 uppercase font-black">ENTREGADO</Badge>
+                       ) : (
+                         <Badge variant="outline" className="text-[8px] h-4 uppercase font-black border-slate-200 text-slate-400">PENDIENTE</Badge>
+                       )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-10 text-center border-2 border-dashed rounded-3xl bg-slate-50/50">
+                    <p className="text-[10px] font-black text-slate-300 uppercase italic">Esperando escaneo de paquetes...</p>
+                  </div>
+                )}
                 
-                {(isReturning || allOutboundDone) && (
+                {(isReturning || allOutboundDone) && load.outboundStops.length > 0 && (
                    <div className={cn(
                      "p-5 rounded-3xl border-2 flex justify-between items-center border-dashed transition-all",
                      load.status === 'delivered' ? "bg-green-50 border-green-200" : "bg-indigo-50 border-indigo-200"

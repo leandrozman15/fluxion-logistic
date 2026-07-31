@@ -1,9 +1,10 @@
+
 'use client';
 
-import { useState, useRef, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useRef, useMemo, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useFirestore, useUser } from "@/firebase";
-import { collection, addDoc, serverTimestamp, doc, setDoc, query, orderBy, limit, getDocs } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, doc, setDoc, query, orderBy, limit, getDocs, updateDoc } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,25 +13,28 @@ import { Label } from "@/components/ui/label";
 import { 
   ShoppingBag, Camera, MapPin, CheckCircle2, 
   ArrowLeft, Loader2, Trash2, Edit2, Zap, 
-  Navigation, ListOrdered, Play, XCircle, AlertTriangle, Search
+  Navigation, ListOrdered, Play, XCircle, AlertTriangle, Search, QrCode
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { parseLogisticsLabel, type LabelOutput } from "@/ai/flows/parse-logistics-label-flow";
 import { cn } from "@/lib/utils";
 import { calculateDistance } from "@/lib/utils/tracking-math";
+import { format } from "date-fns";
 
 export default function MercadoLibreDriverPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const db = useFirestore();
   const { user } = useUser();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const preAssignedLoadId = searchParams.get('loadId');
+
   const [step, setStep] = useState(1); // 1: Home, 2: Camera/Processing, 3: Validation, 4: List/Ready
   const [scannedDestinations, setScannedDestinations] = useState<LabelOutput[]>([]);
   const [currentLabel, setCurrentLabel] = useState<LabelOutput | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isOptimizing, setIsOptimizing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleOpenScanner = () => {
@@ -75,48 +79,60 @@ export default function MercadoLibreDriverPage() {
     if (!db || scannedDestinations.length === 0) return;
     setIsSubmitting(true);
     try {
-      // 1. Crear documento de flete oficial tipo 'LTL' para este reparto
-      const loadsSnap = await getDocs(query(collection(db, "loads"), orderBy("orderNumber", "desc"), limit(1)));
-      let nextSeq = 1;
-      if (!loadsSnap.empty) {
-        const parts = loadsSnap.docs[0].data().orderNumber.split("-");
-        const lastNum = parseInt(parts[parts.length - 1]);
-        if (!isNaN(lastNum)) nextSeq = lastNum + 1;
-      }
-      const orderNum = `ML-${new Date().getFullYear()}-${String(nextSeq).padStart(4, '0')}`;
+      const stops = scannedDestinations.map(d => ({
+        id: Math.random().toString(36).substring(7),
+        name: d.recipient.name,
+        address: `${d.address.street} ${d.address.number}`,
+        city: d.address.city,
+        province: d.address.province,
+        country: "Argentina" as const,
+        weightKg: 1, // Estimado ML
+        description: `Tracking: ${d.tracking.id}`,
+        documents: [{ id: d.tracking.id, type: 'remito' as const, number: d.tracking.id, uploadedAt: new Date().toISOString() }]
+      }));
 
-      const newLoadRef = doc(collection(db, "loads"));
-      await setDoc(newLoadRef, {
-        id: newLoadRef.id,
-        orderNumber: orderNum,
-        clientName: "Mercado Libre (Colecta)",
-        serviceType: 'standard',
-        status: 'on_route',
-        assignedDriverId: user?.uid || 'demo_driver',
-        pickupDate: new Date().toISOString().split('T')[0],
-        pickupTime: format(new Date(), "HH:mm"),
-        origin: { name: "Depósito MELI", address: "CABA", city: "Capital Federal", country: "Argentina" },
-        outboundStops: scannedDestinations.map(d => ({
-          id: Math.random().toString(36).substring(7),
-          name: d.recipient.name,
-          address: `${d.address.street} ${d.address.number}`,
-          city: d.address.city,
-          province: d.address.province,
-          country: "Argentina",
-          weightKg: 1, // Estimado ML
-          description: `Tracking: ${d.tracking.id}`,
-          documents: [{ id: d.tracking.id, type: 'remito', number: d.tracking.id, uploadedAt: serverTimestamp() }]
-        })),
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        tracking: {
-          tripStartedAt: serverTimestamp(),
-          currentLat: -34.6, currentLng: -58.3, currentSpeed: 0, distanceTraveledKm: 0, distanceRemainingKm: 20, history: [], alerts: []
+      if (preAssignedLoadId) {
+        // ACTUALIZAR CARGA EXISTENTE
+        await updateDoc(doc(db, "loads", preAssignedLoadId), {
+          outboundStops: stops,
+          status: 'on_route',
+          updatedAt: serverTimestamp()
+        });
+        toast({ title: "¡Reparto Sincronizado!", description: "La orden pre-asignada ha sido actualizada." });
+        router.push(`/rutas/${preAssignedLoadId}`);
+      } else {
+        // CREAR CARGA NUEVA DESDE CERO
+        const loadsSnap = await getDocs(query(collection(db, "loads"), orderBy("orderNumber", "desc"), limit(1)));
+        let nextSeq = 1;
+        if (!loadsSnap.empty) {
+          const parts = loadsSnap.docs[0].data().orderNumber.split("-");
+          const lastNum = parseInt(parts[parts.length - 1]);
+          if (!isNaN(lastNum)) nextSeq = lastNum + 1;
         }
-      });
+        const orderNum = `ML-${new Date().getFullYear()}-${String(nextSeq).padStart(4, '0')}`;
 
-      toast({ title: "¡Reparto Iniciado!", description: "Ruta oficial generada." });
-      router.push(`/rutas/${newLoadRef.id}`);
+        const newLoadRef = doc(collection(db, "loads"));
+        await setDoc(newLoadRef, {
+          id: newLoadRef.id,
+          orderNumber: orderNum,
+          clientName: "Mercado Libre (Colecta)",
+          serviceType: 'meli',
+          status: 'on_route',
+          assignedDriverId: user?.uid || 'demo_driver',
+          pickupDate: new Date().toISOString().split('T')[0],
+          pickupTime: format(new Date(), "HH:mm"),
+          origin: { name: "Depósito MELI", address: "CABA", city: "Capital Federal", country: "Argentina" },
+          outboundStops: stops,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          tracking: {
+            tripStartedAt: serverTimestamp(),
+            currentLat: -34.6, currentLng: -58.3, currentSpeed: 0, distanceTraveledKm: 0, distanceRemainingKm: 20, history: [], alerts: []
+          }
+        });
+        toast({ title: "¡Reparto Iniciado!", description: "Ruta oficial generada." });
+        router.push(`/rutas/${newLoadRef.id}`);
+      }
     } catch (e) {
       toast({ variant: "destructive", title: "Error al crear reparto" });
     } finally {
@@ -132,7 +148,7 @@ export default function MercadoLibreDriverPage() {
             <ShoppingBag className="text-yellow-500" />
             <h1 className="font-black text-lg italic uppercase tracking-tighter">Mercado Libre</h1>
          </div>
-         <Badge className="bg-yellow-400 text-slate-900 border-none">LIVE</Badge>
+         <Badge className="bg-yellow-400 text-slate-900 border-none">{preAssignedLoadId ? 'VINCULADO' : 'LIVE'}</Badge>
        </div>
 
        {step === 1 && (
@@ -144,7 +160,9 @@ export default function MercadoLibreDriverPage() {
                   </div>
                   <div className="space-y-1">
                      <h2 className="text-2xl font-black italic uppercase tracking-tighter">Gestión de Colecta</h2>
-                     <p className="text-xs text-white/50 font-bold uppercase">Escanee las etiquetas de los paquetes para iniciar.</p>
+                     <p className="text-xs text-white/50 font-bold uppercase">
+                       {preAssignedLoadId ? 'Cargue los paquetes para esta jornada.' : 'Escanee las etiquetas para iniciar.'}
+                     </p>
                   </div>
                   <input type="file" ref={fileInputRef} className="hidden" accept="image/*" capture="environment" onChange={onFileChange} />
                   <Button className="w-full h-16 bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-black text-lg rounded-2xl shadow-xl" onClick={handleOpenScanner}>
@@ -167,7 +185,7 @@ export default function MercadoLibreDriverPage() {
                      <p className="text-[10px] font-black text-slate-400 uppercase">Estado</p>
                      <p className="text-xs font-black text-green-600 uppercase">Sincronizado</p>
                   </CardContent>
-               </Card>
+               </div>
             </div>
 
             {scannedDestinations.length > 0 && (
@@ -192,7 +210,7 @@ export default function MercadoLibreDriverPage() {
                   </div>
                   <Button className="w-full h-16 bg-blue-600 hover:bg-blue-700 text-white font-black text-lg rounded-2xl shadow-xl mt-6" onClick={handleStartReparto} disabled={isSubmitting}>
                     {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Navigation className="mr-2" />}
-                    COMENZAR REPARTO
+                    {preAssignedLoadId ? 'FINALIZAR Y VINCULAR' : 'COMENZAR REPARTO'}
                   </Button>
                </div>
             )}
@@ -261,5 +279,3 @@ export default function MercadoLibreDriverPage() {
     </div>
   );
 }
-
-import { format } from "date-fns";

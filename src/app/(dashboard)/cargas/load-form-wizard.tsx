@@ -19,7 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Package, ArrowLeft, ArrowRight, Save, Loader2, 
   MapPin, Calendar, Clock, DollarSign, Truck, 
-  Info, AlertTriangle, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, LayoutGrid, UserCheck, Edit, TrendingUp, CreditCard, Anchor, Scale, ListOrdered, ShieldCheck, Ship, ScanBarcode, X, Receipt, Files, HandCoins, Landmark
+  Info, AlertTriangle, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, LayoutGrid, UserCheck, Edit, TrendingUp, CreditCard, Anchor, Scale, ListOrdered, ShieldCheck, Ship, ScanBarcode, X, Receipt, Files, HandCoins, Landmark, ShoppingBag
 } from "lucide-react";
 import { Load, Client, Hub, LoadLegStop, LoadDocument, LoadDocType, Truck as TruckType, Driver, Tenant, PendingRemito } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -29,6 +29,7 @@ import { format } from "date-fns";
 const SERVICE_TYPES = [
   { id: 'standard', label: 'Carga General', icon: Package },
   { id: 'FTL', label: 'Carga Completa (FTL)', icon: Truck },
+  { id: 'meli', label: 'Mercado Libre', icon: ShoppingBag },
   { id: 'customs', label: 'Puerto / Contenedor', icon: Ship },
   { id: 'reefer', label: 'Refrigerado', icon: Package },
   { id: 'dangerous', label: 'Carga Peligrosa', icon: AlertTriangle },
@@ -268,13 +269,14 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
           const lastNum = parseInt(parts[parts.length - 1]);
           if (!isNaN(lastNum)) nextSeq = lastNum + 1;
         }
-        finalOrderNumber = `FL-${new Date().getFullYear()}-${String(nextSeq).padStart(4, '0')}`;
+        const prefix = formData.serviceType === 'meli' ? 'ML' : 'FL';
+        finalOrderNumber = `${prefix}-${new Date().getFullYear()}-${String(nextSeq).padStart(4, '0')}`;
       }
       
       const cleanFormData = {
         ...formData,
         orderNumber: finalOrderNumber,
-        clientName: formData.clientName || (formData.outboundStops?.[0]?.name || "Reparto Multi-Remito"),
+        clientName: formData.clientName || (formData.serviceType === 'meli' ? "Mercado Libre" : (formData.outboundStops?.[0]?.name || "Reparto Multi-Remito")),
         updatedAt: serverTimestamp()
       };
 
@@ -381,7 +383,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
           <div className="space-y-6">
             <Card className="border-none shadow-sm">
                <CardHeader><CardTitle>Tipo de Operación</CardTitle></CardHeader>
-               <CardContent className="grid grid-cols-2 md:grid-cols-5 gap-3">
+               <CardContent className="grid grid-cols-2 md:grid-cols-6 gap-3">
                   {SERVICE_TYPES.map(type => (
                     <button key={type.id} onClick={() => setFormData({...formData, serviceType: type.id as any})} className={cn("p-4 border-2 rounded-2xl flex flex-col items-center gap-2 transition-all", formData.serviceType === type.id ? "bg-blue-600 text-white border-blue-600 shadow-lg" : "bg-white text-slate-400 border-slate-100 hover:border-blue-200")}><type.icon size={24} /><span className="text-[10px] font-black uppercase text-center leading-tight">{type.label}</span></button>
                   ))}
@@ -463,7 +465,11 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                 <CardContent className="p-0">
                   <div className="divide-y divide-slate-100">
                     {formData.outboundStops?.length === 0 ? (
-                      <div className="p-20 text-center text-slate-300 italic text-xs font-bold uppercase tracking-widest">No hay destinos asignados. Seleccione remitos o cargue una parada manual.</div>
+                      <div className="p-20 text-center text-slate-300 italic text-xs font-bold uppercase tracking-widest">
+                        {formData.serviceType === 'meli' 
+                          ? "Canal Mercado Libre: El chofer escaneará los bultos en destino." 
+                          : "No hay destinos asignados. Seleccione remitos o cargue una parada manual."}
+                      </div>
                     ) : (
                       formData.outboundStops?.map((stop, idx) => (
                         <div key={stop.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
@@ -572,7 +578,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                 <CardTitle className="text-sm font-black flex items-center gap-2 uppercase italic">
                   <ShieldCheck className="text-blue-400" /> Control Técnico y Vial
                 </CardTitle>
-              </CardHeader>
+              </Header>
               <CardContent className="p-8 space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-4">
