@@ -260,7 +260,6 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                       <SelectValue placeholder="Seleccionar Rol" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="admin">🔴 Super Administrador</SelectItem>
                       <SelectItem value="manager">📊 Gerente</SelectItem>
                       <SelectItem value="sales_admin">💼 Administración Ventas</SelectItem>
                       <SelectItem value="purchasing_admin">💳 Administración Compras</SelectItem>
@@ -268,6 +267,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                       <SelectItem value="warehouse">📦 Depósito</SelectItem>
                       <SelectItem value="driver">🚚 Chofer Profesional (Tractor)</SelectItem>
                       <SelectItem value="companion">👥 Acompañante / Ayudante</SelectItem>
+                      <SelectItem value="viewer">👁️ Solo Lectura</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

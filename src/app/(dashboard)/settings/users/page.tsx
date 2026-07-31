@@ -129,7 +129,6 @@ export default function UsersSettingsPage() {
                       <SelectValue placeholder="Seleccione un papel" />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
-                      <SelectItem value="admin">🔴 Super Administrador</SelectItem>
                       <SelectItem value="manager">📊 Gerente</SelectItem>
                       <SelectItem value="sales_admin">💼 Administración Ventas</SelectItem>
                       <SelectItem value="purchasing_admin">💳 Administración Compras</SelectItem>
