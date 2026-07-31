@@ -61,7 +61,7 @@ export default function ProductTechnicalSheetPage() {
     if (autoPrint && !loading && product) {
       const timer = setTimeout(() => {
         window.print();
-      }, 1000);
+      }, 1500);
       return () => clearTimeout(timer);
     }
   }, [autoPrint, loading, product]);
@@ -82,7 +82,7 @@ export default function ProductTechnicalSheetPage() {
         <div className="flex gap-2">
            <Badge className="bg-blue-600 text-white border-none">PREVIO A4 VECTORIAL</Badge>
            <Button onClick={() => window.print()} className="bg-white text-slate-900 hover:bg-blue-50 rounded-xl font-black shadow-2xl px-8 h-11">
-             <Download className="mr-2 h-5 w-5" /> GENERAR PDF A4
+             <Download className="mr-2 h-5 w-5" /> GUARDAR COMO PDF
            </Button>
         </div>
       </div>

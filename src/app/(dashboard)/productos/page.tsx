@@ -60,19 +60,27 @@ export default function ProductosPage() {
     setIsDownloadingId(productId);
     const printUrl = `/productos/${productId}/ficha?print=true`;
     
+    // Usamos un iframe con visibilidad oculta en lugar de display:none para mejor compatibilidad
     const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = 'none';
+    iframe.style.visibility = 'hidden';
     iframe.src = printUrl;
     document.body.appendChild(iframe);
     
+    // Mayor tiempo de espera para asegurar carga completa de fuentes y estilos
     setTimeout(() => {
       document.body.removeChild(iframe);
       setIsDownloadingId(null);
       toast({ 
         title: "Documento preparado", 
-        description: "Se ha abierto el diálogo de impresión del navegador en formato A4 vectorial." 
+        description: "Se ha abierto el diálogo de impresión del navegador en formato A4 vectorial. Seleccione 'Guardar como PDF'." 
       });
-    }, 3000);
+    }, 4500);
   };
 
   const handleDelete = async (id: string) => {

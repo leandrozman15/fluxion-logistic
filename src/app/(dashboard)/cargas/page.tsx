@@ -78,26 +78,32 @@ export default function CargasPage() {
 
   /**
    * PREPARACIÓN DE DOCUMENTO A4 VECTORIAL
-   * Abre el diálogo de impresión del navegador con el documento listo.
+   * Abre el diálogo de impresión del navegador con el documento preparado.
    */
   const handleDownloadDirect = (loadId: string, type: 'orden' | 'billetera') => {
     setIsDownloadingId(`${loadId}-${type}`);
     const printUrl = `/cargas/${loadId}/${type}?print=true`;
     
     const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = 'none';
+    iframe.style.visibility = 'hidden';
     iframe.src = printUrl;
     document.body.appendChild(iframe);
     
-    // Esperamos a que el motor de impresión se dispare
+    // Tiempo de espera aumentado para asegurar que el navegador cargue todo antes de imprimir
     setTimeout(() => {
       document.body.removeChild(iframe);
       setIsDownloadingId(null);
       toast({ 
         title: "Documento preparado", 
-        description: "Se ha abierto el diálogo de impresión del navegador en formato A4 vectorial." 
+        description: "Se ha abierto el diálogo de impresión del navegador en formato A4 vectorial. Seleccione 'Guardar como PDF' o imprima directamente." 
       });
-    }, 3500);
+    }, 4500);
   };
 
   const getStatusBadge = (status: LoadStatus) => {
