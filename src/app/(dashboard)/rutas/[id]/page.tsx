@@ -12,7 +12,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogFooter, 
+  DialogDescription, 
+  DialogTrigger 
+} from "@/components/ui/dialog";
 import { 
   ArrowLeft, MapPin, CheckCircle2, 
   Truck, Package, FileText, ShieldAlert, Clock, 
@@ -160,7 +168,7 @@ export default function RouteDetailPage() {
           });
         },
         (error) => {
-          // GPS silent error to avoid blocking the UI
+          // GPS silent error to avoid blocking the UI with console noise
         },
         { enableHighAccuracy: true, timeout: 15000 }
       );
@@ -178,7 +186,7 @@ export default function RouteDetailPage() {
   const currentStopIndex = useMemo(() => {
     if (!load?.outboundStops) return -1;
     return load.outboundStops.findIndex(s => !s.deliveredAt);
-  }, [load?.outboundStops, currentStopIndex]);
+  }, [load?.outboundStops]);
 
   const currentStop = useMemo(() => {
     if (!load?.outboundStops || currentStopIndex === -1) return null;
@@ -577,7 +585,7 @@ export default function RouteDetailPage() {
            <div className="px-1 space-y-6">
              <div className="text-center space-y-2 py-4">
                 <Timer className="w-12 h-12 text-blue-600 mx-auto" />
-                <DialogTitle className="text-xl font-black italic uppercase text-slate-900">Pausas y Descansos</DialogTitle>
+                <h2 className="text-xl font-black italic uppercase text-slate-900">Pausas y Descansos</h2>
              </div>
 
              {load.status === 'on_pause' ? (
@@ -612,7 +620,7 @@ export default function RouteDetailPage() {
            <div className="px-1 space-y-6">
              <div className="text-center space-y-2 py-4">
                 <ShieldAlert className="w-12 h-12 text-red-600 mx-auto animate-pulse" />
-                <DialogTitle className="text-xl font-black italic uppercase text-slate-900">Reportar Incidencia</DialogTitle>
+                <h2 className="text-xl font-black italic uppercase text-slate-900">Reportar Incidencia</h2>
              </div>
 
              <div className="grid grid-cols-2 gap-4">
