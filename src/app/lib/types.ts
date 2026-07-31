@@ -115,6 +115,9 @@ export interface Tenant {
   settings?: TenantSettings;
   plan?: 'free' | 'pro';
   monthlyFee?: number;
+  subscriptionStatus?: 'active' | 'suspended';
+  activationDate?: string;
+  expirationDate?: string;
   createdAt?: any;
   updatedAt?: any;
 }

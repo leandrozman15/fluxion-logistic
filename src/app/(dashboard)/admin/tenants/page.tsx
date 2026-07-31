@@ -3,12 +3,16 @@
 
 import { useMemo, useState, useEffect } from "react";
 import { useFirestore, useCollection, useUser } from "@/firebase";
-import { collection, query, orderBy, doc, deleteDoc } from "firebase/firestore";
+import { collection, query, orderBy, doc, deleteDoc, setDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -34,10 +38,16 @@ import {
   Settings,
   UserPlus,
   BarChart3,
-  CreditCard
+  CreditCard,
+  Calendar,
+  Power,
+  Key,
+  AlertTriangle,
+  Save,
+  CheckCircle2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Tenant } from "@/app/lib/types";
+import { Tenant, AppUser } from "@/app/lib/types";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 
@@ -70,6 +80,20 @@ export default function SuperAdminTenantsPage() {
   const router = useRouter();
   const { toast } = useToast();
   
+  const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
+  const [isSubsDialogOpen, setIsSubsDialogOpen] = useState(false);
+  const [isAdminDialogOpen, setIsAdminDialogOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Form states for Bootstrap Admin
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPass, setAdminPass] = useState("LogisticaAr2026");
+
+  // Form states for Subscription
+  const [subStatus, setSubStatus] = useState<'active' | 'suspended'>('active');
+  const [actDate, setActDate] = useState("");
+  const [expDate, setExpDate] = useState("");
+
   // Seguridad: Si no es el SuperAdmin, redirigir
   useEffect(() => {
     if (!userLoading && user?.email !== SUPER_ADMIN_EMAIL) {
@@ -94,12 +118,69 @@ export default function SuperAdminTenantsPage() {
     }
   };
 
+  const handleUpdateSubscription = async () => {
+    if (!db || !selectedTenant) return;
+    setIsSubmitting(true);
+    try {
+      await updateDoc(doc(db, "tenants", selectedTenant.id), {
+        subscriptionStatus: subStatus,
+        activationDate: actDate,
+        expirationDate: expDate,
+        updatedAt: serverTimestamp()
+      });
+      toast({ title: "Suscripción Actualizada", description: "Los cambios han sido aplicados globalmente." });
+      setIsSubsDialogOpen(false);
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al actualizar suscripción" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCreateTenantAdmin = async () => {
+    if (!db || !selectedTenant || !adminEmail) return;
+    setIsSubmitting(true);
+    try {
+      const userId = adminEmail.replace(/[^a-zA-Z0-9]/g, "_");
+      const userRef = doc(db, "tenants", selectedTenant.id, "users", userId);
+      
+      const newAdmin: Partial<AppUser> = {
+        uid: userId,
+        tenantId: selectedTenant.id,
+        email: adminEmail,
+        displayName: "Admin Inicial",
+        role: "manager",
+        status: "active",
+        createdAt: serverTimestamp()
+      };
+
+      await setDoc(userRef, newAdmin);
+      toast({ title: "Usuario Creado", description: `Se ha habilitado acceso manager para ${adminEmail}` });
+      setIsAdminDialogOpen(false);
+      setAdminEmail("");
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al crear usuario" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const openSubsModal = (tenant: Tenant) => {
+    setSelectedTenant(tenant);
+    setSubStatus(tenant.subscriptionStatus || 'active');
+    setActDate(tenant.activationDate || "");
+    setExpDate(tenant.expirationDate || "");
+    setIsSubsDialogOpen(true);
+  };
+
+  const openAdminModal = (tenant: Tenant) => {
+    setSelectedTenant(tenant);
+    setAdminEmail(tenant.settings?.adminEmail || "");
+    setIsAdminDialogOpen(true);
+  };
+
   if (userLoading || user?.email !== SUPER_ADMIN_EMAIL) {
-    return (
-      <div className="h-screen flex items-center justify-center">
-        <Loader2 className="animate-spin text-blue-600 w-10 h-10" />
-      </div>
-    );
+    return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600 w-10 h-10" /></div>;
   }
 
   return (
@@ -169,10 +250,10 @@ export default function SuperAdminTenantsPage() {
             <TableHeader className="bg-slate-50/30">
               <TableRow>
                 <TableHead className="px-8 text-[10px] font-black uppercase tracking-widest h-14">Organización</TableHead>
+                <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Estado</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Usuarios</TableHead>
                 <TableHead className="text-[10px] font-black uppercase tracking-widest">Plan</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest">Mensualidad</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Alta</TableHead>
+                <TableHead className="text-[10px] font-black uppercase tracking-widest">Vencimiento</TableHead>
                 <TableHead className="text-right pr-8 text-[10px] font-black uppercase tracking-widest">Gestión</TableHead>
               </TableRow>
             </TableHeader>
@@ -186,14 +267,25 @@ export default function SuperAdminTenantsPage() {
                   <TableRow key={tenant.id} className="hover:bg-slate-50/50 transition-all group">
                     <TableCell className="px-8 py-8">
                       <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-100 shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-all">
+                        <div className={cn(
+                          "w-12 h-12 rounded-2xl flex items-center justify-center border shadow-sm transition-all",
+                          tenant.subscriptionStatus === 'suspended' ? "bg-red-50 text-red-400 border-red-100" : "bg-blue-50 text-blue-600 border-blue-100 group-hover:bg-blue-600 group-hover:text-white"
+                        )}>
                           <Building2 size={24} />
                         </div>
                         <div className="flex flex-col">
                           <span className="font-black text-slate-900 uppercase italic tracking-tight text-base leading-none">{tenant.name}</span>
-                          <span className="text-[10px] text-slate-400 font-bold uppercase mt-1">ID: {tenant.id}</span>
+                          <span className="text-[10px] text-slate-400 font-bold uppercase mt-1">CUIT: {tenant.settings?.cuit || 'S/D'}</span>
                         </div>
                       </div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                       <Badge className={cn(
+                         "text-[8px] font-black uppercase italic border-none",
+                         tenant.subscriptionStatus === 'suspended' ? "bg-red-600 text-white" : "bg-green-600 text-white"
+                       )}>
+                         {tenant.subscriptionStatus === 'suspended' ? 'SUSPENDIDO' : 'ACTIVO'}
+                       </Badge>
                     </TableCell>
                     <TableCell className="text-center">
                       <TenantUserCount tenantId={tenant.id} />
@@ -207,13 +299,10 @@ export default function SuperAdminTenantsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                       <div className="flex items-center gap-1 font-black text-slate-700">
-                          <DollarSign size={14} className="text-green-600" />
-                          <span>{tenant.monthlyFee?.toLocaleString() || '0'}</span>
+                       <div className="flex flex-col">
+                          <span className="font-black text-slate-700 text-xs">{tenant.expirationDate || 'Ilimitado'}</span>
+                          {tenant.activationDate && <span className="text-[8px] text-slate-400 font-bold">ACT: {tenant.activationDate}</span>}
                        </div>
-                    </TableCell>
-                    <TableCell className="text-center font-bold text-slate-500 text-xs">
-                      {tenant.createdAt?.toDate ? tenant.createdAt.toDate().toLocaleDateString() : '-'}
                     </TableCell>
                     <TableCell className="text-right pr-8">
                       <DropdownMenu>
@@ -223,17 +312,18 @@ export default function SuperAdminTenantsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-64 p-2 rounded-2xl shadow-2xl border-none">
-                          <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Administración de Instancia</DropdownMenuLabel>
-                          <DropdownMenuItem className="font-bold h-11 rounded-xl">
-                            <ExternalLink size={16} className="mr-3 text-blue-600" /> Ver Detalles Fiscales
+                          <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Acciones Rápidas</DropdownMenuLabel>
+                          
+                          <DropdownMenuItem onClick={() => openAdminModal(tenant)} className="font-bold h-11 rounded-xl">
+                            <UserPlus size={16} className="mr-3 text-blue-600" /> Crear Primer Usuario
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="font-bold h-11 rounded-xl">
+
+                          <DropdownMenuItem onClick={() => openSubsModal(tenant)} className="font-bold h-11 rounded-xl">
                             <CreditCard size={16} className="mr-3 text-blue-600" /> Gestionar Suscripción
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="font-bold h-11 rounded-xl">
-                            <Users size={16} className="mr-3 text-blue-600" /> Auditar Usuarios
-                          </DropdownMenuItem>
+                          
                           <DropdownMenuSeparator className="my-2" />
+                          
                           <DropdownMenuLabel className="text-[10px] font-black uppercase text-red-400 tracking-widest p-2">Zona de Peligro</DropdownMenuLabel>
                           <DropdownMenuItem 
                             className="text-red-600 focus:bg-red-50 focus:text-red-600 font-bold h-11 rounded-xl"
@@ -251,6 +341,91 @@ export default function SuperAdminTenantsPage() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* DIALOG: GESTIÓN DE SUSCRIPCIÓN */}
+      <Dialog open={isSubsDialogOpen} onOpenChange={setIsSubsDialogOpen}>
+        <DialogContent className="max-w-md rounded-[2.5rem]">
+           <DialogHeader>
+              <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Control de Servicio</DialogTitle>
+              <DialogDescription className="text-[10px] font-bold uppercase">{selectedTenant?.name}</DialogDescription>
+           </DialogHeader>
+           <div className="space-y-6 py-4">
+              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border">
+                 <div className="space-y-0.5">
+                    <Label className="text-xs font-black uppercase">Estado del Servicio</Label>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase">{subStatus === 'active' ? 'ACCESO HABILITADO' : 'ACCESO BLOQUEADO'}</p>
+                 </div>
+                 <Switch 
+                  checked={subStatus === 'active'} 
+                  onCheckedChange={(v) => setSubStatus(v ? 'active' : 'suspended')} 
+                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                 <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400">Fecha Activación</Label>
+                    <Input type="date" value={actDate} onChange={e => setActDate(e.target.value)} className="bg-slate-50 border-none rounded-xl" />
+                 </div>
+                 <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400">Fecha Vencimiento</Label>
+                    <Input type="date" value={expDate} onChange={e => setExpDate(e.target.value)} className="bg-slate-50 border-none rounded-xl" />
+                 </div>
+              </div>
+
+              {subStatus === 'suspended' && (
+                <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3">
+                   <AlertTriangle className="text-red-600 shrink-0 mt-0.5" size={18} />
+                   <p className="text-[10px] text-red-700 leading-relaxed font-medium">
+                     Al suspender, todos los usuarios de la organización perderán acceso inmediato al panel hasta que el servicio sea rehabilitado.
+                   </p>
+                </div>
+              )}
+           </div>
+           <DialogFooter>
+              <Button variant="ghost" onClick={() => setIsSubsDialogOpen(false)} className="font-bold text-slate-400 uppercase">Cerrar</Button>
+              <Button onClick={handleUpdateSubscription} disabled={isSubmitting} className="bg-blue-600 h-12 px-8 rounded-xl font-black uppercase">
+                 {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />}
+                 GUARDAR CAMBIOS
+              </Button>
+           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* DIALOG: BOOTSTRAP ADMIN */}
+      <Dialog open={isAdminDialogOpen} onOpenChange={setIsAdminDialogOpen}>
+        <DialogContent className="max-w-md rounded-[2.5rem]">
+           <DialogHeader>
+              <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Habilitar Primer Usuario</DialogTitle>
+              <DialogDescription className="text-[10px] font-bold uppercase">Creación manual de Manager para {selectedTenant?.name}</DialogDescription>
+           </DialogHeader>
+           <div className="space-y-6 py-6">
+              <div className="space-y-2">
+                 <Label className="text-[10px] font-black uppercase text-slate-400">Email del Usuario (Root)</Label>
+                 <Input 
+                   type="email" 
+                   className="h-12 bg-slate-50 border-none rounded-xl font-bold" 
+                   placeholder="admin@empresa.com"
+                   value={adminEmail}
+                   onChange={e => setAdminEmail(e.target.value)}
+                 />
+              </div>
+              <div className="space-y-2">
+                 <Label className="text-[10px] font-black uppercase text-slate-400">Contraseña Sugerida</Label>
+                 <div className="h-12 bg-slate-900 text-blue-400 flex items-center px-4 rounded-xl font-mono text-sm border border-blue-500/20 shadow-inner">
+                   {adminPass}
+                 </div>
+                 <p className="text-[9px] text-slate-400 italic">Informe esta contraseña al cliente para su primer ingreso.</p>
+              </div>
+           </div>
+           <DialogFooter>
+              <Button variant="ghost" onClick={() => setIsAdminDialogOpen(false)} className="font-bold text-slate-400 uppercase">Cancelar</Button>
+              <Button onClick={handleCreateTenantAdmin} disabled={isSubmitting || !adminEmail} className="bg-green-600 h-12 px-8 rounded-xl font-black uppercase">
+                 {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2" />}
+                 HABILITAR ACCESO
+              </Button>
+           </DialogFooter>
+        </DialogContent>
+      </Dialog>
       
       <div className="p-10 bg-blue-50 rounded-[3rem] border-2 border-blue-100 flex flex-col md:flex-row items-center gap-8 mx-2 relative overflow-hidden">
          <div className="absolute top-0 right-0 p-10 opacity-5 rotate-12"><Lock size={120}/></div>
