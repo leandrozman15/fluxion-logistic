@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { 
   ArrowLeft, MapPin, CheckCircle2, 
   Truck, Package, FileText, ShieldAlert, Clock, 
@@ -23,7 +23,7 @@ import {
   Siren, CircleCheck, ListOrdered, XCircle,
   Timer, Play, Home
 } from "lucide-react";
-import { Load, Expense, ExpenseCategory, PAUSE_TYPES, INCIDENT_TYPES, ProofOfDelivery } from "@/app/lib/types";
+import { Load, Expense, ExpenseCategory, ProofOfDelivery } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { compressImage } from "@/lib/utils/image-compression";
@@ -178,7 +178,7 @@ export default function RouteDetailPage() {
   const currentStopIndex = useMemo(() => {
     if (!load?.outboundStops) return -1;
     return load.outboundStops.findIndex(s => !s.deliveredAt);
-  }, [load?.outboundStops]);
+  }, [load?.outboundStops, currentStopIndex]);
 
   const currentStop = useMemo(() => {
     if (!load?.outboundStops || currentStopIndex === -1) return null;
