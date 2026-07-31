@@ -39,46 +39,22 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
   doc.setFont("helvetica", "bold");
   doc.text("DATA SHEET", pageWidth - 70, 25, { align: "right" });
   doc.setFontSize(28);
-  doc.text(product.sku, pageWidth - margin, 28, { align: "right" });
+  doc.text(product.sku, pageWidth - margin, 34, { align: "right" });
 
-  // 2. CUERPO - NOMBRE Y MARCA (BLOQUE IZQUIERDO)
+  // 2. CUERPO - NOMBRE Y MARCA (BLOQUE SUPERIOR)
   doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
   doc.setFontSize(24);
-  doc.text(product.name.toUpperCase(), margin, 55);
+  // Usar splitText para que el nombre ocupe el ancho necesario sin pisar nada
+  const nameLines = doc.splitTextToSize(product.name.toUpperCase(), pageWidth - (margin * 2));
+  doc.text(nameLines, margin, 55);
   
+  const brandY = 55 + (nameLines.length * 9);
   doc.setTextColor(150, 150, 150);
   doc.setFontSize(14);
-  doc.text(product.brand || "MARCA NO ESPECIFICADA", margin, 62);
+  doc.text(product.brand || "MARCA NO ESPECIFICADA", margin, brandY);
 
-  // 3. FOTO DEL PRODUCTO (LADO DERECHO)
-  if (product.photoUrl) {
-    try {
-      // Dibujamos un marco para la foto
-      doc.setDrawColor(200, 200, 200);
-      doc.setLineWidth(0.5);
-      doc.rect(pageWidth - margin - 45, 50, 45, 45);
-      
-      // Insertar imagen (jsPDF maneja base64 directamente)
-      doc.addImage(product.photoUrl, 'JPEG', pageWidth - margin - 44, 51, 43, 43);
-    } catch (e) {
-      console.warn("No se pudo añadir la foto al PDF:", e);
-    }
-  }
-
-  // 4. DESCRIPCIÓN (Ajuste de ancho para no chocar con la foto si es muy larga)
-  doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "bold");
-  doc.text("DESCRIPCIÓN DEL ARTÍCULO", margin, 75);
-  doc.line(margin, 77, pageWidth - margin - 55, 77); // Línea más corta para dejar aire a la foto
-
-  doc.setFont("helvetica", "italic");
-  const descWidth = product.photoUrl ? pageWidth - (margin * 2) - 55 : pageWidth - (margin * 2);
-  const descLines = doc.splitTextToSize(product.description || "Sin descripción técnica disponible.", descWidth);
-  doc.text(descLines, margin, 83);
-
-  // 5. GRILLA TÉCNICA (MANUAL)
-  const gridY = 110;
+  // 3. GRILLA TÉCNICA (CENTRAL)
+  const gridY = brandY + 10;
   const colW = (pageWidth - (margin * 2)) / 5;
   
   doc.setDrawColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
@@ -107,14 +83,42 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
     doc.text(values[i], margin + (colW * i) + 2, gridY + 18);
   });
 
-  // 6. SECCIÓN COMEX Y SEGURIDAD
+  // 4. DESCRIPCIÓN E IMAGEN (BLOQUE INFERIOR)
+  const descAreaY = gridY + 40;
+  
+  doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
   doc.setFontSize(10);
   doc.setFont("helvetica", "bold");
-  doc.text("IDENTIFICACIÓN MERCOSUR / SEGURIDAD", margin, 150);
-  doc.line(margin, 152, pageWidth - margin, 152);
+  doc.text("DESCRIPCIÓN DEL ARTÍCULO", margin, descAreaY - 5);
+  doc.line(margin, descAreaY - 3, margin + 40, descAreaY - 3);
+
+  // Foto del Producto (Ahora más abajo para no pisar el nombre)
+  if (product.photoUrl) {
+    try {
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.5);
+      doc.rect(pageWidth - margin - 55, descAreaY, 55, 55);
+      doc.addImage(product.photoUrl, 'JPEG', pageWidth - margin - 54, descAreaY + 1, 53, 53);
+    } catch (e) {
+      console.warn("No se pudo añadir la foto al PDF:", e);
+    }
+  }
+
+  // Descripción con ajuste de ancho si hay foto
+  doc.setFont("helvetica", "italic");
+  const descWidth = product.photoUrl ? pageWidth - (margin * 2) - 65 : pageWidth - (margin * 2);
+  const descLines = doc.splitTextToSize(product.description || "Sin descripción técnica disponible.", descWidth);
+  doc.text(descLines, margin, descAreaY + 5);
+
+  // 5. SECCIÓN COMEX Y SEGURIDAD
+  const tableY = Math.max(descAreaY + 65, descAreaY + (descLines.length * 6) + 10);
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.text("IDENTIFICACIÓN MERCOSUR / SEGURIDAD", margin, tableY - 5);
+  doc.line(margin, tableY - 3, pageWidth - margin, tableY - 3);
 
   autoTable(doc, {
-    startY: 155,
+    startY: tableY,
     margin: { left: margin, right: margin },
     head: [["PARÁMETRO", "VALOR REGISTRADO"]],
     body: [
@@ -129,7 +133,7 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
     styles: { fontSize: 9 }
   });
 
-  // 7. SELLO DE VALIDACIÓN
+  // 6. SELLO DE VALIDACIÓN
   const footerY = 250;
   doc.setDrawColor(0);
   doc.setLineWidth(1);
@@ -143,7 +147,7 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
   doc.setTextColor(150);
   doc.text(`Documento generado automáticamente el ${format(new Date(), "dd/MM/yyyy HH:mm")}`, margin, 285);
 
-  // DESCARGA DIRECTA (Padrón A)
+  // DESCARGA DIRECTA
   doc.save(`Ficha_${product.sku}.pdf`);
 };
 
@@ -201,7 +205,7 @@ export const generateLoadOrderPDF = async (load: Load, driver?: Driver | null, t
   });
 
   // FIRMAS
-  const finalY = (doc as any).lastAutoTable.finalY + 30;
+  const finalY = Math.max((doc as any).lastAutoTable.finalY + 30, 240);
   doc.line(margin, finalY, 70, finalY);
   doc.text("FIRMA CHOFER", margin + 15, finalY + 5);
 
