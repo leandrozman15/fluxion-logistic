@@ -133,7 +133,6 @@ export default function DespachoInteligentePage() {
 
     setIsOptimizing(true);
     try {
-      // 1. Sanitización exhaustiva de Remitos para Server Action (Remover Timestamps de Firebase)
       const sanitizedStops = remitos
         ?.filter(r => selectedRemitoIds.includes(r.id))
         .map(r => ({
@@ -152,7 +151,6 @@ export default function DespachoInteligentePage() {
           status: 'pending' as const
         }));
 
-      // 2. Sanitización de Camiones
       const sanitizedTrucks = trucks
         ?.filter(t => selectedTrucks.includes(t.id))
         .map(t => ({
@@ -163,7 +161,6 @@ export default function DespachoInteligentePage() {
           capacityKg: t.capacityKg || 30000
         }));
 
-      // 3. Sanitización de Hubs (Remover Timestamps)
       const plainStartHub = {
         id: activeHub.id,
         name: activeHub.name,
@@ -188,7 +185,6 @@ export default function DespachoInteligentePage() {
         phone: endHub.phone || ""
       };
 
-      // 4. Llamada al motor de optimización (Server Action)
       const result = await optimizeDistribution(
         sanitizedStops as any, 
         sanitizedTrucks as any, 
@@ -264,6 +260,7 @@ export default function DespachoInteligentePage() {
               id: Math.random().toString(36).substring(7),
               type: 'remito',
               number: r.number,
+              pendingRemitoId: r.id, // VÍNCULO CRÍTICO
               cotNumber: r.cotNumber,
               fileUrl: r.fileUrl,
               uploadedAt: new Date().toISOString(),
@@ -282,8 +279,14 @@ export default function DespachoInteligentePage() {
 
         batch.set(newLoadRef, loadData);
 
+        // Actualizar remitos originales a DISPATCHED
         prop.stops.forEach(r => {
-           batch.update(doc(db, "pending_remitos", r.id), { status: 'dispatched', updatedAt: serverTimestamp() });
+           batch.update(doc(db, "pending_remitos", r.id), { 
+             status: 'dispatched', 
+             loadId: newLoadRef.id,
+             dispatchedDate: planDate,
+             updatedAt: serverTimestamp() 
+           });
         });
       }
 

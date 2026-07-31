@@ -112,15 +112,10 @@ export default function RouteDetailPage() {
   const loadRef = useMemo(() => (db && id) ? doc(db, "loads", id as string) : null, [db, id]);
   const { data: load, loading } = useDoc<Load>(loadRef);
 
-  // Mantener una referencia actualizada del flete para evitar cierres de stale data en el intervalo GPS
   useEffect(() => {
     if (load) loadRefData.current = load;
   }, [load]);
 
-  const expensesQuery = useMemo(() => (db && id) ? collection(db, "loads", id as string, "expenses") : null, [db, id]);
-  const { data: expenses } = useCollection<Expense>(expensesQuery);
-
-  // LOGICA DE RASTREO GPS REAL (SALTOS DE 1 MINUTO)
   useEffect(() => {
     if (!load || load.status !== 'on_route' || !loadRef) return;
 
@@ -130,9 +125,8 @@ export default function RouteDetailPage() {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           const { latitude, longitude, speed } = position.coords;
-          const currentSpeed = speed ? Math.round(speed * 3.6) : 0; // m/s a km/h
+          const currentSpeed = speed ? Math.round(speed * 3.6) : 0;
 
-          // Calculamos la distancia recorrida desde el último punto para telemetría
           let distanceDelta = 0;
           const currentData = loadRefData.current;
           if (currentData?.tracking?.currentLat && currentData?.tracking?.currentLng) {
@@ -151,8 +145,6 @@ export default function RouteDetailPage() {
             timestamp: new Date().toISOString()
           };
 
-          // Actualización atómica de Firestore para GPS
-          // Usamos increment() y arrayUnion() para minimizar el ancho de banda y evitar Resource Exhausted
           updateDoc(loadRef, {
             "tracking.currentLat": latitude,
             "tracking.currentLng": longitude,
@@ -170,12 +162,8 @@ export default function RouteDetailPage() {
       );
     };
 
-    // Primer disparo inmediato
     updateLocation();
-
-    // Intervalo de 1 minuto (60000 ms)
     const intervalId = setInterval(updateLocation, 60000);
-
     return () => clearInterval(intervalId);
   }, [load?.status, loadRef]);
 
@@ -198,7 +186,7 @@ export default function RouteDetailPage() {
         "tracking.tripStartedAt": serverTimestamp(),
         updatedAt: serverTimestamp() 
       });
-      toast({ title: "Viaje Iniciado", description: "Rastreo GPS activo y transmitiendo a central cada 1 minuto." });
+      toast({ title: "Viaje Iniciado", description: "Rastreo GPS activo." });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al iniciar viaje" });
     } finally {
@@ -217,9 +205,9 @@ export default function RouteDetailPage() {
         "tracking.pauseStartedAt": serverTimestamp(),
         updatedAt: serverTimestamp()
       });
-      toast({ title: `Modo ${label} Activo`, description: "La central ha sido notificada de la parada." });
+      toast({ title: `Modo ${label} Activo` });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al iniciar pausa" });
+      toast({ variant: "destructive", title: "Error" });
     } finally {
       setIsUpdating(false);
     }
@@ -235,9 +223,9 @@ export default function RouteDetailPage() {
         "tracking.pauseStartedAt": null,
         updatedAt: serverTimestamp()
       });
-      toast({ title: "Viaje Reanudado", description: "Rastreo activo." });
+      toast({ title: "Viaje Reanudado" });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al reanudar" });
+      toast({ variant: "destructive", title: "Error" });
     } finally {
       setIsUpdating(false);
     }
@@ -255,21 +243,33 @@ export default function RouteDetailPage() {
         const base64 = event.target?.result as string;
         const compressed = await compressImage(base64, 1024, 1024, 0.6);
         setPodForm(prev => ({ ...prev, photoUrl: compressed }));
-        toast({ title: "Foto capturada", description: "Remito digitalizado." });
+        toast({ title: "Foto capturada" });
       };
       reader.readAsDataURL(file);
     }
   };
 
   const handleConfirmDelivery = async () => {
-    if (!load || !loadRef || !currentStop) return;
+    if (!load || !loadRef || !currentStop || !db) return;
     if (!podForm.receiverName || !podForm.receiverSignatureUrl || !podForm.driverSignatureUrl) {
-      toast({ variant: "destructive", title: "Datos incompletos", description: "Firma y nombre de recepción obligatorios." });
+      toast({ variant: "destructive", title: "Datos incompletos", description: "Firma y nombre obligatorios." });
       return;
     }
 
     setIsUpdating(true);
     try {
+      // 1. Marcar el remito administrativo como ENTREGADO
+      for (const docItem of currentStop.documents) {
+        if (docItem.pendingRemitoId) {
+          await updateDoc(doc(db, "pending_remitos", docItem.pendingRemitoId), {
+            status: 'delivered',
+            deliveredAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          });
+        }
+      }
+
+      // 2. Marcar la parada del viaje como entregada
       const updatedStops = load.outboundStops.map(s => 
         s.id === currentStop.id ? { 
           ...s, 
@@ -286,10 +286,11 @@ export default function RouteDetailPage() {
         updatedAt: serverTimestamp()
       });
 
-      toast({ title: "Entrega Confirmada", description: "La central ha sido notificada del éxito." });
+      toast({ title: "Entrega Confirmada", description: "Remito archivado y central notificada." });
       setIsPodOpen(false);
       setPodForm({ receiverName: "", receiverSignatureUrl: "", driverSignatureUrl: "", photoUrl: "", notes: "" });
     } catch (e) {
+      console.error(e);
       toast({ variant: "destructive", title: "Error al confirmar entrega" });
     } finally {
       setIsUpdating(false);
@@ -322,11 +323,11 @@ export default function RouteDetailPage() {
         });
       }
 
-      toast({ title: "Gasto Registrado", description: "Pendiente de aprobación. Odómetro actualizado." });
+      toast({ title: "Gasto Registrado" });
       setIsExpenseOpen(false);
       setExpenseData({ category: 'fuel', amount: 0, description: "", location: "", liters: 0, odometerKm: 0, pricePerLiter: 0, fuelBrand: "" });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al registrar gasto" });
+      toast({ variant: "destructive", title: "Error" });
     } finally {
       setIsUpdating(false);
     }
@@ -348,12 +349,12 @@ export default function RouteDetailPage() {
         updatedAt: serverTimestamp()
       });
 
-      toast({ title: "Alerta Enviada", description: "La central de monitoreo ha recibido tu aviso de emergencia." });
+      toast({ title: "Alerta Enviada" });
       setIsIncidentOpen(false);
       setSelectedIncidentType(null);
       setIncidentDescription("");
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al enviar alerta" });
+      toast({ variant: "destructive", title: "Error" });
     } finally {
       setIsUpdating(false);
     }
@@ -448,11 +449,6 @@ export default function RouteDetailPage() {
                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                </MapContainer>
              )}
-             <div className="absolute top-4 left-4 z-[500]">
-                <Badge className="bg-white/90 backdrop-blur text-blue-600 border shadow-md text-[8px] font-black uppercase">
-                  {load.status === 'on_route' ? 'Transmisión GPS Activa (1min)' : 'Monitoreo GPS Listo'}
-                </Badge>
-             </div>
           </Card>
 
           <div className="space-y-4 px-1">
@@ -493,7 +489,6 @@ export default function RouteDetailPage() {
              <div className="text-center space-y-2 py-4">
                 <Timer className="w-12 h-12 text-blue-600 mx-auto" />
                 <h3 className="text-xl font-black italic uppercase text-slate-900">Pausas y Descansos</h3>
-                <p className="text-xs text-slate-500 font-medium">Registre sus paradas obligatorias u operativas.</p>
              </div>
 
              {load.status === 'on_pause' ? (
@@ -502,13 +497,7 @@ export default function RouteDetailPage() {
                       <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">En Pausa por</p>
                       <h4 className="text-2xl font-black text-amber-700 uppercase italic">{load.tracking?.lastPauseType}</h4>
                    </div>
-                   <div className="flex flex-col items-center gap-2">
-                      <p className="text-[10px] font-bold text-amber-500 uppercase">Iniciado hace</p>
-                      <p className="text-4xl font-black text-amber-700 font-mono tracking-tighter italic">
-                         {load.tracking?.pauseStartedAt ? formatSafeDate(load.tracking.pauseStartedAt, "HH:mm") : '--:--'} hs
-                      </p>
-                   </div>
-                   <Button className="w-full bg-amber-600 hover:bg-amber-700 text-white h-16 text-lg font-black rounded-2xl shadow-xl shadow-amber-200" onClick={handleEndPause} disabled={isUpdating}>
+                   <Button className="w-full bg-amber-600 hover:bg-amber-700 text-white h-16 text-lg font-black rounded-2xl shadow-xl" onClick={handleEndPause} disabled={isUpdating}>
                       TERMINAR PAUSA <Play className="ml-2 fill-current" />
                    </Button>
                 </Card>
@@ -527,15 +516,6 @@ export default function RouteDetailPage() {
                    ))}
                 </div>
              )}
-             
-             {(load.status === 'pending' || load.status === 'assigned') && (
-               <div className="p-6 bg-blue-50 border border-blue-100 rounded-2xl flex items-start gap-3">
-                  <Info size={20} className="text-blue-600 shrink-0" />
-                  <p className="text-[10px] text-blue-700 leading-relaxed font-bold uppercase italic">
-                     Debe INICIAR EL VIAJE en la pestaña Misión antes de poder registrar pausas.
-                  </p>
-               </div>
-             )}
            </div>
         </TabsContent>
 
@@ -544,7 +524,6 @@ export default function RouteDetailPage() {
              <div className="text-center space-y-2 py-4">
                 <ShieldAlert className="w-12 h-12 text-red-600 mx-auto animate-pulse" />
                 <h3 className="text-xl font-black italic uppercase text-slate-900">Reportar Incidencia</h3>
-                <p className="text-xs text-slate-500 font-medium">Use estos botones solo en caso de problemas en ruta.</p>
              </div>
 
              <div className="grid grid-cols-2 gap-4">
@@ -564,49 +543,18 @@ export default function RouteDetailPage() {
              </div>
 
              {selectedIncidentType && (
-               <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-300 bg-white p-6 rounded-[2rem] border-2 border-red-100 shadow-xl">
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-400">Detalle adicional (Opcional)</Label>
-                    <Textarea 
-                      placeholder="Ej: Kilómetro 150, ruta cortada por gendarmería..." 
-                      className="bg-slate-50 border-none rounded-xl"
-                      value={incidentDescription}
-                      onChange={e => setIncidentDescription(e.target.value)}
-                    />
-                  </div>
-                  <Button className="w-full h-14 bg-red-600 text-white font-black text-lg rounded-2xl shadow-xl shadow-red-200" onClick={handleReportIncident} disabled={isUpdating}>
-                    ENVIAR ALERTA A CENTRAL
+               <div className="space-y-4 bg-white p-6 rounded-[2rem] border-2 border-red-100 shadow-xl">
+                  <Textarea 
+                    placeholder="Detalle adicional..." 
+                    className="bg-slate-50 border-none rounded-xl"
+                    value={incidentDescription}
+                    onChange={e => setIncidentDescription(e.target.value)}
+                  />
+                  <Button className="w-full h-14 bg-red-600 text-white font-black text-lg rounded-2xl shadow-xl" onClick={handleReportIncident} disabled={isUpdating}>
+                    ENVIAR ALERTA
                   </Button>
                </div>
              )}
-
-             <div className="space-y-4 pt-6">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-2">
-                   <Gauge size={14} /> Diario de Seguridad
-                </p>
-                <div className="space-y-2">
-                   {load.tracking?.alerts?.map((alert, i) => (
-                     <div key={i} className={cn(
-                       "p-4 rounded-2xl flex gap-4 items-start border-l-4 shadow-sm",
-                       alert.type === 'critical' ? "bg-red-50 border-l-red-600" : "bg-amber-50 border-l-amber-500"
-                     )}>
-                        <div className="mt-1">
-                           {alert.type === 'critical' ? <Siren size={18} className="text-red-600" /> : <AlertTriangle size={18} className="text-amber-600" />}
-                        </div>
-                        <div>
-                           <p className="text-[9px] font-black opacity-40 uppercase">{formatSafeDate(alert.timestamp, "HH:mm")} hs</p>
-                           <p className="text-xs font-bold text-slate-800 leading-relaxed">{alert.message}</p>
-                        </div>
-                     </div>
-                   ))}
-                   {(!load.tracking?.alerts || load.tracking.alerts.length === 0) && (
-                     <div className="p-10 text-center bg-slate-50 rounded-3xl border border-dashed border-slate-200">
-                        <CheckCircle2 size={32} className="mx-auto text-slate-200 mb-2" />
-                        <p className="text-xs font-bold text-slate-400 uppercase italic">Conducción Segura Detectada</p>
-                     </div>
-                   )}
-                </div>
-             </div>
            </div>
         </TabsContent>
 
@@ -614,14 +562,13 @@ export default function RouteDetailPage() {
            <div className="px-1 space-y-6">
              <Dialog open={isExpenseOpen} onOpenChange={setIsExpenseOpen}>
                <DialogTrigger asChild>
-                 <Button className="w-full bg-blue-600 hover:bg-blue-700 h-16 font-black text-lg rounded-2xl shadow-xl shadow-blue-200">
+                 <Button className="w-full bg-blue-600 hover:bg-blue-700 h-16 font-black text-lg rounded-2xl shadow-xl">
                    <Plus className="mr-2" /> REGISTRAR GASTO
                  </Button>
                </DialogTrigger>
                <DialogContent className="max-w-[95vw] rounded-[2.5rem] p-8">
                   <DialogHeader>
-                    <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Nuevo Gasto en Ruta</DialogTitle>
-                    <DialogDescription className="text-xs">Los tickets deben ser legibles para su aprobación.</DialogDescription>
+                    <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Nuevo Gasto</DialogTitle>
                   </DialogHeader>
                   <div className="space-y-6 py-4">
                      <div className="space-y-3">
@@ -632,7 +579,7 @@ export default function RouteDetailPage() {
                               key={cat.id} 
                               className={cn(
                                 "flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all active:scale-95", 
-                                expenseData.category === cat.id ? "bg-blue-600 text-white border-blue-600 shadow-lg" : "bg-slate-50 text-slate-400 border-transparent"
+                                expenseData.category === cat.id ? "bg-blue-600 text-white border-blue-600" : "bg-slate-50 text-slate-400 border-transparent"
                               )} 
                               onClick={() => setExpenseData({...expenseData, category: cat.id})}
                             >
@@ -644,86 +591,44 @@ export default function RouteDetailPage() {
                      </div>
                      <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1.5">
-                           <Label className="text-[10px] font-black uppercase text-slate-400">Monto Final</Label>
+                           <Label className="text-[10px] font-black uppercase text-slate-400">Monto</Label>
                            <div className="relative">
                               <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                              <Input type="number" className="pl-9 h-12 bg-slate-50 border-none font-black text-slate-900 rounded-xl" value={expenseData.amount} onChange={e => setExpenseData({...expenseData, amount: parseFloat(e.target.value) || 0})} />
+                              <Input type="number" className="pl-9 h-12 bg-slate-50 border-none font-black rounded-xl" value={expenseData.amount} onChange={e => setExpenseData({...expenseData, amount: parseFloat(e.target.value) || 0})} />
                            </div>
                         </div>
                         <div className="space-y-1.5">
-                           <Label className="text-[10px] font-black uppercase text-slate-400">Lugar / Ciudad</Label>
-                           <div className="relative">
-                              <MapPin className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                              <Input placeholder="Ej: San Pedro" className="pl-9 h-12 bg-slate-50 border-none text-xs font-bold rounded-xl" value={expenseData.location} onChange={e => setExpenseData({...expenseData, location: e.target.value})} />
-                           </div>
+                           <Label className="text-[10px] font-black uppercase text-slate-400">Lugar</Label>
+                           <Input placeholder="Ej: San Pedro" className="h-12 bg-slate-50 border-none text-xs font-bold rounded-xl" value={expenseData.location} onChange={e => setExpenseData({...expenseData, location: e.target.value})} />
                         </div>
-                     </div>
-                     <div className="p-6 bg-blue-50 border border-blue-100 rounded-3xl space-y-6 animate-in zoom-in-95">
-                        <Label className="text-[10px] font-black text-blue-800 uppercase tracking-widest flex items-center gap-2"><Fuel size={14}/> Detalle Técnico</Label>
-                        {expenseData.category === 'fuel' && (
-                          <Select value={expenseData.fuelBrand} onValueChange={v => setExpenseData({...expenseData, fuelBrand: v})}>
-                             <SelectTrigger className="bg-white h-12 rounded-xl border-none shadow-sm font-bold"><SelectValue placeholder="Marca de Estación" /></SelectTrigger>
-                             <SelectContent>
-                                {['YPF', 'Shell', 'Axion', 'Puma', 'Otra'].map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
-                             </SelectContent>
-                          </Select>
-                        )}
-                        <div className="grid grid-cols-2 gap-4">
-                           {expenseData.category === 'fuel' && (
-                             <div className="space-y-1">
-                                <Label className="text-[8px] uppercase font-bold text-blue-400 ml-1">Litros</Label>
-                                <Input type="number" placeholder="Lts" className="bg-white h-12 border-none font-black rounded-xl" value={expenseData.liters} onChange={e => setExpenseData({...expenseData, liters: parseFloat(e.target.value) || 0})} />
-                             </div>
-                           )}
-                           <div className="space-y-1 col-span-2 sm:col-span-1">
-                              <Label className="text-[8px] uppercase font-bold text-blue-400 ml-1">Km Odómetro Actual</Label>
-                              <Input type="number" placeholder="Km" className="bg-white h-12 border-none font-black rounded-xl" value={expenseData.odometerKm} onChange={e => setExpenseData({...expenseData, odometerKm: parseFloat(e.target.value) || 0})} />
-                           </div>
-                        </div>
-                        <p className="text-[9px] text-blue-400 italic">El kilometraje ingresado actualizará automáticamente la ficha técnica del camión.</p>
                      </div>
                   </div>
                   <DialogFooter>
-                    <Button className="w-full h-16 bg-blue-600 text-white font-black text-lg rounded-2xl shadow-xl shadow-blue-200" onClick={handleAddExpense} disabled={isUpdating || !expenseData.amount}>
-                      REGISTRAR COMPROBANTE
+                    <Button className="w-full h-16 bg-blue-600 text-white font-black text-lg rounded-2xl" onClick={handleAddExpense} disabled={isUpdating || !expenseData.amount}>
+                      GUARDAR GASTO
                     </Button>
                   </DialogFooter>
                </DialogContent>
              </Dialog>
 
-             <div className="space-y-3 pt-4">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Últimos Movimientos</p>
+             <div className="divide-y divide-slate-100">
                 {expenses?.map(exp => (
-                  <Card key={exp.id} className="border-none shadow-sm rounded-3xl overflow-hidden active:scale-[0.98] transition-transform">
-                    <CardContent className="p-5 flex justify-between items-center bg-white">
-                       <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 border border-slate-100">
-                             {EXPENSE_CATEGORIES.find(c => c.id === exp.category)?.icon ? React.createElement(EXPENSE_CATEGORIES.find(c => c.id === exp.category)!.icon, { size: 20 }) : <DollarSign size={20} />}
-                          </div>
-                          <div>
-                             <p className="text-xs font-black uppercase text-slate-800 leading-tight">{exp.category}</p>
-                             <p className="text-[10px] text-slate-400 font-bold uppercase">{exp.location}</p>
-                          </div>
-                       </div>
-                       <div className="text-right">
-                          <p className="text-sm font-black text-slate-900 tracking-tighter">${exp.amount.toLocaleString()}</p>
-                          <Badge variant="outline" className={cn(
-                            "text-[8px] font-black h-4 px-2 mt-1 border-none shadow-sm",
-                            exp.status === 'approved' ? "bg-green-100 text-green-700" : 
-                            exp.status === 'rejected' ? "bg-red-100 text-red-700" : "bg-blue-50 text-blue-600"
-                          )}>
-                             {exp.status.toUpperCase()}
-                          </Badge>
-                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-                {(!expenses || expenses.length === 0) && (
-                  <div className="p-16 text-center bg-slate-50 rounded-[2.5rem] border-2 border-dashed border-slate-100">
-                     <Wallet size={32} className="mx-auto text-slate-200 mb-2" />
-                     <p className="text-xs font-bold text-slate-300 uppercase italic">Sin gastos registrados aún</p>
+                  <div key={exp.id} className="p-4 flex justify-between items-center bg-white rounded-2xl shadow-sm mb-2">
+                     <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400">
+                           {EXPENSE_CATEGORIES.find(c => c.id === exp.category)?.icon ? React.createElement(EXPENSE_CATEGORIES.find(c => c.id === exp.category)!.icon, { size: 18 }) : <DollarSign size={18} />}
+                        </div>
+                        <div>
+                           <p className="text-xs font-black uppercase text-slate-800">{exp.category}</p>
+                           <p className="text-[10px] text-slate-400 font-bold uppercase">{exp.location}</p>
+                        </div>
+                     </div>
+                     <div className="text-right">
+                        <p className="text-sm font-black text-slate-900">${exp.amount.toLocaleString()}</p>
+                        <Badge variant="outline" className="text-[8px] h-3 px-1">{exp.status}</Badge>
+                     </div>
                   </div>
-                )}
+                ))}
              </div>
            </div>
         </TabsContent>
@@ -733,114 +638,56 @@ export default function RouteDetailPage() {
          <DialogContent className="max-w-full sm:max-w-md h-[95vh] sm:h-auto rounded-t-[2.5rem] sm:rounded-[2.5rem] p-0 overflow-hidden flex flex-col border-none shadow-2xl">
             <div className="bg-slate-900 text-white p-6 pb-8 shrink-0">
                <div className="flex justify-between items-start mb-4">
-                  <Badge className="bg-green-500 text-white border-none text-[8px] uppercase font-black tracking-widest">Protocolo de Entrega</Badge>
-                  <Button variant="ghost" size="icon" onClick={() => setIsPodOpen(false)} className="text-white/40 hover:text-white -mr-2"><XCircle /></Button>
+                  <Badge className="bg-green-500 text-white border-none text-[8px] uppercase font-black">Entrega</Badge>
+                  <Button variant="ghost" size="icon" onClick={() => setIsPodOpen(false)} className="text-white/40"><XCircle /></Button>
                </div>
-               <h2 className="text-2xl font-black uppercase italic tracking-tighter leading-none">Confirmar Recepción</h2>
-               <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest mt-2 flex items-center gap-1.5">
-                  <MapPin size={10} className="text-blue-400" /> {currentStop?.name}
-               </p>
+               <h2 className="text-2xl font-black uppercase italic tracking-tighter">Confirmar Recepción</h2>
+               <p className="text-white/40 text-[10px] font-bold uppercase mt-2">{currentStop?.name}</p>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-slate-50">
                <div className="space-y-3">
-                  <Label className="text-[11px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-2">
-                     <User size={14} className="text-blue-600" /> 1. Quién recibe la carga
-                  </Label>
+                  <Label className="text-[11px] font-black uppercase text-slate-500">1. Nombre del Receptor</Label>
                   <Input 
-                    placeholder="Nombre Completo del Receptor" 
-                    className="h-14 bg-white border-slate-200 shadow-sm font-bold text-slate-900 rounded-2xl px-5 focus:ring-4 ring-blue-100 transition-all"
+                    className="h-14 bg-white border-slate-200 shadow-sm font-bold rounded-2xl"
                     value={podForm.receiverName}
                     onChange={e => setPodForm({...podForm, receiverName: e.target.value})}
                   />
                </div>
 
                <div className="space-y-6">
-                  <SignaturePad 
-                    title="Firma del Receptor" 
-                    onSave={(url) => setPodForm({...podForm, receiverSignatureUrl: url})} 
-                  />
-                  <SignaturePad 
-                    title="Firma del Chofer (Conformidad)" 
-                    onSave={(url) => setPodForm({...podForm, driverSignatureUrl: url})} 
-                  />
+                  <SignaturePad title="Firma Receptor" onSave={(url) => setPodForm({...podForm, receiverSignatureUrl: url})} />
+                  <SignaturePad title="Firma Chofer" onSave={(url) => setPodForm({...podForm, driverSignatureUrl: url})} />
                </div>
 
                <div className="space-y-3">
-                  <Label className="text-[11px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-2">
-                     <Camera size={14} className="text-blue-600" /> 2. Evidencia de Remito
-                  </Label>
+                  <Label className="text-[11px] font-black uppercase text-slate-500">2. Foto del Remito</Label>
                   <input type="file" ref={photoInputRef} className="hidden" accept="image/*" capture="environment" onChange={onPhotoChange} />
-                  <div 
-                    className={cn(
-                      "aspect-video rounded-[2rem] border-3 border-dashed flex flex-col items-center justify-center gap-3 cursor-pointer overflow-hidden transition-all shadow-sm",
-                      podForm.photoUrl ? "border-green-500 bg-white" : "border-slate-300 bg-slate-100 hover:bg-blue-50 hover:border-blue-300"
-                    )}
-                    onClick={handlePhotoClick}
-                  >
+                  <div className="aspect-video rounded-[2rem] border-3 border-dashed flex flex-col items-center justify-center gap-3 cursor-pointer overflow-hidden bg-slate-100" onClick={handlePhotoClick}>
                     {podForm.photoUrl ? (
-                      <div className="relative w-full h-full group">
-                         <img src={podForm.photoUrl} className="w-full h-full object-cover" alt="Remito" />
-                         <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Badge className="bg-white text-black font-black">CAMBIAR FOTO</Badge>
-                         </div>
-                      </div>
+                      <img src={podForm.photoUrl} className="w-full h-full object-cover" alt="Remito" />
                     ) : (
                       <>
-                        <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-blue-600 shadow-md">
-                           <Camera size={32} />
-                        </div>
-                        <div className="text-center">
-                           <p className="text-[11px] font-black text-slate-600 uppercase">Capturar Foto del Remito</p>
-                           <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Obligatorio para Auditoría</p>
-                        </div>
+                        <Camera size={32} className="text-slate-300" />
+                        <p className="text-[11px] font-black text-slate-400 uppercase">Capturar Foto</p>
                       </>
                     )}
                   </div>
-               </div>
-
-               <div className="space-y-3">
-                  <Label className="text-[11px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-2">
-                     <MessageSquare size={14} className="text-blue-600" /> 3. Novedades / Observaciones
-                  </Label>
-                  <Textarea 
-                    placeholder="Ej: Entrega parcial, bultos mojados, etc..." 
-                    className="bg-white border-slate-200 rounded-2xl text-sm min-h-[100px] p-5 shadow-sm"
-                    value={podForm.notes}
-                    onChange={e => setPodForm({...podForm, notes: e.target.value})}
-                  />
                </div>
             </div>
 
             <div className="p-6 bg-white border-t shrink-0">
                <Button 
-                className={cn(
-                  "w-full h-18 text-lg font-black uppercase italic tracking-tighter rounded-[1.5rem] shadow-2xl transition-all active:scale-95 py-8",
-                  isUpdating || !podForm.receiverName || !podForm.receiverSignatureUrl || !podForm.driverSignatureUrl || !podForm.photoUrl
-                    ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-                    : "bg-green-600 text-white hover:bg-green-700 shadow-green-200 animate-pulse"
-                )} 
+                className="w-full h-18 text-lg font-black uppercase rounded-[1.5rem] bg-green-600 text-white hover:bg-green-700"
                 onClick={handleConfirmDelivery} 
                 disabled={isUpdating || !podForm.receiverName || !podForm.receiverSignatureUrl || !podForm.driverSignatureUrl || !podForm.photoUrl}
                >
-                 {isUpdating ? <Loader2 className="animate-spin mr-3" size={24} /> : <CircleCheck className="mr-3" size={24} />}
+                 {isUpdating ? <Loader2 className="animate-spin mr-3" /> : <CircleCheck className="mr-3" />}
                  FINALIZAR ENTREGA
                </Button>
-               <p className="text-[8px] text-center text-slate-400 font-bold uppercase mt-4 tracking-[0.2em]">Sincronización Digital Certificada por LogísticaAr</p>
             </div>
          </DialogContent>
       </Dialog>
-
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-xl border-t border-slate-100 flex justify-center z-50">
-        <div className="max-w-md w-full grid grid-cols-2 gap-3 px-2">
-           <Button variant="outline" className="h-14 rounded-2xl font-black text-[10px] uppercase tracking-widest bg-white border-slate-200 text-slate-600" onClick={() => window.open(`tel:0800-LOGISTICA`)}>
-              <LifeBuoy size={18} className="mr-2 text-blue-600" /> Ayuda Central
-           </Button>
-           <Button className="h-14 rounded-2xl font-black text-[10px] uppercase tracking-widest bg-green-600 hover:bg-green-700 shadow-xl shadow-green-200" onClick={() => window.open(`https://wa.me/5491100000000`)}>
-              <MessageSquare size={18} className="mr-2 fill-current" /> Enviar Chat
-           </Button>
-        </div>
-      </div>
     </div>
   );
 }

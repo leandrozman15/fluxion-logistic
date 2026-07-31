@@ -32,7 +32,8 @@ import {
   Wrench,
   Zap,
   Box,
-  Files
+  Files,
+  Archive
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth, useFirestore, useDoc } from "@/firebase";
@@ -69,7 +70,8 @@ function DashboardSidebar() {
     { title: "Cartera Clientes", icon: Briefcase, href: "/clientes" },
     { title: "Catálogo Productos", icon: Box, href: "/productos" },
     { title: "Cargas y Fletes", icon: Package, href: "/cargas" },
-    { title: "Gestión de Remitos", icon: Files, href: "/remitos" },
+    { title: "Buzón de Remitos", icon: Files, href: "/remitos" },
+    { title: "Archivo de Remitos", icon: Archive, href: "/remitos/archivo" },
     { title: "Mantenimiento", icon: Wrench, href: "/mantenimiento" },
     { title: "Sedes Logísticas", icon: Building2, href: "/sedes" },
     { title: "Análisis de Datos", icon: BarChart3, href: "/analytics" },
@@ -122,8 +124,8 @@ function DashboardSidebar() {
                     onClick={handleLinkClick}
                   >
                     <Link href={item.href}>
-                      <item.icon className={cn(item.title === "Gestión de Remitos" && "text-indigo-600")} />
-                      <span className={cn(item.title === "Gestión de Remitos" && "font-bold text-indigo-700")}>{item.title}</span>
+                      <item.icon className={cn(item.title.includes("Remitos") && "text-indigo-600")} />
+                      <span className={cn(item.title.includes("Remitos") && "font-bold text-indigo-700")}>{item.title}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

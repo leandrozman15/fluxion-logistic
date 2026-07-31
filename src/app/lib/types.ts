@@ -123,7 +123,10 @@ export interface PendingRemito {
   volumeM3: number;
   items?: PendingRemitoItem[];
   fileUrl?: string;
-  status: 'pending' | 'dispatched';
+  status: 'pending' | 'dispatched' | 'delivered';
+  loadId?: string;
+  dispatchedDate?: string;
+  deliveredAt?: any;
   createdAt: any;
   createdBy?: string;
 }
@@ -132,6 +135,7 @@ export interface LoadDocument {
   id: string;
   type: LoadDocType;
   number: string;
+  pendingRemitoId?: string; // Referencia al remito original
   fileUrl?: string;
   uploadedAt: any;
   notes?: string;
