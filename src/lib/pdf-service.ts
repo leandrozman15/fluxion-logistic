@@ -52,17 +52,19 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
   doc.setFontSize(14);
   doc.text(product.brand || "MARCA NO ESPECIFICADA", margin, brandY);
 
-  // 3. DESCRIPCIÓN E IMAGEN (AHORA ARRIBA)
-  const descAreaY = brandY + 12;
+  // --- SECCIONES INVERTIDAS: DESCRIPCIÓN ARRIBA, CUADROS ABAJO ---
+
+  // 3. DESCRIPCIÓN E IMAGEN (SECCIÓN SUPERIOR)
+  const contentY = brandY + 12;
   
-  // Foto del Producto (Lado derecho de la descripción)
+  // Foto del Producto (Lado derecho)
   let photoHeight = 0;
   if (product.photoUrl) {
     try {
       doc.setDrawColor(200, 200, 200);
       doc.setLineWidth(0.5);
-      doc.rect(pageWidth - margin - 55, descAreaY, 55, 55);
-      doc.addImage(product.photoUrl, 'JPEG', pageWidth - margin - 54, descAreaY + 1, 53, 53);
+      doc.rect(pageWidth - margin - 55, contentY, 55, 55);
+      doc.addImage(product.photoUrl, 'JPEG', pageWidth - margin - 54, contentY + 1, 53, 53);
       photoHeight = 60;
     } catch (e) {
       console.warn("No se pudo añadir la foto al PDF:", e);
@@ -72,19 +74,19 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
   doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
   doc.setFontSize(10);
   doc.setFont("helvetica", "bold");
-  doc.text("DESCRIPCIÓN DEL ARTÍCULO", margin, descAreaY - 2);
-  doc.line(margin, descAreaY, margin + 40, descAreaY);
+  doc.text("DESCRIPCIÓN DEL ARTÍCULO", margin, contentY - 2);
+  doc.line(margin, contentY, margin + 40, contentY);
 
   doc.setFont("helvetica", "italic");
   doc.setFontSize(11);
   const descWidth = product.photoUrl ? pageWidth - (margin * 2) - 65 : pageWidth - (margin * 2);
   const descLines = doc.splitTextToSize(product.description || "Sin descripción técnica disponible.", descWidth);
-  doc.text(descLines, margin, descAreaY + 8);
+  doc.text(descLines, margin, contentY + 8);
 
   const descTotalHeight = descLines.length * 6;
-  const sectionSplitY = descAreaY + Math.max(descTotalHeight + 15, photoHeight);
+  const sectionSplitY = contentY + Math.max(descTotalHeight + 15, photoHeight);
 
-  // 4. GRILLA TÉCNICA (AHORA ABAJO)
+  // 4. GRILLA TÉCNICA (SECCIÓN INFERIOR)
   const gridY = sectionSplitY;
   const colW = (pageWidth - (margin * 2)) / 5;
   
@@ -92,7 +94,6 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
   doc.setLineWidth(0.5);
   doc.rect(margin, gridY, pageWidth - (margin * 2), 25);
   
-  // Líneas divisorias grilla
   for (let i = 1; i < 5; i++) {
     doc.line(margin + (colW * i), gridY, margin + (colW * i), gridY + 25);
   }
@@ -151,7 +152,6 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
   doc.setTextColor(150);
   doc.text(`Documento generado automáticamente el ${format(new Date(), "dd/MM/yyyy HH:mm")}`, margin, 285);
 
-  // DESCARGA DIRECTA
   doc.save(`Ficha_${product.sku}.pdf`);
 };
 
@@ -208,7 +208,6 @@ export const generateLoadOrderPDF = async (load: Load, driver?: Driver | null, t
     styles: { fontSize: 8 }
   });
 
-  // FIRMAS
   const finalY = Math.max((doc as any).lastAutoTable.finalY + 30, 240);
   doc.line(margin, finalY, 70, finalY);
   doc.text("FIRMA CHOFER", margin + 15, finalY + 5);
@@ -220,13 +219,14 @@ export const generateLoadOrderPDF = async (load: Load, driver?: Driver | null, t
 };
 
 /**
- * RENDICIÓN DE GASTOS / AUDITORÍA (A4)
+ * RENDICIÓN DE GASTOS / AUDITORÍA OPERATIVA (A4)
  */
 export const generateLoadWalletPDF = async (load: Load, expenses: Expense[], driver?: Driver | null, truck?: Truck | null, tenant?: Tenant) => {
   const doc = new jsPDF("p", "mm", "a4");
   const margin = 15;
   const pageWidth = 210;
 
+  // HEADER
   doc.setFillColor(30, 41, 59); // Slate 800
   doc.rect(0, 0, pageWidth, 40, "F");
   doc.setTextColor(255);
@@ -238,7 +238,38 @@ export const generateLoadWalletPDF = async (load: Load, expenses: Expense[], dri
   doc.setFontSize(14);
   doc.text("AUDIT REPORT", pageWidth - margin, 25, { align: "right" });
 
-  const body = expenses.map(e => [
+  // NUEVO: RESUMEN OPERATIVO DEL VIAJE
+  doc.setTextColor(0);
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.text("I. RESUMEN OPERATIVO DEL VIAJE", margin, 52);
+  doc.line(margin, 54, pageWidth - margin, 54);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  const infoY = 62;
+  const col2 = pageWidth / 2;
+
+  // Columna 1: Recursos
+  doc.text(`CHOFER: ${driver ? `${driver.lastName}, ${driver.firstName}` : "---"}`, margin, infoY);
+  doc.text(`DNI: ${driver?.dni || "---"}`, margin, infoY + 5);
+  doc.text(`CAMIÓN: ${truck?.plate || "---"} (${truck?.brand || ""} ${truck?.model || ""})`, margin, infoY + 10);
+
+  // Columna 2: Métricas
+  const totalDeliveredWeight = load.outboundStops.reduce((acc, s) => acc + (s.deliveredAt ? s.weightKg : 0), 0);
+  doc.text(`DISTANCIA RECORRIDA: ${Math.round(load.tracking?.distanceTraveledKm || 0)} KM`, col2, infoY);
+  doc.text(`TIEMPO EN RUTA: ${load.tracking?.timeOnRouteMinutes || 0} MIN`, col2, infoY + 5);
+  doc.text(`CARGA ENTREGADA: ${totalDeliveredWeight.toLocaleString()} KG`, col2, infoY + 10);
+
+  // Resumen de ruta
+  doc.setFont("helvetica", "bold");
+  doc.text(`ITINERARIO: ${load.origin.name} -> ${load.outboundStops.length} Paradas -> ${load.isRoundTrip ? 'Retorno' : 'Directo'}`, margin, infoY + 18);
+
+  // II. DETALLE DE COMPROBANTES
+  doc.setFontSize(10);
+  doc.text("II. DETALLE DE COMPROBANTES REGISTRADOS", margin, infoY + 30);
+  
+  const expenseRows = expenses.map(e => [
     e.createdAt?.toDate ? format(e.createdAt.toDate(), "dd/MM/yy") : "---",
     e.category.toUpperCase(),
     e.location,
@@ -246,25 +277,33 @@ export const generateLoadWalletPDF = async (load: Load, expenses: Expense[], dri
   ]);
 
   autoTable(doc, {
-    startY: 50,
+    startY: infoY + 32,
     head: [["FECHA", "CONCEPTO", "LUGAR", "MONTO"]],
-    body: body,
-    headStyles: { fillColor: [30, 41, 59] }
+    body: expenseRows,
+    headStyles: { fillColor: [30, 41, 59] },
+    styles: { fontSize: 8 },
+    margin: { left: margin, right: margin }
   });
 
-  const finalY = (doc as any).lastAutoTable.finalY + 10;
+  // BALANCE FINAL
+  const finalY = (doc as any).lastAutoTable.finalY + 12;
   const totalExpenses = expenses.reduce((acc, e) => acc + (e.amount || 0), 0);
   const advance = load.budget?.initialAdvance || 0;
   const balance = advance - totalExpenses;
 
-  doc.setTextColor(0);
-  doc.setFontSize(12);
-  doc.text(`Anticipo Otorgado: $${advance.toLocaleString()}`, pageWidth - margin, finalY, { align: "right" });
-  doc.text(`Total Gastos Auditados: $${totalExpenses.toLocaleString()}`, pageWidth - margin, finalY + 7, { align: "right" });
+  doc.setFillColor(248, 250, 252);
+  doc.rect(margin, finalY - 5, pageWidth - (margin * 2), 30, "F");
+
+  doc.setFontSize(11);
+  doc.setTextColor(100);
+  doc.text(`Anticipo Otorgado: $${advance.toLocaleString()}`, pageWidth - margin - 5, finalY + 2, { align: "right" });
+  doc.text(`Total Gastos Auditados: $${totalExpenses.toLocaleString()}`, pageWidth - margin - 5, finalY + 9, { align: "right" });
   
+  doc.setFontSize(13);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(balance >= 0 ? 22 : 185, balance >= 0 ? 101 : 28, balance >= 0 ? 52 : 28);
-  doc.text(`SALDO FINAL: $${Math.abs(balance).toLocaleString()} ${balance >= 0 ? '(A FAVOR CIA)' : '(REINTEGRO)'}`, pageWidth - margin, finalY + 15, { align: "right" });
+  const balanceLabel = balance >= 0 ? '(A FAVOR CIA)' : '(REINTEGRO)';
+  doc.text(`SALDO FINAL: $${Math.abs(balance).toLocaleString()} ${balanceLabel}`, pageWidth - margin - 5, finalY + 18, { align: "right" });
 
   doc.save(`Rendicion_${load.orderNumber}.pdf`);
 };
