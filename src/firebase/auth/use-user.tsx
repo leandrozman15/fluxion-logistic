@@ -6,44 +6,24 @@ import { User, onAuthStateChanged } from 'firebase/auth';
 import { useAuth } from '../provider';
 
 /**
- * Hook de usuario modificado para Acceso Libre (Modo Demo).
- * Provee un perfil de administrador master por defecto.
+ * Hook de usuario para gestionar el estado de autenticación real.
+ * Provee el objeto de usuario de Firebase o null si no hay sesión.
  */
 export function useUser() {
   const auth = useAuth();
   
-  // Mock de usuario administrador para acceso libre
-  const mockUser = {
-    uid: "demo_admin_user",
-    email: "admin@logistica-ar.com",
-    displayName: "Operador Central (Demo)",
-    emailVerified: true,
-    isAnonymous: false,
-    metadata: {},
-    providerData: [],
-    refreshToken: "",
-    tenantId: "default_tenant",
-    delete: async () => {},
-    getIdToken: async () => "mock-token",
-    getIdTokenResult: async () => ({} as any),
-    reload: async () => {},
-    toJSON: () => ({})
-  } as unknown as User;
-
-  const [user, setUser] = useState<User | null>(mockUser);
-  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!auth) return;
+    if (!auth) {
+      setLoading(false);
+      return;
+    }
     
-    // Escuchamos el estado real, pero si no hay sesión, mantenemos el mock
+    // Escuchamos el estado real de Firebase Authentication
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      if (firebaseUser) {
-        setUser(firebaseUser);
-      } else {
-        // Mantenemos el mock para el modo libre
-        setUser(mockUser);
-      }
+      setUser(firebaseUser);
       setLoading(false);
     });
 
