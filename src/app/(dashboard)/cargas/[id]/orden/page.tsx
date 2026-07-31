@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useEffect, useState } from "react";
@@ -7,7 +8,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
-  ArrowLeft, Loader2, ClipboardCheck, ShieldCheck, Truck, User, MapPin, Receipt, MapPinned, CheckCircle2, Download
+  ArrowLeft, Loader2, ClipboardCheck, ShieldCheck, Truck, User, MapPin, Download
 } from "lucide-react";
 import { Load, Driver, Truck as TruckType, Tenant } from "@/app/lib/types";
 import { QRCodeSVG } from "qrcode.react";
@@ -74,7 +75,6 @@ export default function LoadOrderDocumentPage() {
 
   const confirmationUrl = typeof window !== 'undefined' ? `${window.location.origin}/rutas/${load.id}` : '';
   const orgName = tenant?.name || "LOGÍSTICA AR";
-  const pod = load.outboundStops?.[load.outboundStops.length - 1]?.proofOfDelivery;
 
   return (
     <div className="min-h-screen bg-slate-800 py-8 print:bg-white print:py-0 overflow-y-auto">
@@ -86,7 +86,7 @@ export default function LoadOrderDocumentPage() {
           <div className="flex gap-2">
              <Badge className="bg-blue-600 text-white border-none">PREVIO A4 VECTORIAL</Badge>
              <Button onClick={() => window.print()} className="bg-white text-slate-900 hover:bg-blue-50 rounded-xl font-black shadow-2xl px-10 h-12">
-               <Download className="mr-2 h-5 w-5" /> GUARDAR PDF A4
+               <Download className="mr-2 h-5 w-5" /> GENERAR PDF A4
              </Button>
           </div>
         </div>

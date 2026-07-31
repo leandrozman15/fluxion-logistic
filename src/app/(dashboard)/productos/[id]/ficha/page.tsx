@@ -59,10 +59,9 @@ export default function ProductTechnicalSheetPage() {
 
   useEffect(() => {
     if (autoPrint && !loading && product) {
-      // Pequeño delay para asegurar renderizado vectorial
       const timer = setTimeout(() => {
         window.print();
-      }, 800);
+      }, 1000);
       return () => clearTimeout(timer);
     }
   }, [autoPrint, loading, product]);
@@ -83,7 +82,7 @@ export default function ProductTechnicalSheetPage() {
         <div className="flex gap-2">
            <Badge className="bg-blue-600 text-white border-none">PREVIO A4 VECTORIAL</Badge>
            <Button onClick={() => window.print()} className="bg-white text-slate-900 hover:bg-blue-50 rounded-xl font-black shadow-2xl px-8 h-11">
-             <Download className="mr-2 h-5 w-5" /> GUARDAR PDF A4
+             <Download className="mr-2 h-5 w-5" /> GENERAR PDF A4
            </Button>
         </div>
       </div>

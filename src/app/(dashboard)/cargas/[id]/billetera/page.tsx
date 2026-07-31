@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
@@ -8,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
-  ArrowLeft, Loader2, Receipt, Download, Truck, User, DollarSign
+  ArrowLeft, Loader2, Receipt, Download
 } from "lucide-react";
 import { Load, Expense, Driver, Truck as TruckType, Tenant } from "@/app/lib/types";
 import { format } from "date-fns";
@@ -91,7 +92,7 @@ export default function LoadWalletPage() {
   if (!load) return <div className="p-10 text-center">Carga no encontrada.</div>;
 
   const statsApproved = expenses?.filter(e => e.status === 'approved').reduce((acc, exp) => acc + (exp.amount || 0), 0) || 0;
-  const balanceFinal = statsApproved - (load.budget?.initialAdvance || 0);
+  const balanceFinal = (load.budget?.initialAdvance || 0) - statsApproved;
 
   return (
     <div className="min-h-screen bg-slate-800 py-8 print:bg-white print:py-0 overflow-y-auto">
@@ -100,7 +101,7 @@ export default function LoadWalletPage() {
         <div className="flex gap-2">
            <Badge className="bg-blue-600 text-white border-none">PREVIO A4 VECTORIAL</Badge>
            <Button className="font-black h-11 px-8 rounded-xl shadow-2xl bg-white text-slate-900 hover:bg-blue-50" onClick={() => window.print()}>
-             <Download size={18} className="mr-2" /> GUARDAR PDF A4
+             <Download size={18} className="mr-2" /> GENERAR PDF A4
            </Button>
         </div>
       </div>
@@ -160,13 +161,18 @@ export default function LoadWalletPage() {
             </tbody>
             <tfoot>
                <tr className="border-t-[4px] border-black bg-slate-50">
-                  <td colSpan={2} className="p-5 text-right text-xs font-black uppercase italic tracking-widest">Total Comprobantes Auditados:</td>
-                  <td className="p-5 text-right text-lg font-black italic">${statsApproved.toLocaleString()}</td>
+                  <td colSpan={2} className="p-5 text-right text-xs font-black uppercase italic tracking-widest">Anticipo Otorgado:</td>
+                  <td className="p-5 text-right text-lg font-black italic">${(load.budget?.initialAdvance || 0).toLocaleString()}</td>
+               </tr>
+               <tr className="border-t-[2px] border-black bg-slate-50">
+                  <td colSpan={2} className="p-5 text-right text-xs font-black uppercase italic tracking-widest">Total Gastos Auditados:</td>
+                  <td className="p-5 text-right text-lg font-black italic text-red-700">-${statsApproved.toLocaleString()}</td>
                </tr>
                <tr className="border-t-[3px] border-black bg-blue-50/30">
-                  <td colSpan={2} className="p-6 text-right text-sm font-black uppercase italic tracking-[0.3em] text-blue-900">Total Liquidación Final:</td>
-                  <td className={cn("p-6 text-right text-3xl font-black italic tracking-tighter", balanceFinal >= 0 ? "text-red-700" : "text-green-700")}>
+                  <td colSpan={2} className="p-6 text-right text-sm font-black uppercase italic tracking-[0.3em] text-blue-900">Saldo Final a Liquidar:</td>
+                  <td className={cn("p-6 text-right text-3xl font-black italic tracking-tighter", balanceFinal < 0 ? "text-red-700" : "text-green-700")}>
                      ${Math.abs(balanceFinal).toLocaleString()}
+                     <span className="text-xs block font-bold uppercase tracking-widest">{balanceFinal >= 0 ? '(A FAVOR CIA)' : '(REINTEGRO)'}</span>
                   </td>
                </tr>
             </tfoot>
