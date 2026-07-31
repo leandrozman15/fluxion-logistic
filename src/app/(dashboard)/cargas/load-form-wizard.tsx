@@ -19,7 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Package, ArrowLeft, ArrowRight, Save, Loader2, 
   MapPin, Calendar, Clock, DollarSign, Truck, 
-  Info, AlertTriangle, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, LayoutGrid, UserCheck, Edit, TrendingUp, CreditCard, Anchor, Scale, ListOrdered, ShieldCheck, Ship, ScanBarcode, X, Receipt, Files
+  Info, AlertTriangle, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, LayoutGrid, UserCheck, Edit, TrendingUp, CreditCard, Anchor, Scale, ListOrdered, ShieldCheck, Ship, ScanBarcode, X, Receipt, Files, HandCoins, Landmark
 } from "lucide-react";
 import { Load, Client, Hub, LoadLegStop, LoadDocument, LoadDocType, Truck as TruckType, Driver, Tenant, PendingRemito } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -85,7 +85,8 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
         ...existingLoad,
         outboundStops: existingLoad.outboundStops || [],
         returnStops: existingLoad.returnStops || [],
-        assignedCompanionIds: existingLoad.assignedCompanionIds || []
+        assignedCompanionIds: existingLoad.assignedCompanionIds || [],
+        budget: existingLoad.budget || { initialAdvance: 0, totalBudget: 0, categories: {} }
       });
       // Initialize selected remitos from existing stops
       const remitoIds: string[] = [];
@@ -344,7 +345,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
            <Input 
              className="w-40 font-mono font-black h-9 text-blue-600 bg-blue-50 border-blue-100" 
              placeholder="Auto-Generar" 
-             value={formData.orderNumber} 
+             value={formData.orderNumber ?? ''} 
              onChange={e => setFormData({...formData, orderNumber: e.target.value.toUpperCase()})}
            />
         </div>
@@ -357,7 +358,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
             { id: 2, label: "Hoja Ruta", icon: ListOrdered },
             { id: 3, label: "Retorno", icon: Repeat },
             { id: 4, label: "Puerto / Comex", icon: Ship },
-            { id: 5, label: "Seguridad", icon: ShieldCheck }
+            { id: 5, label: "Cierre", icon: ShieldCheck }
           ].map((s) => (
             <div key={s.id} className="flex flex-col items-center gap-1.5 flex-1 relative">
               <div className={cn(
@@ -448,8 +449,8 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                     </Select>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-slate-400">Fecha Carga</Label><Input type="date" value={formData.pickupDate} onChange={e => setFormData({...formData, pickupDate: e.target.value})} /></div>
-                    <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-slate-400">Hora</Label><Input type="time" value={formData.pickupTime} onChange={e => setFormData({...formData, pickupTime: e.target.value})} /></div>
+                    <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-slate-400">Fecha Carga</Label><Input type="date" value={formData.pickupDate ?? ''} onChange={e => setFormData({...formData, pickupDate: e.target.value})} /></div>
+                    <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-slate-400">Hora</Label><Input type="time" value={formData.pickupTime ?? ''} onChange={e => setFormData({...formData, pickupTime: e.target.value})} /></div>
                   </div>
                 </CardContent>
               </Card>
@@ -547,7 +548,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
            <Card className="border-none shadow-sm">
              <CardHeader><CardTitle>Retorno / Fin de Jornada</CardTitle></CardHeader>
              <CardContent className="space-y-6">
-                <div className="flex items-center justify-between p-4 bg-orange-50/50 border border-orange-100 rounded-2xl"><div className="space-y-0.5"><Label className="text-xs font-black uppercase text-orange-700">Viaje de Ida y Vuelta</Label><p className="text-[10px] text-orange-600 font-bold uppercase">Habilitar paradas de recolección en el retorno</p></div><Switch checked={formData.isRoundTrip} onCheckedChange={v => setFormData({...formData, isRoundTrip: v})} /></div>
+                <div className="flex items-center justify-between p-4 bg-orange-50/50 border border-orange-100 rounded-2xl"><div className="space-y-0.5"><Label className="text-xs font-black uppercase text-orange-700">Viaje de Ida y Vuelta</Label><p className="text-[10px] text-orange-600 font-bold uppercase">Habilitar paradas de recolección en el retorno</p></div><Switch checked={formData.isRoundTrip ?? false} onCheckedChange={v => setFormData({...formData, isRoundTrip: v})} /></div>
                 <div className="space-y-4">
                   <div className="flex justify-between items-center"><Label className="text-xs font-black uppercase text-slate-400">Recolecciones de Retorno</Label><Button size="sm" variant="outline" className="text-orange-600 border-orange-200 rounded-full" onClick={() => { setActiveLeg('return'); setIsStopModalOpen(true); }}><Plus size={14} className="mr-1" /> AGREGAR RETORNO</Button></div>
                   <div className="space-y-3">
@@ -561,11 +562,81 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
         )}
 
         {step === 4 && (
-          <Card className="border-none shadow-sm"><CardHeader><CardTitle className="flex items-center gap-2"><Ship className="text-blue-600" /> Operativa Aduanera / Puerto</CardTitle><CardDescription>Datos del contenedor y documentación.</CardDescription></CardHeader><CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6"><div className="space-y-2"><Label className="flex items-center gap-2"><ScanBarcode size={14} className="text-blue-500" /> N° de Contenedor</Label><Input placeholder="Ej: MEDU 123456-7" value={formData.international?.containerNumber || ''} onChange={e => setFormData({...formData, international: {...formData.international!, containerNumber: e.target.value.toUpperCase()}})} /></div><div className="space-y-2"><Label>N° de Precinto</Label><Input placeholder="Ej: 009876" value={formData.international?.sealNumber || ''} onChange={e => setFormData({...formData, international: {...formData.international!, sealNumber: e.target.value}})} /></div></CardContent></Card>
+          <Card className="border-none shadow-sm"><CardHeader><CardTitle className="flex items-center gap-2"><Ship className="text-blue-600" /> Operativa Aduanera / Puerto</CardTitle><CardDescription>Datos del contenedor y documentación.</CardDescription></CardHeader><CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6"><div className="space-y-2"><Label className="flex items-center gap-2"><ScanBarcode size={14} className="text-blue-500" /> N° de Contenedor</Label><Input placeholder="Ej: MEDU 123456-7" value={formData.international?.containerNumber ?? ''} onChange={e => setFormData({...formData, international: {...formData.international!, containerNumber: e.target.value.toUpperCase()}})} /></div><div className="space-y-2"><Label>N° de Precinto</Label><Input placeholder="Ej: 009876" value={formData.international?.sealNumber ?? ''} onChange={e => setFormData({...formData, international: {...formData.international!, sealNumber: e.target.value}})} /></div></CardContent></Card>
         )}
 
         {step === 5 && (
-          <Card className="border-none shadow-xl rounded-3xl overflow-hidden"><CardHeader className="bg-slate-900 text-white"><CardTitle className="text-sm font-black flex items-center gap-2 uppercase italic"><ShieldCheck className="text-blue-400" /> Control Técnico y Vial</CardTitle></CardHeader><CardContent className="p-8 space-y-8"><div className="grid grid-cols-1 md:grid-cols-2 gap-8"><div className="space-y-4"><p className="text-[10px] font-black uppercase text-slate-400">Balance de Pesos</p><div className="p-6 bg-slate-50 rounded-3xl border space-y-4"><div className="flex justify-between items-center"><span className="text-xs font-bold text-slate-500">Carga Declarada:</span><span className="text-lg font-black text-slate-800">{currentTotalWeight.toLocaleString()} KG</span></div>{selectedTruck && (<><div className="flex justify-between items-center border-t pt-4"><span className="text-xs font-bold text-slate-500">Carga Máxima:</span><span className="text-lg font-black text-green-600">{selectedTruck.capacityKg.toLocaleString()} KG</span></div><Progress value={Math.min(100, (currentTotalWeight / selectedTruck.capacityKg) * 100)} className={cn("h-2", isWeightLimitExceeded ? "bg-red-200" : "bg-slate-200")} /></>)}</div></div></div></CardContent><CardFooter className="bg-slate-50 p-6 border-t flex justify-end"><Button onClick={handleSubmit} className={cn("h-14 px-10 rounded-2xl font-black text-lg", isWeightLimitExceeded ? "bg-slate-300" : "bg-green-600 shadow-xl")} disabled={isSubmitting || isWeightLimitExceeded}>{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} EMITIR ORDEN</Button></CardFooter></Card>
+          <div className="space-y-6">
+            <Card className="border-none shadow-xl rounded-3xl overflow-hidden">
+              <CardHeader className="bg-slate-900 text-white">
+                <CardTitle className="text-sm font-black flex items-center gap-2 uppercase italic">
+                  <ShieldCheck className="text-blue-400" /> Control Técnico y Vial
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-8 space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-4">
+                    <p className="text-[10px] font-black uppercase text-slate-400">Balance de Pesos</p>
+                    <div className="p-6 bg-slate-50 rounded-3xl border space-y-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold text-slate-500">Carga Declarada:</span>
+                        <span className="text-lg font-black text-slate-800">{currentTotalWeight.toLocaleString()} KG</span>
+                      </div>
+                      {selectedTruck && (
+                        <>
+                          <div className="flex justify-between items-center border-t pt-4">
+                            <span className="text-xs font-bold text-slate-500">Carga Máxima:</span>
+                            <span className="text-lg font-black text-green-600">{selectedTruck.capacityKg.toLocaleString()} KG</span>
+                          </div>
+                          <Progress value={Math.min(100, (currentTotalWeight / selectedTruck.capacityKg) * 100)} className={cn("h-2", isWeightLimitExceeded ? "bg-red-200" : "bg-slate-200")} />
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <p className="text-[10px] font-black uppercase text-slate-400">Gestión Financiera de Viaje</p>
+                    <div className="p-6 bg-blue-50 border-2 border-blue-100 rounded-3xl space-y-4">
+                       <div className="space-y-2">
+                          <Label className="text-xs font-bold text-blue-700 flex items-center gap-2">
+                             <HandCoins size={14} /> Anticipo Otorgado (Efectivo/Caja)
+                          </Label>
+                          <div className="relative">
+                             <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-blue-400" />
+                             <Input 
+                                type="number" 
+                                className="pl-9 h-12 bg-white border-blue-200 font-black text-lg text-blue-900 rounded-xl"
+                                placeholder="0"
+                                value={formData.budget?.initialAdvance ?? 0}
+                                onChange={e => setFormData({
+                                  ...formData, 
+                                  budget: {
+                                    ...(formData.budget || { initialAdvance: 0, totalBudget: 0, categories: {} }),
+                                    initialAdvance: parseFloat(e.target.value) || 0
+                                  }
+                                })}
+                             />
+                          </div>
+                          <p className="text-[9px] text-blue-400 italic">Este monto se descontará automáticamente en la rendición final del viaje.</p>
+                       </div>
+                       
+                       <div className="pt-2 border-t border-blue-100">
+                          <div className="flex items-center gap-2 text-blue-600 font-bold text-[10px] uppercase">
+                             <Landmark size={12} /> Proyección Contable
+                          </div>
+                       </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+              <CardFooter className="bg-slate-50 p-6 border-t flex justify-end">
+                <Button onClick={handleSubmit} className={cn("h-14 px-10 rounded-2xl font-black text-lg", isWeightLimitExceeded ? "bg-slate-300" : "bg-green-600 shadow-xl")} disabled={isSubmitting || isWeightLimitExceeded}>
+                  {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} 
+                  {loadId ? 'GUARDAR CAMBIOS' : 'EMITIR ORDEN'}
+                </Button>
+              </CardFooter>
+            </Card>
+          </div>
         )}
       </div>
 
@@ -576,7 +647,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
       <Dialog open={isStopModalOpen} onOpenChange={setIsStopModalOpen}>
         <DialogContent className="max-w-2xl rounded-3xl">
           <DialogHeader><DialogTitle>Nueva Parada Manual</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-4"><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>Ubicación</Label><Select onValueChange={v => { const sel = locationsList.find(l => l.id === v); if (sel) setEditingStop({...editingStop, name: sel.data.name, address: sel.data.address?.street ? `${sel.data.address.street} ${sel.data.address.number}, ${sel.data.address.city}` : sel.data.address, lat: sel.data.address?.lat || sel.data.lat, lng: sel.data.address?.lng || sel.data.lng }); }}><SelectTrigger><SelectValue placeholder="Destino" /></SelectTrigger><SelectContent>{locationsList.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>Peso Carga (KG)</Label><Input type="number" value={editingStop.weightKg} onChange={e => setEditingStop({...editingStop, weightKg: parseFloat(e.target.value) || 0})} /></div></div><div className="space-y-2"><Label>Dirección Final</Label><Input value={editingStop.address} onChange={e => setEditingStop({...editingStop, address: e.target.value})} /></div></div>
+          <div className="space-y-4 py-4"><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>Ubicación</Label><Select onValueChange={v => { const sel = locationsList.find(l => l.id === v); if (sel) setEditingStop({...editingStop, name: sel.data.name, address: sel.data.address?.street ? `${sel.data.address.street} ${sel.data.address.number}, ${sel.data.address.city}` : sel.data.address, lat: sel.data.address?.lat || sel.data.lat, lng: sel.data.address?.lng || sel.data.lng }); }}><SelectTrigger><SelectValue placeholder="Destino" /></SelectTrigger><SelectContent>{locationsList.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>Peso Carga (KG)</Label><Input type="number" value={editingStop.weightKg ?? 0} onChange={e => setEditingStop({...editingStop, weightKg: parseFloat(e.target.value) || 0})} /></div></div><div className="space-y-2"><Label>Dirección Final</Label><Input value={editingStop.address ?? ''} onChange={e => setEditingStop({...editingStop, address: e.target.value})} /></div></div>
           <DialogFooter><Button onClick={saveStop} className="bg-blue-600 w-full rounded-xl">ASIGNAR A RUTA</Button></DialogFooter>
         </DialogContent>
       </Dialog>

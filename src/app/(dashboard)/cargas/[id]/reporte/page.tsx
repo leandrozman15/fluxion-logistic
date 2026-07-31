@@ -17,7 +17,7 @@ import {
   DollarSign, Zap, Timer, History, FileText, 
   CheckCircle2, AlertTriangle, Printer, Download,
   ExternalLink, BarChart3, TrendingUp, User,
-  Loader2, Receipt, Search
+  Loader2, Receipt, Search, XCircle, HandCoins
 } from "lucide-react";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, 
@@ -181,6 +181,9 @@ export default function TripReportPage() {
     iconAnchor: [12, 12]
   }) : null;
 
+  const initialAdvance = load.budget?.initialAdvance || 0;
+  const auditBalance = initialAdvance - stats.totalCost;
+
   return (
     <div className="space-y-6 pb-20">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -192,7 +195,7 @@ export default function TripReportPage() {
               <Badge variant="outline" className="font-mono bg-blue-50 text-blue-700 border-blue-100">#{load.orderNumber}</Badge>
               <Badge className={cn(
                 "border-none uppercase font-black text-[10px]",
-                load.status === 'delivered' ? "bg-green-600 text-white" : "bg-orange-500 text-white"
+                load.status === 'delivered' ? "bg-green-600 text-white" : "bg-orange-50 text-white"
               )}>
                 {load.status === 'delivered' ? 'Finalizada' : 'En Curso'}
               </Badge>
@@ -230,9 +233,9 @@ export default function TripReportPage() {
         </Card>
         <Card className="border-none shadow-sm">
           <CardContent className="pt-4 flex flex-col items-center text-center gap-1">
-            <DollarSign size={20} className="text-red-600" />
-            <p className="text-[10px] uppercase font-bold text-slate-400">Inversión Aprobada</p>
-            <p className="text-3xl font-black italic text-slate-800">${stats.totalCost.toLocaleString()} <span className="text-xs font-normal text-slate-400 uppercase">ars</span></p>
+            <HandCoins size={20} className="text-blue-600" />
+            <p className="text-[10px] uppercase font-bold text-slate-400">Anticipo Otorgado</p>
+            <p className="text-3xl font-black italic text-slate-800">${initialAdvance.toLocaleString()} <span className="text-xs font-normal text-slate-400 uppercase">ars</span></p>
           </CardContent>
         </Card>
       </div>
@@ -370,7 +373,7 @@ export default function TripReportPage() {
                    <div className="flex gap-8">
                       <div className="text-center md:text-left">
                          <p className="text-[10px] font-black text-slate-400 uppercase">Anticipo Original</p>
-                         <p className="text-xl font-black italic text-slate-900">${(load.budget?.initialAdvance || 0).toLocaleString()}</p>
+                         <p className="text-xl font-black italic text-slate-900">${initialAdvance.toLocaleString()}</p>
                       </div>
                       <div className="text-center md:text-left">
                          <p className="text-[10px] font-black text-slate-400 uppercase">Gastos Auditados</p>
@@ -379,17 +382,17 @@ export default function TripReportPage() {
                    </div>
                    <div className={cn(
                       "p-4 rounded-2xl border-2 px-8 text-center",
-                      (load.budget?.initialAdvance || 0) >= stats.totalCost ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"
+                      auditBalance >= 0 ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"
                    )}>
                       <p className="text-[10px] font-black uppercase text-slate-400">Balance Final</p>
                       <p className={cn(
                         "text-3xl font-black italic",
-                        (load.budget?.initialAdvance || 0) >= stats.totalCost ? "text-green-700" : "text-red-700"
+                        auditBalance >= 0 ? "text-green-700" : "text-red-700"
                       )}>
-                        ${Math.abs((load.budget?.initialAdvance || 0) - stats.totalCost).toLocaleString()}
+                        ${Math.abs(auditBalance).toLocaleString()}
                       </p>
                       <p className="text-[8px] font-bold uppercase opacity-60">
-                        {(load.budget?.initialAdvance || 0) >= stats.totalCost ? 'A favor Empresa' : 'Reintegro Chofer'}
+                        {auditBalance >= 0 ? 'A favor Empresa' : 'Reintegro Chofer'}
                       </p>
                    </div>
                 </div>
