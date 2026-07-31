@@ -163,7 +163,7 @@ export default function RouteDetailPage() {
           });
         },
         (error) => {
-          console.error("GPS Error:", error);
+          // Se elimina el console.error para evitar reportes de NextJS en zonas de baja señal
         },
         { enableHighAccuracy: true, timeout: 15000 }
       );
@@ -265,7 +265,6 @@ export default function RouteDetailPage() {
 
     setIsUpdating(true);
     try {
-      // 1. Marcar el remito administrativo como ENTREGADO
       for (const docItem of currentStop.documents) {
         if (docItem.pendingRemitoId) {
           await updateDoc(doc(db, "pending_remitos", docItem.pendingRemitoId), {
@@ -276,7 +275,6 @@ export default function RouteDetailPage() {
         }
       }
 
-      // 2. Marcar la parada del viaje como entregada
       const updatedStops = load.outboundStops.map(s => 
         s.id === currentStop.id ? { 
           ...s, 
@@ -297,7 +295,6 @@ export default function RouteDetailPage() {
       setIsPodOpen(false);
       setPodForm({ receiverName: "", receiverSignatureUrl: "", driverSignatureUrl: "", photoUrl: "", notes: "" });
     } catch (e) {
-      console.error(e);
       toast({ variant: "destructive", title: "Error al confirmar entrega" });
     } finally {
       setIsUpdating(false);
