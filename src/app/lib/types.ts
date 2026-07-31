@@ -102,6 +102,11 @@ export interface TenantSettings {
   centralPhone?: string;
   logoUrl?: string;
   cuit?: string;
+  legalAddress?: string;
+  legalCityState?: string;
+  responsibleName?: string;
+  country?: string;
+  adminEmail?: string;
 }
 
 export interface Tenant {

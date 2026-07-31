@@ -23,7 +23,11 @@ import {
   TrendingUp,
   Box,
   Zap,
-  Info
+  Info,
+  MapPin,
+  Phone,
+  User,
+  CreditCard
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -42,7 +46,11 @@ export default function NewTenantPage() {
     cuit: "",
     country: "Argentina",
     plan: "free" as "free" | "pro",
-    adminEmail: ""
+    adminEmail: "",
+    legalAddress: "",
+    legalCityState: "",
+    centralPhone: "",
+    responsibleName: ""
   });
 
   // Seguridad: Solo SuperAdmin
@@ -68,7 +76,11 @@ export default function NewTenantPage() {
           gpsIntervalSeconds: 60,
           cuit: formData.cuit,
           country: formData.country,
-          adminEmail: formData.adminEmail
+          adminEmail: formData.adminEmail,
+          legalAddress: formData.legalAddress,
+          legalCityState: formData.legalCityState,
+          centralPhone: formData.centralPhone,
+          responsibleName: formData.responsibleName
         }
       });
       
@@ -89,7 +101,7 @@ export default function NewTenantPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-20">
+    <div className="max-w-4xl mx-auto space-y-8 pb-20 px-4">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full bg-white shadow-sm border">
           <ArrowLeft size={20} />
@@ -102,6 +114,7 @@ export default function NewTenantPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 space-y-8">
+          {/* 1. IDENTIDAD FISCAL */}
           <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-white">
             <CardHeader className="bg-slate-900 text-white p-8">
               <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
@@ -160,10 +173,69 @@ export default function NewTenantPage() {
             </CardContent>
           </Card>
 
+          {/* 2. CONTACTO Y FACTURACIÓN */}
+          <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-white">
+            <CardHeader className="bg-slate-100/50 border-b p-8">
+              <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2 text-slate-600">
+                <CreditCard size={18} className="text-blue-600" /> 2. Contacto y Facturación
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-8 space-y-6">
+               <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Dirección Fiscal / Oficina Central</Label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-3 h-5 w-5 text-slate-300" />
+                    <Input 
+                      placeholder="Calle, Número, Piso/Depto" 
+                      className="h-12 bg-slate-50 border-none rounded-xl font-bold pl-12"
+                      value={formData.legalAddress}
+                      onChange={e => setFormData({...formData, legalAddress: e.target.value})}
+                    />
+                  </div>
+               </div>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Ciudad / Provincia</Label>
+                    <Input 
+                      placeholder="Ej: Buenos Aires, CABA" 
+                      className="h-12 bg-slate-50 border-none rounded-xl font-bold"
+                      value={formData.legalCityState}
+                      onChange={e => setFormData({...formData, legalCityState: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Teléfono de la Empresa</Label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-3 h-5 w-5 text-slate-300" />
+                      <Input 
+                        placeholder="Ej: +54 11 4444-4444" 
+                        className="h-12 bg-slate-50 border-none rounded-xl font-bold pl-12"
+                        value={formData.centralPhone}
+                        onChange={e => setFormData({...formData, centralPhone: e.target.value})}
+                      />
+                    </div>
+                  </div>
+               </div>
+               <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Nombre del Responsable Legal</Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-3 h-5 w-5 text-slate-300" />
+                    <Input 
+                      placeholder="Nombre Completo del Directivo" 
+                      className="h-12 bg-slate-50 border-none rounded-xl font-bold pl-12"
+                      value={formData.responsibleName}
+                      onChange={e => setFormData({...formData, responsibleName: e.target.value})}
+                    />
+                  </div>
+               </div>
+            </CardContent>
+          </Card>
+
+          {/* 3. PLAN DE SERVICIO */}
           <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-white">
             <CardHeader className="bg-slate-50/50 border-b p-8">
               <CardTitle className="text-sm font-black uppercase italic tracking-tighter flex items-center gap-2">
-                <Zap size={18} className="text-blue-600" /> 2. Selección de Plan de Servicio
+                <Zap size={18} className="text-blue-600" /> 3. Selección de Plan de Servicio
               </CardTitle>
             </CardHeader>
             <CardContent className="p-8">
@@ -234,8 +306,12 @@ export default function NewTenantPage() {
                        <p className="text-base font-bold text-blue-400 uppercase italic">{formData.plan === 'pro' ? '🚀 Industrial PRO' : '📦 Free tier'}</p>
                     </div>
                     <div className="space-y-1">
-                       <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">País de Operación</p>
-                       <p className="text-sm font-bold text-slate-300">{formData.country}</p>
+                       <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Responsable</p>
+                       <p className="text-sm font-bold text-slate-300">{formData.responsibleName || 'No especificado'}</p>
+                    </div>
+                    <div className="space-y-1">
+                       <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Contacto</p>
+                       <p className="text-xs font-mono text-slate-400">{formData.centralPhone || '-'}</p>
                     </div>
                  </div>
 
@@ -262,7 +338,7 @@ export default function NewTenantPage() {
               <div className="space-y-1">
                  <p className="text-xs font-black text-blue-800 uppercase italic">Aprovisionamiento Instantáneo</p>
                  <p className="text-[10px] text-blue-600 leading-relaxed font-medium">
-                   Al confirmar, el sistema reservará un ID único de base de datos para este cliente. No se puede deshacer el cambio de ID.
+                   Al confirmar, el sistema reservará un ID único de base de datos para este cliente. Los datos fiscales se usarán para la generación de la primera factura mensual.
                  </p>
               </div>
            </div>
