@@ -1,13 +1,13 @@
 'use client';
 
-import { useMemo, useEffect, useState, useRef } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc } from "@/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
-  Printer, ArrowLeft, Loader2, Navigation, ClipboardCheck, ShieldCheck, Anchor, Download, Truck, User, MapPin, Scale, Info, CheckCircle2, Receipt, MapPinned
+  Printer, ArrowLeft, Loader2, ClipboardCheck, ShieldCheck, Truck, User, MapPin, Receipt, MapPinned, CheckCircle2
 } from "lucide-react";
 import { Load, Driver, Truck as TruckType, Tenant } from "@/app/lib/types";
 import { QRCodeSVG } from "qrcode.react";
@@ -40,7 +40,7 @@ export default function LoadOrderDocumentPage() {
     async function fetchExtras() {
       if (!db || !load) return;
       try {
-        if (load.assignedDriverId) {
+        if (load.assignedDriverId && load.assignedDriverId !== 'none') {
           const dSnap = await getDoc(doc(db, "drivers", load.assignedDriverId));
           if (dSnap.exists()) setDriver(dSnap.data() as Driver);
         }
@@ -61,13 +61,11 @@ export default function LoadOrderDocumentPage() {
     window.print();
   };
 
-  if (loadLoading || loadingExtras) return <div className="h-screen flex items-center justify-center gap-2 text-slate-500 font-bold animate-pulse"><Loader2 className="animate-spin" /> GENERANDO DOCUMENTACIÓN OFICIAL...</div>;
+  if (loadLoading || loadingExtras) return <div className="h-screen flex items-center justify-center gap-2 text-slate-500 font-bold animate-pulse"><Loader2 className="animate-spin" /> GENERANDO DOCUMENTACIÓN OFICIAL (TEXTO NATIVO)...</div>;
   if (!load) return <div className="p-20 text-center">Orden no encontrada.</div>;
 
   const confirmationUrl = typeof window !== 'undefined' ? `${window.location.origin}/rutas/${load.id}` : '';
   const orgName = tenant?.name || "LOGÍSTICA AR";
-
-  // Buscar última firma disponible si ya fue entregado
   const lastStop = load.outboundStops?.[load.outboundStops.length - 1];
   const pod = lastStop?.proofOfDelivery;
 
@@ -77,15 +75,15 @@ export default function LoadOrderDocumentPage() {
         <div className="flex justify-between items-center px-4 print:hidden">
           <Button variant="ghost" onClick={() => router.back()} className="text-slate-600 bg-white shadow-sm border rounded-xl"><ArrowLeft className="mr-2 h-4 w-4" /> Volver</Button>
           <Button onClick={handlePrint} className="bg-slate-900 hover:bg-black rounded-xl font-bold shadow-xl px-8 h-12 text-white">
-            <Printer className="mr-2 h-5 w-5" /> GENERAR PDF NATIVO
+            <Printer className="mr-2 h-5 w-5" /> GENERAR PDF (TEXTO REAL)
           </Button>
         </div>
 
-        {/* DOCUMENTO ESTILO FORMULARIO NATIVO (ALTA DENSIDAD) */}
-        <div className="bg-white shadow-2xl p-10 print:p-0 print:shadow-none min-h-[297mm] flex flex-col font-sans text-black border-[6px] border-double border-black print:border-none" id="order-sheet">
+        {/* DOCUMENTO PROFESIONAL - TEXTO NATIVO */}
+        <div className="bg-white shadow-2xl p-10 print:p-0 print:shadow-none min-h-[297mm] flex flex-col font-sans text-black border-[6px] border-double border-black print:border-none">
           
           <div className="print:p-8 flex flex-col h-full print:border-[6px] print:border-double print:border-black">
-            {/* CABECERA INSTITUCIONAL */}
+            {/* CABECERA */}
             <div className="flex justify-between items-start border-b-4 border-black pb-6 mb-6">
               <div className="flex items-center gap-4">
                 {tenant?.settings?.logoUrl && (
@@ -109,9 +107,8 @@ export default function LoadOrderDocumentPage() {
               </div>
             </div>
 
-            {/* GRID DE DATOS MAESTROS */}
+            {/* DATOS MAESTROS */}
             <div className="grid grid-cols-12 gap-0 border-2 border-black">
-              {/* SECCIÓN CLIENTE */}
               <div className="col-span-7 p-4 border-r-2 border-b-2 border-black bg-slate-50/50 space-y-3">
                   <h3 className="text-[9px] font-black uppercase flex items-center gap-2 border-b border-black/20 pb-1 text-blue-800"><ClipboardCheck size={12}/> 1. DATOS DEL CLIENTE / OPERACIÓN</h3>
                   <div className="grid grid-cols-2 gap-4">
@@ -130,7 +127,6 @@ export default function LoadOrderDocumentPage() {
                   </div>
               </div>
 
-              {/* SECCIÓN EQUIPO */}
               <div className="col-span-5 p-4 border-b-2 border-black space-y-3">
                   <h3 className="text-[9px] font-black uppercase flex items-center gap-2 border-b border-black/20 pb-1 text-blue-800"><ShieldCheck size={12}/> 2. RECURSOS ASIGNADOS</h3>
                   <div className="space-y-2">
@@ -151,7 +147,6 @@ export default function LoadOrderDocumentPage() {
                   </div>
               </div>
 
-              {/* SECCIÓN ORIGEN */}
               <div className="col-span-12 p-4 border-b-2 border-black bg-slate-50/20">
                   <h3 className="text-[9px] font-black uppercase flex items-center gap-2 border-b border-black/20 pb-1 text-blue-800"><MapPin size={12}/> 3. PUNTO DE CARGA (ORIGEN)</h3>
                   <div className="flex justify-between items-center mt-2">
@@ -166,10 +161,9 @@ export default function LoadOrderDocumentPage() {
                   </div>
               </div>
 
-              {/* SECCIÓN ITINERARIO */}
-              <div className="col-span-12 p-0 space-y-0 min-h-[250px]">
+              <div className="col-span-12 p-0 space-y-0 min-h-[300px]">
                   <div className="p-4 bg-slate-50/10 border-b-2 border-black/10">
-                    <h3 className="text-[9px] font-black uppercase flex items-center gap-2 text-blue-800"><Navigation size={12}/> 4. SECUENCIA DE ENTREGAS Y DOCUMENTACIÓN</h3>
+                    <h3 className="text-[9px] font-black uppercase flex items-center gap-2 text-blue-800">4. SECUENCIA DE ENTREGAS (DATOS COMPLETOS)</h3>
                   </div>
                   <table className="w-full text-[10px] border-collapse">
                     <thead>
@@ -203,12 +197,9 @@ export default function LoadOrderDocumentPage() {
                                   <MapPinned size={10} className="text-slate-400 mt-0.5 shrink-0" />
                                   <div>
                                     <p className="font-bold text-slate-800 uppercase leading-none">{stop.address}</p>
-                                    <p className="text-[9px] text-slate-500 font-medium italic mt-1">{stop.city || '---'}, {stop.province}</p>
+                                    <p className="text-[9px] text-slate-500 font-medium italic mt-1">{stop.city || '---'}, {stop.province}, Argentina</p>
                                   </div>
                                 </div>
-                                {stop.instructions && (
-                                  <p className="text-[8px] text-orange-600 font-bold uppercase mt-2 border-l-2 border-orange-200 pl-2">Nota: {stop.instructions}</p>
-                                )}
                             </td>
                             <td className="py-3 px-3 text-right font-mono font-black border-r border-slate-200">
                                 {stop.weightKg.toLocaleString()} <span className="text-[7px] text-slate-400">KG</span>
@@ -230,7 +221,6 @@ export default function LoadOrderDocumentPage() {
               </div>
             </div>
 
-            {/* BALANCE DE PESOS */}
             <div className="mt-6 grid grid-cols-3 gap-0 border-2 border-black">
               <div className="p-3 border-r-2 border-black text-center">
                   <p className="text-[8px] font-bold text-slate-400 uppercase">PESO TOTAL CARGA</p>
@@ -246,12 +236,11 @@ export default function LoadOrderDocumentPage() {
               </div>
             </div>
 
-            {/* SECCIÓN DE FIRMAS NATIVA (ALTA DENSIDAD) */}
+            {/* SECCIÓN DE FIRMAS */}
             <div className="mt-auto pt-10">
               <h3 className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-black/10 pb-1 mb-6">VALIDACIÓN Y CONFORMIDAD DE ENTREGA</h3>
               
               <div className="grid grid-cols-12 gap-0 border-2 border-black min-h-[160px]">
-                  {/* FIRMA EMISOR */}
                   <div className="col-span-4 p-5 border-r-2 border-black flex flex-col justify-between items-center text-center bg-slate-50/30">
                     <div className="flex-1 flex items-center justify-center">
                         <div className="border-2 border-black px-4 py-1.5 rotate-[-5deg] text-[9px] font-black shadow-sm bg-white">VALIDADO CENTRAL</div>
@@ -262,7 +251,6 @@ export default function LoadOrderDocumentPage() {
                     </div>
                   </div>
 
-                  {/* FIRMA CHOFER */}
                   <div className="col-span-4 p-5 border-r-2 border-black flex flex-col justify-between items-center text-center">
                     <div className="flex-1 flex items-center justify-center w-full">
                         {pod?.driverSignatureUrl ? (
@@ -277,7 +265,6 @@ export default function LoadOrderDocumentPage() {
                     </div>
                   </div>
 
-                  {/* FIRMA RECEPTOR */}
                   <div className="col-span-4 p-5 flex flex-col justify-between items-center text-center">
                     <div className="flex-1 flex items-center justify-center w-full">
                         {pod?.receiverSignatureUrl ? (
@@ -297,7 +284,7 @@ export default function LoadOrderDocumentPage() {
               <div className="mt-8 flex justify-between items-end">
                   <div className="space-y-1">
                     <p className="text-[10px] font-black text-slate-900 uppercase">Protocolo de Documentación Digital</p>
-                    <p className="text-[8px] text-slate-400 font-medium leading-tight max-w-sm">Esta hoja de ruta ha sido emitida bajo normativa de seguridad digital. El código QR permite la validación de pesos y estados de entrega en tiempo real desde la central.</p>
+                    <p className="text-[8px] text-slate-400 font-medium leading-tight max-w-sm">Este PDF contiene texto nativo y puede ser indexado por sistemas de gestión documental. El código QR permite la validación de estados de entrega en tiempo real.</p>
                   </div>
                   <div className="flex flex-col items-center gap-2">
                     <div className="p-1.5 border-2 border-black">
@@ -314,16 +301,17 @@ export default function LoadOrderDocumentPage() {
         @media print {
           @page {
             size: A4;
-            margin: 0;
+            margin: 10mm;
           }
           body {
             background: white !important;
             -webkit-print-color-adjust: exact;
+            color: black !important;
           }
           .print\:hidden {
             display: none !important;
           }
-          header, nav, aside, footer, .sidebar-trigger, .sidebar-inset-header {
+          header, nav, aside, footer, .sidebar-trigger, .sidebar-inset-header, button {
             display: none !important;
           }
           .min-h-screen {
@@ -332,6 +320,10 @@ export default function LoadOrderDocumentPage() {
           }
           .bg-slate-100 {
             background-color: white !important;
+          }
+          * {
+            text-shadow: none !important;
+            box-shadow: none !important;
           }
         }
       `}</style>
