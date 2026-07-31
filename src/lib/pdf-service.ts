@@ -41,10 +41,9 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
   doc.setFontSize(28);
   doc.text(product.sku, pageWidth - margin, 34, { align: "right" });
 
-  // 2. CUERPO - NOMBRE Y MARCA (BLOQUE SUPERIOR)
+  // 2. TÍTULO Y MARCA
   doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
   doc.setFontSize(24);
-  // Usar splitText para que el nombre ocupe el ancho necesario sin pisar nada
   const nameLines = doc.splitTextToSize(product.name.toUpperCase(), pageWidth - (margin * 2));
   doc.text(nameLines, margin, 55);
   
@@ -53,8 +52,40 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
   doc.setFontSize(14);
   doc.text(product.brand || "MARCA NO ESPECIFICADA", margin, brandY);
 
-  // 3. GRILLA TÉCNICA (CENTRAL)
-  const gridY = brandY + 10;
+  // 3. DESCRIPCIÓN E IMAGEN (AHORA ARRIBA)
+  const descAreaY = brandY + 12;
+  
+  // Foto del Producto (Lado derecho de la descripción)
+  let photoHeight = 0;
+  if (product.photoUrl) {
+    try {
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.5);
+      doc.rect(pageWidth - margin - 55, descAreaY, 55, 55);
+      doc.addImage(product.photoUrl, 'JPEG', pageWidth - margin - 54, descAreaY + 1, 53, 53);
+      photoHeight = 60;
+    } catch (e) {
+      console.warn("No se pudo añadir la foto al PDF:", e);
+    }
+  }
+
+  doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.text("DESCRIPCIÓN DEL ARTÍCULO", margin, descAreaY - 2);
+  doc.line(margin, descAreaY, margin + 40, descAreaY);
+
+  doc.setFont("helvetica", "italic");
+  doc.setFontSize(11);
+  const descWidth = product.photoUrl ? pageWidth - (margin * 2) - 65 : pageWidth - (margin * 2);
+  const descLines = doc.splitTextToSize(product.description || "Sin descripción técnica disponible.", descWidth);
+  doc.text(descLines, margin, descAreaY + 8);
+
+  const descTotalHeight = descLines.length * 6;
+  const sectionSplitY = descAreaY + Math.max(descTotalHeight + 15, photoHeight);
+
+  // 4. GRILLA TÉCNICA (AHORA ABAJO)
+  const gridY = sectionSplitY;
   const colW = (pageWidth - (margin * 2)) / 5;
   
   doc.setDrawColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
@@ -83,35 +114,8 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
     doc.text(values[i], margin + (colW * i) + 2, gridY + 18);
   });
 
-  // 4. DESCRIPCIÓN E IMAGEN (BLOQUE INFERIOR)
-  const descAreaY = gridY + 40;
-  
-  doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "bold");
-  doc.text("DESCRIPCIÓN DEL ARTÍCULO", margin, descAreaY - 5);
-  doc.line(margin, descAreaY - 3, margin + 40, descAreaY - 3);
-
-  // Foto del Producto (Ahora más abajo para no pisar el nombre)
-  if (product.photoUrl) {
-    try {
-      doc.setDrawColor(200, 200, 200);
-      doc.setLineWidth(0.5);
-      doc.rect(pageWidth - margin - 55, descAreaY, 55, 55);
-      doc.addImage(product.photoUrl, 'JPEG', pageWidth - margin - 54, descAreaY + 1, 53, 53);
-    } catch (e) {
-      console.warn("No se pudo añadir la foto al PDF:", e);
-    }
-  }
-
-  // Descripción con ajuste de ancho si hay foto
-  doc.setFont("helvetica", "italic");
-  const descWidth = product.photoUrl ? pageWidth - (margin * 2) - 65 : pageWidth - (margin * 2);
-  const descLines = doc.splitTextToSize(product.description || "Sin descripción técnica disponible.", descWidth);
-  doc.text(descLines, margin, descAreaY + 5);
-
   // 5. SECCIÓN COMEX Y SEGURIDAD
-  const tableY = Math.max(descAreaY + 65, descAreaY + (descLines.length * 6) + 10);
+  const tableY = gridY + 40;
   doc.setFontSize(10);
   doc.setFont("helvetica", "bold");
   doc.text("IDENTIFICACIÓN MERCOSUR / SEGURIDAD", margin, tableY - 5);
