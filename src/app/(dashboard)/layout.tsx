@@ -34,10 +34,11 @@ import {
   Box,
   Files,
   Archive,
-  ShoppingBag
+  ShoppingBag,
+  ShieldCheck
 } from "lucide-react";
 import Link from "next/link";
-import { useAuth, useFirestore, useDoc } from "@/firebase";
+import { useAuth, useFirestore, useDoc, useUser } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { useRouter, usePathname } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
@@ -48,13 +49,18 @@ import { doc } from "firebase/firestore";
 import { Tenant } from "@/app/lib/types";
 import { cn } from '@/lib/utils';
 
+const SUPER_ADMIN_EMAIL = "leozman15@gmail.com";
+
 function DashboardSidebar() {
   const { setOpenMobile, isMobile } = useSidebar();
   const auth = useAuth();
   const db = useFirestore();
+  const { user } = useUser();
   const router = useRouter();
   const pathname = usePathname();
   const { toast } = useToast();
+
+  const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
 
   const tenantRef = useMemo(() => {
     if (!db) return null;
@@ -112,6 +118,30 @@ function DashboardSidebar() {
         </Link>
       </SidebarHeader>
       <SidebarContent>
+        {isSuperAdmin && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden text-red-600 dark:text-red-400 font-black tracking-widest uppercase text-[10px]">SuperAdmin</SidebarGroupLabel>
+            <SidebarGroupContent>
+               <SidebarMenu>
+                 <SidebarMenuItem>
+                    <SidebarMenuButton 
+                      asChild 
+                      tooltip="Panel de Control Maestro" 
+                      isActive={pathname === "/admin/tenants"}
+                      onClick={handleLinkClick}
+                      className="bg-slate-900 text-blue-400 hover:bg-slate-800 hover:text-blue-300"
+                    >
+                      <Link href="/admin/tenants">
+                        <ShieldCheck className="animate-pulse" />
+                        <span className="font-black italic">Control de Empresas</span>
+                      </Link>
+                    </SidebarMenuButton>
+                 </SidebarMenuItem>
+               </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
         <SidebarGroup>
           <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Administración</SidebarGroupLabel>
           <SidebarGroupContent>
