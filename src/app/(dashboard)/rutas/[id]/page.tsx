@@ -30,9 +30,9 @@ import {
   Zap, Satellite, Loader2, Gauge, 
   Coffee, Moon, Car, Battery, CloudRain, Construction, HelpCircle,
   Siren, CircleCheck, ListOrdered, XCircle,
-  Timer, Play, Home, ShoppingBag, QrCode
+  Timer, Play, Home, ShoppingBag, QrCode, Phone, CheckCircle
 } from "lucide-react";
-import { Load, Expense, ExpenseCategory, ProofOfDelivery, Tenant } from "@/app/lib/types";
+import { Load, Expense, ExpenseCategory, ProofOfDelivery, Tenant, LoadLegStop } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { compressImage } from "@/lib/utils/image-compression";
@@ -49,33 +49,12 @@ const MapContainer = dynamic(
 const TileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), { ssr: false });
 
-const EXPENSE_CATEGORIES: { id: ExpenseCategory; label: string; icon: any }[] = [
-  { id: 'fuel', label: 'Combustible', icon: Fuel },
-  { id: 'toll', label: 'Peaje', icon: Navigation },
-  { id: 'meal', label: 'Comida', icon: Utensils },
-  { id: 'lodging', label: 'Hospedaje', icon: Bed },
-  { id: 'maintenance', label: 'Taller/Manten.', icon: Wrench },
-  { id: 'other', label: 'Otros', icon: Receipt },
-];
-
-const INCIDENT_LIST = [
-  { id: 'accident', label: 'Accidente/Choque', icon: Car, color: 'bg-red-600' },
-  { id: 'mechanical', label: 'Avería Mecánica', icon: Wrench, color: 'bg-orange-600' },
-  { id: 'tire', label: 'Pinchadura', icon: Zap, color: 'bg-yellow-600' },
-  { id: 'battery', label: 'Batería', icon: Battery, color: 'bg-blue-600' },
-  { id: 'weather', label: 'Clima Adverso', icon: CloudRain, color: 'bg-slate-600' },
-  { id: 'traffic', label: 'Ruta Cortada', icon: Construction, color: 'bg-amber-600' },
-  { id: 'health', label: 'Salud Chofer', icon: Siren, color: 'bg-red-50' },
-  { id: 'other', label: 'Otro Problema', icon: HelpCircle, color: 'bg-slate-500' },
-];
-
-const PAUSE_LIST = [
-  { id: 'lunch', label: 'Almuerzo', icon: Utensils, color: 'bg-blue-600' },
-  { id: 'rest', label: 'Descanso', icon: Coffee, color: 'bg-green-600' },
-  { id: 'sleep', label: 'Dormir / Noche', icon: Moon, color: 'bg-slate-800' },
-  { id: 'fuel', label: 'Combustible', icon: Fuel, color: 'bg-orange-600' },
-  { id: 'paperwork', label: 'Trámites', icon: FileText, color: 'bg-indigo-600' },
-  { id: 'other', label: 'Otras', icon: Clock, color: 'bg-slate-500' },
+const INCIDENT_REASONS = [
+  { id: 'absent', label: 'Cliente Ausente' },
+  { id: 'wrong_address', label: 'Dirección Incorrecta' },
+  { id: 'no_response', label: 'No Responde' },
+  { id: 'refused', label: 'Rechazó Paquete' },
+  { id: 'other', label: 'Otro Motivo' }
 ];
 
 export default function RouteDetailPage() {
@@ -87,329 +66,58 @@ export default function RouteDetailPage() {
   
   const [activeTab, setActiveTab] = useState("mission");
   const [isUpdating, setIsUpdating] = useState(false);
-  const [isExpenseOpen, setIsExpenseOpen] = useState(false);
-  const [isIncidentOpen, setIsIncidentOpen] = useState(false);
   const [isPodOpen, setIsPodOpen] = useState(false);
-  const [selectedIncidentType, setSelectedIncidentType] = useState<string | null>(null);
+  const [isFailedOpen, setIsFailedOpen] = useState(false);
   
-  const [L, setL] = useState<any>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
-  const loadRefData = useRef<Load | null>(null);
-
-  const [expenseData, setExpenseData] = useState<any>({
-    category: 'fuel', amount: 0, description: "", location: "", liters: 0, odometerKm: 0, pricePerLiter: 0, fuelBrand: "", receiptNumber: ""
-  });
-
-  const [incidentDescription, setIncidentDescription] = useState("");
 
   const [podForm, setPodForm] = useState<Partial<ProofOfDelivery>>({
     receiverName: "",
     receiverSignatureUrl: "",
     driverSignatureUrl: "",
     photoUrl: "",
-    notes: ""
+    notes: "",
+    status: 'delivered'
   });
-
-  useEffect(() => {
-    import('leaflet').then((leaflet) => {
-      setL(leaflet.default);
-    });
-  }, []);
 
   const loadRef = useMemo(() => (db && id) ? doc(db, "loads", id as string) : null, [db, id]);
   const { data: load, loading: loadLoading } = useDoc<Load>(loadRef);
 
-  const tenantRef = useMemo(() => (db) ? doc(db, "tenants", "default_tenant") : null, [db]);
-  const { data: tenant } = useDoc<Tenant>(tenantRef);
-
-  const expensesQuery = useMemo(() => {
-    if (!db || !id) return null;
-    return query(collection(db, "loads", id as string, "expenses"), orderBy("createdAt", "desc"));
-  }, [db, id]);
-
-  const { data: expenses } = useCollection<Expense>(expensesQuery);
-
-  useEffect(() => {
-    if (load) loadRefData.current = load;
-  }, [load]);
-
-  useEffect(() => {
-    if (!load || (load.status !== 'on_route' && load.status !== 'on_pause') || !loadRef) return;
-
-    const updateLocation = () => {
-      if (typeof window === 'undefined' || !navigator.geolocation) return;
-
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const { latitude, longitude, speed } = position.coords;
-          const currentSpeed = speed ? Math.round(speed * 3.6) : 0;
-
-          let distanceDelta = 0;
-          const currentData = loadRefData.current;
-          if (currentData?.tracking?.currentLat && currentData?.tracking?.currentLng) {
-            distanceDelta = calculateDistance(
-              currentData.tracking.currentLat,
-              currentData.tracking.currentLng,
-              latitude,
-              longitude
-            );
-          }
-
-          const newPoint = {
-            lat: latitude,
-            lng: longitude,
-            speed: currentSpeed,
-            timestamp: new Date().toISOString()
-          };
-
-          updateDoc(loadRef, {
-            "tracking.currentLat": latitude,
-            "tracking.currentLng": longitude,
-            "tracking.currentSpeed": currentSpeed,
-            "tracking.lastUpdateAt": serverTimestamp(),
-            "tracking.distanceTraveledKm": increment(distanceDelta),
-            "tracking.distanceRemainingKm": increment(-distanceDelta),
-            "tracking.history": arrayUnion(newPoint),
-            updatedAt: serverTimestamp()
-          });
-        },
-        () => {},
-        { enableHighAccuracy: true, timeout: 15000 }
-      );
-    };
-
-    const intervalSeconds = tenant?.settings?.gpsIntervalSeconds || 60;
-    updateLocation();
-    const intervalId = setInterval(updateLocation, intervalSeconds * 1000);
-    
-    return () => clearInterval(intervalId);
-  }, [load?.status, loadRef, tenant?.settings?.gpsIntervalSeconds]);
-
-  const allOutboundDone = useMemo(() => {
-    return load?.outboundStops?.length > 0 && load.outboundStops.every(s => !!s.deliveredAt);
-  }, [load?.outboundStops]);
-
-  const currentStopIndex = useMemo(() => {
-    if (!load?.outboundStops) return -1;
-    return load.outboundStops.findIndex(s => !s.deliveredAt);
-  }, [load?.outboundStops]);
-
   const currentStop = useMemo(() => {
-    if (!load?.outboundStops || currentStopIndex === -1) return null;
-    return load.outboundStops[currentStopIndex];
-  }, [load?.outboundStops, currentStopIndex]);
+    if (!load?.outboundStops) return null;
+    return load.outboundStops.find(s => !s.deliveredAt && !s.failedAt);
+  }, [load?.outboundStops]);
 
-  const isReturning = useMemo(() => {
-    return !!load?.tracking?.returnStartedAt;
-  }, [load?.tracking?.returnStartedAt]);
-
-  const handleStartTrip = async () => {
-    if (!loadRef || !load) return;
-    setIsUpdating(true);
-    try {
-      const dest = load.outboundStops.find(s => !s.deliveredAt) || load.outboundStops[0];
-      if (!dest) throw new Error("No hay destinos configurados");
-
-      const lat = dest.lat || -34.6;
-      const lng = dest.lng || -58.3;
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      const url = isIOS 
-        ? `maps://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`
-        : `google.navigation:q=${lat},${lng}`;
-      
-      let distanceRemaining = 0;
-      if (tenant?.settings?.mapApiKey && load.origin.lat) {
-        const routeInfo = await calculateRouteDetails(
-          [`${load.origin.lat},${load.origin.lng}`, `${lat},${lng}`],
-          tenant.settings.mapApiKey
-        );
-        if (routeInfo) distanceRemaining = routeInfo.distanceKm;
-      }
-
-      await updateDoc(loadRef, { 
-        status: 'on_route',
-        "tracking.tripStartedAt": serverTimestamp(),
-        "tracking.distanceRemainingKm": distanceRemaining || increment(0),
-        updatedAt: serverTimestamp() 
-      });
-
-      window.location.href = url;
-      toast({ title: "Viaje Iniciado", description: "Navegación GPS activada." });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Error al iniciar viaje" });
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  const handleStartReturn = async () => {
-    if (!load || !loadRef) return;
-    setIsUpdating(true);
-    try {
-      const lat = load.returnDestination?.lat || load.origin.lat || -34.6;
-      const lng = load.returnDestination?.lng || load.origin.lng || -58.3;
-
-      let distanceRemaining = 0;
-      if (tenant?.settings?.mapApiKey && load.tracking?.currentLat) {
-        const routeInfo = await calculateRouteDetails(
-          [`${load.tracking.currentLat},${load.tracking.currentLng}`, `${lat},${lng}`],
-          tenant.settings.mapApiKey
-        );
-        if (routeInfo) distanceRemaining = routeInfo.distanceKm;
-      }
-
-      await updateDoc(loadRef, {
-        "tracking.returnStartedAt": serverTimestamp(),
-        "tracking.distanceRemainingKm": distanceRemaining || increment(0),
-        updatedAt: serverTimestamp()
-      });
-
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      const url = isIOS 
-        ? `maps://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`
-        : `google.navigation:q=${lat},${lng}`;
-      
-      window.location.href = url;
-      toast({ title: "Retorno Iniciado", description: "Navegación hacia base activa." });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Error al iniciar retorno" });
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  const handleFinishAtBase = async () => {
-    if (!loadRef) return;
-    setIsUpdating(true);
-    try {
-      await updateDoc(loadRef, {
-        status: 'delivered',
-        "tracking.tripEndedAt": serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-      toast({ title: "Jornada Finalizada", description: "Vehículo en base y reporte cerrado." });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Error al finalizar" });
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  const handleStartPause = async (typeId: string) => {
-    if (!loadRef) return;
-    setIsUpdating(true);
-    const label = PAUSE_LIST.find(p => p.id === typeId)?.label || "Pausa";
-    try {
-      await updateDoc(loadRef, {
-        status: 'on_pause',
-        "tracking.lastPauseType": label,
-        "tracking.pauseStartedAt": serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-      toast({ title: `Modo ${label} Activo` });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Error" });
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  const handleEndPause = async () => {
-    if (!loadRef) return;
-    setIsUpdating(true);
-    try {
-      await updateDoc(loadRef, {
-        status: 'on_route',
-        "tracking.lastPauseType": null,
-        "tracking.pauseStartedAt": null,
-        updatedAt: serverTimestamp()
-      });
-      toast({ title: "Viaje Reanudado" });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Error" });
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  const onPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const base64 = event.target?.result as string;
-        const compressed = await compressImage(base64, 1024, 1024, 0.6);
-        setPodForm(prev => ({ ...prev, photoUrl: compressed }));
-      };
-      reader.readAsDataURL(file);
+  const handleAction = (type: 'nav' | 'call') => {
+    if (!currentStop) return;
+    if (type === 'nav') {
+      const url = `https://www.google.com/maps/dir/?api=1&destination=${currentStop.lat},${currentStop.lng}`;
+      window.open(url, '_blank');
+    } else {
+      window.open(`tel:${currentStop.phone}`, '_self');
     }
   };
 
   const handleConfirmDelivery = async () => {
     if (!load || !loadRef || !currentStop || !db) return;
-    if (!podForm.receiverName || !podForm.receiverSignatureUrl || !podForm.driverSignatureUrl) {
-      toast({ variant: "destructive", title: "Datos incompletos", description: "Firmas y nombre obligatorios." });
-      return;
-    }
-
     setIsUpdating(true);
     try {
-      for (const docItem of currentStop.documents) {
-        if (docItem.pendingRemitoId) {
-          await updateDoc(doc(db, "pending_remitos", docItem.pendingRemitoId), {
-            status: 'delivered',
-            deliveredAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-          });
-        }
-      }
-
       const updatedStops = load.outboundStops.map(s => 
         s.id === currentStop.id ? { 
           ...s, 
           deliveredAt: new Date().toISOString(),
-          proofOfDelivery: { ...podForm, confirmedAt: new Date().toISOString() }
+          proofOfDelivery: { ...podForm, status: 'delivered', confirmedAt: new Date().toISOString() }
         } : s
       );
 
       await updateDoc(loadRef, {
         outboundStops: updatedStops,
-        status: 'on_route',
         updatedAt: serverTimestamp()
       });
 
-      toast({ title: "Entrega Confirmada", description: "Punto de descarga registrado." });
+      toast({ title: "Entrega Exitosa" });
       setIsPodOpen(false);
-      setPodForm({ receiverName: "", receiverSignatureUrl: "", driverSignatureUrl: "", photoUrl: "", notes: "" });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Error al confirmar entrega" });
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  const handleAddExpense = async () => {
-    if (!db || !id || !user || !load) return;
-    setIsUpdating(true);
-    try {
-      const expRef = collection(db, "loads", id as string, "expenses");
-      const globalExpRef = collection(db, "global_expenses");
-      
-      const payload = { 
-        ...expenseData, 
-        driverId: user.uid, 
-        loadId: id, 
-        truckId: load.assignedTruckId,
-        status: 'registered', 
-        createdAt: serverTimestamp() 
-      };
-
-      await addDoc(expRef, payload);
-      await addDoc(globalExpRef, payload);
-
-      toast({ title: "Gasto Registrado" });
-      setIsExpenseOpen(false);
-      setExpenseData({ category: 'fuel', amount: 0, description: "", location: "", liters: 0, odometerKm: 0, pricePerLiter: 0, fuelBrand: "", receiptNumber: "" });
+      setPodForm({ receiverName: "", receiverSignatureUrl: "", driverSignatureUrl: "", photoUrl: "", notes: "", status: 'delivered' });
     } catch (e) {
       toast({ variant: "destructive", title: "Error" });
     } finally {
@@ -417,26 +125,25 @@ export default function RouteDetailPage() {
     }
   };
 
-  const handleReportIncident = async () => {
-    if (!loadRef || !selectedIncidentType) return;
+  const handleReportFailure = async (reason: any) => {
+    if (!load || !loadRef || !currentStop) return;
     setIsUpdating(true);
     try {
-      const incident = {
-        type: 'critical',
-        message: `INCIDENTE: ${INCIDENT_LIST.find(t => t.id === selectedIncidentType)?.label}. ${incidentDescription}`,
-        timestamp: new Date().toISOString()
-      };
+      const updatedStops = load.outboundStops.map(s => 
+        s.id === currentStop.id ? { 
+          ...s, 
+          failedAt: new Date().toISOString(),
+          proofOfDelivery: { status: 'failed', failedReason: reason, confirmedAt: new Date().toISOString(), receiverName: "FALLIDO" }
+        } : s
+      );
 
       await updateDoc(loadRef, {
-        status: 'incident',
-        "tracking.alerts": arrayUnion(incident),
+        outboundStops: updatedStops,
         updatedAt: serverTimestamp()
       });
 
-      toast({ title: "Alerta Enviada" });
-      setIsIncidentOpen(false);
-      setSelectedIncidentType(null);
-      setIncidentDescription("");
+      toast({ title: "Incidente Registrado" });
+      setIsFailedOpen(false);
     } catch (e) {
       toast({ variant: "destructive", title: "Error" });
     } finally {
@@ -447,417 +154,130 @@ export default function RouteDetailPage() {
   if (loadLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!load) return <div className="p-10 text-center">Viaje no encontrado.</div>;
 
+  const isMeli = load.serviceType === 'meli';
+
   return (
     <div className="max-w-md mx-auto space-y-6 pb-32 px-2">
-      <div className="flex items-center justify-between pt-4 px-2">
+      <div className="flex items-center justify-between pt-6 px-2">
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full bg-white shadow-sm border"><ArrowLeft size={18} /></Button>
         <div className="text-center">
-          <h1 className="font-black text-lg tracking-tighter italic uppercase text-slate-900 leading-none">Mi Viaje</h1>
-          <p className="text-[9px] text-slate-400 font-mono uppercase tracking-widest mt-1">{load?.orderNumber || 'S/D'}</p>
+          <h1 className="font-black text-lg tracking-tighter italic uppercase text-slate-900 leading-none">Reparto Activo</h1>
+          <p className="text-[9px] text-slate-400 font-mono uppercase tracking-widest mt-1">{load.orderNumber}</p>
         </div>
-        <div className="flex items-center gap-2">
-           {(load.status === 'on_route' || load.status === 'on_pause') ? (
-             <div className="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center text-green-600 border border-green-100 shadow-sm animate-pulse">
-                <Satellite size={18} />
-             </div>
-           ) : (
-             <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 border border-slate-100">
-                <Satellite size={18} />
-             </div>
-           )}
-        </div>
+        <Badge className={cn("bg-slate-100 text-slate-500 border-none", isMeli && "bg-yellow-400 text-slate-900")}>
+          {isMeli ? 'ML' : 'FTL'}
+        </Badge>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 bg-slate-100 p-1 rounded-2xl h-12">
-          <TabsTrigger value="mission" className="text-[9px] uppercase font-black rounded-xl">Misión</TabsTrigger>
-          <TabsTrigger value="pauses" className="text-[9px] uppercase font-black rounded-xl">Pausas</TabsTrigger>
-          <TabsTrigger value="incidents" className="text-[9px] uppercase font-black rounded-xl">Alertas</TabsTrigger>
-          <TabsTrigger value="wallet" className="text-[9px] uppercase font-black rounded-xl">Gastos</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="mission" className="space-y-6 animate-in fade-in">
-          <Card className={cn(
-            "border-none rounded-[2.5rem] overflow-hidden shadow-2xl transition-all",
-            load.status === 'on_route' ? (isReturning ? "bg-indigo-600 text-white" : "bg-blue-600 text-white") : 
-            load.status === 'delivered' ? "bg-green-600 text-white" : 
-            load.status === 'on_pause' ? "bg-amber-50 text-white" : "bg-slate-900 text-white"
-          )}>
-            <CardContent className="p-8 text-center space-y-4">
-               <div className="space-y-1">
-                 <p className="text-[10px] font-black uppercase text-white/50 tracking-widest">Estado de Jornada</p>
-                 <h2 className="text-3xl font-black uppercase italic tracking-tighter">
-                   {load.status === 'on_route' ? (isReturning ? 'Volviendo a Base' : 'En Tránsito') : 
-                    load.status === 'on_pause' ? `Pausa: ${load.tracking?.lastPauseType || 'Descanso'}` :
-                    load.status === 'delivered' ? 'Viaje Finalizado' : 
-                    load.status === 'incident' ? 'Incidencia' : 'Listo para Salir'}
-                 </h2>
+      {currentStop ? (
+        <div className="space-y-6 animate-in fade-in zoom-in-95">
+          <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-slate-900 text-white">
+            <CardContent className="p-8 space-y-6">
+               <div className="flex justify-between items-start">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black uppercase text-blue-400 tracking-widest">Siguiente Entrega</p>
+                    <h2 className="text-2xl font-black uppercase italic tracking-tighter leading-tight">{currentStop.name}</h2>
+                  </div>
+                  <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center text-blue-400">
+                    <MapPin size={24} />
+                  </div>
                </div>
                
-               {load.serviceType === 'meli' && load.outboundStops.length === 0 && (
-                 <Button 
-                   className="w-full bg-yellow-400 text-slate-900 hover:bg-yellow-500 h-16 text-lg font-black rounded-2xl shadow-xl animate-pulse"
-                   onClick={() => router.push(`/rutas/mercadolibre?loadId=${load.id}`)}
-                 >
-                   <QrCode className="mr-2" /> INICIAR ESCANEO ML
-                 </Button>
-               )}
+               <div className="p-5 bg-white/5 rounded-3xl border border-white/10">
+                  <p className="text-sm font-bold leading-tight">{currentStop.address}</p>
+                  <p className="text-[10px] text-white/40 font-bold uppercase mt-1">{currentStop.city}, {currentStop.province}</p>
+               </div>
 
-               {(load.status === 'pending' || load.status === 'assigned') && (load.serviceType !== 'meli' || load.outboundStops.length > 0) && (
-                 <Button className="w-full bg-white text-slate-900 hover:bg-slate-50 h-16 text-lg font-black rounded-2xl shadow-xl animate-pulse" onClick={handleStartTrip} disabled={isUpdating}>
-                   INICIAR VIAJE <ChevronRight className="ml-2" />
-                 </Button>
-               )}
-
-               {load.status === 'on_pause' && (
-                 <Button className="w-full bg-white text-amber-600 hover:bg-slate-50 h-16 text-lg font-black rounded-2xl shadow-xl" onClick={handleEndPause} disabled={isUpdating}>
-                   REANUDAR VIAJE <Play className="ml-2 fill-current" />
-                 </Button>
-               )}
-
-               {load.status === 'on_route' && !allOutboundDone && currentStop && (
-                 <div className="space-y-3">
-                   <p className="text-[10px] font-bold text-white/70 uppercase">Destino {currentStopIndex + 1} de {load.outboundStops.length}: {currentStop.name}</p>
-                   <Button className="w-full bg-green-500 hover:bg-green-600 text-white h-16 text-lg font-black rounded-2xl shadow-xl" onClick={() => setIsPodOpen(true)} disabled={isUpdating}>
-                     CONFIRMAR LLEGADA <CheckCircle2 className="ml-2" />
-                   </Button>
-                 </div>
-               )}
-
-               {load.status === 'on_route' && allOutboundDone && (
-                 <div className="space-y-4 animate-in zoom-in-95">
-                    {!isReturning ? (
-                      <>
-                        <p className="text-xs font-bold text-white/70 uppercase italic">Entregas completadas. Inicie el retorno para registrar el kilometraje final.</p>
-                        <Button className="w-full bg-white text-indigo-600 hover:bg-slate-50 h-16 text-lg font-black rounded-2xl shadow-xl" onClick={handleStartReturn} disabled={isUpdating}>
-                           VOLVER A BASE <Home className="ml-2" />
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-xs font-bold text-white/70 uppercase">Destino: {load.returnDestination?.name || load.origin.name}</p>
-                        <Button className="w-full bg-green-500 hover:bg-green-600 text-white h-16 text-lg font-black rounded-2xl shadow-xl" onClick={handleFinishAtBase} disabled={isUpdating}>
-                           FINALIZAR EN BASE <CheckCircle2 className="ml-2" />
-                        </Button>
-                      </>
-                    )}
-                 </div>
-               )}
-               
-               {load.status === 'delivered' && (
-                 <div className="flex flex-col items-center gap-2">
-                    <CircleCheck size={48} className="text-white/30" />
-                    <p className="text-xs font-bold opacity-70">Tarea cumplida. Central de despacho notificada.</p>
-                 </div>
-               )}
+               <div className="grid grid-cols-2 gap-3">
+                  <Button className="h-14 bg-blue-600 hover:bg-blue-700 rounded-2xl font-black text-xs uppercase" onClick={() => handleAction('nav')}>
+                    <Navigation size={18} className="mr-2" /> Navegar
+                  </Button>
+                  <Button variant="outline" className="h-14 bg-white/5 border-white/10 text-white rounded-2xl font-black text-xs uppercase" onClick={() => handleAction('call')}>
+                    <Phone size={18} className="mr-2" /> Llamar
+                  </Button>
+               </div>
             </CardContent>
           </Card>
 
-          {load.status === 'on_route' && (
-            <Card className="border-none shadow-md bg-slate-50 rounded-3xl mx-1">
-               <CardContent className="p-5 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                     <div className="w-10 h-10 rounded-2xl bg-white border flex items-center justify-center text-blue-600">
-                        <Gauge size={20} />
-                     </div>
-                     <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Distancia Auditada</p>
-                        <p className="text-xl font-black text-slate-800 italic mt-1">{load.tracking?.distanceTraveledKm?.toFixed(1) || 0} <span className="text-xs font-normal opacity-50">KM</span></p>
-                     </div>
-                  </div>
-                  <div className="text-right">
-                     <p className="text-[9px] font-black text-slate-400 uppercase leading-none">Restante</p>
-                     <p className="text-sm font-black text-blue-600 mt-1">{load.tracking?.distanceRemainingKm?.toFixed(1) || '--'} KM</p>
-                  </div>
-               </CardContent>
-            </Card>
-          )}
-
-          <Card className="border-none shadow-xl h-64 relative rounded-[2rem] overflow-hidden mx-1">
-             {L && (
-               <MapContainer 
-                center={[load.tracking?.currentLat || load.origin.lat || -34.6, load.tracking?.currentLng || load.origin.lng || -58.3]} 
-                zoom={10} 
-                className="h-full w-full"
-                zoomControl={false}
-               >
-                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-               </MapContainer>
-             )}
-          </Card>
-
-          <div className="space-y-4 px-1">
-             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 ml-2">
-               {load.serviceType === 'meli' ? <ShoppingBag size={14} className="text-yellow-500" /> : <ListOrdered size={14} className="text-blue-500" />} 
-               {load.serviceType === 'meli' ? 'Colecta Mercado Libre' : 'Hoja de Ruta'}
-             </p>
-             <div className="space-y-3">
-                {load.outboundStops?.length > 0 ? (
-                  load.outboundStops.map((stop, idx) => (
-                    <div key={stop.id} className={cn(
-                      "p-5 rounded-3xl border-2 flex justify-between items-center transition-all",
-                      stop.deliveredAt ? "bg-green-50 border-green-100" : "bg-white border-slate-100 shadow-sm"
-                    )}>
-                       <div className="flex items-center gap-4">
-                         <div className={cn(
-                           "w-8 h-8 rounded-full flex items-center justify-center font-black text-xs border shadow-inner",
-                           stop.deliveredAt ? "bg-green-600 text-white border-green-500" : "bg-slate-50 text-slate-400 border-slate-100"
-                         )}>
-                           {idx + 1}
-                         </div>
-                         <div>
-                            <p className={cn("text-sm font-black uppercase", stop.deliveredAt ? "text-green-700" : "text-slate-800")}>{stop.name}</p>
-                            <p className="text-[10px] text-slate-400 font-medium leading-tight mt-0.5">{stop.address}</p>
-                         </div>
-                       </div>
-                       {stop.deliveredAt ? (
-                         <Badge className="bg-green-600 border-none text-[8px] h-4 uppercase font-black">ENTREGADO</Badge>
-                       ) : (
-                         <Badge variant="outline" className="text-[8px] h-4 uppercase font-black border-slate-200 text-slate-400">PENDIENTE</Badge>
-                       )}
-                    </div>
-                  ))
-                ) : (
-                  <div className="p-10 text-center border-2 border-dashed rounded-3xl bg-slate-50/50">
-                    <p className="text-[10px] font-black text-slate-300 uppercase italic">Esperando escaneo de paquetes...</p>
-                  </div>
-                )}
-                
-                {(isReturning || allOutboundDone) && load.outboundStops.length > 0 && (
-                   <div className={cn(
-                     "p-5 rounded-3xl border-2 flex justify-between items-center border-dashed transition-all",
-                     load.status === 'delivered' ? "bg-green-50 border-green-200" : "bg-indigo-50 border-indigo-200"
-                   )}>
-                      <div className="flex items-center gap-4">
-                         <div className={cn(
-                           "w-8 h-8 rounded-full flex items-center justify-center text-white border shadow-inner",
-                           load.status === 'delivered' ? "bg-green-600 border-green-500" : "bg-indigo-600 border-indigo-500"
-                         )}>
-                           <Home size={14} />
-                         </div>
-                         <div>
-                            <p className="text-sm font-black uppercase text-indigo-700">Retorno a Base</p>
-                            <p className="text-[10px] text-slate-500 font-medium">{load.returnDestination?.name || load.origin.name}</p>
-                         </div>
-                      </div>
-                      <Badge className="bg-indigo-600 text-white border-none text-[8px] font-black uppercase">Base Final</Badge>
-                   </div>
-                )}
-             </div>
+          <div className="grid grid-cols-2 gap-4">
+             <Button className="h-20 bg-green-600 hover:bg-green-700 text-white font-black text-lg rounded-3xl shadow-xl flex flex-col items-center justify-center gap-1" onClick={() => setIsPodOpen(true)}>
+                <CheckCircle size={28} />
+                <span className="text-[10px] uppercase">Entregado</span>
+             </Button>
+             <Button className="h-20 bg-red-600 hover:bg-red-700 text-white font-black text-lg rounded-3xl shadow-xl flex flex-col items-center justify-center gap-1" onClick={() => setIsFailedOpen(true)}>
+                <XCircle size={28} />
+                <span className="text-[10px] uppercase">No Entregado</span>
+             </Button>
           </div>
-        </TabsContent>
-
-        <TabsContent value="pauses" className="space-y-6 animate-in fade-in">
-           <div className="px-1 space-y-6">
-             <div className="text-center space-y-2 py-4">
-                <Timer className="w-12 h-12 text-blue-600 mx-auto" />
-                <h2 className="text-xl font-black italic uppercase text-slate-900">Pausas y Descansos</h2>
-             </div>
-
-             {load.status === 'on_pause' ? (
-                <Card className="bg-amber-50 border-2 border-amber-200 rounded-[2rem] p-8 text-center space-y-6 shadow-xl">
-                   <div className="space-y-1">
-                      <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">En Pausa por</p>
-                      <h4 className="text-2xl font-black text-amber-700 uppercase italic">{load.tracking?.lastPauseType}</h4>
-                   </div>
-                   <Button className="w-full bg-amber-600 hover:bg-amber-700 text-white h-16 text-lg font-black rounded-2xl shadow-xl" onClick={handleEndPause} disabled={isUpdating}>
-                      TERMINAR PAUSA <Play className="ml-2 fill-current" />
-                   </Button>
-                </Card>
-             ) : (
-                <div className="grid grid-cols-2 gap-4">
-                   {PAUSE_LIST.map(pause => (
-                     <button 
-                        key={pause.id}
-                        className="p-6 rounded-3xl border-2 bg-white border-slate-100 hover:border-blue-300 hover:bg-blue-50 transition-all active:scale-95 group shadow-sm"
-                        onClick={() => handleStartPause(pause.id)}
-                        disabled={isUpdating || load.status === 'delivered' || load.status === 'pending' || load.status === 'assigned'}
-                     >
-                        <pause.icon size={32} className="text-slate-400 group-hover:text-blue-600 mx-auto mb-2" />
-                        <span className="text-[10px] font-black uppercase text-slate-800">{pause.label}</span>
-                     </button>
-                   ))}
-                </div>
-             )}
+        </div>
+      ) : (
+        <div className="h-[60vh] flex flex-col items-center justify-center text-center space-y-6">
+           <div className="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center text-green-600 shadow-inner">
+              <CheckCircle2 size={48} />
            </div>
-        </TabsContent>
-
-        <TabsContent value="incidents" className="space-y-6 animate-in fade-in">
-           <div className="px-1 space-y-6">
-             <div className="text-center space-y-2 py-4">
-                <ShieldAlert className="w-12 h-12 text-red-600 mx-auto animate-pulse" />
-                <h2 className="text-xl font-black italic uppercase text-slate-900">Reportar Incidencia</h2>
-             </div>
-
-             <div className="grid grid-cols-2 gap-4">
-                {INCIDENT_LIST.map(type => (
-                  <button 
-                    key={type.id} 
-                    className={cn(
-                      "p-6 rounded-3xl border-2 flex flex-col items-center gap-3 transition-all active:scale-95",
-                      selectedIncidentType === type.id ? "bg-red-600 text-white border-red-600 shadow-xl" : "bg-white text-slate-400 border-slate-100"
-                    )}
-                    onClick={() => setSelectedIncidentType(type.id)}
-                  >
-                    <type.icon size={32} className={cn(selectedIncidentType === type.id ? "text-white" : "text-slate-300")} />
-                    <span className="text-[10px] font-black uppercase text-center leading-tight">{type.label}</span>
-                  </button>
-                ))}
-             </div>
-
-             {selectedIncidentType && (
-               <div className="space-y-4 bg-white p-6 rounded-[2rem] border-2 border-red-100 shadow-xl">
-                  <Textarea 
-                    placeholder="Detalle adicional..." 
-                    className="bg-slate-50 border-none rounded-xl"
-                    value={incidentDescription}
-                    onChange={e => setIncidentDescription(e.target.value)}
-                  />
-                  <Button className="w-full h-14 bg-red-600 text-white font-black text-lg rounded-2xl shadow-xl" onClick={handleReportIncident} disabled={isUpdating}>
-                    ENVIAR ALERTA
-                  </Button>
-               </div>
-             )}
+           <div className="space-y-2">
+              <h3 className="text-xl font-black uppercase italic tracking-tighter">Hoja de Ruta Completa</h3>
+              <p className="text-sm text-slate-400 font-medium">Has finalizado todos los destinos de esta jornada.</p>
            </div>
-        </TabsContent>
+           <Button className="bg-slate-900 text-white h-14 px-10 rounded-2xl font-black uppercase italic" onClick={() => router.push('/rutas')}>
+              VOLVER A MI AGENDA
+           </Button>
+        </div>
+      )}
 
-        <TabsContent value="wallet" className="space-y-6 animate-in fade-in">
-           <div className="px-1 space-y-6">
-             <Dialog open={isExpenseOpen} onOpenChange={setIsExpenseOpen}>
-               <DialogTrigger asChild>
-                 <Button className="w-full bg-blue-600 hover:bg-blue-700 h-16 font-black text-lg rounded-2xl shadow-xl">
-                   <Plus className="mr-2" /> REGISTRAR GASTO
-                 </Button>
-               </DialogTrigger>
-               <DialogContent className="max-w-[95vw] rounded-[2.5rem] p-8">
-                  <DialogHeader>
-                    <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Nuevo Gasto</DialogTitle>
-                    <DialogDescription>Registre los detalles del gasto operativo durante su trayecto.</DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-6 py-4">
-                     <div className="space-y-3">
-                        <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Categoría</Label>
-                        <div className="grid grid-cols-3 gap-3">
-                          {EXPENSE_CATEGORIES.map(cat => (
-                            <button 
-                              key={cat.id} 
-                              className={cn(
-                                "flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all active:scale-95", 
-                                expenseData.category === cat.id ? "bg-blue-600 text-white border-blue-600" : "bg-slate-50 text-slate-400 border-transparent"
-                              )} 
-                              onClick={() => setExpenseData({...expenseData, category: cat.id})}
-                            >
-                              <cat.icon size={20} />
-                              <span className="text-[8px] font-black mt-2 uppercase">{cat.label}</span>
-                            </button>
-                          ))}
-                        </div>
-                     </div>
-                     <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                           <Label className="text-[10px] font-black uppercase text-slate-400">Monto</Label>
-                           <div className="relative">
-                              <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                              <Input type="number" className="pl-9 h-12 bg-slate-50 border-none font-black rounded-xl" value={expenseData.amount} onChange={e => setExpenseData({...expenseData, amount: parseFloat(e.target.value) || 0})} />
-                           </div>
-                        </div>
-                        <div className="space-y-1.5">
-                           <Label className="text-[10px] font-black uppercase text-slate-400">Lugar</Label>
-                           <Input placeholder="Ej: San Pedro" className="h-12 bg-slate-50 border-none text-xs font-bold rounded-xl" value={expenseData.location} onChange={e => setExpenseData({...expenseData, location: e.target.value})} />
-                        </div>
-                     </div>
-                     <div className="space-y-1.5">
-                        <Label className="text-[10px] font-black uppercase text-slate-400">N° Factura / Ticket (Opcional)</Label>
-                        <Input placeholder="Ej: 0001-00004567" className="h-12 bg-slate-50 border-none text-xs font-mono font-bold rounded-xl" value={expenseData.receiptNumber} onChange={e => setExpenseData({...expenseData, receiptNumber: e.target.value})} />
-                     </div>
-                  </div>
-                  <DialogFooter>
-                    <Button className="w-full h-16 bg-blue-600 text-white font-black text-lg rounded-2xl" onClick={handleAddExpense} disabled={isUpdating || !expenseData.amount}>
-                      GUARDAR GASTO
-                    </Button>
-                  </DialogFooter>
-               </DialogContent>
-             </Dialog>
-
-             <div className="divide-y divide-slate-100">
-                {expenses?.map(exp => (
-                  <div key={exp.id} className="p-4 flex justify-between items-center bg-white rounded-2xl shadow-sm mb-2">
-                     <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400">
-                           {EXPENSE_CATEGORIES.find(c => c.id === exp.category)?.icon ? React.createElement(EXPENSE_CATEGORIES.find(c => c.id === exp.category)!.icon, { size: 18 }) : <DollarSign size={18} />}
-                        </div>
-                        <div>
-                           <p className="text-xs font-black uppercase text-slate-800">{exp.category}</p>
-                           <p className="text-[10px] text-slate-400 font-bold uppercase">{exp.location}</p>
-                           {exp.receiptNumber && <p className="text-[8px] font-mono text-blue-600">Doc: {exp.receiptNumber}</p>}
-                        </div>
-                     </div>
-                     <div className="text-right">
-                        <p className="text-sm font-black text-slate-900">${exp.amount.toLocaleString()}</p>
-                        <Badge variant="outline" className="text-[8px] h-3 px-1">{exp.status}</Badge>
-                     </div>
-                  </div>
-                ))}
-             </div>
-           </div>
-        </TabsContent>
-      </Tabs>
-
+      {/* DIALOG ENTREGADO */}
       <Dialog open={isPodOpen} onOpenChange={setIsPodOpen}>
-         <DialogContent className="max-w-full sm:max-w-md h-[95vh] sm:h-auto rounded-t-[2.5rem] sm:rounded-[2.5rem] p-0 overflow-hidden flex flex-col border-none shadow-2xl">
-            <div className="bg-slate-900 text-white p-6 pb-8 shrink-0">
-               <DialogHeader className="text-left space-y-0">
-                  <div className="flex justify-between items-start mb-4">
-                     <Badge className="bg-green-500 text-white border-none text-[8px] uppercase font-black">Entrega</Badge>
-                     <Button variant="ghost" size="icon" onClick={() => setIsPodOpen(false)} className="text-white/40"><XCircle /></Button>
-                  </div>
-                  <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter">Confirmar Recepción</DialogTitle>
-                  <DialogDescription className="text-white/40 text-[10px] font-bold uppercase mt-2">{currentStop?.name}</DialogDescription>
-               </DialogHeader>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-slate-50 pb-10">
-               <div className="space-y-3">
-                  <Label className="text-[11px] font-black uppercase text-slate-500">1. Nombre del Receptor</Label>
-                  <Input 
-                    className="h-14 bg-white border-slate-200 shadow-sm font-bold rounded-2xl"
-                    value={podForm.receiverName}
-                    onChange={e => setPodForm({...podForm, receiverName: e.target.value})}
-                  />
-               </div>
-
-               <div className="space-y-6">
-                  <SignaturePad title="Firma Receptor" onSave={(url) => setPodForm({...podForm, receiverSignatureUrl: url})} />
-                  <SignaturePad title="Firma Chofer" onSave={(url) => setPodForm({...podForm, driverSignatureUrl: url})} />
-               </div>
-
-               <div className="space-y-3">
-                  <Label className="text-[11px] font-black uppercase text-slate-500">2. Foto del Remito</Label>
-                  <input type="file" ref={photoInputRef} className="hidden" accept="image/*" capture="environment" onChange={onPhotoChange} />
-                  <div className="aspect-video rounded-[2rem] border-2 border-dashed flex flex-col items-center justify-center gap-3 cursor-pointer overflow-hidden bg-slate-100" onClick={() => photoInputRef.current?.click()}>
-                    {podForm.photoUrl ? (
-                      <img src={podForm.photoUrl} className="w-full h-full object-cover" alt="Remito" />
-                    ) : (
-                      <>
-                        <Camera size={32} className="text-slate-300" />
-                        <p className="text-[11px] font-black text-slate-400 uppercase">Capturar Foto</p>
-                      </>
-                    )}
-                  </div>
-               </div>
-            </div>
-
-            <div className="p-6 bg-white border-t shrink-0">
-               <Button 
-                className="w-full h-18 text-lg font-black uppercase rounded-[1.5rem] bg-green-600 text-white hover:bg-green-700"
-                onClick={handleConfirmDelivery} 
-                disabled={isUpdating || !podForm.receiverName || !podForm.receiverSignatureUrl || !podForm.driverSignatureUrl || !podForm.photoUrl}
-               >
-                 {isUpdating ? <Loader2 className="animate-spin mr-3" /> : <CircleCheck className="mr-3" />}
+        <DialogContent className="max-w-[95vw] rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl">
+           <div className="bg-green-600 text-white p-6">
+              <DialogHeader>
+                <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Confirmar Entrega</DialogTitle>
+                <DialogDescription className="text-white/60 text-[10px] font-bold uppercase">{currentStop?.name}</DialogDescription>
+              </DialogHeader>
+           </div>
+           <div className="p-6 space-y-6 bg-slate-50 overflow-y-auto max-h-[70vh]">
+              <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-400">Receptor</Label>
+                <Input className="h-12 bg-white rounded-xl" placeholder="Nombre completo" value={podForm.receiverName} onChange={e => setPodForm({...podForm, receiverName: e.target.value})} />
+              </div>
+              <SignaturePad title="Firma de Recepción" onSave={(url) => setPodForm({...podForm, receiverSignatureUrl: url})} />
+              <div className="space-y-3">
+                 <Label className="text-[10px] font-black uppercase text-slate-400">Foto de Evidencia</Label>
+                 <input type="file" ref={photoInputRef} className="hidden" accept="image/*" capture="environment" onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = async (ev) => setPodForm({...podForm, photoUrl: ev.target?.result as string});
+                      reader.readAsDataURL(file);
+                    }
+                 }} />
+                 <div className="aspect-video bg-white rounded-3xl border-2 border-dashed flex items-center justify-center cursor-pointer overflow-hidden" onClick={() => photoInputRef.current?.click()}>
+                    {podForm.photoUrl ? <img src={podForm.photoUrl} className="w-full h-full object-cover" /> : <Camera size={32} className="text-slate-200" />}
+                 </div>
+              </div>
+           </div>
+           <div className="p-6 bg-white border-t">
+              <Button className="w-full h-16 bg-green-600 hover:bg-green-700 text-white font-black text-lg rounded-2xl" onClick={handleConfirmDelivery} disabled={isUpdating || !podForm.receiverName}>
                  FINALIZAR ENTREGA
-               </Button>
-            </div>
-         </DialogContent>
+              </Button>
+           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* DIALOG NO ENTREGADO */}
+      <Dialog open={isFailedOpen} onOpenChange={setIsFailedOpen}>
+        <DialogContent className="max-w-[95vw] rounded-[2.5rem] p-8 border-none shadow-2xl">
+           <DialogHeader>
+              <DialogTitle className="text-xl font-black uppercase italic tracking-tighter text-red-600">Reportar Fallo</DialogTitle>
+              <DialogDescription className="text-[10px] font-bold uppercase">Seleccione el motivo por el cual no se pudo entregar</DialogDescription>
+           </DialogHeader>
+           <div className="grid grid-cols-1 gap-3 py-6">
+              {INCIDENT_REASONS.map(r => (
+                <Button key={r.id} variant="outline" className="h-14 justify-start px-6 rounded-2xl font-black text-xs uppercase border-2 hover:bg-red-50 hover:border-red-200" onClick={() => handleReportFailure(r.id)}>
+                   {r.label}
+                </Button>
+              ))}
+           </div>
+        </DialogContent>
       </Dialog>
     </div>
   );

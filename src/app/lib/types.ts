@@ -155,6 +155,8 @@ export interface ProofOfDelivery {
   driverSignatureUrl?: string;
   confirmedAt: any;
   notes?: string;
+  failedReason?: 'absent' | 'wrong_address' | 'no_response' | 'refused' | 'other';
+  status: 'delivered' | 'failed';
 }
 
 export interface LoadLegStop {
@@ -182,6 +184,7 @@ export interface LoadLegStop {
 
   // Tracking
   deliveredAt?: any;
+  failedAt?: any;
   proofOfDelivery?: ProofOfDelivery;
 }
 
