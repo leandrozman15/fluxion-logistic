@@ -16,7 +16,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Users, ArrowLeft, ArrowRight, Save, Loader2, 
   ShieldCheck, CheckCircle2, User, FileText, 
-  Phone, HeartPulse, Info, X, Briefcase, Upload, AlertTriangle, FileCheck, Camera, Key, Sparkles
+  Phone, HeartPulse, Info, X, Briefcase, Upload, AlertTriangle, FileCheck, Camera, Key, Sparkles,
+  Shield, BadgeCheck, HardHat, Truck, UserCircle2
 } from "lucide-react";
 import { Driver, DriverRole } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -259,6 +260,12 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                       <SelectValue placeholder="Seleccionar Rol" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="admin">🔴 Super Administrador</SelectItem>
+                      <SelectItem value="manager">📊 Gerente</SelectItem>
+                      <SelectItem value="sales_admin">💼 Administración Ventas</SelectItem>
+                      <SelectItem value="purchasing_admin">💳 Administración Compras</SelectItem>
+                      <SelectItem value="coordinator">🛰️ Coordinador / Tráfico</SelectItem>
+                      <SelectItem value="warehouse">📦 Depósito</SelectItem>
                       <SelectItem value="driver">🚚 Chofer Profesional (Tractor)</SelectItem>
                       <SelectItem value="companion">👥 Acompañante / Ayudante</SelectItem>
                     </SelectContent>
@@ -349,13 +356,13 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Key size={18} className="text-blue-600" /> Credenciales de Acceso al Sistema
                 </CardTitle>
-                <CardDescription>Defina el usuario para que el integrante pueda utilizar la App del Chofer.</CardDescription>
+                <CardDescription>Defina el usuario para que el integrante pueda utilizar la App del Chofer o el Panel Central.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label>Email de Login (Corporativo o Personal)</Label>
-                    <Input type="email" placeholder="chofer@logistica-ar.com" value={formData.email ?? ''} onChange={e => setFormData({...formData, email: e.target.value})} />
+                    <Input type="email" placeholder="usuario@logistica-ar.com" value={formData.email ?? ''} onChange={e => setFormData({...formData, email: e.target.value})} />
                   </div>
                   <div className="space-y-2">
                     <Label>Contraseña Provisoria</Label>
@@ -370,7 +377,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                 <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-3">
                    <Info size={18} className="text-blue-600 shrink-0 mt-0.5" />
                    <p className="text-[10px] text-blue-700 leading-relaxed font-medium">
-                     El sistema registrará estas credenciales. Al finalizar el alta, informe al chofer su email y contraseña para que pueda sincronizar su hoja de ruta.
+                     El sistema registrará estas credenciales vinculadas al rol seleccionado. Informe al usuario su email y contraseña para que pueda ingresar.
                    </p>
                 </div>
               </CardContent>

@@ -14,7 +14,7 @@ export type OwnershipType = 'company' | 'third_party';
 export type MaintenanceType = 'preventive' | 'corrective' | 'inspection';
 export type MaintenanceStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 
-export type DriverRole = 'driver' | 'companion';
+export type DriverRole = 'admin' | 'sales_admin' | 'purchasing_admin' | 'coordinator' | 'manager' | 'warehouse' | 'driver' | 'companion' | 'viewer';
 
 export type UserRole = 'admin' | 'sales_admin' | 'purchasing_admin' | 'coordinator' | 'manager' | 'warehouse' | 'driver' | 'viewer';
 

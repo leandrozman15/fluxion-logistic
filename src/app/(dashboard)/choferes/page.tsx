@@ -13,8 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Users, UserPlus, Search, Loader2, ShieldCheck, AlertTriangle, 
   CheckCircle2, MoreVertical, Eye, FileText, Calendar, Truck as TruckIcon, Package,
-  Camera,
-  Edit2
+  Camera, Edit2, Shield, BadgeCheck, HardHat, Briefcase, UserCircle2
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -24,7 +23,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Driver, DriverStatus, Truck, Load } from "@/app/lib/types";
+import { Driver, DriverStatus, Truck, Load, DriverRole } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO, differenceInDays, isBefore } from "date-fns";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -92,6 +91,20 @@ export default function ChoferesPage() {
     }
   };
 
+  const getRoleBadge = (role: DriverRole) => {
+    switch (role) {
+      case 'admin': return <Badge className="bg-red-100 text-red-700 border-none text-[8px] uppercase font-black"><Shield className="w-2.5 h-2.5 mr-1" /> Super Admin</Badge>;
+      case 'manager': return <Badge className="bg-blue-100 text-blue-700 border-none text-[8px] uppercase font-black"><BadgeCheck className="w-2.5 h-2.5 mr-1" /> Gerente</Badge>;
+      case 'sales_admin': 
+      case 'purchasing_admin': return <Badge className="bg-slate-100 text-slate-700 border-none text-[8px] uppercase font-black"><Briefcase className="w-2.5 h-2.5 mr-1" /> Administración</Badge>;
+      case 'coordinator': return <Badge className="bg-orange-100 text-orange-700 border-none text-[8px] uppercase font-black"><UserCircle2 className="w-2.5 h-2.5 mr-1" /> Coordinador</Badge>;
+      case 'warehouse': return <Badge className="bg-slate-100 text-slate-700 border-none text-[8px] uppercase font-black"><HardHat className="w-2.5 h-2.5 mr-1" /> Depósito</Badge>;
+      case 'driver': return <Badge className="bg-blue-50 text-blue-600 border-blue-100 text-[8px] uppercase font-black"><TruckIcon className="w-2.5 h-2.5 mr-1" /> Chofer</Badge>;
+      case 'companion': return <Badge className="bg-slate-100 text-slate-500 border-none text-[8px] uppercase font-black">Acompañante</Badge>;
+      default: return <Badge variant="outline" className="text-[8px] uppercase">{role}</Badge>;
+    }
+  };
+
   const getExpiryLabel = (expiryDateStr?: string) => {
     if (!expiryDateStr) return null;
     try {
@@ -111,70 +124,16 @@ export default function ChoferesPage() {
     }
   };
 
-  const getDocPhotoStats = (d: Driver) => {
-    const checkList = [
-      { key: 'dni', present: !!d.dniFileUrl },
-      { key: 'dni_back', present: !!d.dniBackFileUrl },
-      { key: 'lic', present: !!d.licenseFileUrl },
-      { key: 'lic_back', present: !!d.licenseBackFileUrl }
-    ];
-    
-    if (d.hasLinti) {
-      checkList.push({ key: 'linti', present: !!d.lintiFileUrl });
-    }
-
-    const count = checkList.filter(item => item.present).length;
-    const total = checkList.length;
-    
-    return { count, total, all: count === total };
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Gestión de Personal</h1>
-          <p className="text-slate-500 text-sm">Control de personal habilitado (Choferes y Acompañantes).</p>
+          <p className="text-slate-500 text-sm">Control de personal habilitado (Operaciones y Administración).</p>
         </div>
         <Button className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100" onClick={() => router.push('/choferes/nuevo')}>
           <UserPlus className="w-4 h-4 mr-2" /> Alta de Personal
         </Button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-blue-50 border-blue-100 shadow-none">
-          <CardContent className="pt-4 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600"><Users size={20} /></div>
-            <div>
-              <p className="text-[10px] uppercase font-bold text-blue-400">Total Personal</p>
-              <p className="text-xl font-bold text-blue-700">{drivers?.length || 0}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-green-50 border-green-100 shadow-none">
-          <CardContent className="pt-4 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600"><CheckCircle2 size={20} /></div>
-            <div>
-              <p className="text-[10px] uppercase font-bold text-green-400">Disponibles</p>
-              <p className="text-xl font-bold text-green-700">{drivers?.filter(d => d.status === 'active').length || 0}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-orange-50 border-orange-100 shadow-none">
-          <CardContent className="pt-4 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600"><AlertTriangle size={20} /></div>
-            <div>
-              <p className="text-[10px] uppercase font-bold text-orange-400">Vencimientos Próximos</p>
-              <p className="text-xl font-bold text-orange-700">
-                {drivers?.filter(d => {
-                  const licExp = d.licenseExpiry ? differenceInDays(parseISO(d.licenseExpiry), new Date()) : 999;
-                  const lintiExp = d.lintiExpiry ? differenceInDays(parseISO(d.lintiExpiry), new Date()) : 999;
-                  return licExp <= 30 || lintiExp <= 30;
-                }).length || 0}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       <Card className="border-none shadow-sm overflow-hidden">
@@ -203,7 +162,7 @@ export default function ChoferesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Personal</TableHead>
-                  <TableHead>Rol</TableHead>
+                  <TableHead>Rol / Función</TableHead>
                   <TableHead>Licencia Nacional</TableHead>
                   <TableHead>Unidad / Viajes</TableHead>
                   <TableHead>Estado</TableHead>
@@ -217,11 +176,10 @@ export default function ChoferesPage() {
                   filteredDrivers.map((driver) => {
                     const assignedTruck = trucks?.find(t => t.assignedDriverId === driver.id || t.assignedCompanionIds?.includes(driver.id));
                     const tripCount = loads?.filter(l => l.assignedDriverId === driver.id).length || 0;
-                    const photoStats = getDocPhotoStats(driver);
                     
                     const isLicenseExpired = driver.licenseExpiry && isBefore(parseISO(driver.licenseExpiry), new Date());
                     const isLintiExpired = driver.hasLinti && driver.lintiExpiry && isBefore(parseISO(driver.lintiExpiry), new Date());
-                    const hasExpiredDocs = isLicenseExpired || isLintiExpired;
+                    const hasExpiredDocs = (driver.role === 'driver' && isLicenseExpired) || (driver.hasLinti && isLintiExpired);
 
                     return (
                       <TableRow key={driver.id} className="hover:bg-slate-50 transition-colors">
@@ -245,25 +203,24 @@ export default function ChoferesPage() {
                           </Link>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className={cn(
-                            "text-[9px] uppercase font-bold",
-                            driver.role === 'companion' ? "text-slate-500 border-slate-200" : "text-blue-600 border-blue-200 bg-blue-50"
-                          )}>
-                            {driver.role === 'companion' ? 'Acompañante' : 'Chofer'}
-                          </Badge>
+                          {getRoleBadge(driver.role)}
                         </TableCell>
                         <TableCell>
-                          <div className="space-y-1">
-                            <div className="text-[11px] font-bold text-slate-700">{driver.licenseNumber ? `Lic: ${driver.licenseNumber}` : 'S/L'}</div>
-                            <div className="text-[9px] uppercase font-bold tracking-tighter">{getExpiryLabel(driver.licenseExpiry)}</div>
-                          </div>
+                          {driver.role === 'driver' ? (
+                            <div className="space-y-1">
+                              <div className="text-[11px] font-bold text-slate-700">{driver.licenseNumber ? `Lic: ${driver.licenseNumber}` : 'S/L'}</div>
+                              <div className="text-[9px] uppercase font-bold tracking-tighter">{getExpiryLabel(driver.licenseExpiry)}</div>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-300 italic">No aplica</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <div className="space-y-1">
                             {assignedTruck ? (
                               <div className="flex items-center gap-1.5 text-xs font-bold text-blue-600"><TruckIcon size={12} /> {assignedTruck.plate}</div>
                             ) : (
-                              <div className="text-[10px] text-slate-400 italic">Sin unidad fija</div>
+                              <div className="text-[10px] text-slate-400 italic">Personal Administrativo</div>
                             )}
                             {driver.role === 'driver' && (
                               <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-bold uppercase"><Package size={12} className="text-slate-400" /> {tripCount} Viajes realizados</div>
