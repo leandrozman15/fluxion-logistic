@@ -586,15 +586,15 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                     <div className="p-6 bg-slate-50 rounded-3xl border space-y-4">
                       <div className="flex justify-between items-center">
                         <span className="text-xs font-bold text-slate-500">Carga Declarada:</span>
-                        <span className="text-lg font-black text-slate-800">{currentTotalWeight.toLocaleString()} KG</span>
+                        <span className="text-lg font-black text-slate-800">{(currentTotalWeight || 0).toLocaleString()} KG</span>
                       </div>
                       {selectedTruck && (
                         <>
                           <div className="flex justify-between items-center border-t pt-4">
                             <span className="text-xs font-bold text-slate-500">Carga Máxima:</span>
-                            <span className="text-lg font-black text-green-600">{selectedTruck.capacityKg.toLocaleString()} KG</span>
+                            <span className="text-lg font-black text-green-600">{(selectedTruck.capacityKg || 0).toLocaleString()} KG</span>
                           </div>
-                          <Progress value={Math.min(100, (currentTotalWeight / selectedTruck.capacityKg) * 100)} className={cn("h-2", isWeightLimitExceeded ? "bg-red-200" : "bg-slate-200")} />
+                          <Progress value={Math.min(100, (currentTotalWeight / (selectedTruck.capacityKg || 1)) * 100)} className={cn("h-2", isWeightLimitExceeded ? "bg-red-200" : "bg-slate-200")} />
                         </>
                       )}
                     </div>

@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { 
   ShoppingBag, Camera, MapPin, CheckCircle2, 
   ArrowLeft, Loader2, Trash2, Edit2, Zap, 
-  Navigation, ListOrdered, Play, XCircle, AlertTriangle, Search, QrCode
+  Navigation, ListOrdered, Play, XCircle, AlertTriangle, Search, QrCode, ChevronRight
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { parseLogisticsLabel, type LabelOutput } from "@/ai/flows/parse-logistics-label-flow";
@@ -105,7 +105,8 @@ export default function MercadoLibreDriverPage() {
         const loadsSnap = await getDocs(query(collection(db, "loads"), orderBy("orderNumber", "desc"), limit(1)));
         let nextSeq = 1;
         if (!loadsSnap.empty) {
-          const parts = loadsSnap.docs[0].data().orderNumber.split("-");
+          const orderNumber = (loadsSnap.docs[0].data() as any).orderNumber || "";
+          const parts = orderNumber.split("-");
           const lastNum = parseInt(parts[parts.length - 1]);
           if (!isNaN(lastNum)) nextSeq = lastNum + 1;
         }
@@ -185,7 +186,7 @@ export default function MercadoLibreDriverPage() {
                      <p className="text-[10px] font-black text-slate-400 uppercase">Estado</p>
                      <p className="text-xs font-black text-green-600 uppercase">Sincronizado</p>
                   </CardContent>
-               </div>
+               </Card>
             </div>
 
             {scannedDestinations.length > 0 && (
