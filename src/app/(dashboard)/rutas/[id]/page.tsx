@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -6,26 +5,25 @@ import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection, useUser } from "@/firebase";
 import { doc, updateDoc, serverTimestamp, collection, query, addDoc, arrayUnion, increment, orderBy } from "firebase/firestore";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { 
-  ArrowLeft, MapPin, Phone, MessageSquare, CheckCircle2, 
+  ArrowLeft, MapPin, CheckCircle2, 
   Truck, Package, FileText, ShieldAlert, Clock, 
-  Navigation, Info, ChevronRight, AlertTriangle,
-  Wallet, Plus, DollarSign, Camera, Fuel, Utensils, Bed, Wrench, Receipt,
-  Zap, Satellite, SignalHigh, Loader2, Compass, Gauge, History, 
-  Coffee, Moon, Car, Battery, Flame, CloudRain, Construction, FileWarning, HelpCircle,
-  Siren, LifeBuoy, CirclePlay, CircleCheck, ListOrdered, XCircle, User,
-  Timer, Play, Pause, Home, MoveLeft
+  Navigation, Info, ChevronRight,
+  Plus, DollarSign, Camera, Fuel, Utensils, Bed, Wrench, Receipt,
+  Zap, Satellite, Loader2, Gauge, 
+  Coffee, Moon, Car, Battery, CloudRain, Construction, HelpCircle,
+  Siren, CircleCheck, ListOrdered, XCircle,
+  Timer, Play, Home
 } from "lucide-react";
-import { Load, Expense, ExpenseCategory, LoadStatus, TrackingPoint, Tenant, LoadLegStop, ProofOfDelivery } from "@/app/lib/types";
+import { Load, Expense, ExpenseCategory, PAUSE_TYPES, INCIDENT_TYPES, ProofOfDelivery } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { compressImage } from "@/lib/utils/image-compression";
@@ -40,7 +38,6 @@ const MapContainer = dynamic(
 );
 const TileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), { ssr: false });
-const Polyline = dynamic(() => import("react-leaflet").then((mod) => mod.Polyline), { ssr: false });
 
 const EXPENSE_CATEGORIES: { id: ExpenseCategory; label: string; icon: any }[] = [
   { id: 'fuel', label: 'Combustible', icon: Fuel },
@@ -51,7 +48,7 @@ const EXPENSE_CATEGORIES: { id: ExpenseCategory; label: string; icon: any }[] = 
   { id: 'other', label: 'Otros', icon: Receipt },
 ];
 
-const INCIDENT_TYPES = [
+const INCIDENT_LIST = [
   { id: 'accident', label: 'Accidente/Choque', icon: Car, color: 'bg-red-600' },
   { id: 'mechanical', label: 'Avería Mecánica', icon: Wrench, color: 'bg-orange-600' },
   { id: 'tire', label: 'Pinchadura', icon: Zap, color: 'bg-yellow-600' },
@@ -62,7 +59,7 @@ const INCIDENT_TYPES = [
   { id: 'other', label: 'Otro Problema', icon: HelpCircle, color: 'bg-slate-500' },
 ];
 
-const PAUSE_TYPES = [
+const PAUSE_LIST = [
   { id: 'lunch', label: 'Almuerzo', icon: Utensils, color: 'bg-blue-600' },
   { id: 'rest', label: 'Descanso', icon: Coffee, color: 'bg-green-600' },
   { id: 'sleep', label: 'Dormir / Noche', icon: Moon, color: 'bg-slate-800' },
@@ -163,7 +160,7 @@ export default function RouteDetailPage() {
           });
         },
         (error) => {
-          // GPS silent error
+          // GPS silent error to avoid blocking the UI
         },
         { enableHighAccuracy: true, timeout: 15000 }
       );
@@ -175,7 +172,7 @@ export default function RouteDetailPage() {
   }, [load?.status, loadRef]);
 
   const allOutboundDone = useMemo(() => {
-    return load?.outboundStops.every(s => !!s.deliveredAt);
+    return load?.outboundStops?.every(s => !!s.deliveredAt);
   }, [load?.outboundStops]);
 
   const currentStopIndex = useMemo(() => {
@@ -215,7 +212,6 @@ export default function RouteDetailPage() {
       });
       toast({ title: "Retorno a Base Iniciado", description: "Kilometraje de vuelta en seguimiento." });
       
-      // Lanzar navegación a la base
       const lat = load.returnDestination?.lat || load.origin.lat || -34.6;
       const lng = load.returnDestination?.lng || load.origin.lng || -58.3;
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
@@ -251,7 +247,7 @@ export default function RouteDetailPage() {
   const handleStartPause = async (typeId: string) => {
     if (!loadRef) return;
     setIsUpdating(true);
-    const label = PAUSE_TYPES.find(p => p.id === typeId)?.label || "Pausa";
+    const label = PAUSE_LIST.find(p => p.id === typeId)?.label || "Pausa";
     try {
       await updateDoc(loadRef, {
         status: 'on_pause',
@@ -283,10 +279,6 @@ export default function RouteDetailPage() {
     } finally {
       setIsUpdating(false);
     }
-  };
-
-  const handlePhotoClick = () => {
-    photoInputRef.current?.click();
   };
 
   const onPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -329,7 +321,6 @@ export default function RouteDetailPage() {
         } : s
       );
 
-      // We stay in 'on_route' even if all done to allow the 'Return to Base' phase
       await updateDoc(loadRef, {
         outboundStops: updatedStops,
         status: 'on_route',
@@ -381,7 +372,7 @@ export default function RouteDetailPage() {
     try {
       const incident = {
         type: 'critical',
-        message: `INCIDENTE: ${INCIDENT_TYPES.find(t => t.id === selectedIncidentType)?.label}. ${incidentDescription}`,
+        message: `INCIDENTE: ${INCIDENT_LIST.find(t => t.id === selectedIncidentType)?.label}. ${incidentDescription}`,
         timestamp: new Date().toISOString()
       };
 
@@ -402,7 +393,10 @@ export default function RouteDetailPage() {
     }
   };
 
-  const isReturning = !!load?.tracking?.returnStartedAt;
+  if (loadLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
+  if (!load) return <div className="p-10 text-center">Viaje no encontrado.</div>;
+
+  const isReturning = !!load.tracking?.returnStartedAt;
 
   return (
     <div className="max-w-md mx-auto space-y-6 pb-32 px-2">
@@ -410,7 +404,7 @@ export default function RouteDetailPage() {
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full bg-white shadow-sm border"><ArrowLeft size={18} /></Button>
         <div className="text-center">
           <h1 className="font-black text-lg tracking-tighter italic uppercase text-slate-900 leading-none">Mi Viaje</h1>
-          <p className="text-[9px] text-slate-400 font-mono uppercase tracking-widest mt-1">{load.orderNumber}</p>
+          <p className="text-[9px] text-slate-400 font-mono uppercase tracking-widest mt-1">{load?.orderNumber || 'S/D'}</p>
         </div>
         <div className="flex items-center gap-2">
            {(load.status === 'on_route' || load.status === 'on_pause') ? (
@@ -530,7 +524,7 @@ export default function RouteDetailPage() {
                <ListOrdered size={14} className="text-blue-500" /> Hoja de Ruta
              </p>
              <div className="space-y-3">
-                {load.outboundStops.map((stop, idx) => (
+                {load.outboundStops?.map((stop, idx) => (
                    <div key={stop.id} className={cn(
                      "p-5 rounded-3xl border-2 flex justify-between items-center transition-all",
                      stop.deliveredAt ? "bg-green-50 border-green-100" : "bg-white border-slate-100 shadow-sm"
@@ -555,7 +549,6 @@ export default function RouteDetailPage() {
                    </div>
                 ))}
                 
-                {/* Visualización del Punto de Retorno */}
                 {(isReturning || allOutboundDone) && (
                    <div className={cn(
                      "p-5 rounded-3xl border-2 flex justify-between items-center border-dashed transition-all",
@@ -584,7 +577,7 @@ export default function RouteDetailPage() {
            <div className="px-1 space-y-6">
              <div className="text-center space-y-2 py-4">
                 <Timer className="w-12 h-12 text-blue-600 mx-auto" />
-                <h3 className="text-xl font-black italic uppercase text-slate-900">Pausas y Descansos</h3>
+                <DialogTitle className="text-xl font-black italic uppercase text-slate-900">Pausas y Descansos</DialogTitle>
              </div>
 
              {load.status === 'on_pause' ? (
@@ -599,7 +592,7 @@ export default function RouteDetailPage() {
                 </Card>
              ) : (
                 <div className="grid grid-cols-2 gap-4">
-                   {PAUSE_TYPES.map(pause => (
+                   {PAUSE_LIST.map(pause => (
                      <button 
                         key={pause.id}
                         className="p-6 rounded-3xl border-2 bg-white border-slate-100 hover:border-blue-300 hover:bg-blue-50 transition-all active:scale-95 group shadow-sm"
@@ -619,11 +612,11 @@ export default function RouteDetailPage() {
            <div className="px-1 space-y-6">
              <div className="text-center space-y-2 py-4">
                 <ShieldAlert className="w-12 h-12 text-red-600 mx-auto animate-pulse" />
-                <h3 className="text-xl font-black italic uppercase text-slate-900">Reportar Incidencia</h3>
+                <DialogTitle className="text-xl font-black italic uppercase text-slate-900">Reportar Incidencia</DialogTitle>
              </div>
 
              <div className="grid grid-cols-2 gap-4">
-                {INCIDENT_TYPES.map(type => (
+                {INCIDENT_LIST.map(type => (
                   <button 
                     key={type.id} 
                     className={cn(
@@ -665,7 +658,7 @@ export default function RouteDetailPage() {
                <DialogContent className="max-w-[95vw] rounded-[2.5rem] p-8">
                   <DialogHeader>
                     <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Nuevo Gasto</DialogTitle>
-                    <DialogDescription className="sr-only">Registrar un nuevo gasto operativo durante el viaje.</DialogDescription>
+                    <DialogDescription>Registre los detalles del gasto operativo durante su trayecto.</DialogDescription>
                   </DialogHeader>
                   <div className="space-y-6 py-4">
                      <div className="space-y-3">
@@ -762,7 +755,7 @@ export default function RouteDetailPage() {
                <div className="space-y-3">
                   <Label className="text-[11px] font-black uppercase text-slate-500">2. Foto del Remito</Label>
                   <input type="file" ref={photoInputRef} className="hidden" accept="image/*" capture="environment" onChange={onPhotoChange} />
-                  <div className="aspect-video rounded-[2rem] border-3 border-dashed flex flex-col items-center justify-center gap-3 cursor-pointer overflow-hidden bg-slate-100" onClick={handlePhotoClick}>
+                  <div className="aspect-video rounded-[2rem] border-3 border-dashed flex flex-col items-center justify-center gap-3 cursor-pointer overflow-hidden bg-slate-100" onClick={() => photoInputRef.current?.click()}>
                     {podForm.photoUrl ? (
                       <img src={podForm.photoUrl} className="w-full h-full object-cover" alt="Remito" />
                     ) : (
