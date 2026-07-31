@@ -48,7 +48,8 @@ import {
   Ship,
   ScanBarcode,
   MoveRight,
-  Coffee
+  Coffee,
+  Home
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -255,26 +256,35 @@ export default function MonitorOperativoPage() {
     const isStarted = load.status !== 'pending' && load.status !== 'assigned';
     const isFinished = load.status === 'delivered';
     const stops = load.outboundStops || [];
-    const lastDeliveredIdx = stops.reduce((acc, s, idx) => s.deliveredAt ? idx : acc, -1);
+    const lastDeliveredIdx = stops.reduce((acc, s, idx) => (s.deliveredAt ? idx : acc), -1);
     const nextStopIdx = lastDeliveredIdx + 1;
     const isReturnPhase = isStarted && !isFinished && lastDeliveredIdx === stops.length - 1;
 
     return (
       <div className="space-y-1.5 min-w-0">
         <div className="flex items-center gap-1.5 overflow-hidden">
-          <div className={cn("w-3 h-3 rounded-full shrink-0 flex items-center justify-center", !isStarted ? "bg-red-500" : "bg-green-500")}>
+          {/* 1. ORIGEN (Verde si empezó, Rojo si no) */}
+          <div className={cn("w-2.5 h-2.5 rounded-full shrink-0 flex items-center justify-center shadow-sm", !isStarted ? "bg-red-500" : "bg-green-500")}>
             <div className="w-1 h-1 bg-white rounded-full"></div>
           </div>
           <ArrowRight size={12} className={cn("shrink-0", !isStarted ? "text-slate-200" : "text-green-500")} />
+          
+          {/* 2. TRANSICIÓN DE ENTREGAS (Verde si al menos una entrega se hizo) */}
           {stops.length > 0 && (
             <>
-              <div className={cn("w-3 h-3 rounded-full shrink-0", lastDeliveredIdx >= 0 ? "bg-green-500" : "bg-slate-200")} />
-              <ArrowRight size={12} className={cn("shrink-0", isFinished ? "text-green-500" : "text-slate-300")} />
+              <div className={cn("w-2.5 h-2.5 rounded-full shrink-0 shadow-sm", lastDeliveredIdx >= 0 ? "bg-green-500" : "bg-slate-200")} />
+              <ArrowRight size={12} className={cn("shrink-0", isFinished || isReturnPhase ? "text-orange-500" : "text-slate-200")} />
             </>
           )}
-          <div className={cn("w-3 h-3 rounded-full shrink-0", isFinished ? "bg-green-500" : "bg-slate-200")} />
+
+          {/* 3. PUNTO DE RETORNO DEFINITIVO (Naranja) */}
+          <div className={cn(
+            "w-2.5 h-2.5 rounded-full shrink-0 shadow-sm", 
+            isFinished ? "bg-green-500" : (isReturnPhase ? "bg-orange-500 animate-pulse" : "bg-slate-200")
+          )} />
+
           <span className="text-[10px] font-black text-slate-500 uppercase tracking-tighter truncate ml-1">
-            {isFinished ? `Finalizado` : !isStarted ? `Base: ${load.origin.name}` : isReturnPhase ? `Retorno` : `A: ${stops[nextStopIdx]?.name || 'Destino'}`}
+            {isFinished ? `Finalizado` : !isStarted ? `Base: ${load.origin.name}` : isReturnPhase ? `Retorno a Base` : `A: ${stops[nextStopIdx]?.name || 'Destino'}`}
           </span>
         </div>
         
@@ -359,6 +369,11 @@ export default function MonitorOperativoPage() {
                const isExpanded = expandedLoadId === load.id;
                const tracking = load.tracking;
                const totalPlannedKm = getPlannedTotalKm(load);
+               const isStarted = load.status !== 'pending' && load.status !== 'assigned';
+               const isFinished = load.status === 'delivered';
+               const stops = load.outboundStops || [];
+               const lastDeliveredIdx = stops.reduce((acc, s, idx) => (s.deliveredAt ? idx : acc), -1);
+               const isReturnPhase = isStarted && !isFinished && lastDeliveredIdx === stops.length - 1;
 
                return (
                  <Collapsible key={load.id} open={isExpanded} onOpenChange={() => setExpandedLoadId(isExpanded ? null : load.id)} className="group transition-all">
@@ -367,6 +382,7 @@ export default function MonitorOperativoPage() {
                          <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border shadow-sm", 
                            load.status === 'on_route' ? "bg-blue-600 text-white border-blue-400" : 
                            load.status === 'on_pause' ? "bg-amber-500 text-white border-amber-400" :
+                           load.status === 'delivered' ? "bg-green-600 text-white border-green-400" :
                            "bg-white text-slate-400 border-slate-200")}>
                            {load.serviceType === 'customs' ? <Ship size={24}/> : (load.status === 'on_route' ? <Navigation size={24} className="animate-pulse" /> : load.status === 'on_pause' ? <Coffee size={24} /> : <Clock size={24} />)}
                          </div>
@@ -392,8 +408,67 @@ export default function MonitorOperativoPage() {
                             <div className="pt-4"><Card className="bg-white shadow-none border-slate-200"><CardContent className="p-3 flex justify-between items-center"><div><p className="text-[8px] font-black text-slate-400 uppercase">Recorrido Total Previsto</p><p className="text-xl font-black text-slate-900 italic">{totalPlannedKm} <span className="text-[10px] font-normal opacity-50 uppercase">km</span></p></div><div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600"><RouteIcon size={20} /></div></CardContent></Card></div>
                          </div>
                          <div className="lg:col-span-2 space-y-8">
-                            <div className="space-y-4"><h4 className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-2 tracking-widest"><Navigation size={14} /> Tramo 1: Hoja de Ruta (Ida)</h4><div className="space-y-3 relative pl-4 border-l-2 border-dashed border-blue-200">{load.outboundStops?.map((stop, idx) => (<div key={stop.id} className="relative pt-2"><div className={cn("absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm", stop.deliveredAt ? "bg-green-600" : "bg-white border-blue-400")}></div><div className={cn("p-4 rounded-xl border shadow-sm space-y-3 transition-all", stop.deliveredAt ? "bg-green-50 border-green-200" : "bg-white border-slate-200")}><div className="flex justify-between items-start"><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="text-[9px] font-black text-blue-600 uppercase tracking-tighter">Parada {idx + 1}</p>{stop.deliveredAt && <Badge className="bg-green-600 text-white text-[7px] h-3 border-none px-1 uppercase font-black">Confirmada</Badge>}</div><p className="text-xs font-black text-slate-800 truncate uppercase mt-0.5">{stop.name}</p></div><div className="text-right shrink-0"><Badge className="bg-slate-100 text-slate-600 text-[8px] border-none font-black">{stop.weightKg} KG</Badge></div></div></div></div>))}</div></div>
-                            <div className="space-y-4"><h4 className="text-[10px] font-black uppercase text-orange-600 flex items-center gap-2 tracking-widest"><Repeat size={14} /> Tramo 2: Logística de Retorno</h4>{(load.isRoundTrip || (load.returnStops?.length || 0) > 0) ? <div className="space-y-3 relative pl-4 border-l-2 border-dashed border-orange-200">{load.returnStops?.map((stop) => (<div key={stop.id} className="relative pt-2"><div className="absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm bg-orange-500"></div><div className="bg-orange-50/50 p-4 rounded-xl border border-orange-100 shadow-sm space-y-2"><div className="flex justify-between items-start"><div><p className="text-[9px] font-black text-orange-600 uppercase">Recolección Retorno</p><p className="text-xs font-bold text-orange-700 uppercase">{stop.name}</p></div><Badge className="bg-orange-100 text-orange-700 text-[8px] border-none font-black">{stop.weightKg} KG</Badge></div></div></div>))}<div className="relative pt-2"><div className="absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm bg-slate-900"></div><div className="bg-slate-900 text-white p-4 rounded-xl space-y-2 shadow-xl"><div className="flex justify-between items-center"><p className="text-[8px] font-black text-white/50 uppercase tracking-widest">Fin de Jornada</p></div><div className="flex items-center gap-2"><p className="text-xs font-bold uppercase">{load.returnDestination?.name || load.origin.name}</p></div></div></div></div> : <div className="h-20 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-2xl text-slate-300"><Repeat size={16} className="opacity-20 mb-1" /><p className="text-[9px] font-black uppercase italic tracking-widest">Flete Directo (Solo Ida)</p></div>}</div>
+                            <div className="space-y-4">
+                               <h4 className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-2 tracking-widest"><Navigation size={14} /> Tramo 1: Hoja de Ruta (Ida)</h4>
+                               <div className="space-y-3 relative pl-4 border-l-2 border-dashed border-blue-200">
+                                  {load.outboundStops?.map((stop, idx) => (
+                                     <div key={stop.id} className="relative pt-2">
+                                        <div className={cn("absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm", stop.deliveredAt ? "bg-green-600" : "bg-white border-blue-400")}></div>
+                                        <div className={cn("p-4 rounded-xl border shadow-sm space-y-3 transition-all", stop.deliveredAt ? "bg-green-50 border-green-200" : "bg-white border-slate-200")}>
+                                           <div className="flex justify-between items-start">
+                                              <div className="min-w-0 flex-1">
+                                                 <div className="flex items-center gap-2"><p className="text-[9px] font-black text-blue-600 uppercase tracking-tighter">Parada {idx + 1}</p>{stop.deliveredAt && <Badge className="bg-green-600 text-white text-[7px] h-3 border-none px-1 uppercase font-black">Confirmada</Badge>}</div>
+                                                 <p className="text-xs font-black text-slate-800 truncate uppercase mt-0.5">{stop.name}</p>
+                                              </div>
+                                              <div className="text-right shrink-0"><Badge className="bg-slate-100 text-slate-600 text-[8px] border-none font-black">{stop.weightKg} KG</Badge></div>
+                                           </div>
+                                        </div>
+                                     </div>
+                                  ))}
+                               </div>
+                            </div>
+                            
+                            <div className="space-y-4">
+                               <h4 className="text-[10px] font-black uppercase text-orange-600 flex items-center gap-2 tracking-widest"><Repeat size={14} /> Tramo 2: Logística de Retorno</h4>
+                               {(load.isRoundTrip || (load.returnStops?.length || 0) > 0) ? (
+                                  <div className="space-y-3 relative pl-4 border-l-2 border-dashed border-orange-200">
+                                     {load.returnStops?.map((stop) => (
+                                        <div key={stop.id} className="relative pt-2">
+                                           <div className="absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm bg-orange-500"></div>
+                                           <div className="bg-orange-50/50 p-4 rounded-xl border border-orange-100 shadow-sm space-y-2">
+                                              <div className="flex justify-between items-start">
+                                                 <div><p className="text-[9px] font-black text-orange-600 uppercase">Recolección Retorno</p><p className="text-xs font-bold text-orange-700 uppercase">{stop.name}</p></div>
+                                                 <Badge className="bg-orange-100 text-orange-700 text-[8px] border-none font-black">{stop.weightKg} KG</Badge>
+                                              </div>
+                                           </div>
+                                        </div>
+                                     ))}
+                                     <div className="relative pt-2">
+                                        <div className={cn(
+                                          "absolute -left-[21px] top-3 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm",
+                                          isFinished ? "bg-green-600" : (isReturnPhase ? "bg-orange-500 animate-pulse" : "bg-slate-300")
+                                        )}></div>
+                                        <div className={cn(
+                                          "p-4 rounded-xl space-y-2 shadow-xl transition-all border-2",
+                                          isFinished ? "bg-green-600 border-green-500 text-white" : "bg-slate-900 border-slate-800 text-white"
+                                        )}>
+                                           <div className="flex justify-between items-center">
+                                              <p className={cn("text-[8px] font-black uppercase tracking-widest", isFinished ? "text-white/70" : "text-blue-400")}>Fin de Jornada / Retorno Definitivo</p>
+                                              {isFinished && <CheckCircle2 size={14} className="text-white/50" />}
+                                           </div>
+                                           <div className="flex items-center gap-2">
+                                              <Home size={14} className={isFinished ? "text-white/50" : "text-slate-400"} />
+                                              <p className="text-xs font-bold uppercase">{load.returnDestination?.name || load.origin.name}</p>
+                                           </div>
+                                        </div>
+                                     </div>
+                                  </div>
+                               ) : (
+                                  <div className="h-20 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-2xl text-slate-300">
+                                     <Repeat size={16} className="opacity-20 mb-1" /><p className="text-[9px] font-black uppercase italic tracking-widest">Flete Directo (Solo Ida)</p>
+                                  </div>
+                               )}
+                            </div>
                          </div>
                       </div>
                    </CollapsibleContent>
