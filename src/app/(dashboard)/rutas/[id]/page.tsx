@@ -167,8 +167,8 @@ export default function RouteDetailPage() {
             updatedAt: serverTimestamp()
           });
         },
-        (error) => {
-          // GPS silent error to avoid blocking the UI with console noise
+        () => {
+          // Silently handle GPS errors to avoid blocking the UI
         },
         { enableHighAccuracy: true, timeout: 15000 }
       );
@@ -745,7 +745,7 @@ export default function RouteDetailPage() {
                </DialogHeader>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-slate-50">
+            <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-slate-50 pb-10">
                <div className="space-y-3">
                   <Label className="text-[11px] font-black uppercase text-slate-500">1. Nombre del Receptor</Label>
                   <Input 
@@ -763,7 +763,7 @@ export default function RouteDetailPage() {
                <div className="space-y-3">
                   <Label className="text-[11px] font-black uppercase text-slate-500">2. Foto del Remito</Label>
                   <input type="file" ref={photoInputRef} className="hidden" accept="image/*" capture="environment" onChange={onPhotoChange} />
-                  <div className="aspect-video rounded-[2rem] border-3 border-dashed flex flex-col items-center justify-center gap-3 cursor-pointer overflow-hidden bg-slate-100" onClick={() => photoInputRef.current?.click()}>
+                  <div className="aspect-video rounded-[2rem] border-2 border-dashed flex flex-col items-center justify-center gap-3 cursor-pointer overflow-hidden bg-slate-100" onClick={() => photoInputRef.current?.click()}>
                     {podForm.photoUrl ? (
                       <img src={podForm.photoUrl} className="w-full h-full object-cover" alt="Remito" />
                     ) : (
