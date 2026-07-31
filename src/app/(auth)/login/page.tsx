@@ -43,10 +43,10 @@ export default function LoginPage() {
       console.error("Login Error:", error);
       let message = "Verifique sus credenciales e intente nuevamente.";
       
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        message = "Email o contraseña incorrectos. Si es su primer ingreso, asegúrese de haber creado el usuario en la Consola de Firebase.";
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential' || error.code === 'auth/invalid-email') {
+        message = "Email o contraseña incorrectos. Por favor, asegúrese de que el usuario haya sido creado en la Consola de Firebase (Authentication).";
       } else if (error.code === 'auth/too-many-requests') {
-        message = "Demasiados intentos fallidos. Intente más tarde.";
+        message = "Demasiados intentos fallidos. Su cuenta ha sido bloqueada temporalmente. Intente más tarde.";
       } else if (error.code === 'auth/network-request-failed') {
         message = "Error de red. Verifique su conexión a internet.";
       }
