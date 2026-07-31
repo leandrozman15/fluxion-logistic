@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, serverTimestamp, doc, setDoc, query, orderBy, updateDoc, limit, getDocs } from "firebase/firestore";
+import { collection, serverTimestamp, doc, setDoc, query, orderBy, updateDoc, limit, getDocs, where, writeBatch } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,12 +15,13 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Package, ArrowLeft, ArrowRight, Save, Loader2, 
   MapPin, Calendar, Clock, DollarSign, Truck, 
-  Info, AlertTriangle, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, LayoutGrid, UserCheck, Edit, TrendingUp, CreditCard, Anchor, Scale, ListOrdered, ShieldCheck, Ship, ScanBarcode, X
+  Info, AlertTriangle, FileText, Zap, Plus, Trash2, Repeat, MoveRight, CheckCircle2, ChevronRight, ChevronLeft, LayoutGrid, UserCheck, Edit, TrendingUp, CreditCard, Anchor, Scale, ListOrdered, ShieldCheck, Ship, ScanBarcode, X, Receipt, Files
 } from "lucide-react";
-import { Load, Client, Hub, LoadLegStop, LoadDocument, LoadDocType, Truck as TruckType, Driver, Tenant } from "@/app/lib/types";
+import { Load, Client, Hub, LoadLegStop, LoadDocument, LoadDocType, Truck as TruckType, Driver, Tenant, PendingRemito } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -44,6 +45,9 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Remito selection state
+  const [selectedRemitoIds, setSelectedRemitoIds] = useState<string[]>([]);
 
   // Stop Modal State
   const [isStopModalOpen, setIsStopModalOpen] = useState(false);
@@ -90,11 +94,13 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
   const driversQuery = useMemo(() => db ? query(collection(db, "drivers"), orderBy("lastName")) : null, [db]);
   const clientsQuery = useMemo(() => db ? query(collection(db, "clients"), orderBy("name")) : null, [db]);
   const hubsQuery = useMemo(() => db ? query(collection(db, "hubs"), orderBy("name")) : null, [db]);
+  const remitosQuery = useMemo(() => db ? query(collection(db, "pending_remitos"), where("status", "==", "pending")) : null, [db]);
 
   const { data: trucks } = useCollection<TruckType>(trucksQuery);
   const { data: drivers } = useCollection<Driver>(driversQuery);
   const { data: clients } = useCollection<Client>(clientsQuery);
   const { data: hubs } = useCollection<Hub>(hubsQuery);
+  const { data: remitos } = useCollection<PendingRemito>(remitosQuery);
 
   const driversOnly = useMemo(() => drivers?.filter(d => d.role === 'driver' || !d.role) || [], [drivers]);
   const companionsOnly = useMemo(() => drivers?.filter(d => d.role === 'companion') || [], [drivers]);
@@ -168,6 +174,59 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     }));
   };
 
+  // AUTOMATION: Map Remito to Stop
+  const handleToggleRemito = (remitoId: string) => {
+    const isSelected = selectedRemitoIds.includes(remitoId);
+    const remito = remitos?.find(r => r.id === remitoId);
+    
+    if (!remito) return;
+
+    if (isSelected) {
+      // Remove stop associated with this remito
+      setSelectedRemitoIds(prev => prev.filter(id => id !== remitoId));
+      setFormData(prev => ({
+        ...prev,
+        outboundStops: prev.outboundStops?.filter(s => !s.documents.some(d => d.pendingRemitoId === remitoId))
+      }));
+    } else {
+      // Add stop associated with this remito
+      setSelectedRemitoIds(prev => [...prev, remitoId]);
+      
+      const newStop: LoadLegStop = {
+        id: Math.random().toString(36).substring(7),
+        name: remito.clientName,
+        address: remito.address,
+        province: remito.province || "",
+        city: remito.city || "",
+        country: "Argentina",
+        contact: "",
+        phone: "",
+        lat: remito.lat,
+        lng: remito.lng,
+        description: `Entrega Remito #${remito.number}`,
+        weightKg: remito.weightKg,
+        volumeM3: remito.volumeM3 || 0,
+        units: remito.items?.reduce((acc, i) => acc + i.quantity, 0) || 1,
+        unitType: "Bultos",
+        documents: [{
+          id: Math.random().toString(36).substring(7),
+          type: 'remito',
+          number: remito.number,
+          pendingRemitoId: remito.id,
+          cotNumber: remito.cotNumber,
+          fileUrl: remito.fileUrl,
+          uploadedAt: new Date().toISOString(),
+          leg: 'outbound'
+        }]
+      };
+
+      setFormData(prev => ({
+        ...prev,
+        outboundStops: [...(prev.outboundStops || []), newStop]
+      }));
+    }
+  };
+
   const saveStop = () => {
     if (!editingStop.name || !editingStop.address) {
       toast({ variant: "destructive", title: "Faltan datos" });
@@ -184,12 +243,28 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     if (!db) return;
     setIsSubmitting(true);
     try {
-      if (loadId) {
-        await updateDoc(doc(db, "loads", loadId), { ...formData, updatedAt: serverTimestamp() });
-      } else {
+      const batch = writeBatch(db);
+      
+      let finalLoadId = loadId;
+      if (!loadId) {
         const newRef = doc(collection(db, "loads"));
-        await setDoc(newRef, { ...formData, id: newRef.id, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+        finalLoadId = newRef.id;
+        batch.set(newRef, { ...formData, id: finalLoadId, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      } else {
+        batch.update(doc(db, "loads", loadId), { ...formData, updatedAt: serverTimestamp() });
       }
+
+      // Mark remitos as dispatched
+      for (const rid of selectedRemitoIds) {
+        batch.update(doc(db, "pending_remitos", rid), {
+          status: 'dispatched',
+          loadId: finalLoadId,
+          dispatchedDate: formData.pickupDate,
+          updatedAt: serverTimestamp()
+        });
+      }
+
+      await batch.commit();
       toast({ title: "Operación Guardada" });
       router.push('/cargas');
     } catch (e) {
@@ -298,26 +373,112 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
         )}
 
         {step === 2 && (
-          <Card className="border-none shadow-sm">
-            <CardHeader><CardTitle>Hoja de Ruta (Ida)</CardTitle></CardHeader>
-            <CardContent className="space-y-6">
-              <div className="p-4 bg-slate-50 rounded-2xl border border-dashed space-y-4">
-                <Label className="text-xs font-black uppercase text-blue-600">Origen / Despacho</Label>
-                <Select onValueChange={handleOriginSelect} value={formData.origin?.id ?? ''}>
-                  <SelectTrigger className="bg-white"><SelectValue placeholder="Sede o Planta de Carga" /></SelectTrigger>
-                  <SelectContent>{locationsList.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent>
-                </Select>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="lg:col-span-8 space-y-6">
+              <Card className="border-none shadow-sm">
+                <CardHeader className="bg-slate-900 text-white py-4"><CardTitle className="text-sm flex items-center gap-2"><MapPin size={16} className="text-blue-400" /> 1. Origen / Despacho</CardTitle></CardHeader>
+                <CardContent className="pt-6 space-y-6">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-black uppercase text-blue-600">Punto de Presentación</Label>
+                    <Select onValueChange={handleOriginSelect} value={formData.origin?.id ?? ''}>
+                      <SelectTrigger className="bg-slate-50 h-12 rounded-xl"><SelectValue placeholder="Elegir Sede o Planta de Carga" /></SelectTrigger>
+                      <SelectContent>{locationsList.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-slate-400">Fecha Carga</Label><Input type="date" value={formData.pickupDate} onChange={e => setFormData({...formData, pickupDate: e.target.value})} /></div>
+                    <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-slate-400">Hora</Label><Input type="time" value={formData.pickupTime} onChange={e => setFormData({...formData, pickupTime: e.target.value})} /></div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-none shadow-sm">
+                <CardHeader className="flex flex-row items-center justify-between py-4 border-b">
+                  <CardTitle className="text-sm flex items-center gap-2"><ListOrdered size={16} className="text-blue-600" /> 2. Secuencia de Entregas</CardTitle>
+                  <Button size="sm" className="bg-blue-600 rounded-full h-8" onClick={() => { setActiveLeg('outbound'); setIsStopModalOpen(true); }}><Plus size={14} className="mr-1" /> PARADA MANUAL</Button>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="divide-y divide-slate-100">
+                    {formData.outboundStops?.length === 0 ? (
+                      <div className="p-20 text-center text-slate-300 italic text-xs font-bold uppercase tracking-widest">No hay destinos asignados. Seleccione remitos o cargue una parada manual.</div>
+                    ) : (
+                      formData.outboundStops?.map((stop, idx) => (
+                        <div key={stop.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-xs border shadow-inner">{idx + 1}</div>
+                            <div>
+                               <p className="font-black text-sm text-slate-800 uppercase leading-none">{stop.name}</p>
+                               <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 flex items-center gap-1"><MapPin size={10}/> {stop.address}</p>
+                               <div className="flex gap-1.5 mt-1">
+                                  {stop.documents.map(doc => (
+                                    <Badge key={doc.id} variant="outline" className="bg-blue-50 text-blue-700 text-[7px] h-3 px-1 border-blue-200">REM {doc.number}</Badge>
+                                  ))}
+                               </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                             <div className="text-right"><p className="text-xs font-black text-slate-900">{stop.weightKg.toLocaleString()} KG</p><p className="text-[8px] text-slate-400 uppercase font-black">Carga Declarada</p></div>
+                             <Button variant="ghost" size="icon" className="text-red-400 hover:text-red-600" onClick={() => {
+                               const rid = stop.documents[0]?.pendingRemitoId;
+                               if (rid) setSelectedRemitoIds(prev => prev.filter(id => id !== rid));
+                               setFormData(prev => ({ ...prev, outboundStops: (prev.outboundStops || []).filter(s => s.id !== stop.id) }));
+                             }}><Trash2 size={16} /></Button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="lg:col-span-4 space-y-6">
+              <Card className="border-none shadow-sm overflow-hidden h-fit">
+                <CardHeader className="bg-indigo-600 text-white py-4">
+                  <CardTitle className="text-xs uppercase font-black tracking-widest flex items-center gap-2"><Receipt size={16} /> Remitos Disponibles</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0 max-h-[500px] overflow-y-auto">
+                  <div className="divide-y divide-slate-100">
+                    {remitos?.length === 0 ? (
+                      <div className="p-10 text-center space-y-2">
+                        <Files size={32} className="mx-auto text-slate-200" />
+                        <p className="text-[10px] font-black text-slate-300 uppercase italic">Buzón de remitos vacío</p>
+                      </div>
+                    ) : (
+                      remitos?.map(remito => (
+                        <div 
+                          key={remito.id} 
+                          className={cn("p-4 flex items-start gap-3 cursor-pointer hover:bg-indigo-50/50 transition-colors", selectedRemitoIds.includes(remito.id) && "bg-indigo-50")}
+                          onClick={() => handleToggleRemito(remito.id)}
+                        >
+                          <Checkbox checked={selectedRemitoIds.includes(remito.id)} className="mt-1" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-black text-slate-900 uppercase leading-none">REM {remito.number}</p>
+                            <p className="text-[10px] font-black text-indigo-700 truncate mt-1 uppercase">{remito.clientName}</p>
+                            <div className="flex items-center justify-between mt-2">
+                               <p className="text-[8px] font-bold text-slate-400 uppercase truncate max-w-[100px] flex items-center gap-1"><MapPin size={8}/> {remito.city}</p>
+                               <Badge className="bg-slate-900 text-white border-none text-[8px] h-3 px-1">{remito.weightKg} KG</Badge>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </CardContent>
+                <CardFooter className="bg-slate-50 border-t py-3 flex justify-between">
+                   <p className="text-[9px] font-black uppercase text-slate-400 italic">Vincular remitos para automatizar destinos</p>
+                </CardFooter>
+              </Card>
+
+              <div className="p-5 bg-blue-50 border-2 border-blue-100 rounded-3xl flex items-start gap-4">
+                 <Zap size={24} className="text-blue-600 shrink-0 mt-1" />
+                 <div className="space-y-1">
+                    <p className="text-xs font-black text-blue-800 uppercase italic">Planificación Inteligente</p>
+                    <p className="text-[10px] text-blue-600 leading-relaxed font-medium">Al seleccionar remitos del buzón, el sistema calcula automáticamente el peso bruto y vincula la documentación para el chofer.</p>
+                 </div>
               </div>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center"><Label className="text-xs font-black uppercase text-slate-400">Puntos de Entrega</Label><Button size="sm" className="bg-blue-600 rounded-full" onClick={() => { setActiveLeg('outbound'); setIsStopModalOpen(true); }}><Plus size={14} className="mr-1" /> AGREGAR PARADA</Button></div>
-                <div className="space-y-3">
-                  {formData.outboundStops?.map((stop, idx) => (
-                    <div key={stop.id} className="p-4 bg-white border rounded-2xl shadow-sm flex items-center justify-between"><div className="flex items-center gap-4"><div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs">{idx + 1}</div><div><p className="font-bold text-sm">{stop.name}</p><p className="text-[10px] text-slate-400">{stop.weightKg} KG • {stop.address}</p></div></div><Button variant="ghost" size="icon" className="text-red-500" onClick={() => setFormData(prev => ({ ...prev, outboundStops: (prev.outboundStops || []).filter(s => s.id !== stop.id) }))}><Trash2 size={16} /></Button></div>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
 
         {step === 3 && (
@@ -352,7 +513,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
 
       <Dialog open={isStopModalOpen} onOpenChange={setIsStopModalOpen}>
         <DialogContent className="max-w-2xl rounded-3xl">
-          <DialogHeader><DialogTitle>Nueva Parada</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Nueva Parada Manual</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4"><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>Ubicación</Label><Select onValueChange={v => { const sel = locationsList.find(l => l.id === v); if (sel) setEditingStop({...editingStop, name: sel.data.name, address: sel.data.address?.street ? `${sel.data.address.street} ${sel.data.address.number}, ${sel.data.address.city}` : sel.data.address, lat: sel.data.address?.lat || sel.data.lat, lng: sel.data.address?.lng || sel.data.lng }); }}><SelectTrigger><SelectValue placeholder="Destino" /></SelectTrigger><SelectContent>{locationsList.map(loc => <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>Peso Carga (KG)</Label><Input type="number" value={editingStop.weightKg} onChange={e => setEditingStop({...editingStop, weightKg: parseFloat(e.target.value) || 0})} /></div></div><div className="space-y-2"><Label>Dirección Final</Label><Input value={editingStop.address} onChange={e => setEditingStop({...editingStop, address: e.target.value})} /></div></div>
           <DialogFooter><Button onClick={saveStop} className="bg-blue-600 w-full rounded-xl">ASIGNAR A RUTA</Button></DialogFooter>
         </DialogContent>
