@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from "react";
 import { useFirestore, useCollection, useUser } from "@/firebase";
-import { collection, query, orderBy, addDoc, serverTimestamp, doc, setDoc, deleteDoc } from "firebase/firestore";
+import { collection, query, orderBy, doc, setDoc, deleteDoc, serverTimestamp, getDocs } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -12,12 +12,33 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { ShieldCheck, Plus, Building2, Loader2, Trash2, Globe, Lock, ExternalLink, Save } from "lucide-react";
+import { ShieldCheck, Plus, Building2, Loader2, Trash2, Globe, Lock, Save, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tenant } from "@/app/lib/types";
 import { cn } from "@/lib/utils";
 
 const SUPER_ADMIN_EMAIL = "leozman15@gmail.com";
+
+/**
+ * Componente auxiliar para contar usuarios de un tenant específico.
+ */
+function TenantUserCount({ tenantId }: { tenantId: string }) {
+  const db = useFirestore();
+  const usersQuery = useMemo(() => {
+    if (!db || !tenantId) return null;
+    return collection(db, "tenants", tenantId, "users");
+  }, [db, tenantId]);
+
+  const { data: users, loading } = useCollection(usersQuery);
+
+  if (loading) return <Loader2 className="animate-spin w-3 h-3 text-slate-300" />;
+  
+  return (
+    <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded-md">
+      {users?.length || 0}
+    </Badge>
+  );
+}
 
 export default function SuperAdminTenantsPage() {
   const db = useFirestore();
@@ -159,18 +180,19 @@ export default function SuperAdminTenantsPage() {
           <Table>
             <TableHeader className="bg-slate-50/30">
               <TableRow>
-                <TableHead className="px-8 text-[10px] font-black uppercase">Organización</TableHead>
-                <TableHead className="text-[10px] font-black uppercase">ID Instancia</TableHead>
-                <TableHead className="text-[10px] font-black uppercase">Plan</TableHead>
-                <TableHead className="text-[10px] font-black uppercase text-center">Alta</TableHead>
-                <TableHead className="text-right pr-8 text-[10px] font-black uppercase">Control</TableHead>
+                <TableHead className="px-8 text-[10px] font-black uppercase tracking-widest">Organización</TableHead>
+                <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Usuarios</TableHead>
+                <TableHead className="text-[10px] font-black uppercase tracking-widest">ID Instancia</TableHead>
+                <TableHead className="text-[10px] font-black uppercase tracking-widest">Plan</TableHead>
+                <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Alta</TableHead>
+                <TableHead className="text-right pr-8 text-[10px] font-black uppercase tracking-widest">Control</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-20"><Loader2 className="animate-spin mx-auto text-blue-600" /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center py-20"><Loader2 className="animate-spin mx-auto text-blue-600" /></TableCell></TableRow>
               ) : tenants?.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-20 text-slate-400 italic">No hay organizaciones registradas.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center py-20 text-slate-400 italic">No hay organizaciones registradas.</TableCell></TableRow>
               ) : (
                 tenants?.map((tenant) => (
                   <TableRow key={tenant.id} className="hover:bg-slate-50/50 transition-all">
@@ -181,6 +203,9 @@ export default function SuperAdminTenantsPage() {
                         </div>
                         <div className="font-black text-slate-900 uppercase italic tracking-tight">{tenant.name}</div>
                       </div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <TenantUserCount tenantId={tenant.id} />
                     </TableCell>
                     <TableCell className="font-mono text-[10px] text-slate-400">{tenant.id}</TableCell>
                     <TableCell>
