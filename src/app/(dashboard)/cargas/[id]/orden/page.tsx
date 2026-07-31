@@ -7,24 +7,20 @@ import { doc, getDoc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
-  Printer, ArrowLeft, Loader2, Navigation, ClipboardCheck, ShieldCheck, Anchor, Download, Truck, User, MapPin, Scale, Info, CheckCircle2
+  Printer, ArrowLeft, Loader2, Navigation, ClipboardCheck, ShieldCheck, Anchor, Download, Truck, User, MapPin, Scale, Info, CheckCircle2, Receipt, MapPinned
 } from "lucide-react";
 import { Load, Driver, Truck as TruckType, Tenant } from "@/app/lib/types";
 import { QRCodeSVG } from "qrcode.react";
 import { format } from "date-fns";
-import html2canvas from "html2canvas";
-import { jsPDF } from "jspdf";
 
 export default function LoadOrderDocumentPage() {
   const { id } = useParams();
   const router = useRouter();
   const db = useFirestore();
-  const reportRef = useRef<HTMLDivElement>(null);
   
   const [driver, setDriver] = useState<Driver | null>(null);
   const [truck, setTruck] = useState<TruckType | null>(null);
   const [loadingExtras, setLoadingExtras] = useState(true);
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const loadRef = useMemo(() => {
     if (!db || !id) return null;
@@ -61,27 +57,8 @@ export default function LoadOrderDocumentPage() {
     if (load) fetchExtras();
   }, [db, load]);
 
-  const downloadPdf = async () => {
-    if (!reportRef.current) return;
-    setIsGeneratingPdf(true);
-    try {
-      const canvas = await html2canvas(reportRef.current, { 
-        scale: 2, 
-        logging: false,
-        useCORS: true,
-        backgroundColor: "#ffffff"
-      });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Hoja_Ruta_${load?.orderNumber || 'Flete'}.pdf`);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsGeneratingPdf(false);
-    }
+  const handlePrint = () => {
+    window.print();
   };
 
   if (loadLoading || loadingExtras) return <div className="h-screen flex items-center justify-center gap-2 text-slate-500 font-bold animate-pulse"><Loader2 className="animate-spin" /> GENERANDO DOCUMENTACIÓN OFICIAL...</div>;
@@ -99,208 +76,265 @@ export default function LoadOrderDocumentPage() {
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex justify-between items-center px-4 print:hidden">
           <Button variant="ghost" onClick={() => router.back()} className="text-slate-600 bg-white shadow-sm border rounded-xl"><ArrowLeft className="mr-2 h-4 w-4" /> Volver</Button>
-          <Button onClick={downloadPdf} disabled={isGeneratingPdf} className="bg-blue-700 hover:bg-blue-800 rounded-xl font-bold shadow-xl">
-            {isGeneratingPdf ? <Loader2 className="animate-spin mr-2" /> : <Download className="mr-2 h-4 w-4" />} Descargar Hoja de Ruta
+          <Button onClick={handlePrint} className="bg-slate-900 hover:bg-black rounded-xl font-bold shadow-xl px-8 h-12 text-white">
+            <Printer className="mr-2 h-5 w-5" /> GENERAR PDF NATIVO
           </Button>
         </div>
 
         {/* DOCUMENTO ESTILO FORMULARIO NATIVO (ALTA DENSIDAD) */}
-        <div className="bg-white shadow-2xl p-10 print:p-8 print:shadow-none min-h-[297mm] flex flex-col font-sans text-black border-[6px] border-double border-black" ref={reportRef}>
+        <div className="bg-white shadow-2xl p-10 print:p-0 print:shadow-none min-h-[297mm] flex flex-col font-sans text-black border-[6px] border-double border-black print:border-none" id="order-sheet">
           
-          {/* CABECERA INSTITUCIONAL */}
-          <div className="flex justify-between items-start border-b-4 border-black pb-6 mb-6">
-            <div className="flex items-center gap-4">
-               {tenant?.settings?.logoUrl && (
-                 <img src={tenant.settings.logoUrl} className="h-14 w-auto object-contain" alt="Logo" />
-               )}
-               <div>
-                 <h1 className="text-3xl font-black uppercase italic tracking-tighter leading-none text-blue-800">{orgName}</h1>
-                 <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 mt-1">Gestión de Cargas Nacionales e Internacionales</p>
-                 <div className="pt-2 text-[8px] font-bold space-y-0">
-                    <p>CUIT: {tenant?.settings?.cuit || '30-XXXXXXXX-X'}</p>
-                    <p>DOMICILIO: Sede Central Operativa - República Argentina</p>
-                 </div>
-               </div>
-            </div>
-            <div className="text-right border-l-2 border-black pl-6">
-              <div className="bg-black text-white px-5 py-1.5 mb-2">
-                 <h2 className="text-base font-black uppercase tracking-widest italic text-center">Hoja de Ruta / OT</h2>
+          <div className="print:p-8 flex flex-col h-full print:border-[6px] print:border-double print:border-black">
+            {/* CABECERA INSTITUCIONAL */}
+            <div className="flex justify-between items-start border-b-4 border-black pb-6 mb-6">
+              <div className="flex items-center gap-4">
+                {tenant?.settings?.logoUrl && (
+                  <img src={tenant.settings.logoUrl} className="h-16 w-auto object-contain" alt="Logo" />
+                )}
+                <div>
+                  <h1 className="text-3xl font-black uppercase italic tracking-tighter leading-none text-blue-800">{orgName}</h1>
+                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 mt-1">Gestión de Cargas Nacionales e Internacionales</p>
+                  <div className="pt-2 text-[8px] font-bold space-y-0 text-slate-400">
+                      <p>CUIT: {tenant?.settings?.cuit || '30-XXXXXXXX-X'}</p>
+                      <p>DOMICILIO: Sede Central Operativa - República Argentina</p>
+                  </div>
+                </div>
               </div>
-              <p className="text-3xl font-mono font-black tracking-tighter leading-none">{load.orderNumber}</p>
-              <p className="text-[8px] font-black uppercase mt-1">EMISIÓN: {format(new Date(), "dd/MM/yyyy HH:mm")}</p>
+              <div className="text-right border-l-2 border-black pl-6">
+                <div className="bg-black text-white px-5 py-1.5 mb-2">
+                  <h2 className="text-base font-black uppercase tracking-widest italic text-center">Hoja de Ruta / OT</h2>
+                </div>
+                <p className="text-3xl font-mono font-black tracking-tighter leading-none">{load.orderNumber}</p>
+                <p className="text-[8px] font-black uppercase mt-1">EMISIÓN: {format(new Date(), "dd/MM/yyyy HH:mm")}</p>
+              </div>
             </div>
-          </div>
 
-          {/* GRID DE DATOS MAESTROS */}
-          <div className="grid grid-cols-12 gap-0 border-2 border-black">
-             {/* SECCIÓN CLIENTE */}
-             <div className="col-span-7 p-4 border-r-2 border-b-2 border-black bg-slate-50/50 space-y-3">
-                <h3 className="text-[9px] font-black uppercase flex items-center gap-2 border-b border-black/20 pb-1 text-blue-800"><ClipboardCheck size={12}/> 1. DATOS DEL CLIENTE / OPERACIÓN</h3>
-                <div className="grid grid-cols-2 gap-4">
-                   <div className="space-y-0.5">
-                      <p className="text-[8px] font-bold text-slate-500 uppercase">Razón Social:</p>
-                      <p className="text-xs font-black uppercase truncate">{load.clientName}</p>
-                   </div>
-                   <div className="space-y-0.5">
-                      <p className="text-[8px] font-bold text-slate-500 uppercase">Tipo de Servicio:</p>
-                      <Badge variant="outline" className="text-[8px] h-4 font-black uppercase border-black">{load.serviceType}</Badge>
-                   </div>
-                </div>
-                <div className="space-y-0.5">
-                   <p className="text-[8px] font-bold text-slate-500 uppercase">Modalidad:</p>
-                   <p className="text-[10px] font-black uppercase italic">{load.isRoundTrip ? 'IDA Y VUELTA (CON RETORNO)' : 'FLETE DIRECTO (SOLO IDA)'}</p>
-                </div>
-             </div>
+            {/* GRID DE DATOS MAESTROS */}
+            <div className="grid grid-cols-12 gap-0 border-2 border-black">
+              {/* SECCIÓN CLIENTE */}
+              <div className="col-span-7 p-4 border-r-2 border-b-2 border-black bg-slate-50/50 space-y-3">
+                  <h3 className="text-[9px] font-black uppercase flex items-center gap-2 border-b border-black/20 pb-1 text-blue-800"><ClipboardCheck size={12}/> 1. DATOS DEL CLIENTE / OPERACIÓN</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-0.5">
+                        <p className="text-[8px] font-bold text-slate-500 uppercase">Razón Social:</p>
+                        <p className="text-xs font-black uppercase truncate">{load.clientName}</p>
+                    </div>
+                    <div className="space-y-0.5">
+                        <p className="text-[8px] font-bold text-slate-500 uppercase">Tipo de Servicio:</p>
+                        <Badge variant="outline" className="text-[8px] h-4 font-black uppercase border-black">{load.serviceType}</Badge>
+                    </div>
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-[8px] font-bold text-slate-500 uppercase">Modalidad:</p>
+                    <p className="text-[10px] font-black uppercase italic">{load.isRoundTrip ? 'IDA Y VUELTA (CON RETORNO)' : 'FLETE DIRECTO (SOLO IDA)'}</p>
+                  </div>
+              </div>
 
-             {/* SECCIÓN EQUIPO */}
-             <div className="col-span-5 p-4 border-b-2 border-black space-y-3">
-                <h3 className="text-[9px] font-black uppercase flex items-center gap-2 border-b border-black/20 pb-1 text-blue-800"><ShieldCheck size={12}/> 2. RECURSOS ASIGNADOS</h3>
-                <div className="space-y-2">
-                   <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center border border-blue-100 text-blue-800"><User size={16}/></div>
-                      <div>
-                        <p className="text-[10px] font-black uppercase leading-none">{driver ? `${driver.lastName}, ${driver.firstName}` : 'S/D'}</p>
-                        <p className="text-[8px] font-bold text-slate-400">DNI: {driver?.dni || '---'}</p>
-                      </div>
-                   </div>
-                   <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center text-white"><Truck size={16}/></div>
-                      <div>
-                        <p className="text-[10px] font-black uppercase leading-none text-blue-700">DOMINIO: {truck?.plate || 'S/D'}</p>
-                        <p className="text-[8px] font-bold text-slate-400">{truck?.brand} {truck?.model}</p>
-                      </div>
-                   </div>
-                </div>
-             </div>
+              {/* SECCIÓN EQUIPO */}
+              <div className="col-span-5 p-4 border-b-2 border-black space-y-3">
+                  <h3 className="text-[9px] font-black uppercase flex items-center gap-2 border-b border-black/20 pb-1 text-blue-800"><ShieldCheck size={12}/> 2. RECURSOS ASIGNADOS</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center border border-blue-100 text-blue-800"><User size={16}/></div>
+                        <div>
+                          <p className="text-[10px] font-black uppercase leading-none">{driver ? `${driver.lastName}, ${driver.firstName}` : 'S/D'}</p>
+                          <p className="text-[8px] font-bold text-slate-400">DNI: {driver?.dni || '---'}</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center text-white"><Truck size={16}/></div>
+                        <div>
+                          <p className="text-[10px] font-black uppercase leading-none text-blue-700">DOMINIO: {truck?.plate || 'S/D'}</p>
+                          <p className="text-[8px] font-bold text-slate-400">{truck?.brand} {truck?.model}</p>
+                        </div>
+                    </div>
+                  </div>
+              </div>
 
-             {/* SECCIÓN ORIGEN */}
-             <div className="col-span-12 p-4 border-b-2 border-black bg-slate-50/20">
-                <h3 className="text-[9px] font-black uppercase flex items-center gap-2 border-b border-black/20 pb-1 text-blue-800"><MapPin size={12}/> 3. PUNTO DE CARGA (ORIGEN)</h3>
-                <div className="flex justify-between items-center mt-2">
-                   <div className="space-y-0.5">
-                      <p className="text-xs font-black uppercase">{load.origin.name}</p>
-                      <p className="text-[9px] font-medium italic text-slate-600">{load.origin.address}</p>
-                   </div>
-                   <div className="text-right">
-                      <p className="text-[8px] font-bold text-slate-400 uppercase">Presentación</p>
-                      <p className="text-xs font-black">{load.pickupDate} • {load.pickupTime} hs</p>
-                   </div>
-                </div>
-             </div>
+              {/* SECCIÓN ORIGEN */}
+              <div className="col-span-12 p-4 border-b-2 border-black bg-slate-50/20">
+                  <h3 className="text-[9px] font-black uppercase flex items-center gap-2 border-b border-black/20 pb-1 text-blue-800"><MapPin size={12}/> 3. PUNTO DE CARGA (ORIGEN)</h3>
+                  <div className="flex justify-between items-center mt-2">
+                    <div className="space-y-0.5">
+                        <p className="text-xs font-black uppercase">{load.origin.name}</p>
+                        <p className="text-[9px] font-medium italic text-slate-600">{load.origin.address}, {load.origin.city}, {load.origin.province}</p>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-[8px] font-bold text-slate-400 uppercase">Presentación</p>
+                        <p className="text-xs font-black">{load.pickupDate} • {load.pickupTime} hs</p>
+                    </div>
+                  </div>
+              </div>
 
-             {/* SECCIÓN ITINERARIO */}
-             <div className="col-span-12 p-4 space-y-3 min-h-[150px]">
-                <h3 className="text-[9px] font-black uppercase flex items-center gap-2 border-b border-black/20 pb-1 text-blue-800"><Navigation size={12}/> 4. SECUENCIA DE ENTREGAS (DESTINOS)</h3>
-                <table className="w-full text-[10px] border-collapse">
-                   <thead>
-                      <tr className="border-b border-black bg-slate-50">
-                         <th className="py-1 px-2 text-left font-black uppercase w-8">POS</th>
-                         <th className="py-1 px-2 text-left font-black uppercase">PUNTO DE DESCARGA</th>
-                         <th className="py-1 px-2 text-left font-black uppercase">DOMICILIO</th>
-                         <th className="py-1 px-2 text-right font-black uppercase">PESO DECL.</th>
-                         <th className="py-1 px-2 text-center font-black uppercase w-24">ESTADO</th>
-                      </tr>
-                   </thead>
-                   <tbody>
-                      {load.outboundStops?.map((stop, i) => (
-                        <tr key={stop.id} className="border-b border-dashed border-slate-300">
-                           <td className="py-2 px-2 font-black">{i+1}</td>
-                           <td className="py-2 px-2 font-bold uppercase">{stop.name}</td>
-                           <td className="py-2 px-2 text-[9px] text-slate-500 uppercase">{stop.address}</td>
-                           <td className="py-2 px-2 text-right font-black">{stop.weightKg.toLocaleString()} KG</td>
-                           <td className="py-2 px-2 text-center">
-                              {stop.deliveredAt ? (
-                                <Badge className="bg-green-600 text-white border-none text-[7px] font-black h-4 px-1">ENTREGADO</Badge>
-                              ) : (
-                                <span className="text-[8px] text-slate-300 italic">PENDIENTE</span>
-                              )}
-                           </td>
+              {/* SECCIÓN ITINERARIO */}
+              <div className="col-span-12 p-0 space-y-0 min-h-[250px]">
+                  <div className="p-4 bg-slate-50/10 border-b-2 border-black/10">
+                    <h3 className="text-[9px] font-black uppercase flex items-center gap-2 text-blue-800"><Navigation size={12}/> 4. SECUENCIA DE ENTREGAS Y DOCUMENTACIÓN</h3>
+                  </div>
+                  <table className="w-full text-[10px] border-collapse">
+                    <thead>
+                        <tr className="border-b-2 border-black bg-slate-100">
+                          <th className="py-2 px-3 text-left font-black uppercase w-8">POS</th>
+                          <th className="py-2 px-3 text-left font-black uppercase w-1/4">DESTINATARIO / REMITO</th>
+                          <th className="py-2 px-3 text-left font-black uppercase">DIRECCIÓN COMPLETA DE DESCARGA</th>
+                          <th className="py-2 px-3 text-right font-black uppercase w-24">PESO</th>
+                          <th className="py-2 px-3 text-center font-black uppercase w-20">ESTADO</th>
                         </tr>
-                      ))}
-                   </tbody>
-                </table>
-             </div>
-          </div>
+                    </thead>
+                    <tbody className="divide-y divide-slate-300">
+                        {load.outboundStops?.map((stop, i) => (
+                          <tr key={stop.id} className="hover:bg-slate-50/50">
+                            <td className="py-3 px-3 font-black text-center border-r border-slate-200 bg-slate-50/30">{i+1}</td>
+                            <td className="py-3 px-3 border-r border-slate-200">
+                                <p className="font-black uppercase text-slate-900 leading-tight">{stop.name}</p>
+                                <div className="mt-2 space-y-1">
+                                  {stop.documents?.map(doc => (
+                                    <div key={doc.id} className="flex items-center gap-1 text-blue-700 font-mono font-bold text-[9px] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 w-fit">
+                                      <Receipt size={8} /> REM: {doc.number}
+                                    </div>
+                                  ))}
+                                  {(!stop.documents || stop.documents.length === 0) && (
+                                    <p className="text-[7px] text-slate-300 italic">SIN REMITO VINCULADO</p>
+                                  )}
+                                </div>
+                            </td>
+                            <td className="py-3 px-3 border-r border-slate-200">
+                                <div className="flex items-start gap-1.5">
+                                  <MapPinned size={10} className="text-slate-400 mt-0.5 shrink-0" />
+                                  <div>
+                                    <p className="font-bold text-slate-800 uppercase leading-none">{stop.address}</p>
+                                    <p className="text-[9px] text-slate-500 font-medium italic mt-1">{stop.city || '---'}, {stop.province}</p>
+                                  </div>
+                                </div>
+                                {stop.instructions && (
+                                  <p className="text-[8px] text-orange-600 font-bold uppercase mt-2 border-l-2 border-orange-200 pl-2">Nota: {stop.instructions}</p>
+                                )}
+                            </td>
+                            <td className="py-3 px-3 text-right font-mono font-black border-r border-slate-200">
+                                {stop.weightKg.toLocaleString()} <span className="text-[7px] text-slate-400">KG</span>
+                            </td>
+                            <td className="py-3 px-3 text-center bg-slate-50/20">
+                                {stop.deliveredAt ? (
+                                  <div className="flex flex-col items-center gap-0.5">
+                                    <CheckCircle2 size={12} className="text-green-600" />
+                                    <span className="text-[7px] font-black text-green-700 uppercase">ENTREGADO</span>
+                                  </div>
+                                ) : (
+                                  <span className="text-[8px] text-slate-400 font-black uppercase tracking-tighter italic">EN TRÁNSITO</span>
+                                )}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+              </div>
+            </div>
 
-          {/* BALANCE DE PESOS */}
-          <div className="mt-6 grid grid-cols-3 gap-0 border-2 border-black">
-             <div className="p-3 border-r-2 border-black text-center">
-                <p className="text-[8px] font-bold text-slate-400 uppercase">PESO TOTAL CARGA</p>
-                <p className="text-lg font-black italic">{(load.outboundStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0).toLocaleString()} KG</p>
-             </div>
-             <div className="p-3 border-r-2 border-black text-center">
-                <p className="text-[8px] font-bold text-slate-400 uppercase">CAPACIDAD UNIDAD</p>
-                <p className="text-lg font-black italic text-blue-800">{(truck?.capacityKg || 0).toLocaleString()} KG</p>
-             </div>
-             <div className="p-3 text-center bg-slate-900 text-white">
-                <p className="text-[8px] font-bold text-white/50 uppercase">BALANCE TÉCNICO</p>
-                <p className="text-lg font-black italic text-green-400">APROBADO</p>
-             </div>
-          </div>
+            {/* BALANCE DE PESOS */}
+            <div className="mt-6 grid grid-cols-3 gap-0 border-2 border-black">
+              <div className="p-3 border-r-2 border-black text-center">
+                  <p className="text-[8px] font-bold text-slate-400 uppercase">PESO TOTAL CARGA</p>
+                  <p className="text-lg font-black italic">{(load.outboundStops?.reduce((acc, s) => acc + (s.weightKg || 0), 0) || 0).toLocaleString()} KG</p>
+              </div>
+              <div className="p-3 border-r-2 border-black text-center">
+                  <p className="text-[8px] font-bold text-slate-400 uppercase">CAPACIDAD UNIDAD</p>
+                  <p className="text-lg font-black italic text-blue-800">{(truck?.capacityKg || 0).toLocaleString()} KG</p>
+              </div>
+              <div className="p-3 text-center bg-slate-900 text-white">
+                  <p className="text-[8px] font-bold text-white/50 uppercase">BALANCE TÉCNICO</p>
+                  <p className="text-lg font-black italic text-green-400">APROBADO</p>
+              </div>
+            </div>
 
-          {/* SECCIÓN DE FIRMAS NATIVA (ALTA DENSIDAD) */}
-          <div className="mt-auto pt-10">
-             <h3 className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-black/10 pb-1 mb-6">VALIDACIÓN Y CONFORMIDAD DE ENTREGA</h3>
-             
-             <div className="grid grid-cols-12 gap-0 border-2 border-black min-h-[160px]">
-                {/* FIRMA EMISOR */}
-                <div className="col-span-4 p-5 border-r-2 border-black flex flex-col justify-between items-center text-center bg-slate-50/30">
-                   <div className="flex-1 flex items-center justify-center">
-                      <div className="border-2 border-black px-4 py-1.5 rotate-[-5deg] text-[9px] font-black shadow-sm bg-white">VALIDADO CENTRAL</div>
-                   </div>
-                   <div className="w-full border-t border-black/20 pt-2">
-                      <p className="text-[8px] font-black uppercase">RESPONSABLE EMISIÓN</p>
-                      <p className="text-[7px] font-bold text-slate-400">LogísticaAr Control Hub</p>
-                   </div>
-                </div>
+            {/* SECCIÓN DE FIRMAS NATIVA (ALTA DENSIDAD) */}
+            <div className="mt-auto pt-10">
+              <h3 className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-black/10 pb-1 mb-6">VALIDACIÓN Y CONFORMIDAD DE ENTREGA</h3>
+              
+              <div className="grid grid-cols-12 gap-0 border-2 border-black min-h-[160px]">
+                  {/* FIRMA EMISOR */}
+                  <div className="col-span-4 p-5 border-r-2 border-black flex flex-col justify-between items-center text-center bg-slate-50/30">
+                    <div className="flex-1 flex items-center justify-center">
+                        <div className="border-2 border-black px-4 py-1.5 rotate-[-5deg] text-[9px] font-black shadow-sm bg-white">VALIDADO CENTRAL</div>
+                    </div>
+                    <div className="w-full border-t border-black/20 pt-2">
+                        <p className="text-[8px] font-black uppercase">RESPONSABLE EMISIÓN</p>
+                        <p className="text-[7px] font-bold text-slate-400">LogísticaAr Control Hub</p>
+                    </div>
+                  </div>
 
-                {/* FIRMA CHOFER */}
-                <div className="col-span-4 p-5 border-r-2 border-black flex flex-col justify-between items-center text-center">
-                   <div className="flex-1 flex items-center justify-center w-full">
-                      {pod?.driverSignatureUrl ? (
-                        <img src={pod.driverSignatureUrl} className="max-h-24 w-auto grayscale" alt="Firma Chofer" />
-                      ) : (
-                        <div className="h-16 w-full border-b border-dashed border-slate-300"></div>
-                      )}
-                   </div>
-                   <div className="w-full border-t border-black/20 pt-2">
-                      <p className="text-[8px] font-black uppercase">CONFORMIDAD DEL CHOFER</p>
-                      <p className="text-[7px] font-bold text-slate-400">{driver ? `${driver.lastName}, ${driver.firstName}` : 'Personal Asignado'}</p>
-                   </div>
-                </div>
+                  {/* FIRMA CHOFER */}
+                  <div className="col-span-4 p-5 border-r-2 border-black flex flex-col justify-between items-center text-center">
+                    <div className="flex-1 flex items-center justify-center w-full">
+                        {pod?.driverSignatureUrl ? (
+                          <img src={pod.driverSignatureUrl} className="max-h-24 w-auto grayscale" alt="Firma Chofer" />
+                        ) : (
+                          <div className="h-16 w-full border-b border-dashed border-slate-300"></div>
+                        )}
+                    </div>
+                    <div className="w-full border-t border-black/20 pt-2">
+                        <p className="text-[8px] font-black uppercase">CONFORMIDAD DEL CHOFER</p>
+                        <p className="text-[7px] font-bold text-slate-400">{driver ? `${driver.lastName}, ${driver.firstName}` : 'Personal Asignado'}</p>
+                    </div>
+                  </div>
 
-                {/* FIRMA RECEPTOR */}
-                <div className="col-span-4 p-5 flex flex-col justify-between items-center text-center">
-                   <div className="flex-1 flex items-center justify-center w-full">
-                      {pod?.receiverSignatureUrl ? (
-                        <img src={pod.receiverSignatureUrl} className="max-h-24 w-auto grayscale" alt="Firma Receptor" />
-                      ) : (
-                        <div className="h-16 w-full border-b border-dashed border-slate-300"></div>
-                      )}
-                   </div>
-                   <div className="w-full border-t border-black/20 pt-2">
-                      <p className="text-[8px] font-black uppercase">RECEPCIÓN EN DESTINO</p>
-                      <p className="text-[7px] font-bold text-slate-400">ACLARACIÓN: {pod?.receiverName || 'Sello de Planta'}</p>
-                   </div>
-                </div>
-             </div>
+                  {/* FIRMA RECEPTOR */}
+                  <div className="col-span-4 p-5 flex flex-col justify-between items-center text-center">
+                    <div className="flex-1 flex items-center justify-center w-full">
+                        {pod?.receiverSignatureUrl ? (
+                          <img src={pod.receiverSignatureUrl} className="max-h-24 w-auto grayscale" alt="Firma Receptor" />
+                        ) : (
+                          <div className="h-16 w-full border-b border-dashed border-slate-300"></div>
+                        )}
+                    </div>
+                    <div className="w-full border-t border-black/20 pt-2">
+                        <p className="text-[8px] font-black uppercase">RECEPCIÓN EN DESTINO</p>
+                        <p className="text-[7px] font-bold text-slate-400">ACLARACIÓN: {pod?.receiverName || 'Sello de Planta'}</p>
+                    </div>
+                  </div>
+              </div>
 
-             {/* QR Y TRAZABILIDAD */}
-             <div className="mt-8 flex justify-between items-end">
-                <div className="space-y-1">
-                   <p className="text-[10px] font-black text-slate-900 uppercase">Protocolo de Documentación Digital</p>
-                   <p className="text-[8px] text-slate-400 font-medium leading-tight max-w-sm">Esta hoja de ruta ha sido emitida bajo normativa de seguridad digital. El código QR permite la validación de pesos y estados de entrega en tiempo real desde la central.</p>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                   <div className="p-1.5 border-2 border-black">
-                      <QRCodeSVG value={confirmationUrl} size={70} />
-                   </div>
-                   <p className="text-[6px] font-black uppercase text-center leading-none">VALIDACIÓN <br/> OPERATIVA</p>
-                </div>
-             </div>
+              {/* QR Y TRAZABILIDAD */}
+              <div className="mt-8 flex justify-between items-end">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black text-slate-900 uppercase">Protocolo de Documentación Digital</p>
+                    <p className="text-[8px] text-slate-400 font-medium leading-tight max-w-sm">Esta hoja de ruta ha sido emitida bajo normativa de seguridad digital. El código QR permite la validación de pesos y estados de entrega en tiempo real desde la central.</p>
+                  </div>
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="p-1.5 border-2 border-black">
+                        <QRCodeSVG value={confirmationUrl} size={70} />
+                    </div>
+                    <p className="text-[6px] font-black uppercase text-center leading-none">VALIDACIÓN <br/> OPERATIVA</p>
+                  </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: A4;
+            margin: 0;
+          }
+          body {
+            background: white !important;
+            -webkit-print-color-adjust: exact;
+          }
+          .print\:hidden {
+            display: none !important;
+          }
+          header, nav, aside, footer, .sidebar-trigger, .sidebar-inset-header {
+            display: none !important;
+          }
+          .min-h-screen {
+            min-h-0 !important;
+            padding: 0 !important;
+          }
+          .bg-slate-100 {
+            background-color: white !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
