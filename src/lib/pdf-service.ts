@@ -6,7 +6,8 @@ import { Product, Load, Driver, Truck, Tenant, Expense } from "@/app/lib/types";
 
 /**
  * SERVICIO CENTRAL DE GENERACIÓN DE DOCUMENTOS PDF (LOGÍSTICA AR)
- * Implementa el Padrón A: Maquetación programática vectorial.
+ * Implementa el Padrón A: Maquetación programática vectorial con jsPDF.
+ * Garantiza descarga automática y calidad de imprenta.
  */
 
 const BLUE_LOGISTIC = [37, 99, 235]; // #2563eb
@@ -20,7 +21,7 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
   const margin = 15;
   const pageWidth = 210;
 
-  // 1. CABECERA
+  // 1. CABECERA CORPORATIVA
   doc.setFillColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
   doc.rect(0, 0, pageWidth, 40, "F");
   
@@ -40,7 +41,7 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
   doc.setFontSize(28);
   doc.text(product.sku, pageWidth - margin, 28, { align: "right" });
 
-  // 2. CUERPO - NOMBRE Y MARCA
+  // 2. CUERPO - NOMBRE Y MARCA (BLOQUE IZQUIERDO)
   doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
   doc.setFontSize(24);
   doc.text(product.name.toUpperCase(), margin, 55);
@@ -49,18 +50,34 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
   doc.setFontSize(14);
   doc.text(product.brand || "MARCA NO ESPECIFICADA", margin, 62);
 
-  // 3. DESCRIPCIÓN (SPLIT TEXT)
+  // 3. FOTO DEL PRODUCTO (LADO DERECHO)
+  if (product.photoUrl) {
+    try {
+      // Dibujamos un marco para la foto
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.5);
+      doc.rect(pageWidth - margin - 45, 50, 45, 45);
+      
+      // Insertar imagen (jsPDF maneja base64 directamente)
+      doc.addImage(product.photoUrl, 'JPEG', pageWidth - margin - 44, 51, 43, 43);
+    } catch (e) {
+      console.warn("No se pudo añadir la foto al PDF:", e);
+    }
+  }
+
+  // 4. DESCRIPCIÓN (Ajuste de ancho para no chocar con la foto si es muy larga)
   doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
   doc.setFontSize(10);
   doc.setFont("helvetica", "bold");
   doc.text("DESCRIPCIÓN DEL ARTÍCULO", margin, 75);
-  doc.line(margin, 77, pageWidth - margin, 77);
+  doc.line(margin, 77, pageWidth - margin - 55, 77); // Línea más corta para dejar aire a la foto
 
   doc.setFont("helvetica", "italic");
-  const descLines = doc.splitTextToSize(product.description || "Sin descripción técnica disponible.", pageWidth - (margin * 2));
+  const descWidth = product.photoUrl ? pageWidth - (margin * 2) - 55 : pageWidth - (margin * 2);
+  const descLines = doc.splitTextToSize(product.description || "Sin descripción técnica disponible.", descWidth);
   doc.text(descLines, margin, 83);
 
-  // 4. GRILLA TÉCNICA (MANUAL)
+  // 5. GRILLA TÉCNICA (MANUAL)
   const gridY = 110;
   const colW = (pageWidth - (margin * 2)) / 5;
   
@@ -86,12 +103,11 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7);
     doc.text(l, margin + (colW * i) + 2, gridY + 6);
-    doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
     doc.text(values[i], margin + (colW * i) + 2, gridY + 18);
   });
 
-  // 5. SECCIÓN COMEX
+  // 6. SECCIÓN COMEX Y SEGURIDAD
   doc.setFontSize(10);
   doc.setFont("helvetica", "bold");
   doc.text("IDENTIFICACIÓN MERCOSUR / SEGURIDAD", margin, 150);
@@ -113,7 +129,7 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
     styles: { fontSize: 9 }
   });
 
-  // 6. SELLO DE VALIDACIÓN
+  // 7. SELLO DE VALIDACIÓN
   const footerY = 250;
   doc.setDrawColor(0);
   doc.setLineWidth(1);
@@ -125,8 +141,9 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
 
   doc.setFontSize(8);
   doc.setTextColor(150);
-  doc.text(`Documento generado el ${format(new Date(), "dd/MM/yyyy HH:mm")}`, margin, 285);
+  doc.text(`Documento generado automáticamente el ${format(new Date(), "dd/MM/yyyy HH:mm")}`, margin, 285);
 
+  // DESCARGA DIRECTA (Padrón A)
   doc.save(`Ficha_${product.sku}.pdf`);
 };
 
@@ -228,17 +245,17 @@ export const generateLoadWalletPDF = async (load: Load, expenses: Expense[], dri
   });
 
   const finalY = (doc as any).lastAutoTable.finalY + 10;
-  const totalExpenses = expenses.reduce((acc, e) => acc + e.amount, 0);
+  const totalExpenses = expenses.reduce((acc, e) => acc + (e.amount || 0), 0);
   const advance = load.budget?.initialAdvance || 0;
   const balance = advance - totalExpenses;
 
   doc.setTextColor(0);
   doc.setFontSize(12);
   doc.text(`Anticipo Otorgado: $${advance.toLocaleString()}`, pageWidth - margin, finalY, { align: "right" });
-  doc.text(`Total Gastos: $${totalExpenses.toLocaleString()}`, pageWidth - margin, finalY + 7, { align: "right" });
+  doc.text(`Total Gastos Auditados: $${totalExpenses.toLocaleString()}`, pageWidth - margin, finalY + 7, { align: "right" });
   
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(balance >= 0 ? [22, 101, 52] : [185, 28, 28]);
+  doc.setTextColor(balance >= 0 ? 22 : 185, balance >= 0 ? 101 : 28, balance >= 0 ? 52 : 28);
   doc.text(`SALDO FINAL: $${Math.abs(balance).toLocaleString()} ${balance >= 0 ? '(A FAVOR CIA)' : '(REINTEGRO)'}`, pageWidth - margin, finalY + 15, { align: "right" });
 
   doc.save(`Rendicion_${load.orderNumber}.pdf`);
