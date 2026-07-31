@@ -5,7 +5,7 @@ export type LoadStatus = 'pending' | 'assigned' | 'on_route' | 'on_pause' | 'del
 export type DocStatus = 'pending' | 'valid' | 'expired' | 'warning';
 export type HubType = 'hub' | 'warehouse' | 'office';
 export type MapProvider = 'google' | 'mapbox';
-export type Country = 'Argentina' | 'Chile' | 'Paraguay' | 'Ushort' | 'Bolivia' | 'Brasil' | 'Uruguay';
+export type Country = 'Argentina' | 'Chile' | 'Paraguay' | 'Ushort' | 'Bolivia' | 'Brasil' | 'UShort' | 'Uruguay';
 
 export type LoadDocType = 'remito' | 'factura' | 'cot' | 'otro' | 'despacho';
 
@@ -195,7 +195,8 @@ export interface Expense {
   description: string;
   location: string;
   status: 'registered' | 'approved' | 'rejected';
-  receiptNumber?: string; // NUEVO: N° de factura o ticket
+  receiptNumber?: string;
+  docsPresented?: boolean;
   createdAt: any;
   
   // Fuel Specific Fields

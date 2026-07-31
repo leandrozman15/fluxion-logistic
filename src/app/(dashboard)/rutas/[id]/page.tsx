@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -96,7 +97,7 @@ export default function RouteDetailPage() {
   const loadRefData = useRef<Load | null>(null);
 
   const [expenseData, setExpenseData] = useState<any>({
-    category: 'fuel', amount: 0, description: "", location: "", liters: 0, odometerKm: 0, pricePerLiter: 0, fuelBrand: ""
+    category: 'fuel', amount: 0, description: "", location: "", liters: 0, odometerKm: 0, pricePerLiter: 0, fuelBrand: "", receiptNumber: ""
   });
 
   const [incidentDescription, setIncidentDescription] = useState("");
@@ -132,7 +133,6 @@ export default function RouteDetailPage() {
     if (load) loadRefData.current = load;
   }, [load]);
 
-  // INTERVALO GPS REGULABLE SEGÚN CONFIGURACIÓN
   useEffect(() => {
     if (!load || (load.status !== 'on_route' && load.status !== 'on_pause') || !loadRef) return;
 
@@ -409,7 +409,7 @@ export default function RouteDetailPage() {
 
       toast({ title: "Gasto Registrado" });
       setIsExpenseOpen(false);
-      setExpenseData({ category: 'fuel', amount: 0, description: "", location: "", liters: 0, odometerKm: 0, pricePerLiter: 0, fuelBrand: "" });
+      setExpenseData({ category: 'fuel', amount: 0, description: "", location: "", liters: 0, odometerKm: 0, pricePerLiter: 0, fuelBrand: "", receiptNumber: "" });
     } catch (e) {
       toast({ variant: "destructive", title: "Error" });
     } finally {
@@ -742,6 +742,10 @@ export default function RouteDetailPage() {
                            <Input placeholder="Ej: San Pedro" className="h-12 bg-slate-50 border-none text-xs font-bold rounded-xl" value={expenseData.location} onChange={e => setExpenseData({...expenseData, location: e.target.value})} />
                         </div>
                      </div>
+                     <div className="space-y-1.5">
+                        <Label className="text-[10px] font-black uppercase text-slate-400">N° Factura / Ticket (Opcional)</Label>
+                        <Input placeholder="Ej: 0001-00004567" className="h-12 bg-slate-50 border-none text-xs font-mono font-bold rounded-xl" value={expenseData.receiptNumber} onChange={e => setExpenseData({...expenseData, receiptNumber: e.target.value})} />
+                     </div>
                   </div>
                   <DialogFooter>
                     <Button className="w-full h-16 bg-blue-600 text-white font-black text-lg rounded-2xl" onClick={handleAddExpense} disabled={isUpdating || !expenseData.amount}>
@@ -761,6 +765,7 @@ export default function RouteDetailPage() {
                         <div>
                            <p className="text-xs font-black uppercase text-slate-800">{exp.category}</p>
                            <p className="text-[10px] text-slate-400 font-bold uppercase">{exp.location}</p>
+                           {exp.receiptNumber && <p className="text-[8px] font-mono text-blue-600">Doc: {exp.receiptNumber}</p>}
                         </div>
                      </div>
                      <div className="text-right">

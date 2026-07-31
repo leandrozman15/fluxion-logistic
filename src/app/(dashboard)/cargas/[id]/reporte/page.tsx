@@ -1,19 +1,23 @@
+
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection } from "@/firebase";
-import { doc, collection, query, orderBy } from "firebase/firestore";
+import { doc, collection, query, orderBy, updateDoc, serverTimestamp } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { 
   Truck, MapPin, Navigation, Clock, Gauge, 
   Fuel, ArrowLeft, Activity, ShieldCheck, 
   DollarSign, Zap, Timer, History, FileText, 
   CheckCircle2, AlertTriangle, Printer, Download,
   ExternalLink, BarChart3, TrendingUp, User,
-  Loader2
+  Loader2, Receipt, Search
 } from "lucide-react";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, 
@@ -25,6 +29,7 @@ import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { formatSafeDate, toSafeDate } from "@/lib/utils/date-utils";
 import dynamic from "next/dynamic";
+import { useToast } from "@/hooks/use-toast";
 
 // Carga dinámica del mapa
 const MapContainer = dynamic(
@@ -40,7 +45,9 @@ export default function TripReportPage() {
   const { id } = useParams();
   const router = useRouter();
   const db = useFirestore();
+  const { toast } = useToast();
   const [L, setL] = useState<any>(null);
+  const [isUpdatingExpenseId, setIsUpdatingExpenseId] = useState<string | null>(null);
 
   useEffect(() => {
     import('leaflet').then((leaflet) => {
@@ -80,8 +87,6 @@ export default function TripReportPage() {
 
     const avgSpeed = countSpeed > 0 ? sumSpeed / countSpeed : 0;
     
-    // Lógica de Duración Total: Desde tripStartedAt hasta confirmedAt o Ahora
-    // CORRECCIÓN: Si el viaje está entregado, el final es estrictamente confirmedAt
     const start = toSafeDate(load.tracking?.tripStartedAt);
     const end = load.status === 'delivered' 
       ? (toSafeDate(load.proofOfDelivery?.confirmedAt) || toSafeDate(load.updatedAt) || new Date()) 
@@ -99,9 +104,10 @@ export default function TripReportPage() {
     const drivingMinutes = Math.round(load.tracking.timeOnRouteMinutes || 0);
     const idleMinutes = Math.max(0, Math.round(totalMinutes - drivingMinutes));
 
-    const fuelCost = expenses?.filter(e => e.category === 'fuel').reduce((acc, e) => acc + (e.amount || 0), 0) || 0;
-    const totalFuel = expenses?.filter(e => e.category === 'fuel').reduce((acc, e) => acc + (e.liters || 0), 0) || 0;
-    const otherCost = expenses?.filter(e => e.category !== 'fuel').reduce((acc, e) => acc + (e.amount || 0), 0) || 0;
+    const approvedExpenses = expenses?.filter(e => e.status === 'approved') || [];
+    const fuelCost = approvedExpenses.filter(e => e.category === 'fuel').reduce((acc, e) => acc + (e.amount || 0), 0);
+    const totalFuel = approvedExpenses.filter(e => e.category === 'fuel').reduce((acc, e) => acc + (e.liters || 0), 0);
+    const otherCost = approvedExpenses.filter(e => e.category !== 'fuel').reduce((acc, e) => acc + (e.amount || 0), 0);
 
     return {
       avgSpeed: Math.round(avgSpeed),
@@ -131,6 +137,40 @@ export default function TripReportPage() {
     return load.tracking.history.map(p => [p.lat, p.lng] as [number, number]);
   }, [load?.tracking?.history]);
 
+  const handleUpdateExpenseStatus = async (expId: string, status: 'approved' | 'rejected') => {
+    if (!db || !id) return;
+    setIsUpdatingExpenseId(expId);
+    try {
+      const expRef = doc(db, "loads", id as string, "expenses", expId);
+      await updateDoc(expRef, { status, updatedAt: serverTimestamp() });
+      toast({ title: `Gasto ${status === 'approved' ? 'Aprobado' : 'Rechazado'}` });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al actualizar" });
+    } finally {
+      setIsUpdatingExpenseId(null);
+    }
+  };
+
+  const handleUpdateReceiptNumber = async (expId: string, receiptNumber: string) => {
+    if (!db || !id) return;
+    try {
+      const expRef = doc(db, "loads", id as string, "expenses", expId);
+      await updateDoc(expRef, { receiptNumber, updatedAt: serverTimestamp() });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleToggleDocsPresented = async (expId: string, docsPresented: boolean) => {
+    if (!db || !id) return;
+    try {
+      const expRef = doc(db, "loads", id as string, "expenses", expId);
+      await updateDoc(expRef, { docsPresented, updatedAt: serverTimestamp() });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   if (loadLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!load) return <div className="p-20 text-center">Flete no encontrado.</div>;
 
@@ -150,7 +190,12 @@ export default function TripReportPage() {
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold text-slate-900">Auditoría de Telemetría</h1>
               <Badge variant="outline" className="font-mono bg-blue-50 text-blue-700 border-blue-100">#{load.orderNumber}</Badge>
-              <Badge className="bg-green-600 text-white border-none uppercase font-black text-[10px]">Entregada</Badge>
+              <Badge className={cn(
+                "border-none uppercase font-black text-[10px]",
+                load.status === 'delivered' ? "bg-green-600 text-white" : "bg-orange-500 text-white"
+              )}>
+                {load.status === 'delivered' ? 'Finalizada' : 'En Curso'}
+              </Badge>
             </div>
             <p className="text-sm text-slate-500 font-medium">Análisis detallado de la operación logística y desempeño del conductor.</p>
           </div>
@@ -186,7 +231,7 @@ export default function TripReportPage() {
         <Card className="border-none shadow-sm">
           <CardContent className="pt-4 flex flex-col items-center text-center gap-1">
             <DollarSign size={20} className="text-red-600" />
-            <p className="text-[10px] uppercase font-bold text-slate-400">Inversión Real</p>
+            <p className="text-[10px] uppercase font-bold text-slate-400">Inversión Aprobada</p>
             <p className="text-3xl font-black italic text-slate-800">${stats.totalCost.toLocaleString()} <span className="text-xs font-normal text-slate-400 uppercase">ars</span></p>
           </CardContent>
         </Card>
@@ -231,112 +276,202 @@ export default function TripReportPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-none shadow-sm overflow-hidden h-[400px] relative">
-            <CardHeader className="absolute top-4 left-4 z-[500] pointer-events-none p-0">
-               <div className="bg-white/90 backdrop-blur p-3 rounded-lg border shadow-lg pointer-events-auto">
-                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Ruta Real Recorrida (Auditada)</p>
-                  <div className="flex items-center gap-3">
-                     <div className="flex items-center gap-1 text-xs font-bold text-blue-600"><MapPin size={12}/> Origen: {load.origin.city}</div>
-                     <div className="w-4 h-[1px] bg-slate-200"></div>
-                     <div className="flex items-center gap-1 text-xs font-bold text-green-600"><CheckCircle2 size={12}/> Destino Final OK</div>
-                  </div>
-               </div>
-            </CardHeader>
-            {L && (
-              <MapContainer 
-                center={[load.tracking?.currentLat || load.origin.lat || -34.6, load.tracking?.currentLng || load.origin.lng || -58.3]} 
-                zoom={10} 
-                className="h-full w-full"
-              >
-                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                {breadcrumbs.length > 0 && (
-                  <Polyline positions={breadcrumbs} color="#2563eb" weight={4} opacity={0.6} dashArray="5, 10" />
-                )}
-                <Marker position={[load.tracking?.currentLat || -34.6, load.tracking?.currentLng || -58.3]} icon={truckIcon}>
-                  <Popup>Ubicación Final de Entrega</Popup>
-                </Marker>
-              </MapContainer>
-            )}
+          <Card className="border-none shadow-sm overflow-hidden">
+             <CardHeader className="bg-slate-900 text-white">
+                <CardTitle className="text-sm flex items-center gap-2"><DollarSign size={16} className="text-green-400" /> Rendición y Auditoría de Gastos</CardTitle>
+                <CardDescription className="text-white/40 text-[10px] uppercase font-bold">Verificación de comprobantes físicos y aprobación contable</CardDescription>
+             </CardHeader>
+             <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                   <table className="w-full text-left border-collapse">
+                      <thead className="bg-slate-50 border-b">
+                         <tr>
+                            <th className="p-4 text-[10px] uppercase font-black text-slate-500">Categoría / Fecha</th>
+                            <th className="p-4 text-[10px] uppercase font-black text-slate-500">Lugar / Descrip.</th>
+                            <th className="p-4 text-[10px] uppercase font-black text-slate-500">Monto</th>
+                            <th className="p-4 text-[10px] uppercase font-black text-slate-500">N° Factura</th>
+                            <th className="p-4 text-[10px] uppercase font-black text-slate-500 text-center">Papel OK</th>
+                            <th className="p-4 text-[10px] uppercase font-black text-slate-500 text-right">Acción</th>
+                         </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                         {expenses?.map(exp => (
+                            <tr key={exp.id} className={cn("hover:bg-slate-50/50", exp.status === 'rejected' && "bg-red-50/30")}>
+                               <td className="p-4">
+                                  <div className="flex flex-col">
+                                     <span className="text-xs font-black text-slate-700 capitalize">{exp.category}</span>
+                                     <span className="text-[9px] text-slate-400 font-bold">{formatSafeDate(exp.createdAt, "dd/MM HH:mm")}</span>
+                                  </div>
+                               </td>
+                               <td className="p-4">
+                                  <div className="flex flex-col">
+                                     <span className="text-xs font-bold text-slate-600 uppercase">{exp.location}</span>
+                                     <span className="text-[9px] text-slate-400 truncate max-w-[150px]">{exp.description}</span>
+                                  </div>
+                               </td>
+                               <td className="p-4">
+                                  <span className="text-sm font-black text-slate-900">${exp.amount?.toLocaleString()}</span>
+                               </td>
+                               <td className="p-4">
+                                  <Input 
+                                    className="h-8 w-24 text-[10px] font-mono font-bold bg-white" 
+                                    placeholder="N° Ticket" 
+                                    defaultValue={exp.receiptNumber || ''} 
+                                    onBlur={(e) => handleUpdateReceiptNumber(exp.id, e.target.value)}
+                                  />
+                               </td>
+                               <td className="p-4 text-center">
+                                  <Switch 
+                                    checked={!!exp.docsPresented} 
+                                    onCheckedChange={(v) => handleToggleDocsPresented(exp.id, v)} 
+                                  />
+                               </td>
+                               <td className="p-4 text-right">
+                                  {exp.status === 'registered' ? (
+                                     <div className="flex gap-1 justify-end">
+                                        <Button 
+                                          variant="ghost" 
+                                          size="icon" 
+                                          className="h-8 w-8 text-green-600 hover:bg-green-50" 
+                                          onClick={() => handleUpdateExpenseStatus(exp.id, 'approved')}
+                                          disabled={isUpdatingExpenseId === exp.id}
+                                        >
+                                           {isUpdatingExpenseId === exp.id ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={16} />}
+                                        </Button>
+                                        <Button 
+                                          variant="ghost" 
+                                          size="icon" 
+                                          className="h-8 w-8 text-red-500 hover:bg-red-50" 
+                                          onClick={() => handleUpdateExpenseStatus(exp.id, 'rejected')}
+                                          disabled={isUpdatingExpenseId === exp.id}
+                                        >
+                                           <XCircle size={16} />
+                                        </Button>
+                                     </div>
+                                  ) : (
+                                     <Badge className={cn(
+                                       "text-[8px] font-black uppercase",
+                                       exp.status === 'approved' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                                     )}>
+                                        {exp.status === 'approved' ? 'Auditado' : 'Rechazado'}
+                                     </Badge>
+                                  )}
+                               </td>
+                            </tr>
+                         ))}
+                         {(!expenses || expenses.length === 0) && (
+                            <tr><td colSpan={6} className="p-10 text-center text-slate-400 italic text-xs">Sin gastos registrados para auditar.</td></tr>
+                         )}
+                      </tbody>
+                   </table>
+                </div>
+
+                <div className="p-6 bg-slate-50 border-t flex flex-col md:flex-row justify-between items-center gap-6">
+                   <div className="flex gap-8">
+                      <div className="text-center md:text-left">
+                         <p className="text-[10px] font-black text-slate-400 uppercase">Anticipo Original</p>
+                         <p className="text-xl font-black italic text-slate-900">${(load.budget?.initialAdvance || 0).toLocaleString()}</p>
+                      </div>
+                      <div className="text-center md:text-left">
+                         <p className="text-[10px] font-black text-slate-400 uppercase">Gastos Auditados</p>
+                         <p className="text-xl font-black italic text-red-600">-${stats.totalCost.toLocaleString()}</p>
+                      </div>
+                   </div>
+                   <div className={cn(
+                      "p-4 rounded-2xl border-2 px-8 text-center",
+                      (load.budget?.initialAdvance || 0) >= stats.totalCost ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"
+                   )}>
+                      <p className="text-[10px] font-black uppercase text-slate-400">Balance Final</p>
+                      <p className={cn(
+                        "text-3xl font-black italic",
+                        (load.budget?.initialAdvance || 0) >= stats.totalCost ? "text-green-700" : "text-red-700"
+                      )}>
+                        ${Math.abs((load.budget?.initialAdvance || 0) - stats.totalCost).toLocaleString()}
+                      </p>
+                      <p className="text-[8px] font-bold uppercase opacity-60">
+                        {(load.budget?.initialAdvance || 0) >= stats.totalCost ? 'A favor Empresa' : 'Reintegro Chofer'}
+                      </p>
+                   </div>
+                </div>
+             </CardContent>
           </Card>
         </div>
 
         <div className="space-y-6">
            <Card className="border-none shadow-sm">
-             <CardHeader className="pb-3 border-b"><CardTitle className="text-sm">Prueba de Entrega (POD)</CardTitle></CardHeader>
-             <CardContent className="pt-6 space-y-6">
-                <div className="flex items-center gap-4">
-                   <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600"><User size={24}/></div>
-                   <div>
-                      <p className="text-[10px] uppercase font-bold text-slate-400">Recibido por</p>
-                      <p className="text-sm font-black uppercase text-slate-900">{load.proofOfDelivery?.receiverName || 'S/D'}</p>
-                      <p className="text-[9px] font-bold text-blue-600">VALIDADO: {formatSafeDate(load.proofOfDelivery?.confirmedAt)}</p>
-                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                   <div className="space-y-2">
-                      <p className="text-[9px] font-black text-slate-400 uppercase text-center">Firma Receptor</p>
-                      <div className="h-24 bg-slate-50 border border-slate-100 rounded-xl overflow-hidden flex items-center justify-center">
-                         {load.proofOfDelivery?.receiverSignatureUrl ? (
-                           <img src={load.proofOfDelivery.receiverSignatureUrl} alt="Firma Receptor" className="max-h-full object-contain" />
-                         ) : <div className="text-[8px] text-slate-300 italic">No disponible</div>}
+             <CardHeader className="pb-3 border-b bg-slate-50"><CardTitle className="text-sm">Pruebas de Entrega (POD)</CardTitle></CardHeader>
+             <CardContent className="pt-6 space-y-8">
+                {load.outboundStops?.map((stop, i) => (
+                   <div key={stop.id} className="space-y-4 border-b pb-6 last:border-0 last:pb-0">
+                      <div className="flex items-center justify-between">
+                         <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-xs">{i+1}</div>
+                            <div>
+                               <p className="text-xs font-black uppercase text-slate-800">{stop.name}</p>
+                               <p className="text-[9px] font-bold text-slate-400">{stop.address}</p>
+                            </div>
+                         </div>
+                         {stop.deliveredAt ? (
+                            <Badge className="bg-green-600 text-white border-none text-[8px] font-black uppercase">Entregado</Badge>
+                         ) : (
+                            <Badge variant="outline" className="text-[8px] font-black uppercase">Pendiente</Badge>
+                         )}
                       </div>
-                   </div>
-                   <div className="space-y-2">
-                      <p className="text-[9px] font-black text-slate-400 uppercase text-center">Firma Chofer</p>
-                      <div className="h-24 bg-slate-50 border border-slate-100 rounded-xl overflow-hidden flex items-center justify-center">
-                         {load.proofOfDelivery?.driverSignatureUrl ? (
-                           <img src={load.proofOfDelivery.driverSignatureUrl} alt="Firma Chofer" className="max-h-full object-contain" />
-                         ) : <div className="text-[8px] text-slate-300 italic">No disponible</div>}
-                      </div>
-                   </div>
-                </div>
 
-                {load.proofOfDelivery?.photoUrl && (
-                  <div className="space-y-2">
-                     <p className="text-[9px] font-black text-slate-400 uppercase">Evidencia Fotográfica</p>
-                     <div className="aspect-video bg-slate-100 rounded-xl overflow-hidden border shadow-inner">
-                        <img src={load.proofOfDelivery.photoUrl} alt="POD Evidencia" className="w-full h-full object-cover" />
-                     </div>
-                  </div>
-                )}
-             </CardContent>
-           </Card>
+                      {stop.proofOfDelivery ? (
+                         <div className="space-y-4 animate-in fade-in">
+                            <div className="flex items-center gap-4 bg-slate-50 p-3 rounded-xl border">
+                               <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600"><User size={20}/></div>
+                               <div>
+                                  <p className="text-[10px] uppercase font-bold text-slate-400">Recibido por</p>
+                                  <p className="text-sm font-black uppercase text-slate-900">{stop.proofOfDelivery.receiverName}</p>
+                                  <p className="text-[8px] font-bold text-blue-600 uppercase">VALIDADO: {formatSafeDate(stop.proofOfDelivery.confirmedAt)}</p>
+                               </div>
+                            </div>
 
-           <Card className="border-none shadow-sm overflow-hidden">
-             <CardHeader className="bg-slate-900 text-white"><CardTitle className="text-sm flex items-center gap-2"><DollarSign size={16} className="text-green-400" /> Rendición de Gastos</CardTitle></CardHeader>
-             <CardContent className="p-0">
-                <div className="p-4 bg-slate-50 border-b space-y-1">
-                   <div className="flex justify-between text-xs font-bold text-slate-500"><span>Anticipo Otorgado</span> <span>${load.budget?.initialAdvance?.toLocaleString()}</span></div>
-                   <div className="flex justify-between text-xs font-bold text-red-600"><span>Gastos Reales</span> <span>-${stats.totalCost.toLocaleString()}</span></div>
-                   <div className="flex justify-between text-sm font-black border-t-2 border-slate-200 pt-1 mt-2">
-                      <span className="uppercase italic">Balance Final</span>
-                      <span className={cn(stats.totalCost > (load.budget?.initialAdvance || 0) ? "text-red-700" : "text-green-700")}>
-                        ${((load.budget?.initialAdvance || 0) - stats.totalCost).toLocaleString()}
-                      </span>
+                            <div className="grid grid-cols-2 gap-3">
+                               <div className="space-y-1.5">
+                                  <p className="text-[9px] font-black text-slate-400 uppercase text-center">Firma Receptor</p>
+                                  <div className="h-20 bg-white border rounded-xl overflow-hidden flex items-center justify-center p-1 shadow-sm">
+                                     {stop.proofOfDelivery.receiverSignatureUrl ? (
+                                       <img src={stop.proofOfDelivery.receiverSignatureUrl} alt="Firma Receptor" className="max-h-full object-contain" />
+                                     ) : <span className="text-[8px] text-slate-300 italic">No disponible</span>}
+                                  </div>
+                               </div>
+                               <div className="space-y-1.5">
+                                  <p className="text-[9px] font-black text-slate-400 uppercase text-center">Firma Chofer</p>
+                                  <div className="h-20 bg-white border rounded-xl overflow-hidden flex items-center justify-center p-1 shadow-sm">
+                                     {stop.proofOfDelivery.driverSignatureUrl ? (
+                                       <img src={stop.proofOfDelivery.driverSignatureUrl} alt="Firma Chofer" className="max-h-full object-contain" />
+                                     ) : <span className="text-[8px] text-slate-300 italic">No disponible</span>}
+                                  </div>
+                               </div>
+                            </div>
+
+                            {stop.proofOfDelivery.photoUrl && (
+                               <div className="space-y-1.5">
+                                  <p className="text-[9px] font-black text-slate-400 uppercase">Evidencia Fotográfica</p>
+                                  <div className="aspect-video bg-slate-100 rounded-2xl overflow-hidden border shadow-inner">
+                                     <img src={stop.proofOfDelivery.photoUrl} alt="POD Evidencia" className="w-full h-full object-cover" />
+                                  </div>
+                               </div>
+                            )}
+                         </div>
+                      ) : (
+                         <div className="py-8 text-center bg-slate-50/50 border-2 border-dashed rounded-2xl">
+                            <Clock size={24} className="mx-auto text-slate-200 mb-2" />
+                            <p className="text-[10px] font-black text-slate-300 uppercase italic">Esperando confirmación de descarga</p>
+                         </div>
+                      )}
                    </div>
-                </div>
-                <div className="divide-y divide-slate-100">
-                   {expenses?.map(exp => (
-                     <div key={exp.id} className="p-3 flex justify-between items-center hover:bg-slate-50 transition-colors">
-                        <div>
-                           <p className="text-xs font-bold text-slate-700 capitalize">{exp.category}</p>
-                           <p className="text-[9px] text-slate-400 uppercase font-medium">{exp.location}</p>
-                        </div>
-                        <div className="text-right">
-                           <p className="text-xs font-black text-slate-900">${exp.amount?.toLocaleString()}</p>
-                           <Badge variant="outline" className="text-[8px] h-3 bg-white">{exp.status}</Badge>
-                        </div>
-                     </div>
-                   ))}
-                </div>
+                ))}
              </CardContent>
            </Card>
 
            <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-start gap-3">
               <ShieldCheck className="text-blue-600 shrink-0 mt-1" size={20} />
               <p className="text-[10px] text-blue-700 leading-relaxed italic">
-                 Este reporte ha sido generado automáticamente por el sistema de rastreo satelital nativo. Los datos de velocidad y posición han sido auditados contra los sensores del dispositivo del chofer.
+                 Este reporte de auditoría centraliza la telemetría GPS, la validación biométrica de entrega y la fiscalización de gastos operativos. Los datos aquí vertidos tienen carácter de declaración oficial para liquidación de fletes.
               </p>
            </div>
         </div>
