@@ -40,6 +40,26 @@ const UNIT_TYPES = [
   { id: 'bag', label: 'Bolsa' },
 ];
 
+const INITIAL_COSTS = {
+  fixed: {
+    salaryWithSocial: 0,
+    insuranceTotal: 0,
+    patenteMonthly: 0,
+    satelliteGps: 0,
+    garageAdmin: 0,
+    taxesHabilitations: 0,
+    amortization: 0,
+  },
+  variable: {
+    preventiveMaintenance: { cost: 0, frequencyKm: 20000 },
+    tires: { costFullSet: 0, lifeSpanKm: 100000 },
+    unforeseenReservePerKm: 0,
+  },
+  operational: {
+    estimatedMonthlyKm: 10000,
+  }
+};
+
 export default function ProductFormWizard({ productId }: ProductFormWizardProps) {
   const db = useFirestore();
   const { tenantId } = useTenant();
@@ -114,6 +134,14 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
         w.hubId === hubId ? { ...w, [field]: value } : w
       )
     }));
+  };
+
+  const generateAutoSku = () => {
+    const categoryPrefix = (formData.category || "PROD").substring(0, 3).toUpperCase();
+    const randomPart = Math.floor(10000 + Math.random() * 90000);
+    const newSku = `${categoryPrefix}-${randomPart}`;
+    setFormData(prev => ({ ...prev, sku: newSku }));
+    toast({ title: "SKU Generado", description: `Código: ${newSku}` });
   };
 
   const handleSubmit = async () => {
@@ -191,7 +219,20 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
                 </div>
                 
                 <div className="md:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">SKU / Código Interno</Label><Input value={formData.sku ?? ''} onChange={e => setFormData({...formData, sku: e.target.value.toUpperCase()})} /></div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-[10px] font-black uppercase text-slate-400">SKU / Código Interno</Label>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="h-6 text-[9px] font-black text-blue-600 uppercase hover:bg-blue-50"
+                        onClick={(e) => { e.preventDefault(); generateAutoSku(); }}
+                      >
+                        <Zap size={10} className="mr-1" /> Auto
+                      </Button>
+                    </div>
+                    <Input value={formData.sku ?? ''} onChange={e => setFormData({...formData, sku: e.target.value.toUpperCase()})} />
+                  </div>
                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">EAN-13 / GTIN</Label><Input value={formData.gtin ?? ''} onChange={e => setFormData({...formData, gtin: e.target.value})} /></div>
                   <div className="md:col-span-2 space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Nombre Comercial</Label><Input className="font-bold text-lg" value={formData.name ?? ''} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Marca</Label><Input value={formData.brand ?? ''} onChange={e => setFormData({...formData, brand: e.target.value})} /></div>
