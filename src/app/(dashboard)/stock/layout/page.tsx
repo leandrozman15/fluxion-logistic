@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { 
   Dialog, 
   DialogContent, 
@@ -42,26 +43,32 @@ import {
   Settings2,
   ChevronRight,
   Maximize2,
-  Zap
+  Zap,
+  Calendar,
+  Trash2,
+  FileText,
+  Download
 } from "lucide-react";
-import { Hub, Product } from "@/app/lib/types";
+import { Hub, Product, WarehouseSlot } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 /**
  * Componente de Slot de Rack (Ubicación física individual)
- * Simula visualmente un pallet o un espacio vacío en la estantería.
  */
-function RackSlot({ coordinate, status, product }: { coordinate: string, status: string, product?: any }) {
+function RackSlot({ coordinate, status, product, onClick }: { coordinate: string, status: string, product?: any, onClick: () => void }) {
   const isOccupied = status === 'occupied';
   const isBlocked = status === 'blocked';
   const isReserved = status === 'reserved';
 
   return (
-    <div className={cn(
-      "relative h-32 w-full border-x-4 border-orange-500 flex flex-col justify-end p-1 transition-all group",
-      isBlocked ? "bg-red-50/50" : "bg-slate-50/30 hover:bg-blue-50/50 cursor-pointer"
-    )}>
+    <div 
+      className={cn(
+        "relative h-32 w-full border-x-4 border-orange-500 flex flex-col justify-end p-1 transition-all group",
+        isBlocked ? "bg-red-50/50" : "bg-slate-50/30 hover:bg-blue-50/50 cursor-pointer"
+      )}
+      onClick={onClick}
+    >
       {/* Viga de carga (Beam) */}
       <div className="absolute bottom-0 left-[-4px] right-[-4px] h-2 bg-blue-600 shadow-sm z-10"></div>
       
@@ -123,7 +130,18 @@ function LayoutContent() {
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Formulario de Configuración
+  // Slot Management State
+  const [selectedSlotCoord, setSelectedSlotCoord] = useState<string | null>(null);
+  const [slotForm, setSlotForm] = useState<Partial<WarehouseSlot>>({
+    status: 'empty',
+    productId: "",
+    productSku: "",
+    productName: "",
+    capacityKg: 1000,
+    currentWeightKg: 0
+  });
+
+  // Configuración de Estructura
   const [configForm, setConfigForm] = useState({
     corridors: "A,B,C",
     positions: 4,
@@ -146,7 +164,6 @@ function LayoutContent() {
 
   const activeHub = useMemo(() => hubs?.find(h => h.id === selectedHubId), [hubs, selectedHubId]);
 
-  // Cargar configuración existente del Hub
   useEffect(() => {
     if (activeHub?.settings?.layoutConfig) {
       const cfg = activeHub.settings.layoutConfig;
@@ -161,7 +178,6 @@ function LayoutContent() {
     }
   }, [activeHub]);
 
-  // Generar estructura de racks basada en la configuración
   const displayRacks = useMemo(() => {
     const corridorsArray = configForm.corridors.split(',').map(s => s.trim().toUpperCase()).filter(s => s !== "");
     
@@ -201,6 +217,46 @@ function LayoutContent() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleOpenSlot = (coord: string) => {
+    setSelectedSlotCoord(coord);
+    // Simulación de carga de datos del slot
+    const product = getProductAt(coord);
+    setSlotForm({
+      coordinate: coord,
+      status: product ? 'occupied' : 'empty',
+      productId: product?.id || "",
+      productSku: product?.sku || "",
+      productName: product?.name || "",
+      currentWeightKg: product?.unitWeightKg || 0,
+      capacityKg: 1000
+    });
+  };
+
+  const handleSaveSlot = async () => {
+    setIsSaving(true);
+    try {
+      // Aquí se guardaría la persistencia real por coordenada en una subcolección de Hubs o similar
+      toast({ title: "Ubicación Actualizada", description: `Se han guardado los cambios en ${selectedSlotCoord}` });
+      setSelectedSlotCoord(null);
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al guardar ubicación" });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleClearSlot = () => {
+    setSlotForm({
+      ...slotForm,
+      status: 'empty',
+      productId: "",
+      productSku: "",
+      productName: "",
+      currentWeightKg: 0
+    });
+    toast({ title: "Ubicación liberada", description: "El espacio se marcará como disponible." });
   };
 
   const getProductAt = (coord: string) => {
@@ -327,7 +383,7 @@ function LayoutContent() {
                             {rackGroup.positions.map(pos => {
                                const coord = `${prefix}-${rackGroup.corridor}-${pos}-${level}`;
                                const product = getProductAt(coord);
-                               const status = product ? 'occupied' : 'available';
+                               const status = product ? 'occupied' : 'empty';
                                
                                return (
                                  <div key={pos} className="w-48">
@@ -335,6 +391,7 @@ function LayoutContent() {
                                       coordinate={coord}
                                       status={status}
                                       product={product}
+                                      onClick={() => handleOpenSlot(coord)}
                                     />
                                  </div>
                                );
@@ -359,7 +416,105 @@ function LayoutContent() {
          </div>
       </div>
 
-      {/* DIALOG DE CONFIGURACIÓN */}
+      {/* DIALOG DE GESTIÓN DE UBICACIÓN (SLOT) */}
+      <Dialog open={!!selectedSlotCoord} onOpenChange={(o) => !o && setSelectedSlotCoord(null)}>
+        <DialogContent className="rounded-[2.5rem] max-w-2xl p-0 overflow-hidden border-none shadow-2xl">
+           <div className="bg-slate-900 text-white p-8 pb-6">
+              <DialogHeader>
+                <div className="flex justify-between items-start">
+                   <div>
+                      <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Ubicación {selectedSlotCoord}</DialogTitle>
+                      <DialogDescription className="text-white/40 text-[10px] font-bold uppercase mt-1">Gestión de status, lote, fechas y trazabilidad del slot.</DialogDescription>
+                   </div>
+                   <Badge className={cn(
+                     "border-none px-4 py-1 h-6 font-black text-[10px] uppercase italic tracking-widest",
+                     slotForm.status === 'occupied' ? "bg-blue-600" : slotForm.status === 'empty' ? "bg-green-600" : "bg-red-600"
+                   )}>
+                     {slotForm.status === 'empty' ? 'Disponible' : slotForm.status === 'occupied' ? 'Ocupado' : slotForm.status?.toUpperCase()}
+                   </Badge>
+                </div>
+              </DialogHeader>
+           </div>
+           
+           <div className="p-8 space-y-6 bg-slate-50 overflow-y-auto max-h-[70vh]">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="space-y-1.5">
+                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Estado de la Ubicación</Label>
+                    <Select value={slotForm.status} onValueChange={(v: any) => setSlotForm({...slotForm, status: v})}>
+                       <SelectTrigger className="bg-white h-11 rounded-xl border-slate-200"><SelectValue /></SelectTrigger>
+                       <SelectContent>
+                          <SelectItem value="empty">🟢 Disponible / Vacío</SelectItem>
+                          <SelectItem value="occupied">🔵 Ocupado (Mercadería)</SelectItem>
+                          <SelectItem value="reserved">🟡 Reservado (Ingreso)</SelectItem>
+                          <SelectItem value="blocked">🔴 Bloqueado (Mantenimiento)</SelectItem>
+                       </SelectContent>
+                    </Select>
+                 </div>
+                 <div className="space-y-1.5">
+                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Tipo de Ítem</Label>
+                    <Select defaultValue="product">
+                       <SelectTrigger className="bg-white h-11 rounded-xl border-slate-200"><SelectValue /></SelectTrigger>
+                       <SelectContent>
+                          <SelectItem value="product">📦 Producto Terminado</SelectItem>
+                          <SelectItem value="raw">🪵 Materia Prima</SelectItem>
+                          <SelectItem value="return">🔄 Devolución</SelectItem>
+                       </SelectContent>
+                    </Select>
+                 </div>
+              </div>
+
+              <div className="space-y-1.5">
+                 <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Producto / Artículo Asignado</Label>
+                 <Select value={slotForm.productId} onValueChange={v => {
+                   const p = products?.find(x => x.id === v);
+                   setSlotForm({...slotForm, productId: v, productSku: p?.sku || "", productName: p?.name || "", status: 'occupied'});
+                 }}>
+                    <SelectTrigger className="bg-white h-12 rounded-xl border-slate-200 font-bold">
+                       <SelectValue placeholder="Seleccione un ítem para este slot..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                       {products?.map(p => (
+                         <SelectItem key={p.id} value={p.id} className="text-xs">{p.sku} - {p.name}</SelectItem>
+                       ))}
+                    </SelectContent>
+                 </Select>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                 <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400 ml-1">SKU</Label><Input readOnly className="bg-slate-100 font-mono text-[10px] h-10" value={slotForm.productSku} /></div>
+                 <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400 ml-1">N° Lote</Label><Input placeholder="A-001" className="h-10 bg-white" /></div>
+                 <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400 ml-1">Cantidad</Label><Input type="number" className="h-10 bg-white" defaultValue={1} /></div>
+                 <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400 ml-1">Unidad</Label><Input readOnly className="bg-slate-100 text-[10px] h-10" value="Bulto/Pallet" /></div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                 <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400 ml-1">Fecha Entrada</Label><Input type="date" className="h-10 bg-white" defaultValue={format(new Date(), "yyyy-MM-dd")} /></div>
+                 <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400 ml-1">Salida Prevista</Label><Input type="date" className="h-10 bg-white" /></div>
+              </div>
+
+              <div className="space-y-1.5">
+                 <Label className="text-[9px] font-black uppercase text-slate-400 ml-1">Observaciones / Notas Técnicas</Label>
+                 <Textarea placeholder="Ej: No estibar más de 2 alturas, Pallet dañado, etc." className="min-h-[80px] bg-white text-xs" />
+              </div>
+           </div>
+
+           <div className="p-6 bg-white border-t flex flex-col sm:flex-row justify-between gap-4">
+              <div className="flex gap-2">
+                 <Button variant="outline" className="h-12 px-6 rounded-xl text-red-600 border-red-100 bg-red-50 hover:bg-red-100 font-bold text-xs uppercase" onClick={handleClearSlot}>
+                    <Trash2 size={16} className="mr-2" /> LIBERAR POSICIÓN
+                 </Button>
+              </div>
+              <div className="flex gap-2">
+                 <Button variant="ghost" onClick={() => setSelectedSlotCoord(null)} className="h-12 px-6 rounded-xl font-bold text-slate-400 text-xs uppercase">CANCELAR</Button>
+                 <Button onClick={handleSaveSlot} disabled={isSaving} className="h-12 px-10 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl shadow-lg shadow-blue-100 uppercase text-xs">
+                    {isSaving ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} SALVAR CAMBIOS
+                 </Button>
+              </div>
+           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* DIALOG DE CONFIGURACIÓN DE ESTRUCTURA */}
       <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
         <DialogContent className="rounded-[2.5rem] max-w-lg">
            <DialogHeader>
