@@ -86,7 +86,7 @@ function DashboardSidebar() {
     { id: 'cargas', title: "Cargas y Fletes", icon: Package, href: "/cargas" },
     { id: 'remitos', title: "Buzón de Remitos", icon: Files, href: "/remitos" },
     { id: 'mantenimiento', title: "Mantenimiento", icon: Wrench, href: "/mantenimiento" },
-    { id: 'sedes', title: "Sedes Logísticas", icon: Building2, href: "/sedes" },
+    { id: 'sedes', title: "Depósitos y Sedes", icon: Building2, href: "/sedes" },
     { id: 'analytics', title: "Análisis de Datos", icon: BarChart3, href: "/analytics" },
   ];
 

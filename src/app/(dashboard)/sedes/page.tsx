@@ -3,6 +3,7 @@
 
 import { useState, useMemo } from "react";
 import { useFirestore, useCollection } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { collection, query, orderBy, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, writeBatch, getDocs } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -15,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { 
   Building2, MapPin, Plus, Phone, Search, 
-  MoreVertical, Trash2, Globe, Loader2, Map as MapIcon, Crosshair, Star, Edit2, Save, X, Anchor
+  MoreVertical, Trash2, Globe, Loader2, Map as MapIcon, Crosshair, Star, Edit2, Save, X, Anchor, Warehouse
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Hub, HubType, Country, LoadingBay } from "@/app/lib/types";
@@ -29,7 +30,7 @@ const INITIAL_FORM_DATA: Partial<Hub> = {
   city: "",
   province: "",
   country: "Argentina",
-  type: "hub",
+  type: "warehouse",
   phone: "",
   isMainBase: false,
   lat: -34.6037,
@@ -39,6 +40,7 @@ const INITIAL_FORM_DATA: Partial<Hub> = {
 
 export default function SedesPage() {
   const db = useFirestore();
+  const { tenantId } = useTenant();
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -49,9 +51,9 @@ export default function SedesPage() {
   const [formData, setFormData] = useState<Partial<Hub>>(INITIAL_FORM_DATA);
 
   const hubsQuery = useMemo(() => {
-    if (!db) return null;
-    return query(collection(db, "hubs"), orderBy("name"));
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "hubs"), orderBy("name"));
+  }, [db, tenantId]);
 
   const { data: hubs, loading } = useCollection<Hub>(hubsQuery);
 
@@ -114,12 +116,12 @@ export default function SedesPage() {
   };
 
   const handleSubmitHub = async () => {
-    if (!db || !formData.name || !formData.address) return;
+    if (!db || !tenantId || !formData.name || !formData.address) return;
     setIsSubmitting(true);
     try {
       if (formData.isMainBase) {
         const batch = writeBatch(db);
-        const snapshot = await getDocs(collection(db, "hubs"));
+        const snapshot = await getDocs(collection(db, "tenants", tenantId, "hubs"));
         snapshot.docs.forEach(docSnap => {
           if (docSnap.data().isMainBase && docSnap.id !== editingId) {
             batch.update(docSnap.ref, { isMainBase: false });
@@ -129,17 +131,17 @@ export default function SedesPage() {
       }
 
       if (editingId) {
-        await updateDoc(doc(db, "hubs", editingId), {
+        await updateDoc(doc(db, "tenants", tenantId, "hubs", editingId), {
           ...formData,
           updatedAt: serverTimestamp()
         });
         toast({ title: "Sede Actualizada", description: `Los cambios en ${formData.name} han sido guardados.` });
       } else {
-        await addDoc(collection(db, "hubs"), {
+        await addDoc(collection(db, "tenants", tenantId, "hubs"), {
           ...formData,
           createdAt: serverTimestamp()
         });
-        toast({ title: "Sede Registrada", description: `La sede ${formData.name} ha sido añadida.` });
+        toast({ title: "Depósito Registrado", description: `La sede ${formData.name} ha sido añadida.` });
       }
 
       setIsDialogOpen(false);
@@ -154,9 +156,9 @@ export default function SedesPage() {
   };
 
   const handleDeleteHub = async (id: string) => {
-    if (!db || !confirm("¿Eliminar esta sede logística?")) return;
+    if (!db || !tenantId || !confirm("¿Eliminar esta sede logística?")) return;
     try {
-      await deleteDoc(doc(db, "hubs", id));
+      await deleteDoc(doc(db, "tenants", tenantId, "hubs", id));
       toast({ title: "Sede eliminada" });
     } catch (e) {
       toast({ variant: "destructive", title: "Error" });
@@ -167,12 +169,12 @@ export default function SedesPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Red Logística Regional</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Depósitos y Sedes Regionales</h1>
           <p className="text-slate-500 text-sm">Gestión de bases operativas y bocas de carga.</p>
         </div>
         
         <Button className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100" onClick={handleOpenAdd}>
-          <Plus className="w-4 h-4 mr-2" /> Alta de Sede Regional
+          <Plus className="w-4 h-4 mr-2" /> Alta de Depósito / Sede
         </Button>
       </div>
 
@@ -215,7 +217,7 @@ export default function SedesPage() {
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${hub.isMainBase ? 'bg-amber-100 text-amber-600 shadow-sm border border-amber-200' : 'bg-blue-50 text-blue-600'}`}>
-                             {hub.isMainBase ? <Star size={18} fill="currentColor" /> : <Building2 size={18} />}
+                             {hub.type === 'warehouse' ? <Warehouse size={18} /> : (hub.isMainBase ? <Star size={18} fill="currentColor" /> : <Building2 size={18} />)}
                           </div>
                           <div className="space-y-0.5">
                             <div className="font-bold text-slate-900 flex items-center gap-1.5">
@@ -277,9 +279,9 @@ export default function SedesPage() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingId ? 'Editar Sede Regional' : 'Registrar Nueva Base'}</DialogTitle>
+            <DialogTitle>{editingId ? 'Editar Sede / Depósito' : 'Registrar Nueva Sede'}</DialogTitle>
             <DialogDescription>
-              {editingId ? 'Modifique los parámetros de la base y gestione sus bocas de carga.' : 'Establezca un punto de apoyo operativo en su red.'}
+              Establezca un punto de apoyo operativo o un almacén de stock.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-6 py-4">
@@ -298,9 +300,9 @@ export default function SedesPage() {
                 <Select value={formData.type} onValueChange={(v: HubType) => setFormData({...formData, type: v})}>
                   <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="hub">Hub Principal</SelectItem>
-                    <SelectItem value="warehouse">Depósito</SelectItem>
-                    <SelectItem value="office">Oficina</SelectItem>
+                    <SelectItem value="warehouse">📦 Depósito / Almacén</SelectItem>
+                    <SelectItem value="hub">🛰️ Hub de Transferencia</SelectItem>
+                    <SelectItem value="office">🏢 Oficina Administrativa</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -308,10 +310,9 @@ export default function SedesPage() {
             
             <div className="grid gap-2">
               <Label htmlFor="name">Nombre de la Sede</Label>
-              <Input id="name" placeholder="Ej: Hub Santiago Sur" className="bg-white" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+              <Input id="name" placeholder="Ej: Depósito Norte Logística" className="bg-white" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
             </div>
 
-            {/* GESTIÓN DE BOCAS DE CARGA */}
             <div className="p-4 bg-slate-900 text-white rounded-xl space-y-4 shadow-inner">
                <div className="flex items-center gap-2 text-blue-400 font-bold uppercase text-[10px] tracking-widest">
                   <Anchor size={14} /> Gestión de Bocas de Carga / Docks

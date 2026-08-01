@@ -4,7 +4,7 @@
 import { useState, useMemo } from "react";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc, updateDoc, serverTimestamp, collection, setDoc } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp, collection, setDoc, query, orderBy } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +31,7 @@ import {
 import { Hub, WarehouseLayout, WarehouseSection, WarehouseAisle, WarehouseRack, WarehouseSlot } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 export default function WarehouseLayoutPage() {
   const db = useFirestore();
@@ -41,8 +42,12 @@ export default function WarehouseLayoutPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [activeRackId, setActiveRackId] = useState<string | null>(null);
 
-  const hubsQuery = useMemo(() => (db && tenantId) ? collection(db, "tenants", tenantId, "hubs") : null, [db, tenantId]);
-  const { data: hubs } = useCollection<Hub>(hubsQuery);
+  const hubsQuery = useMemo(() => {
+    if (!db || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "hubs"), orderBy("name"));
+  }, [db, tenantId]);
+
+  const { data: hubs, loading: hubsLoading } = useCollection<Hub>(hubsQuery);
 
   const [layout, setLayout] = useState<Partial<WarehouseLayout>>({
     name: "Mapa de Depósito Principal",
@@ -97,7 +102,7 @@ export default function WarehouseLayoutPage() {
     if (!db || !tenantId || !selectedHubId) return;
     setIsSaving(true);
     try {
-      const layoutId = layout.id || doc(collection(db, "temp")).id;
+      const layoutId = layout.id || doc(collection(db, "tenants", tenantId, "warehouse_layouts")).id;
       const layoutRef = doc(db, "tenants", tenantId, "warehouse_layouts", layoutId);
       
       await setDoc(layoutRef, {
@@ -146,9 +151,16 @@ export default function WarehouseLayoutPage() {
       {!selectedHubId ? (
         <Card className="border-none shadow-sm bg-slate-50/50 rounded-[2.5rem] p-20 flex flex-col items-center justify-center text-center space-y-6">
            <Warehouse size={80} className="text-slate-200" />
-           <div className="space-y-2">
-             <h3 className="text-xl font-black text-slate-400 uppercase italic tracking-widest">Seleccione un Depósito para empezar</h3>
-             <p className="text-sm text-slate-400 max-w-sm">Debe elegir una sede habilitada para configurar su distribución física de racks.</p>
+           <div className="space-y-4">
+             <div>
+               <h3 className="text-xl font-black text-slate-400 uppercase italic tracking-widest">Seleccione un Depósito para empezar</h3>
+               <p className="text-sm text-slate-400 max-w-sm mx-auto">Debe elegir una sede habilitada para configurar su distribución física de racks.</p>
+             </div>
+             {hubs && hubs.length === 0 && (
+               <Button className="bg-blue-600 rounded-xl" asChild>
+                 <Link href="/sedes"><Plus size={16} className="mr-2" /> CREAR MI PRIMER DEPÓSITO</Link>
+               </Button>
+             )}
            </div>
         </Card>
       ) : (
@@ -238,9 +250,7 @@ export default function WarehouseLayoutPage() {
                       </div>
                    </CardHeader>
                    <CardContent className="p-10 space-y-10">
-                      {/* Rack Simulation Grid */}
                       <div className="relative">
-                         {/* Realistic Rack Frame Background */}
                          <div className="absolute -inset-4 border-[8px] border-slate-200 rounded-lg pointer-events-none -z-0"></div>
                          
                          <div className="grid grid-cols-5 gap-3 relative z-10">
@@ -254,8 +264,6 @@ export default function WarehouseLayoutPage() {
                                       <div className="absolute top-1 left-2 text-[8px] font-black text-slate-300">N{lvl}-C{col}</div>
                                       <Container size={24} className="text-slate-200 group-hover:text-blue-300" />
                                       <p className="text-[7px] font-black uppercase text-slate-300">Vacío</p>
-                                      
-                                      {/* Metal Beam Effect */}
                                       <div className="absolute bottom-0 inset-x-0 h-1 bg-slate-300"></div>
                                    </div>
                                  ))}
