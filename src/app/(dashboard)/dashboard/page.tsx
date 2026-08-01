@@ -56,17 +56,17 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import { calculateDistance, estimateFuelLiters } from "@/lib/utils/tracking-math";
+import { toSafeDate, formatSafeDate } from "@/lib/utils/date-utils";
 import { Truck, Driver, Load, Hub, Client } from "@/app/lib/types";
 import { isToday, startOfMonth, format, formatDistanceToNow, addMinutes, addDays, isAfter, isBefore, startOfDay, endOfDay, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { useToast } from "@/hooks/use-toast";
-import { calculateDistance, estimateFuelLiters } from "@/lib/utils/tracking-math";
-import { toSafeDate, formatSafeDate } from "@/lib/utils/date-utils";
 
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
@@ -147,11 +147,6 @@ export default function MonitorOperativoPage() {
     const onRouteCount = loads?.filter(l => l.status === 'on_route' || l.status === 'on_pause').length || 0;
     const activeTrucks = trucks?.filter(t => t.status === 'in_trip').length || 0;
     
-    const billingMonth = loads?.filter(l => 
-      l.status === 'delivered' && 
-      (l.updatedAt?.seconds ? new Date(l.updatedAt.seconds * 1000) >= monthStart : new Date(l.updatedAt) >= monthStart)
-    ).reduce((acc, l) => acc + (l.totalAmount || 0), 0) || 0;
-
     const incidents = loads?.filter(l => l.status === 'incident').length || 0;
 
     return { 
@@ -159,7 +154,6 @@ export default function MonitorOperativoPage() {
       scheduledToday,
       onRouteCount,
       activeTrucks: Math.max(activeTrucks, onRouteCount), 
-      billingMonth, 
       incidents
     };
   }, [trucks, loads, todayStr]);
@@ -231,7 +225,7 @@ export default function MonitorOperativoPage() {
 
     (load.outboundStops || []).forEach(s => {
       if (s.lat && s.lng) {
-        total += calculateDistance(cursor.lat, cursor.lng, s.lat, s.lng);
+        total += calculateDistance(cursor.lat, cursor.lng, s.lat || 0, s.lng || 0);
         cursor = { lat: s.lat, lng: s.lng };
       }
     });
@@ -242,7 +236,7 @@ export default function MonitorOperativoPage() {
     if (finalDestLat && finalDestLng) {
       (load.returnStops || []).forEach(s => {
         if (s.lat && s.lng) {
-          total += calculateDistance(cursor.lat, cursor.lng, s.lat, s.lng);
+          total += calculateDistance(cursor.lat, cursor.lng, s.lat || 0, s.lng || 0);
           cursor = { lat: s.lat, lng: s.lng };
         }
       });
@@ -263,13 +257,11 @@ export default function MonitorOperativoPage() {
     return (
       <div className="space-y-1.5 min-w-0">
         <div className="flex items-center gap-1.5 overflow-hidden">
-          {/* 1. ORIGEN (Verde si empezó, Rojo si no) */}
           <div className={cn("w-2.5 h-2.5 rounded-full shrink-0 flex items-center justify-center shadow-sm", !isStarted ? "bg-red-500" : "bg-green-500")}>
             <div className="w-1 h-1 bg-white rounded-full"></div>
           </div>
           <ArrowRight size={12} className={cn("shrink-0", !isStarted ? "text-slate-200" : "text-green-500")} />
           
-          {/* 2. TRANSICIÓN DE ENTREGAS (Verde si al menos una entrega se hizo) */}
           {stops.length > 0 && (
             <>
               <div className={cn("w-2.5 h-2.5 rounded-full shrink-0 shadow-sm", lastDeliveredIdx >= 0 ? "bg-green-500" : "bg-slate-200")} />
@@ -277,10 +269,9 @@ export default function MonitorOperativoPage() {
             </>
           )}
 
-          {/* 3. PUNTO DE RETORNO DEFINITIVO (Naranja) */}
           <div className={cn(
             "w-2.5 h-2.5 rounded-full shrink-0 shadow-sm", 
-            isFinished ? "bg-green-500" : (isReturnPhase ? "bg-orange-500 animate-pulse" : "bg-slate-200")
+            isFinished ? "bg-green-500" : (isReturnPhase ? "bg-orange-500 animate-pulse" : "bg-slate-300")
           )} />
 
           <span className="text-[10px] font-black text-slate-500 uppercase tracking-tighter truncate ml-1">
@@ -288,7 +279,6 @@ export default function MonitorOperativoPage() {
           </span>
         </div>
         
-        {/* INDICADOR DE PAUSA DETALLADO */}
         {load.status === 'on_pause' && (
           <div className="flex items-center gap-2 mt-1">
             <Badge className="bg-amber-500 hover:bg-amber-600 text-white border-none text-[8px] font-black uppercase flex items-center gap-1 shadow-sm shadow-amber-200 animate-pulse">
@@ -346,11 +336,10 @@ export default function MonitorOperativoPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KPICard title="Entregas Hoy" value={stats.deliveredToday} icon={CheckCircle2} description="Finalizadas" />
         <KPICard title="Salidas Hoy" value={stats.scheduledToday} icon={Calendar} description="Programadas" />
         <KPICard title="Operativos" value={stats.onRouteCount} icon={TruckIcon} description="En tránsito o pausa" />
-        <KPICard title="Facturación" value={stats.billingMonth.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })} icon={DollarSign} description="Mes actual" />
         <KPICard title="Incidencias" value={stats.incidents} icon={AlertTriangle} description="Atención req." />
       </div>
 
