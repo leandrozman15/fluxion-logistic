@@ -21,7 +21,7 @@ import {
   Scale, Layers, ShieldCheck, CheckCircle2, 
   Info, Tag, Ship, ThermometerSnowflake, 
   AlertTriangle, ScanBarcode, Camera, Image as ImageIcon, 
-  ChevronRight, ChevronLeft, Package, LayoutGrid, Building2, User, DollarSign, Activity, TrendingUp, Zap, ShoppingCart, Warehouse, MoveRight, X, BellRing
+  ChevronRight, ChevronLeft, Package, LayoutGrid, Building2, User, DollarSign, Activity, TrendingUp, Zap, ShoppingCart, Warehouse, MoveRight, X, BellRing, Calculator, Percent
 } from "lucide-react";
 import { Product, Hub, ProductWarehouse } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -58,7 +58,7 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
     unitType: 'unit', conversionFactor: 1, unitsPerBox: 0, unitsPerPallet: 0, origin: 'nacional',
     managesStock: true, allowNegativeStock: false, isLotTracked: false, isSerialTracked: false, expiryControl: false,
     minStockAlert: 5, maxStockAlert: 100, stockQuantity: 0, ivaRate: 21, dangerLevel: 'none', requiresReefer: false,
-    warehouses: []
+    warehouses: [], markup: 0, avgCost: 0, listPrice: 0
   });
 
   const handleBack = () => setStep(prev => Math.max(1, prev - 1));
@@ -117,6 +117,36 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
     }));
   };
 
+  // FINANCIAL LOGIC
+  const handlePriceChange = (field: 'listPrice' | 'avgCost' | 'markup', value: string) => {
+    const numVal = value === "" ? 0 : parseFloat(value);
+    setFormData(prev => {
+      const updated = { ...prev, [field]: numVal };
+      
+      // Si cambia Markup o Costo -> Recalcular Precio Lista
+      if (field === 'markup' || field === 'avgCost') {
+        const cost = field === 'avgCost' ? numVal : (prev.avgCost || 0);
+        const mkp = field === 'markup' ? numVal : (prev.markup || 0);
+        updated.listPrice = cost * (1 + (mkp / 100));
+      }
+      
+      // Si cambia Precio Lista -> Recalcular Markup
+      if (field === 'listPrice') {
+        const cost = prev.avgCost || 0;
+        if (cost > 0) {
+          updated.markup = ((numVal - cost) / cost) * 100;
+        }
+      }
+      
+      return updated;
+    });
+  };
+
+  const calculatedMargin = useMemo(() => {
+    if (!formData.listPrice || !formData.avgCost || formData.listPrice === 0) return 0;
+    return (((formData.listPrice - formData.avgCost) / formData.listPrice) * 100).toFixed(1);
+  }, [formData.listPrice, formData.avgCost]);
+
   const generateAutoSku = () => {
     const categoryPrefix = (formData.category || "PROD").substring(0, 3).toUpperCase();
     const randomPart = Math.floor(10000 + Math.random() * 90000);
@@ -146,11 +176,6 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
       setIsSubmitting(false);
     }
   };
-
-  const calculatedMargin = useMemo(() => {
-    if (!formData.listPrice || !formData.avgCost) return 0;
-    return (((formData.listPrice - formData.avgCost) / formData.listPrice) * 100).toFixed(1);
-  }, [formData.listPrice, formData.avgCost]);
 
   if (loadingExisting && productId) return <div className="h-[60vh] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
@@ -360,36 +385,121 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
         {step === 4 && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+               {/* COMPRAS */}
                <Card className="border-none shadow-sm rounded-3xl">
-                  <CardHeader><CardTitle className="text-sm uppercase flex items-center gap-2"><ShoppingCart size={16} className="text-blue-600" /> Parámetros de Compra</CardTitle></CardHeader>
+                  <CardHeader className="bg-slate-50 border-b py-4">
+                    <CardTitle className="text-sm uppercase flex items-center gap-2">
+                      <ShoppingCart size={16} className="text-blue-600" /> Parámetros de Compra
+                    </CardTitle>
+                  </CardHeader>
                   <CardContent className="space-y-4 p-8">
-                     <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Costo Última Compra</Label><Input type="number" value={formData.lastCost || 0} onChange={e => setFormData({...formData, lastCost: parseFloat(e.target.value) || 0})} /></div>
-                     <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Costo Promedio Ponderado</Label><Input type="number" value={formData.avgCost || 0} onChange={e => setFormData({...formData, avgCost: parseFloat(e.target.value) || 0})} /></div>
-                     <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Moneda de Compra</Label><Select value={formData.currency || 'ARS'} onValueChange={v => setFormData({...formData, currency: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ARS">ARS ($)</SelectItem><SelectItem value="USD">USD (U$S)</SelectItem><SelectItem value="BRL">BRL (R$)</SelectItem></SelectContent></Select></div>
+                     <div className="space-y-1.5">
+                        <Label className="text-[10px] font-black uppercase text-slate-400">Costo Última Compra</Label>
+                        <div className="relative">
+                          <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-300" />
+                          <Input type="number" className="pl-9" value={formData.lastCost || 0} onChange={e => setFormData({...formData, lastCost: parseFloat(e.target.value) || 0})} />
+                        </div>
+                     </div>
+                     <div className="space-y-1.5">
+                        <Label className="text-[10px] font-black uppercase text-slate-400">Costo Promedio Ponderado (Auditado)</Label>
+                        <div className="relative">
+                          <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-blue-400" />
+                          <Input type="number" className="pl-9 bg-blue-50/30 border-blue-100 font-bold" value={formData.avgCost || 0} onChange={e => handlePriceChange('avgCost', e.target.value)} />
+                        </div>
+                     </div>
+                     <div className="space-y-1.5">
+                        <Label className="text-[10px] font-black uppercase text-slate-400">Moneda de Gestión</Label>
+                        <Select value={formData.currency || 'ARS'} onValueChange={v => setFormData({...formData, currency: v})}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="ARS">ARS ($)</SelectItem>
+                            <SelectItem value="USD">USD (U$S)</SelectItem>
+                            <SelectItem value="BRL">BRL (R$)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                     </div>
                   </CardContent>
                </Card>
 
+               {/* VENTAS Y MARGENES */}
                <Card className="border-none shadow-sm rounded-3xl">
-                  <CardHeader><CardTitle className="text-sm uppercase flex items-center gap-2"><TrendingUp size={16} className="text-green-600" /> Estructura de Precios</CardTitle></CardHeader>
-                  <CardContent className="space-y-4 p-8">
+                  <CardHeader className="bg-slate-50 border-b py-4">
+                    <CardTitle className="text-sm uppercase flex items-center gap-2">
+                      <TrendingUp size={16} className="text-green-600" /> Estructura de Precios y Markup
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6 p-8">
                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Precio Lista</Label><Input type="number" value={formData.listPrice || 0} onChange={e => setFormData({...formData, lastCost: parseFloat(e.target.value) || 0})} /></div>
-                        <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Alícuota IVA</Label><Select value={formData.ivaRate?.toString()} onValueChange={(v: any) => setFormData({...formData, ivaRate: parseFloat(v) as any})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="0">Exento (0%)</SelectItem><SelectItem value="10.5">10.5%</SelectItem><SelectItem value="21">21%</SelectItem><SelectItem value="27">27%</SelectItem></SelectContent></Select></div>
+                        <div className="space-y-1.5">
+                           <Label className="text-[10px] font-black uppercase text-blue-600">Markup (%)</Label>
+                           <div className="relative">
+                              <Percent className="absolute right-3 top-2.5 h-4 w-4 text-blue-300" />
+                              <Input 
+                                type="number" 
+                                className="pr-9 font-black text-blue-600 bg-blue-50/50 border-blue-200" 
+                                value={formData.markup || 0} 
+                                onChange={e => handlePriceChange('markup', e.target.value)} 
+                              />
+                           </div>
+                        </div>
+                        <div className="space-y-1.5">
+                           <Label className="text-[10px] font-black uppercase text-slate-400">Precio Lista</Label>
+                           <div className="relative">
+                              <Calculator className="absolute left-3 top-2.5 h-4 w-4 text-slate-300" />
+                              <Input 
+                                type="number" 
+                                className="pl-9 font-black text-slate-900" 
+                                value={formData.listPrice || 0} 
+                                onChange={e => handlePriceChange('listPrice', e.target.value)} 
+                              />
+                           </div>
+                        </div>
                      </div>
-                     <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Precio Mayorista</Label><Input type="number" value={formData.wholesalePrice || 0} onChange={e => setFormData({...formData, wholesalePrice: parseFloat(e.target.value) || 0})} /></div>
-                     <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Precio Minorista</Label><Input type="number" value={formData.retailPrice || 0} onChange={e => setFormData({...formData, retailPrice: parseFloat(e.target.value) || 0})} /></div>
+
+                     <div className="p-4 bg-green-50 border border-green-100 rounded-2xl flex items-center justify-between">
+                        <div className="space-y-0.5">
+                           <p className="text-[10px] font-black uppercase text-green-700 tracking-widest">Margen Real Calculado</p>
+                           <p className="text-[8px] text-green-600 font-bold uppercase">(Sobre Precio Venta)</p>
+                        </div>
+                        <p className="text-3xl font-black italic text-green-700">{calculatedMargin}%</p>
+                     </div>
+
+                     <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                        <div className="space-y-1.5">
+                           <Label className="text-[10px] font-black uppercase text-slate-400">Alícuota IVA</Label>
+                           <Select value={formData.ivaRate?.toString()} onValueChange={(v: any) => setFormData({...formData, ivaRate: parseFloat(v) as any})}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="0">Exento (0%)</SelectItem>
+                                <SelectItem value="10.5">10.5%</SelectItem>
+                                <SelectItem value="21">21%</SelectItem>
+                                <SelectItem value="27">27%</SelectItem>
+                              </SelectContent>
+                           </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                           <Label className="text-[10px] font-black uppercase text-slate-400">Precio Minorista</Label>
+                           <Input type="number" value={formData.retailPrice || 0} onChange={e => setFormData({...formData, retailPrice: parseFloat(e.target.value) || 0})} />
+                        </div>
+                     </div>
                   </CardContent>
                </Card>
             </div>
             
             <Card className="border-none shadow-xl bg-slate-900 text-white rounded-3xl">
-              <CardHeader className="border-b border-white/5"><CardTitle className="text-sm uppercase">Resumen Final de Registro</CardTitle></CardHeader>
+              <CardHeader className="border-b border-white/5"><CardTitle className="text-sm uppercase tracking-widest">Resumen Final de Registro</CardTitle></CardHeader>
               <CardContent className="p-8">
                  <div className="flex flex-col md:flex-row justify-between items-center gap-8">
-                    <div className="text-center md:text-left"><p className="text-[10px] font-black uppercase text-blue-400 mb-1">Impacto en Inventario</p><p className="text-3xl font-black italic">{(formData.warehouses || []).reduce((acc, w) => acc + (w.stockQuantity || 0), 0)} u. totales</p></div>
+                    <div className="text-center md:text-left">
+                       <p className="text-[10px] font-black uppercase text-blue-400 mb-1 tracking-widest">Impacto en Inventario</p>
+                       <p className="text-3xl font-black italic">{(formData.warehouses || []).reduce((acc, w) => acc + (w.stockQuantity || 0), 0)} u. <span className="text-sm font-normal text-white/30 uppercase">{formData.unitType}s</span></p>
+                    </div>
                     <div className="h-16 w-[1px] bg-white/10 hidden md:block"></div>
-                    <div className="text-center md:text-left"><p className="text-[10px] font-black uppercase text-blue-400 mb-1">Rédito Bruto (Margen)</p><p className="text-3xl font-black italic text-green-400">{calculatedMargin}%</p></div>
-                    <Button onClick={handleSubmit} className="h-16 px-12 bg-blue-600 hover:bg-blue-700 text-white font-black text-xl rounded-2xl shadow-2xl" disabled={isSubmitting}>
+                    <div className="text-center md:text-left">
+                       <p className="text-[10px] font-black uppercase text-blue-400 mb-1 tracking-widest">Rédito Bruto (Margen)</p>
+                       <p className="text-3xl font-black italic text-green-400">{calculatedMargin}% <span className="text-sm font-normal text-white/30 uppercase">Final</span></p>
+                    </div>
+                    <Button onClick={handleSubmit} className="h-16 px-12 bg-blue-600 hover:bg-blue-700 text-white font-black text-xl rounded-2xl shadow-2xl shadow-blue-900/40" disabled={isSubmitting}>
                       {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} FINALIZAR ALTA
                     </Button>
                  </div>
