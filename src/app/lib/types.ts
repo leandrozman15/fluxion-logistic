@@ -5,7 +5,7 @@ export type LoadStatus = 'pending' | 'assigned' | 'on_route' | 'on_pause' | 'del
 export type DocStatus = 'pending' | 'valid' | 'expired' | 'warning';
 export type HubType = 'hub' | 'warehouse' | 'office';
 export type MapProvider = 'google' | 'mapbox';
-export type Country = 'Argentina' | 'Chile' | 'Paraguay' | 'Ushort' | 'Bolivia' | 'Brasil' | 'UShort' | 'Uruguay';
+export type Country = 'Argentina' | 'Chile' | 'Paraguay' | 'Ushort' | 'Bolivia' | 'Brasil' | 'UShort' | 'UShort' | 'Uruguay';
 
 export type LoadDocType = 'remito' | 'factura' | 'cot' | 'otro' | 'despacho';
 
@@ -107,6 +107,7 @@ export interface TenantSettings {
   responsibleName?: string;
   country?: string;
   adminEmail?: string;
+  enabledModules?: string[]; // IDs de las pantallas habilitadas
 }
 
 export interface Tenant {

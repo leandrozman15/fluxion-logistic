@@ -72,19 +72,27 @@ function DashboardSidebar() {
   const { data: tenant } = useDoc<Tenant>(tenantRef);
 
   const adminMenu = [
-    { title: "Monitor Operativo", icon: LayoutDashboard, href: "/dashboard" },
-    { title: "Mercado Libre", icon: ShoppingBag, href: "/mercadolibre" },
-    { title: "Despacho Inteligente", icon: Zap, href: "/despacho" },
-    { title: "Flota de Camiones", icon: Truck, href: "/flota" },
-    { title: "Gestión Choferes", icon: Users, href: "/choferes" },
-    { title: "Cartera Clientes", icon: Briefcase, href: "/clientes" },
-    { title: "Catálogo Productos", icon: Box, href: "/productos" },
-    { title: "Cargas y Fletes", icon: Package, href: "/cargas" },
-    { title: "Buzón de Remitos", icon: Files, href: "/remitos" },
-    { title: "Mantenimiento", icon: Wrench, href: "/mantenimiento" },
-    { title: "Sedes Logísticas", icon: Building2, href: "/sedes" },
-    { title: "Análisis de Datos", icon: BarChart3, href: "/analytics" },
+    { id: 'dashboard', title: "Monitor Operativo", icon: LayoutDashboard, href: "/dashboard" },
+    { id: 'mercadolibre', title: "Mercado Libre", icon: ShoppingBag, href: "/mercadolibre" },
+    { id: 'despacho', title: "Despacho Inteligente", icon: Zap, href: "/despacho" },
+    { id: 'flota', title: "Flota de Camiones", icon: Truck, href: "/flota" },
+    { id: 'choferes', title: "Gestión Choferes", icon: Users, href: "/choferes" },
+    { id: 'clientes', title: "Cartera Clientes", icon: Briefcase, href: "/clientes" },
+    { id: 'productos', title: "Catálogo Productos", icon: Box, href: "/productos" },
+    { id: 'cargas', title: "Cargas y Fletes", icon: Package, href: "/cargas" },
+    { id: 'remitos', title: "Buzón de Remitos", icon: Files, href: "/remitos" },
+    { id: 'mantenimiento', title: "Mantenimiento", icon: Wrench, href: "/mantenimiento" },
+    { id: 'sedes', title: "Sedes Logísticas", icon: Building2, href: "/sedes" },
+    { id: 'analytics', title: "Análisis de Datos", icon: BarChart3, href: "/analytics" },
   ];
+
+  // FILTRADO DE MENÚ BASADO EN MÓDULOS HABILITADOS
+  const filteredMenu = useMemo(() => {
+    if (!tenant) return adminMenu; // Carga inicial
+    const enabled = tenant.settings?.enabledModules;
+    if (!enabled || enabled.length === 0) return adminMenu; // Fallback legacy
+    return adminMenu.filter(item => enabled.includes(item.id));
+  }, [tenant, adminMenu]);
 
   const driverMenu = [
     { title: "App Chofer (Mis Viajes)", icon: Smartphone, href: "/rutas" },
@@ -147,7 +155,7 @@ function DashboardSidebar() {
           <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Administración</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {adminMenu.map((item) => (
+              {filteredMenu.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton 
                     asChild 

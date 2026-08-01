@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Building2, 
   ArrowLeft, 
@@ -28,12 +29,34 @@ import {
   Phone,
   User,
   CreditCard,
-  DollarSign
+  DollarSign,
+  LayoutGrid,
+  ShoppingBag,
+  Truck,
+  Users,
+  Wrench,
+  Files,
+  BarChart3
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 const SUPER_ADMIN_EMAIL = "leozman15@gmail.com";
+
+const AVAILABLE_MODULES = [
+  { id: 'dashboard', label: 'Monitor Operativo', icon: LayoutGrid, group: 'Core' },
+  { id: 'cargas', label: 'Cargas y fletes', icon: Box, group: 'Core' },
+  { id: 'clientes', label: 'Cartera Clientes', icon: Building2, group: 'Core' },
+  { id: 'flota', label: 'Flota Camiones', icon: Truck, group: 'Activos' },
+  { id: 'choferes', label: 'Gestión Choferes', icon: Users, group: 'Activos' },
+  { id: 'mantenimiento', label: 'Taller y Mantenimiento', icon: Wrench, group: 'Activos' },
+  { id: 'mercadolibre', label: 'Mercado Libre (Last Mile)', icon: ShoppingBag, group: 'E-commerce' },
+  { id: 'remitos', label: 'Buzón de Remitos', icon: Files, group: 'Administración' },
+  { id: 'productos', label: 'Catálogo Productos', icon: Box, group: 'Administración' },
+  { id: 'despacho', label: 'Despacho Inteligente (IA)', icon: Zap, group: 'Inteligencia' },
+  { id: 'analytics', label: 'Análisis de Datos', icon: BarChart3, group: 'Inteligencia' },
+  { id: 'sedes', label: 'Sedes Logísticas', icon: MapPin, group: 'Infraestructura' },
+];
 
 export default function NewTenantPage() {
   const db = useFirestore();
@@ -42,6 +65,8 @@ export default function NewTenantPage() {
   const { toast } = useToast();
   
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [enabledModules, setEnabledModules] = useState<string[]>(AVAILABLE_MODULES.map(m => m.id));
+  
   const [formData, setFormData] = useState({
     name: "",
     cuit: "",
@@ -62,6 +87,12 @@ export default function NewTenantPage() {
     }
   }, [user, userLoading, router]);
 
+  const toggleModule = (moduleId: string) => {
+    setEnabledModules(prev => 
+      prev.includes(moduleId) ? prev.filter(id => id !== moduleId) : [...prev, moduleId]
+    );
+  };
+
   const handleSubmit = async () => {
     if (!db || !formData.name) return;
     setIsSubmitting(true);
@@ -73,6 +104,7 @@ export default function NewTenantPage() {
         plan: formData.plan,
         monthlyFee: formData.monthlyFee,
         createdAt: serverTimestamp(),
+        subscriptionStatus: 'active',
         settings: {
           onboardingCompleted: false,
           mapProvider: 'google',
@@ -83,7 +115,8 @@ export default function NewTenantPage() {
           legalAddress: formData.legalAddress,
           legalCityState: formData.legalCityState,
           centralPhone: formData.centralPhone,
-          responsibleName: formData.responsibleName
+          responsibleName: formData.responsibleName,
+          enabledModules: enabledModules
         }
       });
       
@@ -176,11 +209,55 @@ export default function NewTenantPage() {
             </CardContent>
           </Card>
 
-          {/* 2. CONTACTO Y FACTURACIÓN */}
+          {/* 2. MODULOS HABILITADOS */}
+          <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-white">
+            <CardHeader className="bg-blue-600 text-white p-8">
+              <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
+                <LayoutGrid size={18} /> 2. Configuración de Módulos y Accesos
+              </CardTitle>
+              <CardDescription className="text-white/60 text-[10px] uppercase font-bold">Seleccione las pantallas que el cliente tendrá disponibles</CardDescription>
+            </CardHeader>
+            <CardContent className="p-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {AVAILABLE_MODULES.map(module => (
+                  <div 
+                    key={module.id} 
+                    className={cn(
+                      "p-4 rounded-2xl border-2 transition-all flex items-center justify-between cursor-pointer group",
+                      enabledModules.includes(module.id) ? "border-blue-600 bg-blue-50" : "border-slate-100 hover:border-slate-200"
+                    )}
+                    onClick={() => toggleModule(module.id)}
+                  >
+                    <div className="flex items-center gap-3">
+                       <div className={cn(
+                         "w-10 h-10 rounded-xl flex items-center justify-center border shadow-sm",
+                         enabledModules.includes(module.id) ? "bg-blue-600 text-white border-blue-500" : "bg-white text-slate-400"
+                       )}>
+                          <module.icon size={20} />
+                       </div>
+                       <div>
+                          <p className={cn("text-xs font-black uppercase leading-none", enabledModules.includes(module.id) ? "text-blue-900" : "text-slate-500")}>
+                            {module.label}
+                          </p>
+                          <p className="text-[8px] font-bold text-slate-400 uppercase mt-1">{module.group}</p>
+                       </div>
+                    </div>
+                    <Checkbox 
+                      checked={enabledModules.includes(module.id)} 
+                      onCheckedChange={() => toggleModule(module.id)}
+                      className="rounded-full h-5 w-5"
+                    />
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 3. CONTACTO Y FACTURACIÓN */}
           <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-white">
             <CardHeader className="bg-slate-100/50 border-b p-8">
               <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2 text-slate-600">
-                <CreditCard size={18} className="text-blue-600" /> 2. Contacto y Facturación
+                <CreditCard size={18} className="text-blue-600" /> 3. Contacto y Facturación
               </CardTitle>
             </CardHeader>
             <CardContent className="p-8 space-y-6">
@@ -233,77 +310,6 @@ export default function NewTenantPage() {
                </div>
             </CardContent>
           </Card>
-
-          {/* 3. ACUERDO COMERCIAL Y PLAN */}
-          <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-white">
-            <CardHeader className="bg-slate-50/50 border-b p-8">
-              <CardTitle className="text-sm font-black uppercase italic tracking-tighter flex items-center gap-2">
-                <Zap size={18} className="text-blue-600" /> 3. Selección de Plan y Mensualidad
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-8 space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <button 
-                  onClick={() => setFormData({...formData, plan: 'free'})}
-                  className={cn(
-                    "p-6 rounded-[2rem] border-2 transition-all flex flex-col items-center text-center gap-4 relative overflow-hidden",
-                    formData.plan === 'free' ? "border-blue-600 bg-blue-50 shadow-xl" : "border-slate-100 hover:border-blue-200 bg-white"
-                  )}
-                >
-                   {formData.plan === 'free' && <div className="absolute top-2 right-4"><CheckCircle2 className="text-blue-600" size={20}/></div>}
-                   <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm border">
-                      <Box size={24}/>
-                   </div>
-                   <div>
-                      <p className="text-base font-black uppercase italic text-slate-900 leading-none">Plan Free</p>
-                      <p className="text-[10px] font-bold text-slate-400 mt-2">Básico para pequeñas flotas</p>
-                   </div>
-                </button>
-
-                <button 
-                  onClick={() => setFormData({...formData, plan: 'pro'})}
-                  className={cn(
-                    "p-6 rounded-[2rem] border-2 transition-all flex flex-col items-center text-center gap-4 relative overflow-hidden",
-                    formData.plan === 'pro' ? "border-slate-900 bg-slate-900 text-white shadow-2xl scale-105" : "border-slate-100 hover:border-blue-200 bg-white"
-                  )}
-                >
-                   {formData.plan === 'pro' && <div className="absolute top-2 right-4"><CheckCircle2 className="text-blue-400" size={20}/></div>}
-                   <div className="w-12 h-12 bg-blue-500/20 rounded-2xl flex items-center justify-center text-blue-400 border border-blue-500/30">
-                      <TrendingUp size={24}/>
-                   </div>
-                   <div>
-                      <p className={cn("text-base font-black uppercase italic leading-none", formData.plan === 'pro' ? "text-blue-400" : "text-slate-900")}>Industrial PRO</p>
-                      <p className={cn("text-[10px] font-bold mt-2", formData.plan === 'pro' ? "text-white/40" : "text-slate-400")}>Escalamiento y Auditoría IA</p>
-                   </div>
-                </button>
-              </div>
-
-              <div className="pt-6 border-t space-y-4">
-                 <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Valor de Mensualidad Acordado (ARS)</Label>
-                 <div className="relative">
-                    <DollarSign className="absolute left-4 top-3.5 h-5 w-5 text-blue-600" />
-                    <Input 
-                      type="number"
-                      placeholder="0.00" 
-                      className="h-14 bg-slate-50 border-none rounded-2xl font-black text-xl pl-12"
-                      value={formData.monthlyFee}
-                      onChange={e => setFormData({...formData, monthlyFee: parseFloat(e.target.value) || 0})}
-                    />
-                 </div>
-                 <p className="text-[10px] text-slate-400 italic">Este valor se utilizará como base para la generación automática de facturas.</p>
-              </div>
-            </CardContent>
-            <CardFooter className="bg-slate-50 border-t p-8">
-              <div className="flex items-start gap-4">
-                 <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-blue-600 shadow-sm border border-slate-200 shrink-0">
-                    <Info size={20} />
-                 </div>
-                 <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
-                   Al habilitar el <strong>Plan Industrial PRO</strong>, la organización tendrá acceso inmediato a la Auditoría de Telemetría avanzada, Despacho Inteligente de remitos y soporte para Bitrenes de alta capacidad.
-                 </p>
-              </div>
-            </CardFooter>
-          </Card>
         </div>
 
         <div className="lg:col-span-4 space-y-6">
@@ -320,20 +326,12 @@ export default function NewTenantPage() {
                        <p className="text-lg font-black italic tracking-tighter truncate">{formData.name || 'Sin definir'}</p>
                     </div>
                     <div className="space-y-1">
-                       <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Nivel de Servicio</p>
-                       <p className="text-base font-bold text-blue-400 uppercase italic">{formData.plan === 'pro' ? '🚀 Industrial PRO' : '📦 Free tier'}</p>
+                       <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Módulos Habilitados</p>
+                       <p className="text-base font-bold text-blue-400 uppercase italic">{enabledModules.length} activos</p>
                     </div>
                     <div className="space-y-1">
                        <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Mensualidad</p>
                        <p className="text-xl font-black italic text-green-400">${formData.monthlyFee.toLocaleString()}</p>
-                    </div>
-                    <div className="space-y-1">
-                       <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Responsable</p>
-                       <p className="text-sm font-bold text-slate-300">{formData.responsibleName || 'No especificado'}</p>
-                    </div>
-                    <div className="space-y-1">
-                       <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Contacto</p>
-                       <p className="text-xs font-mono text-slate-400">{formData.centralPhone || '-'}</p>
                     </div>
                  </div>
 
@@ -347,7 +345,7 @@ export default function NewTenantPage() {
                       DAR DE ALTA
                     </Button>
                     <p className="text-[10px] text-center text-white/40 font-bold uppercase tracking-widest">
-                       Creación Segura Certificada
+                       Configuración Modular SaaS
                     </p>
                  </div>
               </CardContent>
@@ -358,9 +356,9 @@ export default function NewTenantPage() {
                  <Zap size={20} />
               </div>
               <div className="space-y-1">
-                 <p className="text-xs font-black text-blue-800 uppercase italic">Aprovisionamiento Instantáneo</p>
+                 <p className="text-xs font-black text-blue-800 uppercase italic">Aprovisionamiento Dinámico</p>
                  <p className="text-[10px] text-blue-600 leading-relaxed font-medium">
-                   Al confirmar, el sistema reservará un ID único de base de datos para este cliente. Los datos fiscales se usarán para la generación de la primera factura mensual.
+                   Al habilitar módulos específicos, la interfaz del cliente se adaptará automáticamente ocultando las funciones no contratadas.
                  </p>
               </div>
            </div>
