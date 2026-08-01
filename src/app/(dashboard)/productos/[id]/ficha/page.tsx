@@ -8,6 +8,7 @@ import { useTenant } from "@/hooks/use-tenant";
 import { doc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import Barcode from "react-barcode";
 import { 
   ArrowLeft, 
   Loader2, 
@@ -121,7 +122,15 @@ export default function ProductTechnicalSheetPage() {
                   <h2 className="text-5xl font-black uppercase tracking-tighter text-slate-900 leading-none">{product.name}</h2>
                   <p className="text-2xl font-bold text-slate-400 uppercase italic mt-4">{product.brand || 'Marca no especificada'}</p>
                </div>
-               <div className="pt-4">
+               
+               <div className="pt-8">
+                  <div className="p-4 bg-white border-[2px] border-slate-200 rounded-2xl w-fit">
+                    <Barcode value={product.sku} format="CODE128" width={1.8} height={60} fontSize={12} fontOptions="bold" />
+                  </div>
+                  <p className="text-[9px] font-black uppercase text-slate-400 mt-2 tracking-widest">Código de Barras Industrial (Code 128)</p>
+               </div>
+
+               <div className="pt-6">
                   <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-blue-900 mb-3 flex items-center gap-2 border-b-2 border-slate-100 pb-1">
                     <InfoIcon size={14} /> Descripción del Artículo
                   </h3>

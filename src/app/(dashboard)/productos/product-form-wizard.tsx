@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from "react";
@@ -14,12 +15,13 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import Barcode from "react-barcode";
 import { 
   Box, ArrowLeft, ArrowRight, Save, Loader2, 
   Scale, Layers, ShieldCheck, CheckCircle2, 
   Info, Tag, Ship, ThermometerSnowflake, 
   AlertTriangle, ScanBarcode, Camera, Image as ImageIcon, 
-  ChevronRight, ChevronLeft, Package, LayoutGrid, Building2, User, DollarSign, Activity, TrendingUp, Zap, ShoppingCart, Warehouse, MoveRight
+  ChevronRight, ChevronLeft, Package, LayoutGrid, Building2, User, DollarSign, Activity, TrendingUp, Zap, ShoppingCart, Warehouse, MoveRight, X
 } from "lucide-react";
 import { Product, Hub, ProductWarehouse } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -39,26 +41,6 @@ const UNIT_TYPES = [
   { id: 'box', label: 'Caja' },
   { id: 'bag', label: 'Bolsa' },
 ];
-
-const INITIAL_COSTS = {
-  fixed: {
-    salaryWithSocial: 0,
-    insuranceTotal: 0,
-    patenteMonthly: 0,
-    satelliteGps: 0,
-    garageAdmin: 0,
-    taxesHabilitations: 0,
-    amortization: 0,
-  },
-  variable: {
-    preventiveMaintenance: { cost: 0, frequencyKm: 20000 },
-    tires: { costFullSet: 0, lifeSpanKm: 100000 },
-    unforeseenReservePerKm: 0,
-  },
-  operational: {
-    estimatedMonthlyKm: 10000,
-  }
-};
 
 export default function ProductFormWizard({ productId }: ProductFormWizardProps) {
   const db = useFirestore();
@@ -92,7 +74,6 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
     if (existingProduct) setFormData(existingProduct);
   }, [existingProduct]);
 
-  // Sincronizar depósitos disponibles
   useEffect(() => {
     if (hubs && (formData.warehouses?.length === 0 || !formData.warehouses)) {
       const initialWarehouses = hubs.map(h => ({
@@ -148,7 +129,6 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
     if (!db || !tenantId || !formData.name || !formData.sku) return;
     setIsSubmitting(true);
     try {
-      // Consolidar stock total
       const totalStock = (formData.warehouses || []).reduce((acc, w) => acc + (w.stockQuantity || 0), 0);
       const finalData = { ...formData, stockQuantity: totalStock, updatedAt: serverTimestamp() };
 
@@ -209,13 +189,24 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
             <Card className="border-none shadow-sm rounded-3xl overflow-hidden">
               <CardHeader className="bg-slate-900 text-white"><CardTitle className="text-sm uppercase tracking-widest">1. Información de Identidad</CardTitle></CardHeader>
               <CardContent className="grid grid-cols-1 md:grid-cols-12 gap-8 pt-8 p-8">
-                <div className="md:col-span-4 flex flex-col items-center justify-center p-6 bg-slate-50 border-2 border-dashed rounded-[2rem] space-y-4">
-                  <div className="relative w-48 h-48 bg-white rounded-3xl border-2 border-slate-200 shadow-md flex items-center justify-center overflow-hidden">
-                    {formData.photoUrl ? <img src={formData.photoUrl} className="w-full h-full object-cover" /> : <Package size={64} className="text-slate-200" />}
-                    {isProcessingPhoto && <div className="absolute inset-0 bg-white/80 flex items-center justify-center"><Loader2 className="animate-spin" /></div>}
-                  </div>
-                  <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handlePhotoChange} />
-                  <Button variant="outline" className="rounded-xl h-10 w-full" onClick={() => fileInputRef.current?.click()} disabled={isProcessingPhoto}><Camera size={16} className="mr-2" /> SUBIR FOTO</Button>
+                <div className="md:col-span-4 space-y-6">
+                   <div className="flex flex-col items-center justify-center p-6 bg-slate-50 border-2 border-dashed rounded-[2rem] space-y-4">
+                     <div className="relative w-48 h-48 bg-white rounded-3xl border-2 border-slate-200 shadow-md flex items-center justify-center overflow-hidden">
+                       {formData.photoUrl ? <img src={formData.photoUrl} className="w-full h-full object-cover" /> : <Package size={64} className="text-slate-200" />}
+                       {isProcessingPhoto && <div className="absolute inset-0 bg-white/80 flex items-center justify-center"><Loader2 className="animate-spin" /></div>}
+                     </div>
+                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handlePhotoChange} />
+                     <Button variant="outline" className="rounded-xl h-10 w-full" onClick={() => fileInputRef.current?.click()} disabled={isProcessingPhoto}><Camera size={16} className="mr-2" /> SUBIR FOTO</Button>
+                   </div>
+                   
+                   {formData.sku && (
+                     <div className="p-4 bg-white border rounded-2xl flex flex-col items-center justify-center gap-2 shadow-sm">
+                        <p className="text-[9px] font-black uppercase text-slate-400">Vista Previa Code 128</p>
+                        <div className="bg-white p-2">
+                           <Barcode value={formData.sku} format="CODE128" width={1.5} height={40} fontSize={10} />
+                        </div>
+                     </div>
+                   )}
                 </div>
                 
                 <div className="md:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6">
