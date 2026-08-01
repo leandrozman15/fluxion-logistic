@@ -4,6 +4,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useDoc } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { collection, serverTimestamp, doc, updateDoc, setDoc } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "0+", "0-"];
 
 export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   const db = useFirestore();
+  const { tenantId } = useTenant();
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
@@ -89,8 +91,8 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   });
 
   const driverRef = useMemo(() => 
-    driverId && db ? doc(db, "drivers", driverId) : null
-  , [db, driverId]);
+    (driverId && db && tenantId) ? doc(db, "tenants", tenantId, "drivers", driverId) : null
+  , [db, tenantId, driverId]);
 
   const { data: existingDriver, loading: loadingExisting } = useDoc<Driver>(driverRef);
 
@@ -110,10 +112,9 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   }, [existingDriver]);
 
   const handleNext = () => {
-    // Validación por paso para asegurar que el usuario no deje campos vacíos
     if (step === 1) {
-      if (!formData.firstName) return toast({ variant: "destructive", title: "Información Faltante", description: "Por favor, ingrese los Nombres del personal." });
-      if (!formData.lastName) return toast({ variant: "destructive", title: "Información Faltante", description: "Por favor, ingrese los Apellidos del personal." });
+      if (!formData.firstName) return toast({ variant: "destructive", title: "Información Faltante", description: "Por favor, ingrese los Nombres." });
+      if (!formData.lastName) return toast({ variant: "destructive", title: "Información Faltante", description: "Por favor, ingrese los Apellidos." });
       if (!formData.dni) return toast({ variant: "destructive", title: "Información Faltante", description: "El número de DNI es obligatorio." });
       if (!formData.role) return toast({ variant: "destructive", title: "Información Faltante", description: "Debe seleccionar un Rol operativo." });
     }
@@ -124,7 +125,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
     }
     if (step === 3) {
       if (!formData.email) return toast({ variant: "destructive", title: "Información Faltante", description: "El correo electrónico es necesario para el acceso." });
-      if (!driverId && !formData.password) return toast({ variant: "destructive", title: "Información Faltante", description: "Debe definir una contraseña inicial para el usuario." });
+      if (!driverId && !formData.password) return toast({ variant: "destructive", title: "Información Faltante", description: "Debe definir una contraseña inicial." });
     }
     setStep(s => s + 1);
   };
@@ -148,19 +149,13 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
     const reader = new FileReader();
     reader.onload = async (event) => {
       const base64 = event.target?.result as string;
-      
-      // Comprimir si es una imagen
       let finalData = base64;
       if (file.type.startsWith('image/')) {
         finalData = await compressImage(base64);
       }
-
       setFormData(prev => ({ ...prev, [key]: finalData }));
       setIsProcessingFile(null);
-      toast({ 
-        title: "Archivo procesado", 
-        description: "El documento se ha cargado correctamente." 
-      });
+      toast({ title: "Archivo procesado" });
     };
     reader.readAsDataURL(file);
   };
@@ -174,13 +169,20 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   };
 
   const handleSubmit = async () => {
-    if (!db) return;
+    if (!db || !tenantId) return;
 
-    // Validación final exhaustiva
-    const required = ['firstName', 'lastName', 'dni', 'email', 'role'];
-    for (const field of required) {
-      if (!formData[field as keyof typeof formData]) {
-        toast({ variant: "destructive", title: "Datos Incompletos", description: `Falta completar el campo: ${field}.` });
+    // Validación final
+    const requiredLabels: Record<string, string> = {
+      firstName: "Nombres",
+      lastName: "Apellidos",
+      dni: "DNI",
+      email: "Correo Electrónico",
+      role: "Rol Operativo"
+    };
+
+    for (const key in requiredLabels) {
+      if (!formData[key as keyof typeof formData]) {
+        toast({ variant: "destructive", title: "Datos Incompletos", description: `Falta completar: ${requiredLabels[key]}` });
         return;
       }
     }
@@ -188,24 +190,25 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
     setIsSubmitting(true);
     try {
       if (driverId) {
-        await updateDoc(doc(db, "drivers", driverId), {
+        await updateDoc(doc(db, "tenants", tenantId, "drivers", driverId), {
           ...formData,
           updatedAt: serverTimestamp()
         });
         toast({ title: "Perfil Actualizado", description: `${formData.firstName} ${formData.lastName} ha sido guardado.` });
       } else {
-        const newRef = doc(collection(db, "drivers"));
+        const newRef = doc(collection(db, "tenants", tenantId, "drivers"));
         await setDoc(newRef, {
           ...formData,
           id: newRef.id,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         });
-        toast({ title: "Alta Exitosa", description: "El personal ha sido habilitado en el sistema." });
+        toast({ title: "Alta Exitosa", description: "El personal ha sido habilitado." });
       }
       router.push('/choferes');
-    } catch (error) {
-      toast({ variant: "destructive", title: "Error al guardar", description: "Verifique los datos e intente nuevamente." });
+    } catch (error: any) {
+      console.error(error);
+      toast({ variant: "destructive", title: "Error al guardar", description: error.message || "Verifique los datos e intente nuevamente." });
     } finally {
       setIsSubmitting(false);
     }

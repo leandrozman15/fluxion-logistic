@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { collection, serverTimestamp, doc, updateDoc, setDoc, query, orderBy } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,8 +15,8 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { 
   Truck, ArrowLeft, ArrowRight, Save, Loader2, 
-  Gauge, Box, Anchor, Layers, 
-  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon, LayoutGrid, Building2, User, DollarSign, Activity, TrendingUp, Zap, Scale, Trash2, Plus, UserCheck, X, Wrench, LifeBuoy
+  Scale, Box, Anchor, Layers, 
+  Crosshair, CheckCircle2, ChevronRight, ChevronLeft, ShieldCheck, Info, MapPin, Camera, Image as ImageIcon, LayoutGrid, Building2, User, DollarSign, Activity, TrendingUp, Zap, Trash2, Plus, UserCheck, X, Wrench, LifeBuoy
 } from "lucide-react";
 import { Truck as TruckType, Driver, OwnershipType, TruckCosts } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -49,6 +50,7 @@ const INITIAL_COSTS: TruckCosts = {
 
 export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
   const db = useFirestore();
+  const { tenantId } = useTenant();
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
@@ -66,10 +68,10 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     costs: INITIAL_COSTS
   });
 
-  const truckRef = useMemo(() => truckId && db ? doc(db, "trucks", truckId) : null, [db, truckId]);
+  const truckRef = useMemo(() => (truckId && db && tenantId) ? doc(db, "tenants", tenantId, "trucks", truckId) : null, [db, tenantId, truckId]);
   const { data: existingTruck, loading: loadingExisting } = useDoc<TruckType>(truckRef);
 
-  const driversQuery = useMemo(() => db ? query(collection(db, "drivers"), orderBy("lastName")) : null, [db]);
+  const driversQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "drivers"), orderBy("lastName")) : null, [db, tenantId]);
   const { data: allStaff } = useCollection<Driver>(driversQuery);
 
   const driversOnly = useMemo(() => allStaff?.filter(s => s.role === 'driver' || !s.role) || [], [allStaff]);
@@ -94,7 +96,14 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
   }, [formData.grossCombinedWeightKg, formData.unladenWeightKg]);
 
   const handleBack = () => setStep(prev => Math.max(1, prev - 1));
-  const handleNext = () => setStep(prev => Math.min(4, prev + 1));
+  
+  const handleNext = () => {
+    if (step === 1) {
+      if (!formData.plate) return toast({ variant: "destructive", title: "Información Faltante", description: "La patente es obligatoria." });
+      if (!formData.brand) return toast({ variant: "destructive", title: "Información Faltante", description: "Debe indicar la marca." });
+    }
+    setStep(prev => Math.min(4, prev + 1));
+  };
 
   const handleCostChange = (block: keyof TruckCosts, field: string, value: string, subField?: string) => {
     const val = value === "" ? 0 : parseFloat(value);
@@ -135,20 +144,24 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
   };
 
   const handleSubmit = async () => {
-    if (!db) return;
+    if (!db || !tenantId) return;
+    
+    if (!formData.plate) return toast({ variant: "destructive", title: "Datos Incompletos", description: "La patente es obligatoria." });
+
     setIsSubmitting(true);
     try {
       if (truckId) {
-        await updateDoc(doc(db, "trucks", truckId), { ...formData, updatedAt: serverTimestamp() });
+        await updateDoc(doc(db, "tenants", tenantId, "trucks", truckId), { ...formData, updatedAt: serverTimestamp() });
         toast({ title: "Unidad Actualizada" });
       } else {
-        const newRef = doc(collection(db, "trucks"));
+        const newRef = doc(collection(db, "tenants", tenantId, "trucks"));
         await setDoc(newRef, { ...formData, id: newRef.id, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
         toast({ title: "Alta Exitosa" });
       }
       router.push('/flota');
-    } catch (e) {
-      toast({ variant: "destructive", title: "Error al guardar" });
+    } catch (e: any) {
+      console.error(e);
+      toast({ variant: "destructive", title: "Error al guardar", description: e.message || "Ocurrió un error técnico." });
     } finally {
       setIsSubmitting(false);
     }
@@ -158,22 +171,11 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     const c = formData.costs || INITIAL_COSTS;
     const fixedTotal = Object.values(c.fixed).reduce((a, b) => a + (b as number), 0);
     const monthlyKm = c.operational.estimatedMonthlyKm || 1;
-    
     const fixedPerKm = fixedTotal / monthlyKm;
-    
-    // Desgaste de neumáticos
     const tireIncidencePerKm = (c.variable.tires.costFullSet || 0) / (c.variable.tires.lifeSpanKm || 1);
-    
-    // Cambio de aceite / Service
     const oilIncidencePerKm = (c.variable.preventiveMaintenance.cost || 0) / (c.variable.preventiveMaintenance.frequencyKm || 1);
-    
     const variablePerKm = oilIncidencePerKm + tireIncidencePerKm + (c.variable.unforeseenReservePerKm || 0);
-    
-    return {
-      fixed: fixedPerKm,
-      variable: variablePerKm,
-      total: fixedPerKm + variablePerKm
-    };
+    return { fixed: fixedPerKm, variable: variablePerKm, total: fixedPerKm + variablePerKm };
   }, [formData.costs]);
 
   if (loadingExisting && truckId) return <div className="h-[60vh] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
@@ -190,14 +192,14 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between">
+      <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between overflow-x-auto">
          {[
             { id: 1, label: "Identificación", icon: Info },
             { id: 2, label: "Arrastre", icon: Truck },
             { id: 3, label: "Pesos y GPS", icon: Scale },
             { id: 4, label: "Costos", icon: DollarSign }
           ].map(s => (
-            <div key={s.id} className={cn("flex flex-col items-center gap-1 flex-1", step === s.id ? "text-blue-600" : "text-slate-400")}>
+            <div key={s.id} className={cn("flex flex-col items-center gap-1 flex-1 min-w-[80px]", step === s.id ? "text-blue-600" : "text-slate-400")}>
                <div className={cn("w-8 h-8 rounded-full flex items-center justify-center border", step >= s.id ? "bg-blue-600 text-white border-blue-600 shadow-sm" : "bg-white")}>
                  {step > s.id ? <CheckCircle2 size={16} /> : <s.icon size={16} />}
                </div>
@@ -369,31 +371,21 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                   </CardHeader>
                   <CardContent className="pt-6 space-y-4">
                     <div className="space-y-1">
-                      <Label className="text-[10px] uppercase font-bold text-slate-400">Sueldo + Cargas (Chofer)</Label>
+                      <Label className="text-[10px] font-bold text-slate-400 uppercase">Sueldo + Cargas (Chofer)</Label>
                       <Input type="number" value={formData.costs?.fixed.salaryWithSocial ?? 0} onChange={e => handleCostChange('fixed', 'salaryWithSocial', e.target.value)} />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[10px] uppercase font-bold text-slate-400">Seguro Total Unidad</Label>
+                      <Label className="text-[10px] font-bold text-slate-400 uppercase">Seguro Total Unidad</Label>
                       <Input type="number" value={formData.costs?.fixed.insuranceTotal ?? 0} onChange={e => handleCostChange('fixed', 'insuranceTotal', e.target.value)} />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
-                        <Label className="text-[10px] uppercase font-bold text-slate-400">Patente (Cuota)</Label>
+                        <Label className="text-[10px] font-bold text-slate-400 uppercase">Patente (Cuota)</Label>
                         <Input type="number" value={formData.costs?.fixed.patenteMonthly ?? 0} onChange={e => handleCostChange('fixed', 'patenteMonthly', e.target.value)} />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-[10px] uppercase font-bold text-slate-400">GPS / Satelital</Label>
+                        <Label className="text-[10px] font-bold text-slate-400 uppercase">GPS / Satelital</Label>
                         <Input type="number" value={formData.costs?.fixed.satelliteGps ?? 0} onChange={e => handleCostChange('fixed', 'satelliteGps', e.target.value)} />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <Label className="text-[10px] uppercase font-bold text-slate-400">Amortización</Label>
-                        <Input type="number" value={formData.costs?.fixed.amortization ?? 0} onChange={e => handleCostChange('fixed', 'amortization', e.target.value)} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] uppercase font-bold text-slate-400">Habilitaciones</Label>
-                        <Input type="number" value={formData.costs?.fixed.taxesHabilitations ?? 0} onChange={e => handleCostChange('fixed', 'taxesHabilitations', e.target.value)} />
                       </div>
                     </div>
                   </CardContent>
@@ -408,36 +400,12 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                     </CardHeader>
                     <CardContent className="pt-6 grid grid-cols-2 gap-4">
                       <div className="space-y-1">
-                        <Label className="text-[10px] uppercase font-bold text-slate-400">Costo Service</Label>
+                        <Label className="text-[10px] font-bold text-slate-400 uppercase">Costo Service</Label>
                         <Input type="number" value={formData.costs?.variable.preventiveMaintenance?.cost ?? 0} onChange={e => handleCostChange('variable', 'preventiveMaintenance', e.target.value, 'cost')} />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-[10px] uppercase font-bold text-slate-400">Frecuencia (KM)</Label>
+                        <Label className="text-[10px] font-bold text-slate-400 uppercase">Frecuencia (KM)</Label>
                         <Input type="number" value={formData.costs?.variable.preventiveMaintenance?.frequencyKm ?? 20000} onChange={e => handleCostChange('variable', 'preventiveMaintenance', e.target.value, 'frequencyKm')} />
-                      </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="border-none shadow-sm rounded-3xl overflow-hidden">
-                    <CardHeader className="bg-slate-50 border-b py-4">
-                      <CardTitle className="text-sm flex items-center gap-2 text-slate-700">
-                        <LifeBuoy size={16} className="text-blue-600" /> Neumáticos y Reservas
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-6 space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <Label className="text-[10px] uppercase font-bold text-slate-400">Costo Juego Completo</Label>
-                          <Input type="number" value={formData.costs?.variable.tires.costFullSet ?? 0} onChange={e => handleCostChange('variable', 'tires', e.target.value, 'costFullSet')} />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px] uppercase font-bold text-slate-400">Vida Útil (KM)</Label>
-                          <Input type="number" value={formData.costs?.variable.tires.lifeSpanKm ?? 100000} onChange={e => handleCostChange('variable', 'tires', e.target.value, 'lifeSpanKm')} />
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] uppercase font-bold text-slate-400">Reserva Imprevistos x KM</Label>
-                        <Input type="number" step="0.01" value={formData.costs?.variable.unforeseenReservePerKm ?? 0} onChange={e => handleCostChange('variable', 'unforeseenReservePerKm', e.target.value)} />
                       </div>
                     </CardContent>
                 </Card>
@@ -448,9 +416,8 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                   </CardHeader>
                   <CardContent className="pt-4 space-y-2">
                     <div className="space-y-1">
-                      <Label className="text-[10px] uppercase font-bold text-blue-400">KM Mensuales Proyectados</Label>
+                      <Label className="text-[10px] font-bold text-blue-400 uppercase">KM Mensuales Proyectados</Label>
                       <Input type="number" className="bg-white" value={formData.costs?.operational.estimatedMonthlyKm ?? 10000} onChange={e => handleCostChange('operational', 'estimatedMonthlyKm', e.target.value)} />
-                      <p className="text-[8px] text-blue-400 italic">Crucial para prorratear los costos fijos sobre el kilometraje real.</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -462,14 +429,12 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
 
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center z-50">
         <div className="max-w-4xl w-full flex justify-between items-center px-4">
-          <Button variant="ghost" onClick={handleBack} disabled={step === 1 || isSubmitting}>
-             <ChevronLeft size={16} className="mr-1" /> VOLVER
-          </Button>
+          <Button variant="ghost" onClick={handleBack} disabled={step === 1 || isSubmitting} className="font-bold"><ChevronLeft size={16} className="mr-1" /> VOLVER</Button>
           <div className="flex gap-2">
             {step < 4 ? (
-              <Button onClick={handleNext} className="bg-blue-600">SIGUIENTE <ChevronRight size={16} className="ml-1" /></Button>
+              <Button onClick={handleNext} className="bg-blue-600 font-bold px-8">SIGUIENTE <ChevronRight size={16} className="ml-1" /></Button>
             ) : (
-              <Button onClick={handleSubmit} className="bg-green-600" disabled={isSubmitting}>
+              <Button onClick={handleSubmit} className="bg-green-600 font-bold px-8 shadow-lg shadow-green-100" disabled={isSubmitting}>
                 {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" size={16} />}
                 {truckId ? 'GUARDAR CAMBIOS' : 'HABILITAR UNIDAD'}
               </Button>
