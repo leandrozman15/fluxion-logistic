@@ -4,6 +4,7 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { doc, updateDoc, serverTimestamp, collection, query, where, getDoc, orderBy } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,7 @@ export default function TruckDetailPage() {
   const { id } = useParams();
   const router = useRouter();
   const db = useFirestore();
+  const { tenantId } = useTenant();
   const { toast } = useToast();
   
   const [assignedDriver, setAssignedDriver] = useState<Driver | null>(null);
@@ -53,28 +55,28 @@ export default function TruckDetailPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const truckRef = useMemo(() => {
-    if (!db || !id) return null;
-    return doc(db, "trucks", id as string);
-  }, [db, id]);
+    if (!db || !id || !tenantId) return null;
+    return doc(db, "tenants", tenantId, "trucks", id as string);
+  }, [db, id, tenantId]);
 
   const { data: truck, loading } = useDoc<Truck>(truckRef);
 
   const fuelExpensesQuery = useMemo(() => {
-    if (!db || !id) return null;
+    if (!db || !id || !tenantId) return null;
     return query(
-      collection(db, "global_expenses"), 
+      collection(db, "tenants", tenantId, "expenses"), 
       where("truckId", "==", id as string), 
       where("category", "==", "fuel")
     );
-  }, [db, id]);
+  }, [db, id, tenantId]);
 
   const maintenanceHistoryQuery = useMemo(() => {
-    if (!db || !id) return null;
+    if (!db || !id || !tenantId) return null;
     return query(
-      collection(db, "maintenance"), 
+      collection(db, "tenants", tenantId, "maintenance"), 
       where("truckId", "==", id as string)
     );
-  }, [db, id]);
+  }, [db, id, tenantId]);
 
   const { data: fuelExpensesRaw } = useCollection<Expense>(fuelExpensesQuery);
   const { data: maintenanceHistoryRaw } = useCollection<Maintenance>(maintenanceHistoryQuery);
@@ -111,11 +113,9 @@ export default function TruckDetailPage() {
     // CÁLCULO DINÁMICO DE COMBUSTIBLE
     let fuelPerKm = 0;
     if (fuelExpenses && fuelExpenses.length > 0) {
-      // Tomamos el promedio de precio por litro de los tickets cargados (media móvil)
       const validTickets = fuelExpenses.filter(e => !!e.pricePerLiter && e.pricePerLiter > 0);
       if (validTickets.length > 0) {
         const avgPrice = validTickets.reduce((acc, e) => acc + (e.pricePerLiter || 0), 0) / validTickets.length;
-        // Costo = (Precio Promedio * Consumo por 100km) / 100
         fuelPerKm = (avgPrice * (truck.avgConsumption || 32)) / 100;
       }
     }
@@ -133,18 +133,18 @@ export default function TruckDetailPage() {
     }
     
     const fetchStaff = async () => {
-      if (!db || !truck) return;
+      if (!db || !truck || !tenantId) return;
       setLoadingStaff(true);
       try {
         if (truck.assignedDriverId && truck.assignedDriverId !== 'none') {
-          const dSnap = await getDoc(doc(db, "drivers", truck.assignedDriverId));
+          const dSnap = await getDoc(doc(db, "tenants", tenantId, "drivers", truck.assignedDriverId));
           if (dSnap.exists()) setAssignedDriver(dSnap.data() as Driver);
         } else {
           setAssignedDriver(null);
         }
 
         if (truck.assignedCompanionIds && truck.assignedCompanionIds.length > 0) {
-          const companionPromises = truck.assignedCompanionIds.map(id => getDoc(doc(db, "drivers", id)));
+          const companionPromises = truck.assignedCompanionIds.map(cid => getDoc(doc(db, "tenants", tenantId, "drivers", cid)));
           const companionSnaps = await Promise.all(companionPromises);
           const companions = companionSnaps
             .filter(s => s.exists())
@@ -161,7 +161,7 @@ export default function TruckDetailPage() {
     };
     
     fetchStaff();
-  }, [truck, truckRef, db]);
+  }, [truck, truckRef, db, tenantId]);
 
   const getStatusIcon = (status: DocStatus) => {
     switch (status) {
@@ -327,7 +327,6 @@ export default function TruckDetailPage() {
                 <div className="flex items-center justify-center py-4"><Loader2 className="w-4 h-4 animate-spin" /></div>
               ) : (
                 <div className="space-y-4">
-                  {/* Chofer */}
                   <div>
                     <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Chofer Designado</p>
                     {assignedDriver ? (
@@ -344,7 +343,6 @@ export default function TruckDetailPage() {
                     ) : <div className="text-xs italic text-slate-400">Sin chofer asignado.</div>}
                   </div>
 
-                  {/* Acompañantes */}
                   {assignedCompanions.length > 0 && (
                     <div className="pt-2 border-t border-slate-100">
                       <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Acompañantes</p>

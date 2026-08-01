@@ -4,6 +4,7 @@
 import { useState, useMemo, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useFirestore, useCollection } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { collection, query, orderBy, serverTimestamp, doc, setDoc, getDocs, limit, writeBatch, where } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,7 @@ const Popup = dynamic(() => import("react-leaflet").then((mod) => mod.Popup), { 
 
 export default function DespachoInteligentePage() {
   const db = useFirestore();
+  const { tenantId } = useTenant();
   const { toast } = useToast();
   const router = useRouter();
   
@@ -73,12 +75,12 @@ export default function DespachoInteligentePage() {
   }, []);
 
   const remitosQuery = useMemo(() => {
-    if (!db) return null;
-    return query(collection(db, "pending_remitos"), orderBy("createdAt", "desc"));
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "pending_remitos"), orderBy("createdAt", "desc"));
+  }, [db, tenantId]);
 
-  const trucksQuery = useMemo(() => db ? query(collection(db, "trucks"), orderBy("plate")) : null, [db]);
-  const hubsQuery = useMemo(() => db ? query(collection(db, "hubs"), orderBy("name")) : null, [db]);
+  const trucksQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "trucks"), orderBy("plate")) : null, [db, tenantId]);
+  const hubsQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "hubs"), orderBy("name")) : null, [db, tenantId]);
 
   const { data: allRemitos, loading: loadingRemitos } = useCollection<PendingRemito>(remitosQuery);
   const { data: trucks, loading: loadingTrucks } = useCollection<TruckType>(trucksQuery);
@@ -203,12 +205,12 @@ export default function DespachoInteligentePage() {
   };
 
   const handleConfirmAndCreateLoads = async () => {
-    if (!db || !proposals || !activeHub || !endHub) return;
+    if (!db || !tenantId || !proposals || !activeHub || !endHub) return;
     setIsSaving(true);
     
     try {
       const batch = writeBatch(db);
-      const loadsSnap = await getDocs(query(collection(db, "loads"), orderBy("orderNumber", "desc"), limit(1)));
+      const loadsSnap = await getDocs(query(collection(db, "tenants", tenantId, "loads"), orderBy("orderNumber", "desc"), limit(1)));
       let nextSeq = 1;
       if (!loadsSnap.empty) {
         const parts = (loadsSnap.docs[0].data() as Load).orderNumber.split("-");
@@ -222,7 +224,7 @@ export default function DespachoInteligentePage() {
         const orderNum = `FL-${new Date().getFullYear()}-${String(nextSeq).padStart(4, '0')}`;
         nextSeq++;
 
-        const newLoadRef = doc(collection(db, "loads"));
+        const newLoadRef = doc(collection(db, "tenants", tenantId, "loads"));
         const loadData: Partial<Load> = {
           id: newLoadRef.id,
           orderNumber: orderNum,
@@ -260,7 +262,7 @@ export default function DespachoInteligentePage() {
               id: Math.random().toString(36).substring(7),
               type: 'remito',
               number: r.number,
-              pendingRemitoId: r.id, // VÍNCULO CRÍTICO
+              pendingRemitoId: r.id, 
               cotNumber: r.cotNumber,
               fileUrl: r.fileUrl,
               uploadedAt: new Date().toISOString(),
@@ -281,7 +283,7 @@ export default function DespachoInteligentePage() {
 
         // Actualizar remitos originales a DISPATCHED
         prop.stops.forEach(r => {
-           batch.update(doc(db, "pending_remitos", r.id), { 
+           batch.update(doc(db, "tenants", tenantId, "pending_remitos", r.id), { 
              status: 'dispatched', 
              loadId: newLoadRef.id,
              dispatchedDate: planDate,

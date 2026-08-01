@@ -1,8 +1,10 @@
+
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection, useUser } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { collection, query, where, orderBy, updateDoc, doc, serverTimestamp } from "firebase/firestore";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,6 +39,8 @@ import { es } from "date-fns/locale";
 
 export default function DriverRoutesPage() {
   const db = useFirestore();
+  const { tenantId, role } = useTenant();
+  const { user } = useUser();
   const { toast } = useToast();
   const router = useRouter();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -52,9 +56,19 @@ export default function DriverRoutesPage() {
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
   const routesQuery = useMemo(() => {
-    if (!db) return null;
-    return query(collection(db, "loads"), orderBy("pickupDate", "asc"));
-  }, [db]);
+    if (!db || !tenantId) return null;
+    
+    // Si es chofer, solo ver sus rutas asignadas
+    if (role === 'driver' && user?.uid) {
+      return query(
+        collection(db, "tenants", tenantId, "loads"), 
+        where("assignedDriverId", "==", user.uid),
+        orderBy("pickupDate", "asc")
+      );
+    }
+
+    return query(collection(db, "tenants", tenantId, "loads"), orderBy("pickupDate", "asc"));
+  }, [db, tenantId, role, user?.uid]);
 
   const { data: routes, loading } = useCollection<Load>(routesQuery);
 
@@ -171,10 +185,10 @@ export default function DriverRoutesPage() {
               const status = dateStatusMap[dateStr];
               let boxStyles = "bg-white border-slate-100 text-slate-300";
               if (isToday) boxStyles = "bg-blue-600 border-blue-600 text-white shadow-blue-200";
-              else if (status?.hasTrips) boxStyles = status.allDelivered ? "bg-green-600 border-green-600 text-white shadow-green-100" : "bg-orange-500 border-orange-500 text-white shadow-orange-100";
+              else if (status?.hasTrips) boxStyles = status.allDelivered ? "bg-green-600 border-green-600 text-white shadow-green-100" : "bg-orange-50 border-orange-100 text-orange-600";
               return (
                 <button key={dateStr} data-today={isToday} onClick={() => setSelectedDate(dateStr)} className={cn("flex flex-col items-center justify-center min-w-[65px] h-20 rounded-2xl border-2 transition-all shrink-0", boxStyles, isSelected && "scale-110 shadow-lg ring-2 ring-offset-2 ring-blue-100 z-10")}>
-                  <span className={cn("text-[9px] font-black uppercase mb-1", isToday || status?.hasTrips ? "text-white/70" : "text-slate-400")}>{format(date, "EEE", { locale: es })}</span>
+                  <span className={cn("text-[9px] font-black uppercase mb-1", (isToday || (status?.hasTrips && status.allDelivered)) ? "text-white/70" : "text-slate-400")}>{format(date, "EEE", { locale: es })}</span>
                   <span className="text-lg font-black leading-none">{format(date, "d")}</span>
                 </button>
               );

@@ -3,6 +3,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useFirestore, useCollection } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { collection, query, orderBy, addDoc, serverTimestamp, updateDoc, doc, deleteDoc, getDocs, limit } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -26,6 +27,7 @@ import { es } from "date-fns/locale";
 
 export default function MaintenancePage() {
   const db = useFirestore();
+  const { tenantId } = useTenant();
   const { toast } = useToast();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -44,14 +46,14 @@ export default function MaintenancePage() {
   });
 
   const maintenanceQuery = useMemo(() => {
-    if (!db) return null;
-    return query(collection(db, "maintenance"), orderBy("scheduledDate", "desc"));
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "maintenance"), orderBy("scheduledDate", "desc"));
+  }, [db, tenantId]);
 
   const trucksQuery = useMemo(() => {
-    if (!db) return null;
-    return query(collection(db, "trucks"), orderBy("plate"));
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "trucks"), orderBy("plate"));
+  }, [db, tenantId]);
 
   const { data: maintenanceRecords, loading } = useCollection<Maintenance>(maintenanceQuery);
   const { data: trucks } = useCollection<Truck>(trucksQuery);
@@ -59,7 +61,7 @@ export default function MaintenancePage() {
   // LÓGICA DE GENERACIÓN DE NÚMERO DE ORDEN (OT)
   useEffect(() => {
     async function fetchNextOrderNumber() {
-      if (!isAddOpen || !db) return;
+      if (!isAddOpen || !db || !tenantId) return;
       
       setIsLoadingNumber(true);
       try {
@@ -67,7 +69,7 @@ export default function MaintenancePage() {
         const datePart = format(today, "yyyy-MM-dd");
         
         // Consultar el último registro del día para el contador
-        const q = query(collection(db, "maintenance"), orderBy("orderNumber", "desc"), limit(1));
+        const q = query(collection(db, "tenants", tenantId, "maintenance"), orderBy("orderNumber", "desc"), limit(1));
         const querySnapshot = await getDocs(q);
         
         let nextSeq = 1;
@@ -92,7 +94,7 @@ export default function MaintenancePage() {
     }
 
     fetchNextOrderNumber();
-  }, [isAddOpen, db]);
+  }, [isAddOpen, db, tenantId]);
 
   const filteredRecords = useMemo(() => {
     if (!maintenanceRecords) return [];
@@ -108,17 +110,17 @@ export default function MaintenancePage() {
   }, [maintenanceRecords, trucks, searchTerm]);
 
   const handleAddMaintenance = async () => {
-    if (!db || !formData.truckId || !formData.description) return;
+    if (!db || !tenantId || !formData.truckId || !formData.description) return;
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, "maintenance"), {
+      await addDoc(collection(db, "tenants", tenantId, "maintenance"), {
         ...formData,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
       
       if (formData.status === 'in_progress') {
-        await updateDoc(doc(db, "trucks", formData.truckId), { status: 'maintenance' });
+        await updateDoc(doc(db, "tenants", tenantId, "trucks", formData.truckId), { status: 'maintenance' });
       }
 
       toast({ title: "Orden de Taller Confirmada", description: `Se ha generado la ${formData.orderNumber}.` });
@@ -132,9 +134,9 @@ export default function MaintenancePage() {
   };
 
   const handleUpdateStatus = async (record: Maintenance, newStatus: MaintenanceStatus) => {
-    if (!db) return;
+    if (!db || !tenantId) return;
     try {
-      const recordRef = doc(db, "maintenance", record.id);
+      const recordRef = doc(db, "tenants", tenantId, "maintenance", record.id);
       await updateDoc(recordRef, { 
         status: newStatus,
         updatedAt: serverTimestamp(),
@@ -142,9 +144,9 @@ export default function MaintenancePage() {
       });
 
       if (newStatus === 'in_progress') {
-        await updateDoc(doc(db, "trucks", record.truckId), { status: 'maintenance' });
+        await updateDoc(doc(db, "tenants", tenantId, "trucks", record.truckId), { status: 'maintenance' });
       } else if (newStatus === 'completed' || newStatus === 'cancelled') {
-        await updateDoc(doc(db, "trucks", record.truckId), { status: 'available' });
+        await updateDoc(doc(db, "tenants", tenantId, "trucks", record.truckId), { status: 'available' });
       }
 
       toast({ title: `Estado actualizado a ${newStatus}` });
@@ -154,9 +156,9 @@ export default function MaintenancePage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!db || !confirm("¿Eliminar este registro de mantenimiento?")) return;
+    if (!db || !tenantId || !confirm("¿Eliminar este registro de mantenimiento?")) return;
     try {
-      await deleteDoc(doc(db, "maintenance", id));
+      await deleteDoc(doc(db, "tenants", tenantId, "maintenance", id));
       toast({ title: "Registro eliminado" });
     } catch (e) {
       toast({ variant: "destructive", title: "Error" });

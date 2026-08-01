@@ -1,8 +1,10 @@
+
 'use client';
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { collection, query, orderBy, deleteDoc, doc } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -29,20 +31,21 @@ import Link from "next/link";
 
 export default function ClientesPage() {
   const db = useFirestore();
+  const { tenantId } = useTenant();
   const router = useRouter();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
 
   const clientsQuery = useMemo(() => {
-    if (!db) return null;
-    return query(collection(db, "clients"), orderBy("name"));
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "clients"), orderBy("name"));
+  }, [db, tenantId]);
 
   const hubsQuery = useMemo(() => {
-    if (!db) return null;
-    return collection(db, "hubs");
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return collection(db, "tenants", tenantId, "hubs");
+  }, [db, tenantId]);
 
   const { data: clients, loading } = useCollection<Client>(clientsQuery);
   const { data: hubs } = useCollection<Hub>(hubsQuery);
@@ -63,9 +66,9 @@ export default function ClientesPage() {
   }, [clients, searchTerm]);
 
   const handleDelete = async (id: string) => {
-    if (!db || !confirm("¿Eliminar este cliente de la base de datos?")) return;
+    if (!db || !tenantId || !confirm("¿Eliminar este cliente de la base de datos?")) return;
     try {
-      await deleteDoc(doc(db, "clients", id));
+      await deleteDoc(doc(db, "tenants", tenantId, "clients", id));
       toast({ title: "Cliente eliminado" });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al eliminar" });
