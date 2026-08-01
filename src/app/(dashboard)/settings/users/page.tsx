@@ -1,11 +1,10 @@
-
 'use client';
 
 import { useMemo, useState } from "react";
 import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { collection, query, orderBy, doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { initializeApp, deleteApp } from "firebase/app";
+import { initializeApp, getApps, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import { firebaseConfig } from "@/firebase/config";
 import { Button } from "@/components/ui/button";
@@ -20,6 +19,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export default function UsersSettingsPage() {
   const db = useFirestore();
@@ -45,8 +46,9 @@ export default function UsersSettingsPage() {
 
     setIsSubmitting(true);
     
-    // Instancia secundaria para Auth
-    const secondaryApp = initializeApp(firebaseConfig, "invite-auth");
+    // Instancia secundaria para Auth para no cerrar sesión del administrador actual
+    const appName = `invite-auth-${Date.now()}`;
+    const secondaryApp = initializeApp(firebaseConfig, appName);
     const secondaryAuth = getAuth(secondaryApp);
 
     try {
@@ -54,33 +56,55 @@ export default function UsersSettingsPage() {
       const userCredential = await createUserWithEmailAndPassword(secondaryAuth, newEmail, newPass);
       const uid = userCredential.user.uid;
 
-      // 2. Registro global (Mapping)
-      await setDoc(doc(db, "users", newEmail), {
+      // 2. Registro global (Mapping para Reglas de Seguridad)
+      const globalUserRef = doc(db, "users", newEmail);
+      const globalData = {
         uid,
         email: newEmail,
         tenantId,
         role: newRole,
         status: "active",
         createdAt: serverTimestamp()
+      };
+
+      setDoc(globalUserRef, globalData).catch(async (err) => {
+        const pError = new FirestorePermissionError({
+          path: globalUserRef.path,
+          operation: 'create',
+          requestResourceData: globalData
+        });
+        errorEmitter.emit('permission-error', pError);
       });
 
-      // 3. Registro en la empresa
-      await setDoc(doc(db, "tenants", tenantId, "users", uid), {
+      // 3. Registro en la subcolección de la empresa
+      const tenantUserRef = doc(db, "tenants", tenantId, "users", uid);
+      const tenantUserData = {
         uid,
         tenantId,
         email: newEmail,
         displayName: newEmail.split('@')[0],
         role: newRole,
         createdAt: serverTimestamp(),
-        status: "active"
+        status: "active" as const
+      };
+
+      setDoc(tenantUserRef, tenantUserData).catch(async (err) => {
+        const pError = new FirestorePermissionError({
+          path: tenantUserRef.path,
+          operation: 'create',
+          requestResourceData: tenantUserData
+        });
+        errorEmitter.emit('permission-error', pError);
       });
 
       toast({ title: "Colaborador Habilitado", description: `La cuenta para ${newEmail} ha sido creada con éxito.` });
       setIsInviteOpen(false);
       setNewEmail("");
     } catch (error: any) {
+      console.error("Auth Error:", error);
       toast({ variant: "destructive", title: "Error al habilitar", description: error.message });
     } finally {
+      // Limpiar la app secundaria
       await deleteApp(secondaryApp);
       setIsSubmitting(false);
     }
@@ -145,7 +169,7 @@ export default function UsersSettingsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase text-slate-400">Definir Contraseña</Label>
+                  <Label className="text-[10px) font-black uppercase text-slate-400">Definir Contraseña</Label>
                   <div className="relative">
                     <Key className="absolute left-3 top-3.5 h-5 w-5 text-slate-300" />
                     <Input 
