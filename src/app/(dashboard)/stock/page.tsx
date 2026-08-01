@@ -4,7 +4,7 @@
 import { useState, useMemo } from "react";
 import { useFirestore, useCollection, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, doc, updateDoc, serverTimestamp, addDoc, writeBatch } from "firebase/firestore";
+import { collection, query, orderBy, doc, updateDoc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -15,16 +15,12 @@ import {
   Search, 
   Loader2, 
   TrendingUp, 
-  TrendingDown, 
-  History, 
   AlertTriangle, 
   Plus, 
   ArrowRightLeft,
   Package,
   CheckCircle2,
-  XCircle,
-  Clock,
-  Filter
+  Clock
 } from "lucide-react";
 import { 
   Dialog, 
@@ -38,9 +34,8 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Product, StockMovement, StockMovementType } from "@/app/lib/types";
+import { Product, StockMovementType } from "@/app/lib/types";
 import { cn } from "@/lib/utils";
-import { formatSafeDate } from "@/lib/utils/date-utils";
 
 export default function StockPage() {
   const db = useFirestore();
@@ -64,19 +59,13 @@ export default function StockPage() {
     return query(collection(db, "tenants", tenantId, "products"), orderBy("name"));
   }, [db, tenantId]);
 
-  const movementsQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "stock_movements"), orderBy("createdAt", "desc"));
-  }, [db, tenantId]);
-
   const { data: products, loading: loadingProducts } = useCollection<Product>(productsQuery);
-  const { data: movements, loading: loadingMovements } = useCollection<StockMovement>(movementsQuery);
 
   const filteredProducts = useMemo(() => {
     if (!products) return [];
     return products.filter(p => 
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      p.sku.toLowerCase().includes(searchTerm.toLowerCase())
+      (p.name || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
+      (p.sku || "").toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [products, searchTerm]);
 
@@ -106,7 +95,7 @@ export default function StockPage() {
         updatedAt: serverTimestamp()
       });
 
-      // 2. Registrar Movimiento
+      // 2. Registrar Movimiento en la BD (para auditoría interna aunque no se muestre)
       const movementRef = doc(collection(db, "tenants", tenantId, "stock_movements"));
       batch.set(movementRef, {
         id: movementRef.id,
@@ -169,7 +158,7 @@ export default function StockPage() {
                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">2. Tipo Movimiento</Label>
-                    <Select value={adjustmentForm.type} onValueChange={(v: StockMovementType) => setAdjustmentForm({...adjustmentForm, type: v})}>
+                    <Select value={adjustmentForm.type} onValueChange={(v: any) => setAdjustmentForm({...adjustmentForm, type: v})}>
                       <SelectTrigger className="h-12 bg-slate-50 border-none rounded-xl font-bold">
                         <SelectValue />
                       </SelectTrigger>
@@ -202,7 +191,7 @@ export default function StockPage() {
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="border-none shadow-md bg-white">
           <CardContent className="p-6 flex items-center justify-between">
             <div>
@@ -221,34 +210,20 @@ export default function StockPage() {
             <AlertTriangle size={40} className={cn(criticalStock.length > 0 ? "text-red-200" : "text-slate-100")} />
           </CardContent>
         </Card>
-        <Card className="border-none shadow-md bg-white">
-          <CardContent className="p-6 flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Entradas (Mes)</p>
-              <p className="text-4xl font-black italic text-green-600">
-                {movements?.filter(m => m.type === 'in').length || 0}
-              </p>
-            </div>
-            <TrendingUp size={40} className="text-green-50" />
-          </CardContent>
-        </Card>
         <Card className="border-none shadow-md bg-slate-900 text-white">
           <CardContent className="p-6 flex items-center justify-between">
             <div>
-              <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Salidas (Mes)</p>
-              <p className="text-4xl font-black italic text-blue-400">
-                {movements?.filter(m => m.type === 'out').length || 0}
-              </p>
+              <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Estado Operativo</p>
+              <p className="text-lg font-black italic text-blue-400 uppercase tracking-tighter">Inventario en Línea</p>
             </div>
-            <TrendingDown size={40} className="text-white/10" />
+            <TrendingUp size={40} className="text-white/10" />
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        <div className="lg:col-span-8 space-y-6">
-          <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-white">
-            <CardHeader className="bg-slate-50/50 border-b p-8">
+      <div className="space-y-6">
+        <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-white">
+          <CardHeader className="bg-slate-50/50 border-b p-8">
                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <CardTitle className="text-base font-black uppercase italic tracking-tighter flex items-center gap-2">
                     <Box className="text-blue-600" size={20} /> Inventario Disponible
@@ -263,8 +238,8 @@ export default function StockPage() {
                     />
                   </div>
                </div>
-            </CardHeader>
-            <CardContent className="p-0">
+          </CardHeader>
+          <CardContent className="p-0">
                {loadingProducts ? (
                  <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>
                ) : (
@@ -322,61 +297,17 @@ export default function StockPage() {
                    </TableBody>
                  </Table>
                )}
-            </CardContent>
-          </Card>
-        </div>
+          </CardContent>
+        </Card>
 
-        <div className="lg:col-span-4 space-y-6">
-          <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-slate-900 text-white">
-            <CardHeader className="bg-white/5 border-b border-white/10 p-8 pb-6">
-              <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2 text-blue-400">
-                <History size={18} /> Historial de Movimientos
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0 max-h-[600px] overflow-y-auto custom-scrollbar">
-               <div className="divide-y divide-white/5">
-                 {loadingMovements ? (
-                   <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-400" /></div>
-                 ) : movements?.length === 0 ? (
-                   <div className="p-10 text-center text-white/20 italic text-xs">Sin movimientos registrados.</div>
-                 ) : (
-                   movements?.map(m => (
-                     <div key={m.id} className="p-6 hover:bg-white/5 transition-colors">
-                        <div className="flex justify-between items-start mb-2">
-                           <Badge className={cn(
-                             "text-[8px] font-black uppercase h-4 px-2",
-                             m.type === 'in' ? "bg-green-600" : m.type === 'out' ? "bg-red-600" : "bg-blue-600"
-                           )}>
-                             {m.type === 'in' ? 'Entrada' : m.type === 'out' ? 'Salida' : 'Ajuste'}
-                           </Badge>
-                           <span className="text-[10px] font-mono text-white/30">{formatSafeDate(m.createdAt, "dd/MM HH:mm")}</span>
-                        </div>
-                        <p className="text-xs font-black uppercase text-white tracking-tighter truncate">{m.productName}</p>
-                        <div className="flex justify-between items-center mt-2">
-                           <p className="text-[10px] text-white/50 font-bold uppercase truncate max-w-[150px]">{m.reason}</p>
-                           <p className={cn(
-                             "text-sm font-black italic",
-                             m.type === 'in' ? "text-green-400" : "text-red-400"
-                           )}>
-                             {m.type === 'in' ? '+' : '-'}{m.quantity} u.
-                           </p>
-                        </div>
-                     </div>
-                   ))
-                 )}
-               </div>
-            </CardContent>
-          </Card>
-
-          <div className="p-6 bg-blue-50 border-2 border-blue-100 rounded-[2.5rem] flex items-start gap-4">
+        <div className="p-6 bg-blue-50 border-2 border-blue-100 rounded-[2.5rem] flex items-start gap-4">
              <Clock size={24} className="text-blue-600 shrink-0 mt-1" />
              <div className="space-y-1">
                 <p className="text-xs font-black text-blue-800 uppercase italic">Auditoría de Almacén</p>
                 <p className="text-[10px] text-blue-600 leading-relaxed font-medium">
-                  Todos los movimientos de stock quedan registrados con el email del operador responsable para garantizar la transparencia en los niveles de inventario.
+                  El sistema mantiene un registro persistente de cada ajuste manual para auditoría contable. Utilice el botón superior para ingresar mercadería nueva o dar de baja bultos dañados.
                 </p>
              </div>
-          </div>
         </div>
       </div>
     </div>
