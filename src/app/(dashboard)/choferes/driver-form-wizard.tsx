@@ -18,9 +18,28 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
-  ArrowLeft, Save, Loader2, User, FileText, Phone, Camera, Upload, 
-  CheckCircle2, ShieldCheck, Sparkles, Key, ChevronRight, ChevronLeft,
-  MapPin, HeartPulse, Briefcase, Award, Zap, Info
+  ArrowLeft, 
+  Save, 
+  Loader2, 
+  User, 
+  FileText, 
+  Phone, 
+  Camera, 
+  Upload, 
+  CheckCircle2, 
+  ShieldCheck, 
+  Sparkles, 
+  Key, 
+  ChevronRight, 
+  ChevronLeft,
+  MapPin, 
+  HeartPulse, 
+  Briefcase, 
+  Award, 
+  Zap, 
+  Info,
+  RefreshCw,
+  Smartphone
 } from "lucide-react";
 import { Driver, DriverRole, DriverStatus } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -114,7 +133,9 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
         
         setFormData(prev => ({ ...prev, [key]: url }));
         
-        await logSystemEvent(db, tenantId, user, 'document_upload', 'driver', formData.dni || 'unknown', { documentType: key });
+        if (db && user) {
+          await logSystemEvent(db, tenantId, user, 'document_upload', 'driver', formData.dni || 'unknown', { documentType: key });
+        }
         
         toast({ title: "Documento digitalizado", description: "El archivo se ha guardado en el legajo." });
       } catch (err) {
@@ -127,16 +148,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   };
 
   const handleNext = () => {
-    if (step === 1) {
-      if (!formData.firstName || !formData.lastName || !formData.dni) {
-        return toast({ variant: "destructive", title: "Datos Obligatorios", description: "Nombre, Apellido y DNI son requeridos." });
-      }
-    }
-    if (step === 2 && formData.role === 'driver') {
-      if (!formData.licenseNumber || !formData.licenseExpiry) {
-        return toast({ variant: "destructive", title: "Falta Licencia", description: "Los datos de la licencia nacional son obligatorios para choferes." });
-      }
-    }
+    // Ningún campo obligatorio para permitir navegación fluida
     setStep(s => s + 1);
   };
 
@@ -152,7 +164,14 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   };
 
   const handleSubmit = async () => {
-    if (!db || !tenantId || !formData.email) return;
+    if (!db || !tenantId) return;
+    
+    // Solo requerimos email para crear el usuario en Auth si es nuevo
+    if (!driverId && !formData.email) {
+      toast({ variant: "destructive", title: "Faltan credenciales", description: "El email es necesario para crear la cuenta de acceso." });
+      return;
+    }
+
     setIsSubmitting(true);
     
     const appName = `auth-worker-${Date.now()}`;
@@ -162,10 +181,10 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
     try {
       let uid = driverId;
       const batch = writeBatch(db);
-      const cleanEmail = formData.email.toLowerCase().trim();
+      const cleanEmail = formData.email?.toLowerCase().trim() || "";
 
-      if (!driverId) {
-        if (!formData.password) throw new Error("Debe definir una contraseña inicial.");
+      if (!driverId && cleanEmail) {
+        if (!formData.password) throw new Error("Debe definir una contraseña inicial para crear el acceso.");
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, cleanEmail, formData.password);
         uid = userCredential.user.uid;
 
@@ -179,9 +198,16 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
           createdAt: serverTimestamp()
         });
         
-        await logSystemEvent(db, tenantId, user, 'create', 'driver', uid, { email: cleanEmail, dni: formData.dni });
-      } else {
+        if (user) {
+          await logSystemEvent(db, tenantId, user, 'create', 'driver', uid, { email: cleanEmail, dni: formData.dni });
+        }
+      } else if (driverId && user) {
         await logSystemEvent(db, tenantId, user, 'update', 'driver', uid!, { email: cleanEmail, dni: formData.dni });
+      }
+
+      // Si no hay email, usamos un ID aleatorio o el DNI para la colección local
+      if (!uid) {
+        uid = formData.dni || Math.random().toString(36).substring(7);
       }
 
       const tenantUserRef = doc(db, "tenants", tenantId, "drivers", uid!);
@@ -198,7 +224,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
       else batch.set(tenantUserRef, finalData);
 
       await batch.commit();
-      toast({ title: "Legajo Digital Guardado", description: `El perfil de ${formData.lastName} ha sido actualizado correctamente.` });
+      toast({ title: "Legajo Digital Guardado", description: `El perfil ha sido actualizado correctamente.` });
       router.push('/choferes');
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error en el alta", description: e.message });
@@ -485,7 +511,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
              <CardHeader className="bg-slate-900 text-white p-8"><CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2"><Key size={18}/> 6. Credenciales de Acceso al App</CardTitle></CardHeader>
              <CardContent className="p-8 space-y-6">
                 <div className="space-y-1.5">
-                   <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Email Institucional / Usuario</Label>
+                   <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Email Institucional / Usuario (Login)</Label>
                    <Input type="email" className="h-12 bg-slate-50 border-none rounded-xl font-bold" placeholder="usuario@empresa.com" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value.toLowerCase().trim()})} />
                 </div>
                 {!driverId && (
@@ -495,7 +521,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                         <Input className="h-12 bg-slate-50 border-none rounded-xl font-mono font-black text-lg flex-1" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
                         <Button variant="secondary" className="h-12 w-12 rounded-xl" onClick={() => setFormData({...formData, password: Math.random().toString(36).substring(2, 10).toUpperCase()})}><RefreshCw size={18}/></Button>
                      </div>
-                     <p className="text-[10px] text-slate-400 italic">El chofer podrá cambiarla al iniciar sesión por primera vez.</p>
+                     <p className="text-[10px] text-slate-400 italic">El usuario podrá cambiarla al iniciar sesión por primera vez.</p>
                   </div>
                 )}
                 
@@ -524,5 +550,3 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
     </div>
   );
 }
-import { Smartphone } from "lucide-react";
-import React from "react";
