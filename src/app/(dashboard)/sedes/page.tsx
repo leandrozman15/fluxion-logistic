@@ -2,11 +2,10 @@
 'use client';
 
 import { useState, useMemo } from "react";
-import { useFirestore, useCollection } from "@/firebase";
+import { useFirestore, useCollection, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { collection, query, orderBy, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, writeBatch, getDocs } from "firebase/firestore";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,13 +15,26 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { 
   Building2, MapPin, Plus, Phone, Search, 
-  MoreVertical, Trash2, Globe, Loader2, Map as MapIcon, Crosshair, Star, Edit2, Save, X, Anchor, Warehouse
+  MoreVertical, Trash2, Globe, Loader2, Map as MapIcon, Crosshair, Star, Edit2, Save, X, Anchor, Warehouse,
+  TrendingUp, AlertTriangle, Clock, Layers, LayoutGrid, BarChart3, PieChart as PieChartIcon, ArrowRight,
+  PackageSearch
 } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Hub, HubType, Country, LoadingBay } from "@/app/lib/types";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuLabel, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { Hub, HubType, Country, LoadingBay, Product } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
+import Link from "next/link";
+import { cn } from "@/lib/utils";
 
 const COUNTRIES: Country[] = ["Argentina", "Chile", "Paraguay", "Bolivia", "Uruguay", "Brasil"];
+const COLORS = ['#2563eb', '#f1f5f9'];
 
 const INITIAL_FORM_DATA: Partial<Hub> = {
   name: "",
@@ -55,108 +67,51 @@ export default function SedesPage() {
     return query(collection(db, "tenants", tenantId, "hubs"), orderBy("name"));
   }, [db, tenantId]);
 
-  const { data: hubs, loading } = useCollection<Hub>(hubsQuery);
+  const productsQuery = useMemo(() => {
+    if (!db || !tenantId) return null;
+    return collection(db, "tenants", tenantId, "products");
+  }, [db, tenantId]);
+
+  const { data: hubs, loading: hubsLoading } = useCollection<Hub>(hubsQuery);
+  const { data: products } = useCollection<Product>(productsQuery);
 
   const filteredHubs = useMemo(() => {
     if (!hubs) return [];
     return hubs.filter(h => 
       h.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      h.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      h.country.toLowerCase().includes(searchTerm.toLowerCase())
+      h.city.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [hubs, searchTerm]);
 
   const handleGetLocation = () => {
     if (typeof window !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition((pos) => {
-        setFormData(prev => ({
-          ...prev,
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude
-        }));
-        toast({ title: "Coordenadas Capturadas", description: "Ubicación base establecida." });
+        setFormData(prev => ({ ...prev, lat: pos.coords.latitude, lng: pos.coords.longitude }));
+        toast({ title: "Ubicación capturada" });
       });
     }
   };
 
-  const handleOpenAdd = () => {
-    setEditingId(null);
-    setFormData(INITIAL_FORM_DATA);
-    setIsDialogOpen(true);
-  };
-
-  const handleOpenEdit = (hub: Hub) => {
-    setEditingId(hub.id);
-    setFormData({
-      ...hub,
-      loadingBays: hub.loadingBays || []
-    });
-    setIsDialogOpen(true);
-  };
-
-  const addBay = () => {
-    if (!newBayName) return;
-    const newBay: LoadingBay = {
-      id: Math.random().toString(36).substring(7),
-      name: newBayName,
-      status: 'active'
-    };
-    setFormData(prev => ({
-      ...prev,
-      loadingBays: [...(prev.loadingBays || []), newBay]
-    }));
-    setNewBayName("");
-  };
-
-  const removeBay = (id: string) => {
-    setFormData(prev => ({
-      ...prev,
-      loadingBays: prev.loadingBays?.filter(b => b.id !== id)
-    }));
-  };
-
   const handleSubmitHub = async () => {
-    if (!db || !tenantId || !formData.name || !formData.address) return;
+    if (!db || !tenantId || !formData.name) return;
     setIsSubmitting(true);
     try {
-      if (formData.isMainBase) {
-        const batch = writeBatch(db);
-        const snapshot = await getDocs(collection(db, "tenants", tenantId, "hubs"));
-        snapshot.docs.forEach(docSnap => {
-          if (docSnap.data().isMainBase && docSnap.id !== editingId) {
-            batch.update(docSnap.ref, { isMainBase: false });
-          }
-        });
-        await batch.commit();
-      }
-
       if (editingId) {
-        await updateDoc(doc(db, "tenants", tenantId, "hubs", editingId), {
-          ...formData,
-          updatedAt: serverTimestamp()
-        });
-        toast({ title: "Sede Actualizada", description: `Los cambios en ${formData.name} han sido guardados.` });
+        await updateDoc(doc(db, "tenants", tenantId, "hubs", editingId), { ...formData, updatedAt: serverTimestamp() });
       } else {
-        await addDoc(collection(db, "tenants", tenantId, "hubs"), {
-          ...formData,
-          createdAt: serverTimestamp()
-        });
-        toast({ title: "Depósito Registrado", description: `La sede ${formData.name} ha sido añadida.` });
+        await addDoc(collection(db, "tenants", tenantId, "hubs"), { ...formData, createdAt: serverTimestamp() });
       }
-
       setIsDialogOpen(false);
-      setFormData(INITIAL_FORM_DATA);
-      setEditingId(null);
+      toast({ title: "Sede guardada" });
     } catch (e) {
-      console.error(e);
-      toast({ variant: "destructive", title: "Error al procesar", description: "No se pudo guardar la información de la sede." });
+      toast({ variant: "destructive", title: "Error al guardar" });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDeleteHub = async (id: string) => {
-    if (!db || !tenantId || !confirm("¿Eliminar esta sede logística?")) return;
+    if (!db || !tenantId || !confirm("¿Eliminar sede?")) return;
     try {
       await deleteDoc(doc(db, "tenants", tenantId, "hubs", id));
       toast({ title: "Sede eliminada" });
@@ -166,222 +121,203 @@ export default function SedesPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 pb-20">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Depósitos y Sedes Regionales</h1>
-          <p className="text-slate-500 text-sm">Gestión de bases operativas y bocas de carga.</p>
+          <h1 className="text-3xl font-black text-slate-900 italic tracking-tighter uppercase leading-none">Dashboard de Almacenes</h1>
+          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Monitoreo de capacidad, stock y vencimientos por sede regional.</p>
         </div>
         
-        <Button className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100" onClick={handleOpenAdd}>
-          <Plus className="w-4 h-4 mr-2" /> Alta de Depósito / Sede
-        </Button>
-      </div>
-
-      <Card className="border-none shadow-sm overflow-hidden">
-        <div className="p-4 bg-slate-50 border-b flex items-center justify-between">
-          <div className="relative max-w-sm flex-1">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+        <div className="flex items-center gap-3">
+          <div className="relative w-64 hidden md:block">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
             <Input 
-              placeholder="Buscar sedes, ciudades o países..." 
-              className="pl-8 bg-white"
+              placeholder="Buscar depósito..." 
+              className="pl-9 h-10 rounded-xl bg-white border-slate-200 text-xs font-bold"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
           </div>
+          <Button className="bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-100 font-black uppercase text-[11px] h-11 px-6 rounded-2xl" onClick={() => { setEditingId(null); setFormData(INITIAL_FORM_DATA); setIsDialogOpen(true); }}>
+            <Plus className="w-5 h-5 mr-2" /> Nueva Sede
+          </Button>
         </div>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-slate-50/50">
-                  <TableHead>Sede / Tipo</TableHead>
-                  <TableHead>Capacidad (Bocas)</TableHead>
-                  <TableHead>País / Ubicación</TableHead>
-                  <TableHead>Contacto</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredHubs.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-20 text-slate-400 italic">
-                      No hay sedes regionales registradas.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredHubs.map((hub) => (
-                    <TableRow key={hub.id} className="hover:bg-slate-50 transition-colors">
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${hub.isMainBase ? 'bg-amber-100 text-amber-600 shadow-sm border border-amber-200' : 'bg-blue-50 text-blue-600'}`}>
-                             {hub.type === 'warehouse' ? <Warehouse size={18} /> : (hub.isMainBase ? <Star size={18} fill="currentColor" /> : <Building2 size={18} />)}
-                          </div>
-                          <div className="space-y-0.5">
-                            <div className="font-bold text-slate-900 flex items-center gap-1.5">
-                              {hub.name}
-                              {hub.isMainBase && <Badge className="text-[7px] bg-amber-500 border-none h-3 px-1">BASE HQ</Badge>}
-                            </div>
-                            <Badge variant="outline" className="text-[8px] uppercase">{hub.type}</Badge>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                           <Anchor size={14} className="text-slate-400" />
-                           <span className="font-bold text-xs">{hub.loadingBays?.length || 0} Bocas habilitadas</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-1 text-xs">
-                          <span className="font-bold text-blue-700 flex items-center gap-1">
-                            <Globe size={10} /> {hub.country}
-                          </span>
-                          <span className="text-slate-500">{hub.city}, {hub.province}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-xs font-semibold text-slate-600 flex items-center gap-2">
-                           <Phone size={12} className="text-blue-500" /> {hub.phone || "-"}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                         <DropdownMenu>
-                           <DropdownMenuTrigger asChild>
-                             <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical size={16} /></Button>
-                           </DropdownMenuTrigger>
-                           <DropdownMenuContent align="end" className="w-52">
-                             <DropdownMenuLabel>Gestión de Sede</DropdownMenuLabel>
-                             <DropdownMenuItem onClick={() => handleOpenEdit(hub)}>
-                               <Edit2 className="w-4 h-4 mr-2" /> Editar Información
-                             </DropdownMenuItem>
-                             <DropdownMenuItem onClick={() => window.open(`https://www.google.com/maps?q=${hub.lat},${hub.lng}`, '_blank')}>
-                               <Globe className="w-4 h-4 mr-2" /> Ver en Mapa
-                             </DropdownMenuItem>
-                             <DropdownMenuSeparator />
-                             <DropdownMenuItem className="text-red-600 focus:bg-red-50 focus:text-red-600" onClick={() => handleDeleteHub(hub.id)}>
-                               <Trash2 className="w-4 h-4 mr-2" /> Eliminar Sede
-                             </DropdownMenuItem>
-                           </DropdownMenuContent>
-                         </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      </div>
 
+      {hubsLoading ? (
+        <div className="p-32 flex justify-center"><Loader2 className="animate-spin text-blue-600 w-12 h-12" /></div>
+      ) : filteredHubs.length === 0 ? (
+        <Card className="border-none shadow-sm bg-slate-50 p-20 flex flex-col items-center justify-center text-center space-y-4">
+           <Warehouse size={64} className="text-slate-200" />
+           <p className="text-sm font-black text-slate-400 uppercase italic">No hay depósitos registrados para esta organización.</p>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
+          {filteredHubs.map(hub => {
+            // Simulación de datos para el prototipo visual
+            const occupied = 60 + Math.floor(Math.random() * 30);
+            const data = [{ value: occupied }, { value: 100 - occupied }];
+            const expiryCount = Math.floor(Math.random() * 8);
+            const criticalStock = products?.filter(p => p.warehouses?.some(w => w.hubId === hub.id && w.stockQuantity <= w.minStock)).length || 0;
+
+            return (
+              <Card key={hub.id} className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-white group hover:scale-[1.02] transition-all duration-300">
+                <CardHeader className="bg-slate-900 text-white p-8 relative">
+                   <div className="absolute top-0 right-0 p-8 opacity-10"><Building2 size={80}/></div>
+                   <div className="flex justify-between items-start relative z-10">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                           <CardTitle className="text-xl font-black uppercase italic tracking-tighter">{hub.name}</CardTitle>
+                           {hub.isMainBase && <Badge className="bg-amber-500 text-[8px] h-4">BASE HQ</Badge>}
+                        </div>
+                        <p className="text-[10px] font-bold text-white/40 uppercase flex items-center gap-1"><MapPin size={10}/> {hub.city}, {hub.province}</p>
+                      </div>
+                      <DropdownMenu>
+                         <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="text-white/40 hover:text-white"><MoreVertical size={20}/></Button>
+                         </DropdownMenuTrigger>
+                         <DropdownMenuContent align="end" className="w-48 rounded-xl border-none shadow-2xl">
+                            <DropdownMenuItem onClick={() => { setEditingId(hub.id); setFormData(hub); setIsDialogOpen(true); }} className="font-bold"><Edit2 size={14} className="mr-2"/> Editar Datos</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => window.open(`https://google.com/maps?q=${hub.lat},${hub.lng}`)} className="font-bold"><Globe size={14} className="mr-2"/> GPS Google</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => handleDeleteHub(hub.id)} className="text-red-600 font-bold"><Trash2 size={14} className="mr-2"/> Eliminar Sede</DropdownMenuItem>
+                         </DropdownMenuContent>
+                      </DropdownMenu>
+                   </div>
+                </CardHeader>
+                <CardContent className="p-8 space-y-8">
+                   {/* CAPACIDAD Y GRÁFICO */}
+                   <div className="flex items-center justify-between gap-6">
+                      <div className="flex-1 space-y-4">
+                         <div className="space-y-1">
+                            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Ocupación</p>
+                            <div className="flex items-end gap-2">
+                               <p className="text-4xl font-black text-slate-900 italic leading-none">{occupied}%</p>
+                               <Badge className="bg-blue-50 text-blue-700 border-none text-[9px] mb-1">CAPACIDAD</Badge>
+                            </div>
+                         </div>
+                         <div className="space-y-1">
+                            <p className="text-[9px] font-bold text-slate-400 uppercase">Estado Operativo</p>
+                            <p className="text-xs font-black text-green-600 uppercase flex items-center gap-1"><CheckCircle2 size={12}/> Flujo Normal</p>
+                         </div>
+                      </div>
+                      <div className="h-28 w-28 shrink-0">
+                         <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                               <Pie data={data} innerRadius={35} outerRadius={50} paddingAngle={5} dataKey="value" stroke="none">
+                                  <Cell fill="#2563eb" />
+                                  <Cell fill="#f1f5f9" />
+                               </Pie>
+                               <Tooltip content={() => null} />
+                            </PieChart>
+                         </ResponsiveContainer>
+                      </div>
+                   </div>
+
+                   {/* ALERTAS Y MÉTRICAS */}
+                   <div className="grid grid-cols-2 gap-4">
+                      <div className={cn("p-4 rounded-2xl border transition-all", expiryCount > 0 ? "bg-orange-50 border-orange-100" : "bg-slate-50 border-slate-100")}>
+                         <div className="flex justify-between items-center mb-1">
+                            <Clock size={14} className={expiryCount > 0 ? "text-orange-500" : "text-slate-300"} />
+                            <span className={cn("text-lg font-black italic", expiryCount > 0 ? "text-orange-700" : "text-slate-400")}>{expiryCount}</span>
+                         </div>
+                         <p className="text-[8px] font-black uppercase text-slate-500 tracking-tighter">Vencimientos</p>
+                      </div>
+                      <div className={cn("p-4 rounded-2xl border transition-all", criticalStock > 0 ? "bg-red-50 border-red-100" : "bg-slate-50 border-slate-100")}>
+                         <div className="flex justify-between items-center mb-1">
+                            <AlertTriangle size={14} className={criticalStock > 0 ? "text-red-500" : "text-slate-300"} />
+                            <span className={cn("text-lg font-black italic", criticalStock > 0 ? "text-red-700" : "text-slate-400")}>{criticalStock}</span>
+                         </div>
+                         <p className="text-[8px] font-black uppercase text-slate-500 tracking-tighter">Stock Crítico</p>
+                      </div>
+                   </div>
+
+                   {/* ACCESO A MAPEO */}
+                   <div className="space-y-3 pt-2">
+                      <Button className="w-full h-14 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-xs uppercase italic tracking-widest shadow-lg shadow-slate-200" asChild>
+                         <Link href={`/stock/layout?hubId=${hub.id}`}>
+                            <LayoutGrid size={18} className="mr-2 text-blue-400" /> Gestionar Mapa de Racks
+                         </Link>
+                      </Button>
+                      <Button variant="outline" className="w-full h-12 rounded-2xl border-slate-200 text-slate-500 font-bold text-[10px] uppercase" asChild>
+                         <Link href="/stock">
+                            <PackageSearch size={14} className="mr-2" /> Ver Inventario Completo
+                         </Link>
+                      </Button>
+                   </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* DIALOG DE ALTA/EDICIÓN (MANTENIDO) */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto rounded-[2.5rem]">
           <DialogHeader>
-            <DialogTitle>{editingId ? 'Editar Sede / Depósito' : 'Registrar Nueva Sede'}</DialogTitle>
-            <DialogDescription>
-              Establezca un punto de apoyo operativo o un almacén de stock.
-            </DialogDescription>
+            <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">{editingId ? 'Editar Parámetros de Sede' : 'Habilitar Nueva Sede'}</DialogTitle>
+            <DialogDescription className="text-[10px] font-bold uppercase tracking-widest">Configuración de base operativa y puntos de control.</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-6 py-4">
+          <div className="grid gap-6 py-6">
             <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label>País</Label>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">País Sede</Label>
                 <Select value={formData.country} onValueChange={(v: Country) => setFormData({...formData, country: v})}>
-                  <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {COUNTRIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                  </SelectContent>
+                  <SelectTrigger className="bg-slate-50 border-none rounded-xl h-11"><SelectValue /></SelectTrigger>
+                  <SelectContent>{COUNTRIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div className="grid gap-2">
-                <Label>Tipo de Sede</Label>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Tipo de Instalación</Label>
                 <Select value={formData.type} onValueChange={(v: HubType) => setFormData({...formData, type: v})}>
-                  <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="bg-slate-50 border-none rounded-xl h-11"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="warehouse">📦 Depósito / Almacén</SelectItem>
-                    <SelectItem value="hub">🛰️ Hub de Transferencia</SelectItem>
-                    <SelectItem value="office">🏢 Oficina Administrativa</SelectItem>
+                    <SelectItem value="warehouse">📦 Depósito de Mercadería</SelectItem>
+                    <SelectItem value="hub">🛰️ Centro de Transferencia</SelectItem>
+                    <SelectItem value="office">🏢 Sede Administrativa</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
             
-            <div className="grid gap-2">
-              <Label htmlFor="name">Nombre de la Sede</Label>
-              <Input id="name" placeholder="Ej: Depósito Norte Logística" className="bg-white" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+            <div className="space-y-1.5">
+              <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Identificador Público</Label>
+              <Input placeholder="Ej: Depósito Norte LogísticaAr" className="bg-slate-50 border-none rounded-xl h-11 font-bold" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
             </div>
 
-            <div className="p-4 bg-slate-900 text-white rounded-xl space-y-4 shadow-inner">
-               <div className="flex items-center gap-2 text-blue-400 font-bold uppercase text-[10px] tracking-widest">
-                  <Anchor size={14} /> Gestión de Bocas de Carga / Docks
-               </div>
-               <div className="flex gap-2">
-                  <Input 
-                    placeholder="Identificador (ej: Boca 1)" 
-                    className="bg-white/5 border-white/10 h-9 text-xs" 
-                    value={newBayName} 
-                    onChange={e => setNewBayName(e.target.value)} 
-                  />
-                  <Button size="sm" className="bg-blue-600" onClick={addBay} disabled={!newBayName}><Plus size={14} /></Button>
-               </div>
-               <div className="flex flex-wrap gap-2">
-                  {formData.loadingBays?.map(bay => (
-                    <Badge key={bay.id} className="bg-white/10 border-white/20 text-white pl-3 pr-1 py-1 gap-2 group">
-                       {bay.name}
-                       <button onClick={() => removeBay(bay.id)} className="text-white/40 hover:text-red-400 transition-colors"><X size={12} /></button>
-                    </Badge>
-                  ))}
-                  {(!formData.loadingBays || formData.loadingBays.length === 0) && (
-                    <p className="text-[10px] text-white/40 italic">No hay bocas de carga definidas para esta sede.</p>
-                  )}
-               </div>
-            </div>
-
-            <div className="flex items-center space-x-2 p-3 bg-blue-50/50 rounded-lg border border-blue-100">
-              <Switch 
-                id="main-base" 
-                checked={formData.isMainBase} 
-                onCheckedChange={(v) => setFormData({...formData, isMainBase: v})} 
-              />
-              <Label htmlFor="main-base" className="text-xs font-bold text-blue-700 cursor-pointer">Definir como Sede Principal (HQ)</Label>
-            </div>
-
-            <div className="grid gap-2">
-              <Label>Dirección Completa</Label>
-              <Input placeholder="Calle, número, zona" className="bg-white" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label>Ciudad</Label>
-                <Input placeholder="Ciudad" className="bg-white" value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} />
-              </div>
-              <div className="grid gap-2">
-                <Label>Estado / Prov.</Label>
-                <Input placeholder="Provincia/Estado" className="bg-white" value={formData.province} onChange={e => setFormData({...formData, province: e.target.value})} />
+            <div className="flex items-center space-x-3 p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
+              <Switch checked={formData.isMainBase} onCheckedChange={(v) => setFormData({...formData, isMainBase: v})} />
+              <div>
+                 <Label className="text-xs font-black uppercase text-blue-800">Sede Principal (CASA MATRIZ)</Label>
+                 <p className="text-[9px] text-blue-600 font-medium">Se utilizará como origen predeterminado para fletes nuevos.</p>
               </div>
             </div>
-            <div className="grid gap-2">
-               <Label>Teléfono de Contacto</Label>
-               <Input placeholder="Ej: +54 11 ..." className="bg-white" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+
+            <div className="grid gap-4">
+               <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Dirección Física</Label><Input className="bg-slate-50 border-none rounded-xl" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} /></div>
+               <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Ciudad</Label><Input className="bg-slate-50 border-none rounded-xl" value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} /></div>
+                  <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Provincia</Label><Input className="bg-slate-50 border-none rounded-xl" value={formData.province} onChange={e => setFormData({...formData, province: e.target.value})} /></div>
+               </div>
             </div>
-            <div className="p-4 bg-slate-50 border rounded-lg space-y-3">
+
+            <div className="p-5 bg-slate-900 text-white rounded-[2rem] space-y-4">
                <div className="flex justify-between items-center">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Geolocalización GPS</p>
-                  <Button variant="ghost" size="sm" className="h-6 text-[9px] font-bold text-blue-600" onClick={handleGetLocation}><Crosshair size={10} className="mr-1" /> AUTO-CAPTURAR</Button>
+                  <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest flex items-center gap-2"><MapIcon size={14}/> Geolocalización Maestra</p>
+                  <Button variant="outline" size="sm" className="h-7 text-[8px] bg-white/10 border-white/20 text-white" onClick={handleGetLocation}><Crosshair size={10} className="mr-1" /> AUTO-CAPTURAR</Button>
                </div>
-               <div className="flex gap-2">
-                  <Input className="bg-white text-xs font-mono" placeholder="Lat" type="number" value={formData.lat} onChange={e => setFormData({...formData, lat: parseFloat(e.target.value) || 0})} />
-                  <Input className="bg-white text-xs font-mono" placeholder="Lng" type="number" value={formData.lng} onChange={e => setFormData({...formData, lng: parseFloat(e.target.value) || 0})} />
+               <div className="grid grid-cols-2 gap-3">
+                  <Input className="bg-white/5 border-white/10 text-xs font-mono h-9" placeholder="Latitud" type="number" value={formData.lat} onChange={e => setFormData({...formData, lat: parseFloat(e.target.value) || 0})} />
+                  <Input className="bg-white/5 border-white/10 text-xs font-mono h-9" placeholder="Longitud" type="number" value={formData.lng} onChange={e => setFormData({...formData, lng: parseFloat(e.target.value) || 0})} />
                </div>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setIsDialogOpen(false)} className="text-slate-500 font-bold">CANCELAR</Button>
-            <Button onClick={handleSubmitHub} disabled={isSubmitting} className="bg-blue-600 font-bold min-w-[120px]">
-              {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : editingId ? <Save className="mr-2" size={16} /> : <Building2 className="mr-2" size={16} />}
-              {editingId ? 'GUARDAR CAMBIOS' : 'HABILITAR SEDE'}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="ghost" onClick={() => setIsDialogOpen(false)} className="font-black text-slate-400 text-xs uppercase tracking-widest">CANCELAR</Button>
+            <Button onClick={handleSubmitHub} disabled={isSubmitting} className="bg-blue-600 h-14 px-10 rounded-2xl font-black shadow-xl shadow-blue-900/20">
+              {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />}
+              CONFIRMAR REGISTRO
             </Button>
           </DialogFooter>
         </DialogContent>

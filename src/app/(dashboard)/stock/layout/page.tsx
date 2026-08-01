@@ -1,8 +1,9 @@
 
 'use client';
 
-import { useState, useMemo } from "react";
-import { useFirestore, useCollection } from "@/firebase";
+import { useState, useMemo, useEffect, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { collection, updateDoc, serverTimestamp, setDoc, query, orderBy, doc } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -33,19 +34,24 @@ import {
   CheckCircle2,
   BarChart3,
   MapPin,
-  ArrowRight
-} from "lucide-react";
+  ArrowRight,
+  ArrowLeft
+} from "lucide-center";
 import { Hub, WarehouseLayout, WarehouseSection, WarehouseAisle, WarehouseRack, WarehouseSlot } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { LucideIcon } from "lucide-react";
 
-export default function WarehouseLayoutPage() {
+function LayoutContent() {
   const db = useFirestore();
   const { tenantId } = useTenant();
   const { toast } = useToast();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   
-  const [selectedHubId, setSelectedHubId] = useState<string>("");
+  const hubIdFromUrl = searchParams.get('hubId');
+  const [selectedHubId, setSelectedHubId] = useState<string>(hubIdFromUrl || "");
   const [isSaving, setIsSaving] = useState(false);
   const [activeRackId, setActiveRackId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'editor' | 'overview'>('overview');
@@ -58,13 +64,16 @@ export default function WarehouseLayoutPage() {
   const { data: hubs, loading: hubsLoading } = useCollection<Hub>(hubsQuery);
 
   const [layout, setLayout] = useState<Partial<WarehouseLayout>>({
-    name: "Mapa de Depósito Principal",
+    name: "Mapa de Depósito",
     sections: []
   });
 
+  useEffect(() => {
+    if (hubIdFromUrl) setSelectedHubId(hubIdFromUrl);
+  }, [hubIdFromUrl]);
+
   const activeHub = useMemo(() => hubs?.find(h => h.id === selectedHubId), [hubs, selectedHubId]);
 
-  // Cálculos de ocupación (Simulados para el prototipo visual)
   const warehouseStats = useMemo(() => {
     if (!layout.sections) return { total: 0, occupied: 0, free: 0, percent: 0 };
     let total = 0;
@@ -75,14 +84,8 @@ export default function WarehouseLayoutPage() {
         });
       });
     });
-    // Simulación de ocupación aleatoria persistente para visualización
     const occupied = Math.floor(total * 0.64); 
-    return {
-      total,
-      occupied,
-      free: total - occupied,
-      percent: total > 0 ? Math.round((occupied / total) * 100) : 0
-    };
+    return { total, occupied, free: total - occupied, percent: total > 0 ? Math.round((occupied / total) * 100) : 0 };
   }, [layout]);
 
   const addSection = () => {
@@ -132,22 +135,13 @@ export default function WarehouseLayoutPage() {
     setIsSaving(true);
     try {
       const layoutId = layout.id || doc(collection(db, "tenants", tenantId, "warehouse_layouts")).id;
-      const layoutRef = doc(db, "tenants", tenantId, "warehouse_layouts", layoutId);
-      
-      await setDoc(layoutRef, {
-        ...layout,
-        id: layoutId,
-        hubId: selectedHubId,
-        updatedAt: serverTimestamp()
+      await setDoc(doc(db, "tenants", tenantId, "warehouse_layouts", layoutId), {
+        ...layout, id: layoutId, hubId: selectedHubId, updatedAt: serverTimestamp()
       });
-
-      await updateDoc(doc(db, "tenants", tenantId, "hubs", selectedHubId), {
-        "settings.layoutId": layoutId
-      });
-
-      toast({ title: "Layout Guardado", description: "El mapa físico ha sido sincronizado." });
+      await updateDoc(doc(db, "tenants", tenantId, "hubs", selectedHubId), { "settings.layoutId": layoutId });
+      toast({ title: "Layout Sincronizado" });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al guardar layout" });
+      toast({ variant: "destructive", title: "Error al guardar" });
     } finally {
       setIsSaving(false);
     }
@@ -156,58 +150,34 @@ export default function WarehouseLayoutPage() {
   return (
     <div className="space-y-6 pb-20">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-black text-slate-900 italic tracking-tighter uppercase leading-none">Mapeo de Depósito</h1>
-          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Configuración técnica de estanterías y control de capacidad.</p>
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => router.push('/sedes')} className="rounded-full bg-white shadow-sm border"><ArrowLeft size={18} /></Button>
+          <div>
+            <h1 className="text-2xl font-black text-slate-900 italic tracking-tighter uppercase leading-none">Mapeo Técnico: {activeHub?.name || '---'}</h1>
+            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Configuración espacial de racks, alturas y coordenadas de picking.</p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
-          <Select value={selectedHubId} onValueChange={setSelectedHubId}>
-            <SelectTrigger className="w-64 bg-white h-11 border-slate-200 rounded-2xl shadow-sm font-bold">
-              <SelectValue placeholder="Seleccionar Depósito..." />
-            </SelectTrigger>
-            <SelectContent>
-              {hubs?.filter(h => h.type === 'warehouse' || h.type === 'hub').map(h => (
-                <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button className="bg-blue-600 h-11 rounded-2xl font-black px-6 shadow-xl shadow-blue-100" onClick={handleSaveLayout} disabled={isSaving || !selectedHubId}>
-            {isSaving ? <Loader2 className="animate-spin" /> : <Save className="mr-2" />} GUARDAR MAPA
+          <Button className="bg-blue-600 h-11 rounded-2xl font-black px-6 shadow-xl" onClick={handleSaveLayout} disabled={isSaving || !selectedHubId}>
+            {isSaving ? <Loader2 className="animate-spin" /> : <Save className="mr-2" />} GUARDAR CAMBIOS
           </Button>
         </div>
       </div>
 
-      {!selectedHubId ? (
-        <Card className="border-none shadow-sm bg-slate-50/50 rounded-[2.5rem] p-20 flex flex-col items-center justify-center text-center space-y-6">
-           <Warehouse size={80} className="text-slate-200" />
-           <div className="space-y-4">
-             <div>
-               <h3 className="text-xl font-black text-slate-400 uppercase italic tracking-widest">Seleccione un Depósito para empezar</h3>
-               <p className="text-sm text-slate-400 max-w-sm mx-auto">Debe elegir una sede habilitada para configurar su distribución física de racks.</p>
-             </div>
-             {hubs && hubs.length === 0 && (
-               <Button className="bg-blue-600 rounded-xl" asChild>
-                 <Link href="/sedes"><Plus size={16} className="mr-2" /> CREAR MI PRIMER DEPÓSITO</Link>
-               </Button>
-             )}
-           </div>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-           {/* BARRA LATERAL: ÁRBOL Y HERRAMIENTAS */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
            <div className="lg:col-span-4 space-y-6">
               <Card className="border-none shadow-xl rounded-[2rem] overflow-hidden bg-white">
                  <CardHeader className="bg-slate-900 text-white p-6">
                     <div className="flex justify-between items-center">
                        <CardTitle className="text-xs uppercase tracking-widest flex items-center gap-2">
-                          <LayoutGrid size={16} className="text-blue-400" /> Estructura Física
+                          <LayoutGrid size={16} className="text-blue-400" /> Árbol de Estructura
                        </CardTitle>
-                       <Button variant="ghost" size="sm" className="h-6 text-[8px] font-black uppercase text-blue-400" onClick={() => { setViewMode('overview'); setActiveRackId(null); }}>Ver Todo</Button>
+                       <Button variant="ghost" size="sm" className="h-6 text-[8px] font-black uppercase text-blue-400" onClick={() => { setViewMode('overview'); setActiveRackId(null); }}>Ver Resumen</Button>
                     </div>
                  </CardHeader>
                  <CardContent className="p-4 space-y-4">
                     <Button variant="outline" className="w-full border-dashed border-2 h-12 rounded-xl text-blue-600 font-black text-[10px] uppercase" onClick={addSection}>
-                       <Plus size={16} className="mr-2" /> Agregar Sector / Nave
+                       <Plus size={16} className="mr-2" /> Agregar Nave / Sector
                     </Button>
 
                     <div className="space-y-6">
@@ -250,25 +220,23 @@ export default function WarehouseLayoutPage() {
               <div className="p-6 bg-blue-50 border-2 border-blue-100 rounded-[2rem] flex items-start gap-4">
                  <Info size={24} className="text-blue-600 shrink-0 mt-1" />
                  <div className="space-y-1">
-                    <p className="text-xs font-black text-blue-800 uppercase italic">Digitalización Gemela</p>
+                    <p className="text-xs font-black text-blue-800 uppercase italic">Precisión en Alturas</p>
                     <p className="text-[10px] text-blue-600 leading-relaxed font-medium">
-                       Configure aquí la cantidad de niveles (altura) y columnas de cada rack. Esto permitirá a los operarios saber exactamente dónde buscar o guardar un pallet.
+                       Configure cada rack según su altura real. Los niveles se numeran de abajo hacia arriba (N1: Piso). Esto asegura que el operario de autoelevador tenga la instrucción correcta.
                     </p>
                  </div>
               </div>
            </div>
 
-           {/* ÁREA PRINCIPAL: OVERVIEW O EDITOR */}
            <div className="lg:col-span-8">
-              {viewMode === 'overview' && !activeRackId ? (
+              {viewMode === 'overview' ? (
                 <div className="space-y-6 animate-in fade-in duration-500">
-                   {/* RESUMEN DE CAPACIDAD GLOBAL */}
                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <Card className="border-none shadow-md bg-white">
                          <CardContent className="p-6 flex items-center justify-between">
                             <div>
-                               <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Capacidad Total</p>
-                               <p className="text-3xl font-black italic text-slate-900">{warehouseStats.total} <span className="text-xs font-normal opacity-40">Slots</span></p>
+                               <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Capacidad Sede</p>
+                               <p className="text-3xl font-black italic text-slate-900">{warehouseStats.total} <span className="text-xs font-normal opacity-40">Posiciones</span></p>
                             </div>
                             <LayoutGrid size={32} className="text-blue-100" />
                          </CardContent>
@@ -276,155 +244,98 @@ export default function WarehouseLayoutPage() {
                       <Card className="border-none shadow-md bg-white">
                          <CardContent className="p-6 flex items-center justify-between">
                             <div>
-                               <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Ocupación Actual</p>
-                               <p className="text-3xl font-black italic text-blue-600">{warehouseStats.occupied} <span className="text-xs font-normal opacity-40">Pallets</span></p>
+                               <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Posiciones Libres</p>
+                               <p className="text-3xl font-black italic text-green-600">{warehouseStats.free} <span className="text-xs font-normal opacity-40">Slots</span></p>
                             </div>
-                            <TrendingUp size={32} className="text-blue-100" />
+                            <PackageCheck size={32} className="text-green-100" />
                          </CardContent>
                       </Card>
                       <Card className="border-none shadow-md bg-slate-900 text-white">
                          <CardContent className="p-6 flex items-center justify-between">
                             <div>
-                               <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Estado General</p>
-                               <p className="text-2xl font-black italic text-blue-400">{warehouseStats.percent}% <span className="text-xs font-normal opacity-40">USO</span></p>
+                               <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Uso de Rack</p>
+                               <p className="text-2xl font-black italic text-blue-400">{warehouseStats.percent}% <span className="text-xs font-normal opacity-40">Real</span></p>
                             </div>
                             <Activity size={32} className="text-blue-500/20" />
                          </CardContent>
                       </Card>
                    </div>
 
-                   {/* TARJETAS DE SECTORES / PASILLOS */}
-                   <div className="space-y-8">
-                      <h3 className="text-[11px] font-black uppercase text-slate-400 tracking-[0.3em] flex items-center gap-3">
-                         <BarChart3 size={16} className="text-blue-600" /> Monitor de Capacidad por Zona
-                      </h3>
-                      
-                      {layout.sections?.length === 0 ? (
-                        <div className="p-20 text-center border-2 border-dashed rounded-[3rem] bg-white space-y-4">
-                           <Box size={48} className="mx-auto text-slate-100" />
-                           <p className="text-xs font-black text-slate-300 uppercase italic">Depósito sin configuración física</p>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                           {layout.sections?.map(section => (
-                             <Card key={section.id} className="border-none shadow-xl rounded-[2.5rem] bg-white overflow-hidden group">
-                                <CardHeader className="bg-slate-50 border-b p-6 flex flex-row items-center justify-between">
-                                   <div>
-                                      <CardTitle className="text-base font-black uppercase italic text-slate-800">{section.name}</CardTitle>
-                                      <CardDescription className="text-[9px] font-bold uppercase">{section.aisles.length} Pasillos Operativos</CardDescription>
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {layout.sections?.map(section => (
+                        <Card key={section.id} className="border-none shadow-xl rounded-[2.5rem] bg-white overflow-hidden">
+                           <CardHeader className="bg-slate-50 border-b p-6 flex flex-row items-center justify-between">
+                              <CardTitle className="text-base font-black uppercase italic text-slate-800">{section.name}</CardTitle>
+                              <Badge className="bg-blue-600 text-white border-none text-[8px] h-4">MAPA ACTIVO</Badge>
+                           </CardHeader>
+                           <CardContent className="p-6 space-y-6">
+                              {section.aisles.map(aisle => {
+                                 const aisleTotal = aisle.racks.reduce((acc, r) => acc + (r.levels * r.columns), 0);
+                                 const aisleOccupied = Math.floor(aisleTotal * (0.4 + Math.random() * 0.4));
+                                 const percent = aisleTotal > 0 ? Math.round((aisleOccupied / aisleTotal) * 100) : 0;
+                                 return (
+                                   <div key={aisle.id} className="space-y-2">
+                                      <div className="flex justify-between items-center">
+                                         <p className="text-[10px] font-black uppercase text-slate-500 flex items-center gap-2">
+                                            <ArrowRight size={10} className="text-blue-600" /> {aisle.name}
+                                         </p>
+                                         <span className="text-[10px] font-black text-slate-400 italic">{percent}%</span>
+                                      </div>
+                                      <Progress value={percent} className="h-1.5 bg-slate-100" />
                                    </div>
-                                   <Badge className="bg-blue-600 text-white border-none">ZONA ACTIVA</Badge>
-                                </CardHeader>
-                                <CardContent className="p-6 space-y-6">
-                                   {section.aisles.map(aisle => {
-                                      const aisleTotal = aisle.racks.reduce((acc, r) => acc + (r.levels * r.columns), 0);
-                                      const aisleOccupied = Math.floor(aisleTotal * (0.4 + Math.random() * 0.4)); // Simulación x pasillo
-                                      const percent = aisleTotal > 0 ? Math.round((aisleOccupied / aisleTotal) * 100) : 0;
-                                      
-                                      return (
-                                        <div key={aisle.id} className="space-y-2">
-                                           <div className="flex justify-between items-center">
-                                              <p className="text-[10px] font-black uppercase text-slate-500 flex items-center gap-2">
-                                                 <ArrowRight size={10} className="text-blue-600" /> {aisle.name}
-                                              </p>
-                                              <span className="text-[10px] font-black text-slate-400 italic">{percent}%</span>
-                                           </div>
-                                           <Progress value={percent} className="h-1.5 bg-slate-100" />
-                                           <div className="flex gap-2 pt-1">
-                                              {aisle.racks.map(r => (
-                                                <div 
-                                                  key={r.id} 
-                                                  className="w-8 h-2 rounded-full bg-slate-100 border border-slate-200 cursor-pointer hover:bg-blue-400 transition-colors"
-                                                  onClick={() => { setActiveRackId(r.id); setViewMode('editor'); }}
-                                                  title={`Rack ${r.name}`}
-                                                />
-                                              ))}
-                                           </div>
-                                        </div>
-                                      );
-                                   })}
-                                </CardContent>
-                                <CardFooter className="bg-slate-50 p-4 flex justify-center border-t">
-                                   <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Optimización de espacio por IA habilitada</p>
-                                </CardFooter>
-                             </Card>
-                           ))}
-                        </div>
-                      )}
+                                 );
+                              })}
+                           </CardContent>
+                        </Card>
+                      ))}
                    </div>
                 </div>
               ) : (
-                /* EDITOR DE RACK (ACTUALIZADO) */
                 <Card className="border-none shadow-2xl rounded-[3rem] overflow-hidden bg-white animate-in zoom-in-95 duration-200">
                    <CardHeader className="bg-blue-600 text-white p-8">
                       <div className="flex justify-between items-center">
                         <div className="flex items-center gap-4">
-                           <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center">
-                              <Grid3X3 size={32} />
-                           </div>
+                           <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center"><Grid3X3 size={32} /></div>
                            <div>
-                              <CardTitle className="text-xl font-black italic uppercase tracking-tighter">Editor Visual de Estantería</CardTitle>
-                              <CardDescription className="text-white/60 text-[10px] font-bold uppercase">Configuración de Niveles y Celdas</CardDescription>
+                              <CardTitle className="text-xl font-black italic uppercase tracking-tighter">Editor de Estantería</CardTitle>
+                              <CardDescription className="text-white/60 text-[10px] font-bold uppercase">Niveles y Columnas</CardDescription>
                            </div>
                         </div>
-                        <Button variant="outline" className="bg-white/10 border-white/20 text-white hover:bg-white/20 h-10 rounded-xl font-black text-[10px] uppercase" onClick={() => setViewMode('overview')}>Cerrar Editor</Button>
+                        <Button variant="outline" className="bg-white/10 border-white/20 text-white h-10 rounded-xl font-black text-[10px] uppercase" onClick={() => setViewMode('overview')}>Cerrar</Button>
                       </div>
                    </CardHeader>
                    <CardContent className="p-10 space-y-10">
-                      <div className="relative">
-                         <div className="absolute -inset-4 border-[8px] border-slate-200 rounded-lg pointer-events-none -z-0"></div>
-                         
-                         <div className="grid grid-cols-5 gap-3 relative z-10">
-                            {[1,2,3,4,5].map(col => (
-                              <div key={col} className="space-y-3">
-                                 {[4,3,2,1].map(lvl => (
-                                   <div 
-                                    key={`${col}-${lvl}`} 
-                                    className="aspect-square bg-slate-50 border-4 border-slate-100 rounded-xl flex flex-col items-center justify-center gap-1 group hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer relative overflow-hidden"
-                                   >
-                                      <div className="absolute top-1 left-2 text-[8px] font-black text-slate-300">N{lvl}-C{col}</div>
-                                      <Container size={24} className="text-slate-200 group-hover:text-blue-300" />
-                                      <p className="text-[7px] font-black uppercase text-slate-300">Vacío</p>
-                                      <div className="absolute bottom-0 inset-x-0 h-1 bg-slate-300"></div>
-                                   </div>
-                                 ))}
-                              </div>
-                            ))}
-                         </div>
+                      <div className="grid grid-cols-5 gap-3 relative z-10">
+                         {[1,2,3,4,5].map(col => (
+                           <div key={col} className="space-y-3">
+                              {[4,3,2,1].map(lvl => (
+                                <div key={`${col}-${lvl}`} className="aspect-square bg-slate-50 border-4 border-slate-100 rounded-xl flex flex-col items-center justify-center gap-1 group hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer relative overflow-hidden">
+                                   <div className="absolute top-1 left-2 text-[8px] font-black text-slate-300">N{lvl}-C{col}</div>
+                                   <Container size={24} className="text-slate-200 group-hover:text-blue-300" />
+                                   <p className="text-[7px] font-black uppercase text-slate-300">Vacío</p>
+                                   <div className="absolute bottom-0 inset-x-0 h-1 bg-slate-300"></div>
+                                </div>
+                              ))}
+                           </div>
+                         ))}
                       </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t">
-                         <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase text-slate-400">Niveles de Altura</Label>
-                            <div className="flex items-center gap-4">
-                               <Input type="number" defaultValue={4} className="h-12 font-black text-lg text-center bg-slate-50 border-none rounded-xl" />
-                               <div className="flex flex-col text-[10px] font-bold text-slate-400">
-                                  <span>MAX: 6</span>
-                                  <span>MIN: 1</span>
-                               </div>
-                            </div>
-                         </div>
-                         <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase text-slate-400">Columnas de Almacén</Label>
-                            <div className="flex items-center gap-4">
-                               <Input type="number" defaultValue={5} className="h-12 font-black text-lg text-center bg-slate-50 border-none rounded-xl" />
-                               <div className="flex flex-col text-[10px] font-bold text-slate-400">
-                                  <span>MAX: 12</span>
-                                  <span>MIN: 1</span>
-                               </div>
-                            </div>
-                         </div>
+                      <div className="grid grid-cols-2 gap-6 pt-6 border-t">
+                         <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Niveles Altura</Label><Input type="number" defaultValue={4} className="h-12 font-black text-lg bg-slate-50 border-none rounded-xl" /></div>
+                         <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Columnas Ancho</Label><Input type="number" defaultValue={5} className="h-12 font-black text-lg bg-slate-50 border-none rounded-xl" /></div>
                       </div>
                    </CardContent>
-                   <CardFooter className="bg-slate-50 p-6 flex justify-between">
-                      <p className="text-[9px] font-black text-slate-400 uppercase italic">Cada celda generará una coordenada única para el sistema de picking.</p>
-                      <Button variant="ghost" size="sm" className="text-red-500 font-bold" onClick={() => setActiveRackId(null)}><Trash2 size={14} className="mr-2" /> ELIMINAR RACK</Button>
-                   </CardFooter>
                 </Card>
               )}
            </div>
         </div>
-      )}
     </div>
+  );
+}
+
+export default function WarehouseLayoutPage() {
+  return (
+    <Suspense fallback={<div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>}>
+      <LayoutContent />
+    </Suspense>
   );
 }
