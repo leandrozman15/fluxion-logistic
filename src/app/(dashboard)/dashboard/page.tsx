@@ -100,29 +100,29 @@ export default function MonitorOperativoPage() {
   }, []);
 
   const trucksQuery = useMemo(() => {
-    if (!db) return null;
-    return collection(db, "trucks");
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return collection(db, "tenants", tenantId, "trucks");
+  }, [db, tenantId]);
 
   const loadsQuery = useMemo(() => {
-    if (!db) return null;
-    return query(collection(db, "loads"), orderBy("createdAt", "desc"));
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "loads"), orderBy("createdAt", "desc"));
+  }, [db, tenantId]);
 
   const hubsQuery = useMemo(() => {
-    if (!db) return null;
-    return collection(db, "hubs");
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return collection(db, "tenants", tenantId, "hubs");
+  }, [db, tenantId]);
 
   const clientsQuery = useMemo(() => {
-    if (!db) return null;
-    return collection(db, "clients");
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return collection(db, "tenants", tenantId, "clients");
+  }, [db, tenantId]);
 
   const driversQuery = useMemo(() => {
-    if (!db) return null;
-    return collection(db, "drivers");
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return collection(db, "tenants", tenantId, "drivers");
+  }, [db, tenantId]);
 
   const { data: trucks } = useCollection<Truck>(trucksQuery);
   const { data: loads } = useCollection<Load>(loadsQuery);
@@ -197,10 +197,10 @@ export default function MonitorOperativoPage() {
   }, [loads, agendaTab, todayStr, tomorrowStr, nextWeekStr]);
 
   const handleDockAssignment = async () => {
-    if (!db || !selectedLoadForDock || !selectedDock) return;
+    if (!db || !selectedLoadForDock || !selectedDock || !tenantId) return;
     setIsUpdatingDock(true);
     try {
-      updateDoc(doc(db, "loads", selectedLoadForDock.id), {
+      updateDoc(doc(db, "tenants", tenantId, "loads", selectedLoadForDock.id), {
         "origin.dockName": selectedDock,
         "dockEntryAuthorized": true,
         "dockEntryMessage": `AUTORIZADO: Diríjase a ${selectedDock}`,
@@ -329,7 +329,7 @@ export default function MonitorOperativoPage() {
     iconSize: [32, 32], iconAnchor: [16, 16]
   }) : null;
 
-  if (!mounted) return <div className="h-[80vh] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
+  if (!mounted || !tenantId) return <div className="h-[80vh] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
     <div className="space-y-6">

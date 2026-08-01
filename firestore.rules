@@ -8,47 +8,48 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.email == 'leozman15@gmail.com';
     }
 
-    // Obtiene los datos del perfil del usuario (vinculado por email para pre-registro)
+    // Obtiene los datos del perfil del usuario (mapeo global por email)
     function getUserProfile() {
       return get(/databases/$(database)/documents/users/$(request.auth.token.email)).data;
     }
 
-    // Valida si el usuario pertenece al tenant que intenta acceder
+    // Valida si el usuario pertenece al tenant o es SuperAdmin
     function belongsToTenant(tenantId) {
       return request.auth != null && (isSuperAdmin() || getUserProfile().tenantId == tenantId);
     }
 
-    // Reglas para la colección global de mapeo de usuarios
+    // Colección global de mapeo: permite saber a qué empresa pertenece un email
     match /users/{email} {
       allow read: if request.auth != null;
       allow write: if isSuperAdmin();
     }
 
-    // Reglas para la colección de organizaciones (Tenants)
+    // Reglas maestras de Organizaciones (Tenants)
     match /tenants/{tenantId} {
-      // Solo miembros de la empresa o SuperAdmin pueden leer la config del tenant
       allow read: if belongsToTenant(tenantId);
       allow write: if isSuperAdmin();
 
-      // Reglas para subcolecciones de la empresa (aislamiento total)
-      match /{allSubcollections=**} {
-        allow read, write: if belongsToTenant(tenantId);
+      // AISLAMIENTO TOTAL: Toda la data operativa vive aquí dentro
+      match /trucks/{id} { allow read, write: if belongsToTenant(tenantId); }
+      match /drivers/{id} { allow read, write: if belongsToTenant(tenantId); }
+      match /clients/{id} { allow read, write: if belongsToTenant(tenantId); }
+      match /products/{id} { allow read, write: if belongsToTenant(tenantId); }
+      match /loads/{id} { 
+        allow read, write: if belongsToTenant(tenantId); 
+        match /expenses/{expId} { allow read, write: if belongsToTenant(tenantId); }
       }
+      match /hubs/{id} { allow read, write: if belongsToTenant(tenantId); }
+      match /maintenance/{id} { allow read, write: if belongsToTenant(tenantId); }
+      match /pending_remitos/{id} { allow read, write: if belongsToTenant(tenantId); }
+      match /expenses/{id} { allow read, write: if belongsToTenant(tenantId); }
+      match /users/{id} { allow read, write: if belongsToTenant(tenantId); }
+      match /events/{id} { allow read, write: if belongsToTenant(tenantId); }
+      match /outbox/{id} { allow read, write: if belongsToTenant(tenantId); }
+      match /templates/{id} { allow read, write: if belongsToTenant(tenantId); }
+      match /campaigns/{id} { allow read, write: if belongsToTenant(tenantId); }
     }
 
-    // Reglas para colecciones operativas (Compatibilidad con modo actual mientras se migran a subcolecciones)
-    // Para una seguridad total, estas deberían estar dentro de /tenants/{tenantId}/...
-    match /trucks/{docId} { allow read, write: if request.auth != null; }
-    match /drivers/{docId} { allow read, write: if request.auth != null; }
-    match /clients/{docId} { allow read, write: if request.auth != null; }
-    match /products/{docId} { allow read, write: if request.auth != null; }
-    match /loads/{docId} { allow read, write: if request.auth != null; }
-    match /hubs/{docId} { allow read, write: if request.auth != null; }
-    match /maintenance/{docId} { allow read, write: if request.auth != null; }
-    match /pending_remitos/{docId} { allow read, write: if request.auth != null; }
-    match /global_expenses/{docId} { allow read, write: if request.auth != null; }
-
-    // Bloqueo total para cualquier otra ruta no definida
+    // Bloqueo por defecto para rutas no mapeadas
     match /{document=**} {
       allow read, write: if isSuperAdmin();
     }

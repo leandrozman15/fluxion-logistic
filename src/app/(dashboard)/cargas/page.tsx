@@ -1,9 +1,9 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { collection, query, orderBy, deleteDoc, doc, where, writeBatch, getDocs, serverTimestamp, getDoc } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -34,6 +34,7 @@ import { generateLoadOrderPDF, generateLoadWalletPDF } from "@/lib/pdf-service";
 
 export default function CargasPage() {
   const db = useFirestore();
+  const { tenantId } = useTenant();
   const router = useRouter();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
@@ -46,25 +47,25 @@ export default function CargasPage() {
   }, []);
 
   const loadsQuery = useMemo(() => {
-    if (!db) return null;
-    return query(collection(db, "loads"), orderBy("createdAt", "desc"));
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "loads"), orderBy("createdAt", "desc"));
+  }, [db, tenantId]);
 
   const trucksQuery = useMemo(() => {
-    if (!db) return null;
-    return collection(db, "trucks");
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return collection(db, "tenants", tenantId, "trucks");
+  }, [db, tenantId]);
 
   const driversQuery = useMemo(() => {
-    if (!db) return null;
-    return collection(db, "drivers");
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return collection(db, "tenants", tenantId, "drivers");
+  }, [db, tenantId]);
 
   const { data: loads, loading: loadsLoading } = useCollection<Load>(loadsQuery);
   const { data: trucks } = useCollection<TruckType>(trucksQuery);
   const { data: drivers } = useCollection<Driver>(driversQuery);
 
-  const tenantRef = useMemo(() => (db) ? doc(db, "tenants", "default_tenant") : null, [db]);
+  const tenantRef = useMemo(() => (db && tenantId) ? doc(db, "tenants", tenantId) : null, [db, tenantId]);
   const { data: tenant } = useDoc<Tenant>(tenantRef);
 
   const filteredLoads = useMemo(() => {
@@ -80,11 +81,8 @@ export default function CargasPage() {
     });
   }, [loads, searchTerm, statusFilter]);
 
-  /**
-   * DESCARGA DIRECTA DE DOCUMENTOS (Programática jsPDF)
-   */
   const handleDownloadDirect = async (load: Load, type: 'orden' | 'billetera') => {
-    if (!db) return;
+    if (!db || !tenantId) return;
     setIsDownloadingId(`${load.id}-${type}`);
     
     try {
@@ -94,8 +92,7 @@ export default function CargasPage() {
       if (type === 'orden') {
         await generateLoadOrderPDF(load, driver, truck, tenant || undefined);
       } else {
-        // Para la billetera necesitamos los gastos aprobados
-        const expSnap = await getDocs(query(collection(db, "loads", load.id, "expenses"), where("status", "==", "approved")));
+        const expSnap = await getDocs(query(collection(db, "tenants", tenantId, "loads", load.id, "expenses"), where("status", "==", "approved")));
         const expenses = expSnap.docs.map(d => ({ ...d.data(), id: d.id } as Expense));
         await generateLoadWalletPDF(load, expenses, driver, truck, tenant || undefined);
       }
@@ -120,14 +117,14 @@ export default function CargasPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!db || !id) return;
+    if (!db || !tenantId || !id) return;
     
     const ok = window.confirm("¿Está seguro de eliminar esta operación? Los remitos vinculados volverán a estar pendientes.");
     if (!ok) return;
 
     try {
       const batch = writeBatch(db);
-      const remitosQuery = query(collection(db, "pending_remitos"), where("loadId", "==", id));
+      const remitosQuery = query(collection(db, "tenants", tenantId, "pending_remitos"), where("loadId", "==", id));
       const remitosSnap = await getDocs(remitosQuery);
       
       remitosSnap.docs.forEach(docSnap => {
@@ -139,7 +136,7 @@ export default function CargasPage() {
         });
       });
 
-      batch.delete(doc(db, "loads", id));
+      batch.delete(doc(db, "tenants", tenantId, "loads", id));
       await batch.commit();
       toast({ title: "Operación eliminada" });
     } catch (e) {
@@ -147,7 +144,7 @@ export default function CargasPage() {
     }
   };
 
-  if (!mounted) return <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
+  if (!mounted || !tenantId) return <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
     <div className="space-y-6">

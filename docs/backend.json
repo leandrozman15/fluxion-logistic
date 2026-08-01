@@ -1,4 +1,3 @@
-
 {
   "auth": {
     "providers": [
@@ -7,64 +6,48 @@
   },
   "firestore": {
     "collections": {
+      "users": {
+        "description": "Mapeo global de correos a organizaciones (Tenant Mapping).",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "email": { "type": "string" },
+            "tenantId": { "type": "string" },
+            "role": { "type": "string" }
+          }
+        }
+      },
       "tenants": {
-        "description": "Organizaciones y empresas registradas.",
+        "description": "Lista de organizaciones registradas.",
         "schema": { "$ref": "#/backend/entities/Tenant" }
       },
-      "tenants/{tenantId}/users": {
-        "description": "Mapeo de usuarios del panel administrativo.",
-        "schema": { "$ref": "#/backend/entities/AppUser" }
-      },
-      "trucks": {
-        "description": "Flota de vehículos pesados con documentación y especificaciones técnicas.",
+      "tenants/{tenantId}/trucks": {
+        "description": "Flota privada de la organización.",
         "schema": { "$ref": "#/backend/entities/Truck" }
       },
-      "drivers": {
-        "description": "Choferes profissionais com licencias nacionais e habilitação LINTI.",
+      "tenants/{tenantId}/drivers": {
+        "description": "Personal de conducción y administración de la empresa.",
         "schema": { "$ref": "#/backend/entities/Driver" }
       },
-      "clients": {
-        "description": "Cartera de clientes dadores de carga con geolocalización de fachada.",
+      "tenants/{tenantId}/clients": {
+        "description": "Cartera de clientes y destinos de la empresa.",
         "schema": { "$ref": "#/backend/entities/Client" }
       },
-      "products": {
-        "description": "Catálogo de artículos transportados con especificaciones logísticas y regulatorias (NCM/SENASA/ANMAT).",
-        "schema": { "$ref": "#/backend/entities/Product" }
-      },
-      "loads": {
-        "description": "Órdenes de flete y transporte regional.",
+      "tenants/{tenantId}/loads": {
+        "description": "Operaciones de flete de la organización.",
         "schema": { "$ref": "#/backend/entities/Load" }
       },
-      "loads/{loadId}/expenses": {
-        "description": "Gastos registrados durante el viaje por el conductor.",
-        "schema": { "$ref": "#/backend/entities/Expense" }
+      "tenants/{tenantId}/products": {
+        "description": "Catálogo de productos de la empresa.",
+        "schema": { "$ref": "#/backend/entities/Product" }
       },
-      "hubs": {
-        "description": "Sedes y centros logísticos regionales.",
+      "tenants/{tenantId}/hubs": {
+        "description": "Sedes y bases operativas propias.",
         "schema": { "$ref": "#/backend/entities/Hub" }
-      },
-      "maintenance": {
-        "description": "Registros de mantenimiento preventivo y correctivo de la flota.",
-        "schema": { "$ref": "#/backend/entities/Maintenance" }
-      },
-      "pending_remitos": {
-        "description": "Buzón de documentos pendientes de despacho.",
-        "schema": { "$ref": "#/backend/entities/PendingRemito" }
       }
     }
   },
   "entities": {
-    "AppUser": {
-      "title": "AppUser",
-      "type": "object",
-      "properties": {
-        "uid": { "type": "string" },
-        "email": { "type": "string" },
-        "role": { "type": "string", "enum": ["admin", "sales_admin", "purchasing_admin", "coordinator", "manager", "warehouse", "driver", "viewer"] },
-        "displayName": { "type": "string" },
-        "status": { "type": "string" }
-      }
-    },
     "Tenant": {
       "title": "Tenant",
       "type": "object",
@@ -72,94 +55,18 @@
         "name": { "type": "string" },
         "plan": { "type": "string", "enum": ["free", "pro"] },
         "monthlyFee": { "type": "number" },
+        "subscriptionStatus": { "type": "string" },
         "settings": { "type": "object" }
       }
     },
-    "Truck": {
-      "title": "Truck",
+    "AppUser": {
+      "title": "AppUser",
       "type": "object",
       "properties": {
-        "plate": { "type": "string" },
-        "brand": { "type": "string" },
-        "model": { "type": "string" },
-        "status": { "type": "string" },
-        "costs": { "type": "object" }
-      }
-    },
-    "Driver": {
-      "title": "Driver",
-      "type": "object",
-      "properties": {
-        "firstName": { "type": "string" },
-        "lastName": { "type": "string" },
-        "dni": { "type": "string" },
+        "uid": { "type": "string" },
         "email": { "type": "string" },
-        "password": { "type": "string" }
-      }
-    },
-    "Client": {
-      "title": "Client",
-      "type": "object",
-      "properties": {
-        "name": { "type": "string" },
-        "cuit": { "type": "string" },
-        "address": { "type": "object" }
-      }
-    },
-    "Product": {
-      "title": "Product",
-      "type": "object",
-      "properties": {
-        "sku": { "type": "string" },
-        "name": { "type": "string" },
-        "unitWeightKg": { "type": "number" },
-        "ncmCode": { "type": "string" }
-      }
-    },
-    "Load": {
-      "title": "Load",
-      "type": "object",
-      "properties": {
-        "orderNumber": { "type": "string" },
-        "status": { "type": "string" },
-        "serviceType": { "type": "string" },
-        "budget": { "type": "object" }
-      }
-    },
-    "Expense": {
-      "title": "Expense",
-      "type": "object",
-      "properties": {
-        "category": { "type": "string" },
-        "amount": { "type": "number" },
-        "receiptNumber": { "type": "string" },
-        "docsPresented": { "type": "boolean" },
-        "status": { "type": "string" }
-      }
-    },
-    "Hub": {
-      "title": "Hub",
-      "type": "object",
-      "properties": {
-        "name": { "type": "string" },
-        "loadingBays": { "type": "array" }
-      }
-    },
-    "Maintenance": {
-      "title": "Maintenance",
-      "type": "object",
-      "properties": {
-        "orderNumber": { "type": "string" },
-        "truckId": { "type": "string" },
-        "status": { "type": "string" }
-      }
-    },
-    "PendingRemito": {
-      "title": "PendingRemito",
-      "type": "object",
-      "properties": {
-        "number": { "type": "string" },
-        "clientName": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "role": { "type": "string" },
         "status": { "type": "string" }
       }
     }

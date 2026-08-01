@@ -1,9 +1,9 @@
-
 'use client';
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { collection, query, orderBy, deleteDoc, doc, where } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -32,25 +32,26 @@ import { cn } from "@/lib/utils";
 
 export default function ChoferesPage() {
   const db = useFirestore();
+  const { tenantId } = useTenant();
   const router = useRouter();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
   const driversQuery = useMemo(() => {
-    if (!db) return null;
-    return query(collection(db, "drivers"), orderBy("lastName"));
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "drivers"), orderBy("lastName"));
+  }, [db, tenantId]);
 
   const trucksQuery = useMemo(() => {
-    if (!db) return null;
-    return collection(db, "trucks");
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return collection(db, "tenants", tenantId, "trucks");
+  }, [db, tenantId]);
 
   const loadsQuery = useMemo(() => {
-    if (!db) return null;
-    return collection(db, "loads");
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return collection(db, "tenants", tenantId, "loads");
+  }, [db, tenantId]);
 
   const { data: drivers, loading } = useCollection<Driver>(driversQuery);
   const { data: trucks } = useCollection<Truck>(trucksQuery);
@@ -69,12 +70,12 @@ export default function ChoferesPage() {
   }, [drivers, searchTerm, statusFilter]);
 
   const handleDeleteDriver = async (id: string, name: string) => {
-    if (!db || !id) return;
+    if (!db || !tenantId || !id) return;
     const ok = window.confirm(`¿Está seguro de eliminar a ${name}? Esta acción no se puede deshacer.`);
     if (!ok) return;
 
     try {
-      await deleteDoc(doc(db, "drivers", id));
+      await deleteDoc(doc(db, "tenants", tenantId, "drivers", id));
       toast({ title: "Registro eliminado", description: "El registro ha sido removido del sistema." });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al eliminar" });

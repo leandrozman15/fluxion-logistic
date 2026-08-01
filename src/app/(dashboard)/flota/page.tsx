@@ -1,9 +1,9 @@
-
 'use client';
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { collection, query, orderBy, deleteDoc, doc, where } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -32,28 +32,37 @@ import { es } from "date-fns/locale";
 
 export default function FlotaPage() {
   const db = useFirestore();
+  const { tenantId } = useTenant();
   const router = useRouter();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
   const trucksQuery = useMemo(() => {
-    if (!db) return null;
-    return query(collection(db, "trucks"), orderBy("plate"));
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "trucks"), orderBy("plate"));
+  }, [db, tenantId]);
 
   const { data: trucks, loading: trucksLoading } = useCollection<TruckType>(trucksQuery);
 
-  const driversQuery = useMemo(() => db ? query(collection(db, "drivers")) : null, [db]);
+  const driversQuery = useMemo(() => {
+    if (!db || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "drivers"));
+  }, [db, tenantId]);
+
   const { data: drivers } = useCollection<Driver>(driversQuery);
 
-  const maintenanceQuery = useMemo(() => db ? query(collection(db, "maintenance")) : null, [db]);
+  const maintenanceQuery = useMemo(() => {
+    if (!db || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "maintenance"));
+  }, [db, tenantId]);
+
   const { data: maintenanceRecords } = useCollection<Maintenance>(maintenanceQuery);
 
   const fuelExpensesQuery = useMemo(() => {
-    if (!db) return null;
-    return query(collection(db, "global_expenses"), where("category", "==", "fuel"));
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "expenses"), where("category", "==", "fuel"));
+  }, [db, tenantId]);
 
   const { data: allFuelExpenses } = useCollection<Expense>(fuelExpensesQuery);
 
@@ -69,12 +78,12 @@ export default function FlotaPage() {
   }, [trucks, searchTerm, statusFilter]);
 
   const handleDelete = async (id: string, plate: string) => {
-    if (!db || !id) return;
+    if (!db || !tenantId || !id) return;
     const ok = window.confirm(`¿Desea eliminar definitivamente la unidad ${plate}? Esta acción no se puede deshacer.`);
     if (!ok) return;
 
     try {
-      await deleteDoc(doc(db, "trucks", id));
+      await deleteDoc(doc(db, "tenants", tenantId, "trucks", id));
       toast({ title: "Unidad eliminada", description: "El registro ha sido removido del sistema." });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al eliminar" });
@@ -200,7 +209,7 @@ export default function FlotaPage() {
 
         <CardContent className="p-0">
           {trucksLoading ? (
-            <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>
+            <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-blue-600 w-10 h-10" /></div>
           ) : (
             <Table>
               <TableHeader>
