@@ -157,6 +157,8 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     setStep(prev => Math.min(5, prev + 1));
   };
 
+  const handleBack = () => setStep(prev => Math.max(1, prev - 1));
+
   const handleTruckSelect = (id: string) => {
     const truck = trucks?.find(t => t.id === id);
     if (!truck) return;
@@ -671,7 +673,20 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center z-50">
-        <div className="max-w-5xl w-full flex justify-between items-center px-4"><Button variant="ghost" onClick={handleBack} disabled={isSubmitting}><ChevronLeft size={16} className="mr-1" /> VOLVER</Button>{step < 5 ? <Button onClick={handleNext} className="bg-blue-600">SIGUIENTE <ChevronRight size={16} /></Button> : <Button onClick={handleSubmit} className="bg-green-600" disabled={isSubmitting || isWeightLimitExceeded}>EMITIR ORDEN <Save size={16} className="ml-2" /></Button>}</div>
+        <div className="max-w-5xl w-full flex justify-between items-center px-4">
+          <Button variant="ghost" onClick={handleBack} disabled={isSubmitting}>
+            <ChevronLeft size={16} className="mr-1" /> VOLVER
+          </Button>
+          {step < 5 ? (
+            <Button onClick={handleNext} className="bg-blue-600">
+              SIGUIENTE <ChevronRight size={16} />
+            </Button>
+          ) : (
+            <Button onClick={handleSubmit} className="bg-green-600" disabled={isSubmitting || isWeightLimitExceeded}>
+              EMITIR ORDEN <Save size={16} className="ml-2" />
+            </Button>
+          )}
+        </div>
       </div>
 
       <Dialog open={isStopModalOpen} onOpenChange={setIsStopModalOpen}>
