@@ -36,6 +36,8 @@ export interface ProductWarehouse {
   stockQuantity: number;
   minStock: number;
   maxStock: number;
+  lotNumber?: string;
+  entryDate?: string;
 }
 
 export interface ProductVariant {

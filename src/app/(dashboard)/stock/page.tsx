@@ -20,7 +20,12 @@ import {
   ArrowRightLeft,
   Package,
   CheckCircle2,
-  Clock
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  MapPin,
+  Calendar,
+  Layers
 } from "lucide-react";
 import { 
   Dialog, 
@@ -46,6 +51,7 @@ export default function StockPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isAdjusting, setIsAdjusting] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [expandedRows, setExpandedRows] = useState<string[]>([]);
 
   const [adjustmentForm, setAdjustmentForm] = useState({
     productId: "",
@@ -73,6 +79,12 @@ export default function StockPage() {
     return products?.filter(p => p.stockQuantity <= (p.minStockAlert || 5)) || [];
   }, [products]);
 
+  const toggleRow = (id: string) => {
+    setExpandedRows(prev => 
+      prev.includes(id) ? prev.filter(rowId => rowId !== id) : [...prev, id]
+    );
+  };
+
   const handleStockAdjustment = async () => {
     if (!db || !tenantId || !adjustmentForm.productId || !user) return;
     setIsSubmitting(true);
@@ -95,7 +107,7 @@ export default function StockPage() {
         updatedAt: serverTimestamp()
       });
 
-      // 2. Registrar Movimiento en la BD (para auditoría interna aunque no se muestre)
+      // 2. Registrar Movimiento en la BD
       const movementRef = doc(collection(db, "tenants", tenantId, "stock_movements"));
       batch.set(movementRef, {
         id: movementRef.id,
@@ -127,8 +139,8 @@ export default function StockPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black text-slate-900 italic tracking-tighter uppercase leading-none">Stock y Almacén</h1>
-          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Control de inventario y trazabilidad de movimientos.</p>
+          <h1 className="text-3xl font-black text-slate-900 italic tracking-tighter uppercase leading-none">Stock e Inventario</h1>
+          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Control de existencias, lotes y ubicaciones físicas.</p>
         </div>
         
         <Dialog open={isAdjusting} onOpenChange={setIsAdjusting}>
@@ -246,53 +258,107 @@ export default function StockPage() {
                  <Table>
                    <TableHeader className="bg-slate-50/30">
                      <TableRow>
+                       <TableHead className="w-10"></TableHead>
                        <TableHead className="px-8 text-[10px] font-black uppercase">SKU / Producto</TableHead>
                        <TableHead className="text-[10px] font-black uppercase text-center">Unidad</TableHead>
                        <TableHead className="text-[10px] font-black uppercase text-center">Existencia</TableHead>
                        <TableHead className="text-[10px] font-black uppercase">Estado Alerta</TableHead>
-                       <TableHead className="pr-8 text-right text-[10px] font-black uppercase">Ficha</TableHead>
+                       <TableHead className="pr-8 text-right text-[10px] font-black uppercase">Acciones</TableHead>
                      </TableRow>
                    </TableHeader>
                    <TableBody>
                      {filteredProducts.length === 0 ? (
-                        <TableRow><TableCell colSpan={5} className="text-center py-20 text-slate-400 italic">No hay productos en inventario.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={6} className="text-center py-20 text-slate-400 italic font-bold uppercase text-xs">No hay productos en inventario.</TableCell></TableRow>
                      ) : (
-                       filteredProducts.map(product => (
-                         <TableRow key={product.id} className="hover:bg-slate-50/50 group">
-                           <TableCell className="px-8 py-4">
-                              <div className="flex items-center gap-3">
-                                 <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-blue-600 border border-slate-100 group-hover:bg-blue-600 group-hover:text-white transition-all">
-                                    <Box size={20} />
-                                 </div>
-                                 <div>
-                                    <p className="font-black text-slate-900 text-sm tracking-tight">{product.name}</p>
-                                    <p className="text-[10px] text-slate-400 font-mono font-bold">{product.sku}</p>
-                                 </div>
-                              </div>
-                           </TableCell>
-                           <TableCell className="text-center font-bold text-slate-500 uppercase text-[10px]">{product.unitType}</TableCell>
-                           <TableCell className="text-center">
-                              <span className={cn(
-                                "text-lg font-black italic",
-                                product.stockQuantity <= (product.minStockAlert || 5) ? "text-red-600" : "text-slate-900"
-                              )}>
-                                {product.stockQuantity || 0}
-                              </span>
-                           </TableCell>
-                           <TableCell>
-                              {product.stockQuantity <= (product.minStockAlert || 5) ? (
-                                <Badge variant="destructive" className="animate-pulse text-[8px] h-4">STOCK CRÍTICO</Badge>
-                              ) : (
-                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-[8px] h-4">NIVEL OK</Badge>
-                              )}
-                           </TableCell>
-                           <TableCell className="pr-8 text-right">
-                              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => window.location.href = `/productos/${product.id}/ficha`}>
-                                <Plus size={16} className="text-slate-400" />
-                              </Button>
-                           </TableCell>
-                         </TableRow>
-                       ))
+                       filteredProducts.map(product => {
+                         const isExpanded = expandedRows.includes(product.id);
+                         return (
+                           <React.Fragment key={product.id}>
+                             <TableRow className={cn("hover:bg-slate-50/50 group cursor-pointer", isExpanded && "bg-blue-50/30")} onClick={() => toggleRow(product.id)}>
+                               <TableCell className="pl-6">
+                                 {isExpanded ? <ChevronUp size={16} className="text-blue-600" /> : <ChevronDown size={16} className="text-slate-300" />}
+                               </TableCell>
+                               <TableCell className="px-8 py-4">
+                                  <div className="flex items-center gap-3">
+                                     <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-blue-600 border border-slate-100 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                                        <Box size={20} />
+                                     </div>
+                                     <div>
+                                        <p className="font-black text-slate-900 text-sm tracking-tight">{product.name}</p>
+                                        <p className="text-[10px] text-slate-400 font-mono font-bold">{product.sku}</p>
+                                     </div>
+                                  </div>
+                               </TableCell>
+                               <TableCell className="text-center font-bold text-slate-500 uppercase text-[10px]">{product.unitType}</TableCell>
+                               <TableCell className="text-center">
+                                  <span className={cn(
+                                    "text-lg font-black italic",
+                                    product.stockQuantity <= (product.minStockAlert || 5) ? "text-red-600" : "text-slate-900"
+                                  )}>
+                                    {product.stockQuantity || 0}
+                                  </span>
+                               </TableCell>
+                               <TableCell>
+                                  {product.stockQuantity <= (product.minStockAlert || 5) ? (
+                                    <Badge variant="destructive" className="animate-pulse text-[8px] h-4">STOCK CRÍTICO</Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-[8px] h-4">NIVEL OK</Badge>
+                                  )}
+                               </TableCell>
+                               <TableCell className="pr-8 text-right">
+                                  <Button variant="ghost" size="icon" className="rounded-full" onClick={(e) => { e.stopPropagation(); window.location.href = `/productos/${product.id}/ficha`; }}>
+                                    <Plus size={16} className="text-slate-400" />
+                                  </Button>
+                               </TableCell>
+                             </TableRow>
+                             {isExpanded && (
+                               <TableRow className="bg-blue-50/20 border-b-2 border-blue-100 animate-in slide-in-from-top-2 duration-300">
+                                 <TableCell colSpan={6} className="p-0">
+                                   <div className="px-16 py-6 space-y-4">
+                                      <div className="flex items-center gap-2 text-[10px] font-black uppercase text-blue-600 tracking-widest">
+                                         <Layers size={14} /> Desglose Físico de Mercadería
+                                      </div>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                         {product.warehouses && product.warehouses.length > 0 ? (
+                                           product.warehouses.map((w, idx) => (
+                                             <Card key={idx} className="border-none shadow-sm bg-white overflow-hidden rounded-2xl">
+                                               <CardContent className="p-4 grid grid-cols-2 gap-4">
+                                                  <div className="space-y-1">
+                                                     <p className="text-[8px] font-black text-slate-400 uppercase">Sede / Almacén</p>
+                                                     <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><MapPin size={12} className="text-blue-500" /> {w.hubName}</p>
+                                                  </div>
+                                                  <div className="space-y-1">
+                                                     <p className="text-[8px] font-black text-slate-400 uppercase">Ubicación Rack</p>
+                                                     <p className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 w-fit">{w.location || 'SIN POSICIÓN'}</p>
+                                                  </div>
+                                                  <div className="space-y-1">
+                                                     <p className="text-[8px] font-black text-slate-400 uppercase">N° Lote</p>
+                                                     <p className="text-xs font-bold text-slate-800">{w.lotNumber || 'LT-XXXXX'}</p>
+                                                  </div>
+                                                  <div className="space-y-1">
+                                                     <p className="text-[8px] font-black text-slate-400 uppercase">Fecha Ingreso</p>
+                                                     <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5"><Calendar size={12} className="text-slate-300" /> {w.entryDate || 'S/D'}</p>
+                                                  </div>
+                                                  <div className="col-span-2 pt-2 border-t mt-1 flex justify-between items-center">
+                                                     <span className="text-[10px] font-black text-slate-900 uppercase">Existencia en esta posición:</span>
+                                                     <span className="text-sm font-black italic text-blue-700">{w.stockQuantity} {product.unitType}s</span>
+                                                  </div>
+                                               </CardContent>
+                                             </Card>
+                                           ))
+                                         ) : (
+                                           <div className="col-span-2 py-8 text-center bg-white rounded-2xl border-2 border-dashed border-slate-200">
+                                              <p className="text-[10px] font-black text-slate-300 uppercase italic">Sin ubicaciones configuradas para este producto</p>
+                                           </div>
+                                         )}
+                                      </div>
+                                   </div>
+                                 </TableCell>
+                               </TableRow>
+                             )}
+                           </React.Fragment>
+                         );
+                       })
                      )}
                    </TableBody>
                  </Table>
@@ -305,7 +371,7 @@ export default function StockPage() {
              <div className="space-y-1">
                 <p className="text-xs font-black text-blue-800 uppercase italic">Auditoría de Almacén</p>
                 <p className="text-[10px] text-blue-600 leading-relaxed font-medium">
-                  El sistema mantiene un registro persistente de cada ajuste manual para auditoría contable. Utilice el botón superior para ingresar mercadería nueva o dar de baja bultos dañados.
+                  El sistema mantiene un registro persistente de cada ajuste manual para auditoría contable. Utilice el botón superior para ingresar mercadería nueva o dar de baja bultos dañados. Pulse sobre la fila de un producto para ver el detalle de lotes y ubicaciones.
                 </p>
              </div>
         </div>
@@ -313,3 +379,5 @@ export default function StockPage() {
     </div>
   );
 }
+
+import React from 'react';
