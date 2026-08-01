@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useDoc } from "@/firebase";
+import { useFirestore, useDoc, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { collection, serverTimestamp, doc, updateDoc, setDoc, writeBatch } from "firebase/firestore";
 import { initializeApp, deleteApp } from "firebase/app";
@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { compressImage } from "@/lib/utils/image-compression";
 import { uploadBase64 } from "@/lib/storage-service";
+import { logSystemEvent } from "@/lib/audit-service";
 
 interface DriverFormWizardProps {
   driverId?: string;
@@ -32,6 +33,7 @@ interface DriverFormWizardProps {
 export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   const db = useFirestore();
   const { tenantId } = useTenant();
+  const { user } = useUser();
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
@@ -71,6 +73,9 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
         const storagePath = `tenants/${tenantId}/drivers/${formData.dni || 'temp'}/${key}_${Date.now()}.jpg`;
         const url = await uploadBase64(storagePath, compressed);
         setFormData(prev => ({ ...prev, [key]: url }));
+        
+        await logSystemEvent(db, tenantId, user, 'document_upload', 'driver', formData.dni || 'unknown', { documentType: key });
+        
         toast({ title: "Archivo cargado" });
       } catch (err) {
         toast({ variant: "destructive", title: "Error al subir" });
@@ -111,6 +116,10 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
         batch.set(doc(db, "users", formData.email.toLowerCase().trim()), {
           uid, email: formData.email.toLowerCase().trim(), tenantId, role: formData.role, status: "active", createdAt: serverTimestamp()
         });
+        
+        await logSystemEvent(db, tenantId, user, 'create', 'driver', uid, { email: formData.email, dni: formData.dni });
+      } else {
+        await logSystemEvent(db, tenantId, user, 'update', 'driver', uid!, { email: formData.email, dni: formData.dni });
       }
 
       const tenantUserRef = doc(db, "tenants", tenantId, "drivers", uid!);

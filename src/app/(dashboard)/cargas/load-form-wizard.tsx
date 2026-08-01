@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useCollection, useDoc } from "@/firebase";
+import { useFirestore, useCollection, useDoc, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { collection, serverTimestamp, doc, setDoc, query, orderBy, updateDoc, limit, getDocs, where, writeBatch } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -25,6 +25,7 @@ import { Load, Client, Hub, LoadLegStop, LoadDocument, LoadDocType, Truck as Tru
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { logSystemEvent } from "@/lib/audit-service";
 
 const SERVICE_TYPES = [
   { id: 'standard', label: 'Carga General', icon: Package },
@@ -42,6 +43,7 @@ interface LoadFormWizardProps {
 export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
   const db = useFirestore();
   const { tenantId } = useTenant();
+  const { user } = useUser();
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
@@ -77,7 +79,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     tracking: { currentLat: 0, currentLng: 0, currentSpeed: 0, avgSpeed: 0, maxSpeed: 0, distanceTraveledKm: 0, distanceRemainingKm: 0, timeOnRouteMinutes: 0, timeStoppedMinutes: 0, lastUpdateAt: null, history: [], alerts: [] }
   });
 
-  const loadRef = useMemo(() => loadId && db ? doc(db, "loads", loadId) : null, [db, loadId]);
+  const loadRef = useMemo(() => loadId && db && tenantId ? doc(db, "tenants", tenantId, "loads", loadId) : null, [db, tenantId, loadId]);
   const { data: existingLoad, loading: loadingExisting } = useDoc<Load>(loadRef);
 
   useEffect(() => {
@@ -100,11 +102,11 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     }
   }, [existingLoad]);
 
-  const trucksQuery = useMemo(() => db ? query(collection(db, "trucks"), orderBy("plate")) : null, [db]);
-  const driversQuery = useMemo(() => db ? query(collection(db, "drivers"), orderBy("lastName")) : null, [db]);
-  const clientsQuery = useMemo(() => db ? query(collection(db, "clients"), orderBy("name")) : null, [db]);
-  const hubsQuery = useMemo(() => db ? query(collection(db, "hubs"), orderBy("name")) : null, [db]);
-  const remitosQuery = useMemo(() => db ? query(collection(db, "pending_remitos"), where("status", "in", ["pending", "dispatched"])) : null, [db]);
+  const trucksQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "trucks"), orderBy("plate")) : null, [db, tenantId]);
+  const driversQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "drivers"), orderBy("lastName")) : null, [db, tenantId]);
+  const clientsQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "clients"), orderBy("name")) : null, [db, tenantId]);
+  const hubsQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "hubs"), orderBy("name")) : null, [db, tenantId]);
+  const remitosQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "pending_remitos"), where("status", "in", ["pending", "dispatched"])) : null, [db, tenantId]);
 
   const { data: trucks } = useCollection<TruckType>(trucksQuery);
   const { data: drivers } = useCollection<Driver>(driversQuery);
@@ -267,7 +269,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
   };
 
   const handleSubmit = async () => {
-    if (!db) return;
+    if (!db || !tenantId) return;
     
     // Validación final
     if (!formData.assignedTruckId || !formData.assignedDriverId) return toast({ variant: "destructive", title: "Error", description: "Faltan recursos asignados (Chofer o Camión)." });
@@ -281,7 +283,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
 
       // 1. AUTO-GENERACIÓN DE NÚMERO DE ORDEN (FL-YEAR-XXXX)
       if (!finalOrderNumber) {
-        const loadsSnap = await getDocs(query(collection(db, "loads"), orderBy("orderNumber", "desc"), limit(1)));
+        const loadsSnap = await getDocs(query(collection(db, "tenants", tenantId, "loads"), orderBy("orderNumber", "desc"), limit(1)));
         let nextSeq = 1;
         if (!loadsSnap.empty) {
           const lastOrderStr = (loadsSnap.docs[0].data() as Load).orderNumber;
@@ -301,16 +303,18 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
       };
 
       if (!loadId) {
-        const newRef = doc(collection(db, "loads"));
+        const newRef = doc(collection(db, "tenants", tenantId, "loads"));
         finalLoadId = newRef.id;
         batch.set(newRef, { ...cleanFormData, id: finalLoadId, createdAt: serverTimestamp() });
+        await logSystemEvent(db, tenantId, user, 'create', 'load', finalLoadId, { orderNumber: finalOrderNumber });
       } else {
-        batch.update(doc(db, "loads", loadId), cleanFormData);
+        batch.update(doc(db, "tenants", tenantId, "loads", loadId), cleanFormData);
+        await logSystemEvent(db, tenantId, user, 'update', 'load', loadId, { orderNumber: finalOrderNumber });
       }
 
       // 2. ACTUALIZACIÓN DE REMITOS EN EL BUZÓN
       for (const rid of selectedRemitoIds) {
-        batch.update(doc(db, "pending_remitos", rid), {
+        batch.update(doc(db, "tenants", tenantId, "pending_remitos", rid), {
           status: 'dispatched',
           loadId: finalLoadId,
           dispatchedDate: formData.pickupDate,
@@ -330,7 +334,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
         });
         
         for (const rid of removedRemitoIds) {
-          batch.update(doc(db, "pending_remitos", rid), {
+          batch.update(doc(db, "tenants", tenantId, "pending_remitos", rid), {
             status: 'pending',
             loadId: null,
             dispatchedDate: null,
@@ -667,7 +671,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center z-50">
-        <div className="max-w-5xl w-full flex justify-between items-center px-4"><Button variant="ghost" onClick={() => setStep(prev => Math.max(1, prev - 1))} disabled={isSubmitting}><ChevronLeft size={16} className="mr-1" /> VOLVER</Button>{step < 5 ? <Button onClick={handleNext} className="bg-blue-600">SIGUIENTE <ChevronRight size={16} /></Button> : <Button onClick={handleSubmit} className="bg-green-600" disabled={isSubmitting || isWeightLimitExceeded}>EMITIR ORDEN <Save size={16} className="ml-2" /></Button>}</div>
+        <div className="max-w-5xl w-full flex justify-between items-center px-4"><Button variant="ghost" onClick={handleBack} disabled={isSubmitting}><ChevronLeft size={16} className="mr-1" /> VOLVER</Button>{step < 5 ? <Button onClick={handleNext} className="bg-blue-600">SIGUIENTE <ChevronRight size={16} /></Button> : <Button onClick={handleSubmit} className="bg-green-600" disabled={isSubmitting || isWeightLimitExceeded}>EMITIR ORDEN <Save size={16} className="ml-2" /></Button>}</div>
       </div>
 
       <Dialog open={isStopModalOpen} onOpenChange={setIsStopModalOpen}>

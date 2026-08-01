@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useDoc, useCollection } from "@/firebase";
+import { useFirestore, useDoc, useCollection, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { collection, serverTimestamp, doc, updateDoc, setDoc, query, orderBy, writeBatch } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -24,6 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { compressImage } from "@/lib/utils/image-compression";
 import { uploadBase64 } from "@/lib/storage-service";
+import { logSystemEvent } from "@/lib/audit-service";
 
 interface ProductFormWizardProps {
   productId?: string;
@@ -42,6 +43,7 @@ const UNIT_TYPES = [
 export default function ProductFormWizard({ productId }: ProductFormWizardProps) {
   const db = useFirestore();
   const { tenantId, role } = useTenant();
+  const { user } = useUser();
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
@@ -130,6 +132,9 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
         } else {
           setFormData(prev => ({ ...prev, photoUrl: url }));
         }
+        
+        await logSystemEvent(db, tenantId, user, 'document_upload', 'product', formData.sku || 'unknown', { variantId });
+        
         toast({ title: "Imagen subida" });
       } catch (err) {
         toast({ variant: "destructive", title: "Error al subir" });
@@ -204,14 +209,17 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
           };
           batch.set(variantRef, variantData);
         }
+        await logSystemEvent(db, tenantId, user, 'create', 'product', 'bulk', { count: formData.variants.length, parentSku: formData.sku });
       } else {
         const totalStock = (formData.warehouses || []).reduce((acc, w) => acc + (w.stockQuantity || 0), 0);
         const finalData = { ...formData, stockQuantity: totalStock, updatedAt: serverTimestamp() };
         if (productId) {
           batch.update(doc(db, "tenants", tenantId, "products", productId), finalData);
+          await logSystemEvent(db, tenantId, user, 'update', 'product', productId, { sku: formData.sku });
         } else {
           const newRef = doc(collection(db, "tenants", tenantId, "products"));
           batch.set(newRef, { ...finalData, id: newRef.id, createdAt: serverTimestamp() });
+          await logSystemEvent(db, tenantId, user, 'create', 'product', newRef.id, { sku: formData.sku });
         }
       }
 

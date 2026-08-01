@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useDoc } from "@/firebase";
+import { useFirestore, useDoc, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { collection, serverTimestamp, doc, setDoc, updateDoc } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -26,6 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { compressImage } from "@/lib/utils/image-compression";
 import { uploadBase64 } from "@/lib/storage-service";
+import { logSystemEvent } from "@/lib/audit-service";
 
 interface ClientFormWizardProps {
   clientId?: string;
@@ -39,11 +40,10 @@ const INDUSTRIES = [
   "Retail / Comercio", "Tecnología", "Textil", "Otro"
 ];
 
-const IVA_CONDITIONS = ["Responsable Inscripto", "Monotributista", "Exento", "No Responsable", "Consumidor Final"];
-
 export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
   const db = useFirestore();
   const { tenantId } = useTenant();
+  const { user } = useUser();
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
@@ -143,6 +143,9 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
           const storagePath = `tenants/${tenantId}/clients/${formData.cuit || 'temp'}/facade.jpg`;
           const url = await uploadBase64(storagePath, compressed);
           setFormData(prev => ({ ...prev, facadePhotoUrl: url }));
+          
+          await logSystemEvent(db, tenantId, user, 'document_upload', 'client', formData.cuit || 'unknown', { fileType: 'facade' });
+          
           toast({ title: "Foto de fachada guardada" });
         } catch (err) {
           toast({ variant: "destructive", title: "Error al subir foto" });
@@ -163,6 +166,7 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
           ...formData,
           updatedAt: serverTimestamp()
         });
+        await logSystemEvent(db, tenantId, user, 'update', 'client', clientId, { name: formData.name });
       } else {
         const newRef = doc(collection(db, "tenants", tenantId, "clients"));
         await setDoc(newRef, {
@@ -171,6 +175,7 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         });
+        await logSystemEvent(db, tenantId, user, 'create', 'client', newRef.id, { name: formData.name });
       }
       toast({ title: "Cliente Guardado" });
       router.push('/clientes');
@@ -278,7 +283,7 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
         <div className="max-w-5xl w-full flex justify-between items-center px-4">
           <Button variant="ghost" onClick={handleBack} disabled={step === 1 || isSubmitting}>VOLVER</Button>
           <div className="flex gap-2">
-            {step < 4 ? <Button onClick={handleNext} className="bg-blue-600">SIGUIENTE <ChevronRight className="ml-2 h-4 w-4" /></Button> : <Button onClick={handleSubmit} className="bg-green-600" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} GUARDAR FICHA</Button>}
+            {step < 4 ? <Button onClick={handleNext} className="bg-blue-600">SIGUIENTE <ChevronRight size={16} /></Button> : <Button onClick={handleSubmit} className="bg-green-600" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} GUARDAR FICHA</Button>}
           </div>
         </div>
       </div>

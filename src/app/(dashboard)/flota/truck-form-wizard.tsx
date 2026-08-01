@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useDoc } from "@/firebase";
+import { useFirestore, useDoc, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { collection, serverTimestamp, doc, updateDoc, setDoc, query, orderBy } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { compressImage } from "@/lib/utils/image-compression";
 import { uploadBase64 } from "@/lib/storage-service";
+import { logSystemEvent } from "@/lib/audit-service";
 
 interface TruckFormWizardProps {
   truckId?: string;
@@ -37,6 +38,7 @@ const INITIAL_COSTS: TruckCosts = {
 export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
   const db = useFirestore();
   const { tenantId } = useTenant();
+  const { user } = useUser();
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
@@ -85,6 +87,9 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
           const storagePath = `tenants/${tenantId}/fleet/${formData.plate || 'temp'}/avatar.jpg`;
           const url = await uploadBase64(storagePath, compressed);
           setFormData(prev => ({ ...prev, avatarUrl: url }));
+          
+          await logSystemEvent(db, tenantId, user, 'document_upload', 'truck', formData.plate || 'unknown', { fileType: 'avatar' });
+          
           toast({ title: "Foto guardada" });
         } catch (err) {
           toast({ variant: "destructive", title: "Error al subir foto" });
@@ -100,11 +105,15 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     if (!db || !tenantId || !formData.plate) return;
     setIsSubmitting(true);
     try {
+      let finalId = truckId;
       if (truckId) {
         await updateDoc(doc(db, "tenants", tenantId, "trucks", truckId), { ...formData, updatedAt: serverTimestamp() });
+        await logSystemEvent(db, tenantId, user, 'update', 'truck', truckId, { plate: formData.plate });
       } else {
         const newRef = doc(collection(db, "tenants", tenantId, "trucks"));
-        await setDoc(newRef, { ...formData, id: newRef.id, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+        finalId = newRef.id;
+        await setDoc(newRef, { ...formData, id: finalId, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+        await logSystemEvent(db, tenantId, user, 'create', 'truck', finalId, { plate: formData.plate });
       }
       toast({ title: "Cambios guardados" });
       router.push('/flota');
@@ -191,7 +200,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                </div>
                <div className="p-6 bg-slate-900 text-white rounded-3xl flex items-center justify-between shadow-xl">
                   <div><p className="text-[10px] font-black uppercase text-blue-400">Finalizar Auditoría</p><p className="text-sm font-medium">Al guardar, se recalculará el costo por KM de la flota.</p></div>
-                  <Button onClick={handleSubmit} className="bg-blue-600 h-14 px-10 rounded-2xl font-black shadow-xl" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin" /> : <Save className="mr-2" />} FINALIZAR FICHA</Button>
+                  <Button onClick={handleSubmit} className="bg-blue-600 h-14 px-10 rounded-2xl font-black shadow-xl" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} FINALIZAR FICHA</Button>
                </div>
           </Card>
         )}
