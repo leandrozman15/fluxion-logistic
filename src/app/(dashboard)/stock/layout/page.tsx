@@ -2,8 +2,7 @@
 
 import { useState, useMemo, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useFirestore, useCollection } from "@/firebase";
-import { useTenant } from "@/hooks/use-tenant";
+import { useFirestore, useCollection, useTenant } from "@/firebase";
 import { collection, query, orderBy, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { 
   Dialog, 
   DialogContent, 
@@ -34,7 +34,6 @@ import {
   MapPin,
   ArrowLeft,
   Search,
-  Filter,
   Camera,
   XCircle,
   ScanBarcode,
@@ -52,6 +51,7 @@ import {
 import { Hub, Product, WarehouseSlot } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { format } from "date-fns";
 
 /**
  * Componente de Slot de Rack (Ubicación física individual)
