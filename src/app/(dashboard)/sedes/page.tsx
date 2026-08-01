@@ -16,7 +16,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { 
   Building2, MapPin, Plus, Search, 
   MoreVertical, Trash2, Globe, Loader2, Crosshair, Edit2, Save, Warehouse,
-  AlertTriangle, Clock, LayoutGrid, CheckCircle2, PackageSearch, Container
+  AlertTriangle, Clock, LayoutGrid, CheckCircle2, PackageSearch, Container,
+  Map as MapIcon
 } from "lucide-react";
 import { 
   DropdownMenu, 
