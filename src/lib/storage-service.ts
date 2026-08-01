@@ -1,10 +1,34 @@
 import { storage } from "./firebase";
-import { ref, uploadString, getDownloadURL, uploadBytes } from "firebase/storage";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+
+/**
+ * Convierte una cadena Base64 en un Blob binario.
+ * Esto mejora la compatibilidad con las reglas de seguridad y reduce errores 403.
+ */
+function base64ToBlob(base64: string): Blob {
+  const parts = base64.split(',');
+  if (parts.length < 2) throw new Error("Formato base64 inválido");
+  
+  const metadata = parts[0];
+  const contentType = metadata.match(/:(.*?);/)?.[1] || 'image/jpeg';
+  const byteCharacters = atob(parts[1]);
+  const byteArrays = [];
+
+  for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+    const slice = byteCharacters.slice(offset, offset + 512);
+    const byteNumbers = new Array(slice.length);
+    for (let i = 0; i < slice.length; i++) {
+      byteNumbers[i] = slice.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    byteArrays.push(byteArray);
+  }
+
+  return new Blob(byteArrays, { type: contentType });
+}
 
 /**
  * Sube un archivo a Firebase Storage y retorna su URL pública.
- * @param path Ruta completa en el bucket (ej: tenants/ID/drivers/DNI.jpg)
- * @param file El archivo o blob a subir
  */
 export async function uploadFile(path: string, file: File | Blob): Promise<string> {
   if (!storage) throw new Error("Storage no inicializado");
@@ -14,19 +38,19 @@ export async function uploadFile(path: string, file: File | Blob): Promise<strin
 }
 
 /**
- * Sube una cadena Base64 a Firebase Storage.
- * Útil para imágenes comprimidas o firmas.
+ * Sube una cadena Base64 a Firebase Storage convirtiéndola primero a Blob.
+ * Soluciona problemas de permisos 403 al enviar datos binarios reales.
  */
 export async function uploadBase64(path: string, base64: string): Promise<string> {
   if (!storage) throw new Error("Storage no inicializado");
   
-  // Limpiar el prefijo data:image/...;base64,
-  const parts = base64.split(',');
-  const metadata = parts[0];
-  const data = parts[1];
-  const contentType = metadata.match(/:(.*?);/)?.[1] || 'image/jpeg';
-  
-  const storageRef = ref(storage, path);
-  const snapshot = await uploadString(storageRef, data, 'base64', { contentType });
-  return getDownloadURL(snapshot.ref);
+  try {
+    const blob = base64ToBlob(base64);
+    const storageRef = ref(storage, path);
+    const snapshot = await uploadBytes(storageRef, blob);
+    return getDownloadURL(snapshot.ref);
+  } catch (error: any) {
+    console.error("Error en uploadBase64:", error);
+    throw new Error(`Fallo al subir imagen: ${error.message}`);
+  }
 }

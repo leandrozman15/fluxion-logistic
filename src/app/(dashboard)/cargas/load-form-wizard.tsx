@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from "react";
@@ -79,6 +78,24 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     tracking: { currentLat: 0, currentLng: 0, currentSpeed: 0, avgSpeed: 0, maxSpeed: 0, distanceTraveledKm: 0, distanceRemainingKm: 0, timeOnRouteMinutes: 0, timeStoppedMinutes: 0, lastUpdateAt: null, history: [], alerts: [] }
   });
 
+  // Funciones de navegación (Definidas antes del retorno para evitar ReferenceError)
+  const handleBack = () => setStep(prev => Math.max(1, prev - 1));
+  
+  const handleNext = () => {
+    if (step === 1) {
+      if (!formData.assignedTruckId) return toast({ variant: "destructive", title: "Asignación Requerida", description: "Debe seleccionar un Camión para el flete." });
+      if (!formData.assignedDriverId || formData.assignedDriverId === 'none') return toast({ variant: "destructive", title: "Asignación Requerida", description: "Debe asignar un Chofer Profesional." });
+    }
+    if (step === 2) {
+      if (!formData.origin?.id) return toast({ variant: "destructive", title: "Datos de Salida", description: "Debe elegir un Punto de Origen." });
+      if (!formData.pickupDate) return toast({ variant: "destructive", title: "Datos de Salida", description: "La fecha de carga es obligatoria." });
+      if ((formData.outboundStops?.length || 0) === 0 && formData.serviceType !== 'meli') {
+        return toast({ variant: "destructive", title: "Falta Itinerario", description: "Debe seleccionar al menos un Remito o Parada de entrega." });
+      }
+    }
+    setStep(prev => Math.min(5, prev + 1));
+  };
+
   const loadRef = useMemo(() => loadId && db && tenantId ? doc(db, "tenants", tenantId, "loads", loadId) : null, [db, tenantId, loadId]);
   const { data: existingLoad, loading: loadingExisting } = useDoc<Load>(loadRef);
 
@@ -114,7 +131,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
   const { data: hubs } = useCollection<Hub>(hubsQuery);
   const { data: allRemitos } = useCollection<PendingRemito>(remitosQuery);
 
-  // Filter remitos that are either pending or belong to this specific load
   const remitos = useMemo(() => {
     return allRemitos?.filter(r => r.status === 'pending' || r.loadId === loadId) || [];
   }, [allRemitos, loadId]);
@@ -141,23 +157,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     if (!selectedTruck) return false;
     return currentTotalWeight > (selectedTruck.capacityKg || 0);
   }, [selectedTruck, currentTotalWeight]);
-
-  const handleNext = () => {
-    if (step === 1) {
-      if (!formData.assignedTruckId) return toast({ variant: "destructive", title: "Asignación Requerida", description: "Debe seleccionar un Camión para el flete." });
-      if (!formData.assignedDriverId || formData.assignedDriverId === 'none') return toast({ variant: "destructive", title: "Asignación Requerida", description: "Debe asignar un Chofer Profesional." });
-    }
-    if (step === 2) {
-      if (!formData.origin?.id) return toast({ variant: "destructive", title: "Datos de Salida", description: "Debe elegir un Punto de Origen." });
-      if (!formData.pickupDate) return toast({ variant: "destructive", title: "Datos de Salida", description: "La fecha de carga es obligatoria." });
-      if ((formData.outboundStops?.length || 0) === 0 && formData.serviceType !== 'meli') {
-        return toast({ variant: "destructive", title: "Falta Itinerario", description: "Debe seleccionar al menos un Remito o Parada de entrega." });
-      }
-    }
-    setStep(prev => Math.min(5, prev + 1));
-  };
-
-  const handleBack = () => setStep(prev => Math.max(1, prev - 1));
 
   const handleTruckSelect = (id: string) => {
     const truck = trucks?.find(t => t.id === id);
