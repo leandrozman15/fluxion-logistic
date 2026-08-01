@@ -5,10 +5,13 @@ import { useMemo, useState } from "react";
 import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { collection, query, orderBy, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { initializeApp, deleteApp } from "firebase/app";
+import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
+import { firebaseConfig } from "@/firebase/config";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { UserPlus, MoreHorizontal, ShieldCheck, Loader2, UserCircle2, Briefcase, Truck, HardHat, BadgeCheck } from "lucide-react";
+import { UserPlus, MoreHorizontal, ShieldCheck, Loader2, UserCircle2, Briefcase, Truck, HardHat, BadgeCheck, Key } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { AppUser, UserRole } from "@/app/lib/types";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -26,6 +29,7 @@ export default function UsersSettingsPage() {
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newEmail, setNewEmail] = useState("");
+  const [newPass, setNewPass] = useState("LogisticaAr2026");
   const [newRole, setNewRole] = useState<UserRole>("sales_admin");
 
   const usersQuery = useMemo(() => {
@@ -37,29 +41,47 @@ export default function UsersSettingsPage() {
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!db || !tenantId || !newEmail) return;
+    if (!db || !tenantId || !newEmail || !newPass) return;
 
     setIsSubmitting(true);
+    
+    // Instancia secundaria para Auth
+    const secondaryApp = initializeApp(firebaseConfig, "invite-auth");
+    const secondaryAuth = getAuth(secondaryApp);
+
     try {
-      const userId = newEmail.replace(/[^a-zA-Z0-9]/g, "_");
-      const userRef = doc(db, "tenants", tenantId, "users", userId);
-      
-      await setDoc(userRef, {
-        uid: userId,
+      // 1. Crear usuario en Auth
+      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, newEmail, newPass);
+      const uid = userCredential.user.uid;
+
+      // 2. Registro global (Mapping)
+      await setDoc(doc(db, "users", newEmail), {
+        uid,
+        email: newEmail,
+        tenantId,
+        role: newRole,
+        status: "active",
+        createdAt: serverTimestamp()
+      });
+
+      // 3. Registro en la empresa
+      await setDoc(doc(db, "tenants", tenantId, "users", uid), {
+        uid,
         tenantId,
         email: newEmail,
         displayName: newEmail.split('@')[0],
         role: newRole,
         createdAt: serverTimestamp(),
-        status: "invited"
+        status: "active"
       });
 
-      toast({ title: "Invitación enviada", description: `El usuario ha sido registrado como ${newRole}.` });
+      toast({ title: "Colaborador Habilitado", description: `La cuenta para ${newEmail} ha sido creada con éxito.` });
       setIsInviteOpen(false);
       setNewEmail("");
-    } catch (error) {
-      toast({ variant: "destructive", title: "Error al invitar", description: "Verifique sus permisos." });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error al habilitar", description: error.message });
     } finally {
+      await deleteApp(secondaryApp);
       setIsSubmitting(false);
     }
   };
@@ -107,7 +129,7 @@ export default function UsersSettingsPage() {
             <form onSubmit={handleInvite}>
               <DialogHeader>
                 <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Habilitar Colaborador</DialogTitle>
-                <DialogDescription className="text-[10px] uppercase font-bold tracking-widest">Defina el nivel de acceso y el correo institucional.</DialogDescription>
+                <DialogDescription className="text-[10px] uppercase font-bold tracking-widest">Se creará una cuenta de acceso inmediata en Firebase Auth.</DialogDescription>
               </DialogHeader>
               <div className="space-y-6 py-6">
                 <div className="space-y-2">
@@ -121,6 +143,18 @@ export default function UsersSettingsPage() {
                     onChange={(e) => setNewEmail(e.target.value)}
                     required 
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400">Definir Contraseña</Label>
+                  <div className="relative">
+                    <Key className="absolute left-3 top-3.5 h-5 w-5 text-slate-300" />
+                    <Input 
+                      className="h-12 bg-slate-50 border-none rounded-xl font-mono font-bold pl-12" 
+                      value={newPass}
+                      onChange={e => setNewPass(e.target.value)}
+                      required
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="role" className="text-[10px] font-black uppercase text-slate-400">Rol / Perfil Operativo</Label>
@@ -144,7 +178,7 @@ export default function UsersSettingsPage() {
                 <Button variant="ghost" type="button" onClick={() => setIsInviteOpen(false)} className="font-bold text-slate-400 uppercase text-xs">Cancelar</Button>
                 <Button type="submit" disabled={isSubmitting} className="bg-blue-600 h-12 px-8 rounded-xl font-black uppercase shadow-lg shadow-blue-100">
                   {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                  Confirmar Alta
+                  Confirmar Alta Real
                 </Button>
               </DialogFooter>
             </form>
@@ -218,25 +252,6 @@ export default function UsersSettingsPage() {
           )}
         </CardContent>
       </Card>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pt-4 px-2">
-         <div className="p-4 bg-slate-50 rounded-2xl border space-y-1">
-            <h4 className="text-[10px] font-black uppercase text-blue-600 tracking-widest">Admin / Gerencia</h4>
-            <p className="text-[9px] text-slate-500 font-medium leading-relaxed italic">Visión total de costos, auditoría de telemetría y reportes de rentabilidad.</p>
-         </div>
-         <div className="p-4 bg-slate-50 rounded-2xl border space-y-1">
-            <h4 className="text-[10px] font-black uppercase text-blue-600 tracking-widest">Ventas / Compras</h4>
-            <p className="text-[9px] text-slate-500 font-medium leading-relaxed italic">Ingreso de remitos, gestión de productos y rendición de gastos por viaje.</p>
-         </div>
-         <div className="p-4 bg-slate-50 rounded-2xl border space-y-1">
-            <h4 className="text-[10px] font-black uppercase text-blue-600 tracking-widest">Tráfico / Depósito</h4>
-            <p className="text-[9px] text-slate-500 font-medium leading-relaxed italic">Planificación de rutas, asignación de unidades y control de bocas de carga.</p>
-         </div>
-         <div className="p-4 bg-slate-50 rounded-2xl border space-y-1">
-            <h4 className="text-[10px] font-black uppercase text-blue-600 tracking-widest">Chofer</h4>
-            <p className="text-[9px] text-slate-500 font-medium leading-relaxed italic">Acceso simplificado al dashboard web para consulta de agenda y perfil.</p>
-         </div>
-      </div>
     </div>
   );
 }

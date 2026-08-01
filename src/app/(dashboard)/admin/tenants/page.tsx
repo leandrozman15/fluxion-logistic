@@ -1,8 +1,12 @@
+
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
 import { useFirestore, useCollection, useUser } from "@/firebase";
 import { collection, query, orderBy, doc, deleteDoc, setDoc, serverTimestamp, updateDoc, writeBatch } from "firebase/firestore";
+import { initializeApp, deleteApp } from "firebase/app";
+import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
+import { firebaseConfig } from "@/firebase/config";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -38,7 +42,8 @@ import {
   DollarSign,
   Info,
   ExternalLink,
-  UserCheck
+  UserCheck,
+  Key
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tenant, AppUser } from "@/app/lib/types";
@@ -77,7 +82,7 @@ export default function SuperAdminTenantsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [adminEmail, setAdminEmail] = useState("");
-  const [adminPass] = useState("LogisticaAr2026");
+  const [adminPass, setAdminPass] = useState("LogisticaAr2026");
 
   const [subStatus, setSubStatus] = useState<'active' | 'suspended'>('active');
   const [actDate, setActDate] = useState("");
@@ -126,15 +131,24 @@ export default function SuperAdminTenantsPage() {
   };
 
   const handleCreateTenantAdmin = async () => {
-    if (!db || !selectedTenant || !adminEmail) return;
+    if (!db || !selectedTenant || !adminEmail || !adminPass) return;
     setIsSubmitting(true);
+    
+    // Instancia secundaria para crear usuario sin cerrar sesión del admin actual
+    const secondaryApp = initializeApp(firebaseConfig, "secondary-auth");
+    const secondaryAuth = getAuth(secondaryApp);
+
     try {
+      // 1. Crear usuario en Firebase Authentication
+      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, adminEmail, adminPass);
+      const uid = userCredential.user.uid;
+
       const batch = writeBatch(db);
       
-      // 1. Registro en la colección global de usuarios (Mapeo por Email)
-      // Usamos el email como ID del documento para que las Security Rules puedan encontrarlo fácilmente
+      // 2. Registro en la colección global de usuarios (Mapeo por Email para Reglas)
       const globalUserRef = doc(db, "users", adminEmail);
       batch.set(globalUserRef, {
+        uid,
         email: adminEmail,
         tenantId: selectedTenant.id,
         role: "manager",
@@ -142,9 +156,10 @@ export default function SuperAdminTenantsPage() {
         createdAt: serverTimestamp()
       });
 
-      // 2. Registro en la subcolección interna de la empresa
-      const tenantUserRef = doc(db, "tenants", selectedTenant.id, "users", adminEmail);
+      // 3. Registro en la subcolección interna de la empresa
+      const tenantUserRef = doc(db, "tenants", selectedTenant.id, "users", uid);
       batch.set(tenantUserRef, {
+        uid,
         email: adminEmail,
         tenantId: selectedTenant.id,
         displayName: "Gerente Inicial",
@@ -156,14 +171,19 @@ export default function SuperAdminTenantsPage() {
       await batch.commit();
 
       toast({ 
-        title: "Perfil Gerencial Creado", 
-        description: `El usuario ya está vinculado a ${selectedTenant.name}. Complete el alta en Auth.` 
+        title: "Usuario Creado Exitosamente", 
+        description: `El acceso para ${adminEmail} ya está activo en la plataforma.` 
       });
       setIsAdminDialogOpen(false);
       setAdminEmail("");
-    } catch (e) {
-      toast({ variant: "destructive", title: "Error al vincular gerente" });
+      setAdminPass("LogisticaAr2026");
+    } catch (e: any) {
+      let msg = "Error al crear usuario.";
+      if (e.code === 'auth/email-already-in-use') msg = "El correo ya está registrado en Firebase.";
+      toast({ variant: "destructive", title: "Error Auth", description: msg });
     } finally {
+      // Limpiar instancia secundaria
+      await deleteApp(secondaryApp);
       setIsSubmitting(false);
     }
   };
@@ -325,7 +345,7 @@ export default function SuperAdminTenantsPage() {
                           <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Acciones de Tenant</DropdownMenuLabel>
                           
                           <DropdownMenuItem onSelect={(e) => { e.preventDefault(); openAdminModal(tenant); }} className="font-bold h-11 rounded-xl cursor-pointer">
-                            <UserCheck size={16} className="mr-3 text-blue-600" /> Habilitar Gerente
+                            <UserCheck size={16} className="mr-3 text-blue-600" /> Crear Primer Usuario (Auth)
                           </DropdownMenuItem>
 
                           <DropdownMenuItem onSelect={(e) => { e.preventDefault(); openSubsModal(tenant); }} className="font-bold h-11 rounded-xl cursor-pointer">
@@ -401,20 +421,20 @@ export default function SuperAdminTenantsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* DIALOG: BOOTSTRAP GERENTE */}
+      {/* DIALOG: BOOTSTRAP GERENTE (CREACIÓN REAL EN AUTH) */}
       <Dialog open={isAdminDialogOpen} onOpenChange={setIsAdminDialogOpen}>
         <DialogContent className="max-w-md rounded-[2.5rem] outline-none">
            <DialogHeader>
               <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Habilitar Gerente de Empresa</DialogTitle>
-              <DialogDescription className="text-[10px] font-bold uppercase">Acceso restringido a {selectedTenant?.name}</DialogDescription>
+              <DialogDescription className="text-[10px] font-bold uppercase">Creación automática en Firebase Auth para {selectedTenant?.name}</DialogDescription>
            </DialogHeader>
            <div className="space-y-6 py-6">
               <div className="p-4 bg-blue-50 border-2 border-blue-100 rounded-2xl flex items-start gap-4">
                  <UserCheck className="text-blue-600 shrink-0 mt-1" size={24} />
                  <div className="space-y-1">
-                    <p className="text-xs font-black text-blue-800 uppercase italic">Vínculo con Organización</p>
+                    <p className="text-xs font-black text-blue-800 uppercase italic">Aprovisionamiento Full-Stack</p>
                     <p className="text-[10px] text-blue-600 leading-relaxed font-medium">
-                      Este usuario tendrá el rol de <strong>Gerente</strong>. Solo podrá ver y gestionar los camiones, choferes y cargas de esta empresa cliente. No tendrá acceso a otras instancias.
+                      Esta acción creará la cuenta de acceso real en Firebase. El usuario podrá iniciar sesión inmediatamente con el rol de <strong>Gerente</strong>.
                     </p>
                  </div>
               </div>
@@ -430,25 +450,22 @@ export default function SuperAdminTenantsPage() {
                  />
               </div>
               <div className="space-y-2">
-                 <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Contraseña Sugerida</Label>
-                 <div className="h-12 bg-slate-900 text-blue-400 flex items-center px-4 rounded-xl font-mono text-sm border border-blue-500/20 shadow-inner">
-                   {adminPass}
+                 <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Definir Contraseña</Label>
+                 <div className="relative">
+                    <Key className="absolute left-3 top-3.5 h-5 w-5 text-slate-300" />
+                    <Input 
+                      className="h-12 bg-slate-50 border-none rounded-xl font-mono font-bold pl-12" 
+                      value={adminPass}
+                      onChange={e => setAdminPass(e.target.value)}
+                    />
                  </div>
               </div>
-
-              <Button 
-                variant="outline" 
-                className="w-full h-10 border-slate-200 text-slate-500 text-[10px] font-bold uppercase gap-2"
-                onClick={() => window.open('https://console.firebase.google.com/', '_blank')}
-              >
-                <ExternalLink size={14} /> Abrir Consola de Firebase
-              </Button>
            </div>
            <DialogFooter className="gap-2 sm:gap-0">
               <Button variant="ghost" onClick={() => setIsAdminDialogOpen(false)} className="font-bold text-slate-400 uppercase text-xs">Cancelar</Button>
               <Button onClick={handleCreateTenantAdmin} disabled={isSubmitting || !adminEmail} className="bg-green-600 h-12 px-8 rounded-xl font-black uppercase shadow-lg shadow-green-100">
                  {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2" size={16} />}
-                 VINCULAR A EMPRESA
+                 CREAR Y VINCULAR USUARIO
               </Button>
            </DialogFooter>
         </DialogContent>
