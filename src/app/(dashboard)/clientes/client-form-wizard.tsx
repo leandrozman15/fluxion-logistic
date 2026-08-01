@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from "react";
@@ -112,6 +113,21 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
     }
   }, [clientId]);
 
+  const handleNext = () => {
+    // Validación de campos obligatorios por pantalla
+    if (step === 1) {
+      if (!formData.name) return toast({ variant: "destructive", title: "Información Faltante", description: "Debe ingresar la Razón Social del cliente." });
+      if (!formData.cuit) return toast({ variant: "destructive", title: "Información Faltante", description: "El número de CUIT es obligatorio." });
+      if (!formData.industry) return toast({ variant: "destructive", title: "Información Faltante", description: "Debe seleccionar un Rubro industrial." });
+    }
+    if (step === 2) {
+      if (!formData.address?.street) return toast({ variant: "destructive", title: "Información Faltante", description: "Debe ingresar el nombre de la Calle." });
+      if (!formData.address?.number) return toast({ variant: "destructive", title: "Información Faltante", description: "El Número de puerta es obligatorio." });
+      if (!formData.address?.city) return toast({ variant: "destructive", title: "Información Faltante", description: "Debe indicar la Ciudad." });
+    }
+    setStep(s => s + 1);
+  };
+
   const handleGetLocation = () => {
     if (typeof window !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition((pos) => {
@@ -157,10 +173,11 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
 
   const handleSubmit = async () => {
     if (!db) return;
-    if (!formData.name || !formData.cuit || !formData.address?.street) {
-      toast({ variant: "destructive", title: "Datos Incompletos", description: "La dirección y datos fiscales son obligatorios." });
-      return;
-    }
+    
+    // Validación final rigurosa
+    if (!formData.name) return toast({ variant: "destructive", title: "Error al Guardar", description: "Falta el nombre o Razón Social." });
+    if (!formData.cuit) return toast({ variant: "destructive", title: "Error al Guardar", description: "Falta el CUIT del cliente." });
+    if (!formData.address?.street || !formData.address?.number) return toast({ variant: "destructive", title: "Error al Guardar", description: "Faltan datos de la dirección física." });
 
     setIsSubmitting(true);
     try {
@@ -458,7 +475,7 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
           </Button>
           <div className="flex gap-2">
             {step < 4 ? (
-              <Button onClick={() => setStep(step + 1)} className="bg-blue-600 min-w-[120px]">
+              <Button onClick={handleNext} className="bg-blue-600 min-w-[120px]">
                 Siguiente <ChevronRight size={16} className="ml-1" />
               </Button>
             ) : (

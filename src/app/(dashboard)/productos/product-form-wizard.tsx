@@ -82,7 +82,19 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
   });
 
   const handleBack = () => setStep(prev => Math.max(1, prev - 1));
-  const handleNext = () => setStep(prev => Math.min(maxSteps, prev + 1));
+  
+  const handleNext = () => {
+    // Validación por pantalla
+    if (step === 1) {
+      if (!formData.name) return toast({ variant: "destructive", title: "Campo Obligatorio", description: "Por favor, ingrese el nombre del producto." });
+      if (!formData.sku) return toast({ variant: "destructive", title: "Campo Obligatorio", description: "Debe definir un código SKU (o generarlo automáticamente)." });
+      if (!formData.category) return toast({ variant: "destructive", title: "Campo Obligatorio", description: "Debe seleccionar una Categoría." });
+    }
+    if (step === 3) {
+      if (formData.unitWeightKg === 0) return toast({ variant: "destructive", title: "Logística Requerida", description: "El peso bruto es necesario para el cálculo de fletes." });
+    }
+    setStep(prev => Math.min(maxSteps, prev + 1));
+  };
 
   const productRef = useMemo(() => (productId && db && tenantId) ? doc(db, "tenants", tenantId, "products", productId) : null, [db, tenantId, productId]);
   const { data: existingProduct, loading: loadingExisting } = useDoc<Product>(productRef);
@@ -238,7 +250,9 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
   };
 
   const handleSubmit = async () => {
-    if (!db || !tenantId || !formData.name || !formData.sku) return;
+    if (!db || !tenantId || !formData.name || !formData.sku) {
+      return toast({ variant: "destructive", title: "Error al Guardar", description: "El nombre y el SKU son campos obligatorios." });
+    }
     setIsSubmitting(true);
     try {
       const totalStock = formData.hasVariants 

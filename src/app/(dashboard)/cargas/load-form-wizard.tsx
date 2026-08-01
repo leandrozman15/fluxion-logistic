@@ -140,6 +140,21 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     return currentTotalWeight > (selectedTruck.capacityKg || 0);
   }, [selectedTruck, currentTotalWeight]);
 
+  const handleNext = () => {
+    if (step === 1) {
+      if (!formData.assignedTruckId) return toast({ variant: "destructive", title: "Asignación Requerida", description: "Debe seleccionar un Camión para el flete." });
+      if (!formData.assignedDriverId || formData.assignedDriverId === 'none') return toast({ variant: "destructive", title: "Asignación Requerida", description: "Debe asignar un Chofer Profesional." });
+    }
+    if (step === 2) {
+      if (!formData.origin?.id) return toast({ variant: "destructive", title: "Datos de Salida", description: "Debe elegir un Punto de Origen." });
+      if (!formData.pickupDate) return toast({ variant: "destructive", title: "Datos de Salida", description: "La fecha de carga es obligatoria." });
+      if ((formData.outboundStops?.length || 0) === 0 && formData.serviceType !== 'meli') {
+        return toast({ variant: "destructive", title: "Falta Itinerario", description: "Debe seleccionar al menos un Remito o Parada de entrega." });
+      }
+    }
+    setStep(prev => Math.min(5, prev + 1));
+  };
+
   const handleTruckSelect = (id: string) => {
     const truck = trucks?.find(t => t.id === id);
     if (!truck) return;
@@ -241,7 +256,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
 
   const saveStop = () => {
     if (!editingStop.name || !editingStop.address) {
-      toast({ variant: "destructive", title: "Faltan datos" });
+      toast({ variant: "destructive", title: "Faltan datos", description: "El nombre y dirección de la parada son obligatorios." });
       return;
     }
     const stop = { ...editingStop, id: editingStop.id || Math.random().toString(36).substring(7) } as LoadLegStop;
@@ -253,6 +268,11 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
 
   const handleSubmit = async () => {
     if (!db) return;
+    
+    // Validación final
+    if (!formData.assignedTruckId || !formData.assignedDriverId) return toast({ variant: "destructive", title: "Error", description: "Faltan recursos asignados (Chofer o Camión)." });
+    if (!formData.origin?.id) return toast({ variant: "destructive", title: "Error", description: "El origen no está definido." });
+
     setIsSubmitting(true);
     try {
       const batch = writeBatch(db);
@@ -647,7 +667,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center z-50">
-        <div className="max-w-5xl w-full flex justify-between items-center px-4"><Button variant="ghost" onClick={() => setStep(prev => Math.max(1, prev - 1))} disabled={isSubmitting}><ChevronLeft size={16} className="mr-1" /> VOLVER</Button>{step < 5 ? <Button onClick={() => setStep(prev => Math.min(5, prev + 1))} className="bg-blue-600">SIGUIENTE <ChevronRight size={16} /></Button> : <Button onClick={handleSubmit} className="bg-green-600" disabled={isSubmitting || isWeightLimitExceeded}>EMITIR ORDEN <Save size={16} className="ml-2" /></Button>}</div>
+        <div className="max-w-5xl w-full flex justify-between items-center px-4"><Button variant="ghost" onClick={() => setStep(prev => Math.max(1, prev - 1))} disabled={isSubmitting}><ChevronLeft size={16} className="mr-1" /> VOLVER</Button>{step < 5 ? <Button onClick={handleNext} className="bg-blue-600">SIGUIENTE <ChevronRight size={16} /></Button> : <Button onClick={handleSubmit} className="bg-green-600" disabled={isSubmitting || isWeightLimitExceeded}>EMITIR ORDEN <Save size={16} className="ml-2" /></Button>}</div>
       </div>
 
       <Dialog open={isStopModalOpen} onOpenChange={setIsStopModalOpen}>

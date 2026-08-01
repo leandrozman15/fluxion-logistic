@@ -109,7 +109,26 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
     }
   }, [existingDriver]);
 
-  const handleNext = () => setStep(s => s + 1);
+  const handleNext = () => {
+    // Validación por paso para asegurar que el usuario no deje campos vacíos
+    if (step === 1) {
+      if (!formData.firstName) return toast({ variant: "destructive", title: "Información Faltante", description: "Por favor, ingrese los Nombres del personal." });
+      if (!formData.lastName) return toast({ variant: "destructive", title: "Información Faltante", description: "Por favor, ingrese los Apellidos del personal." });
+      if (!formData.dni) return toast({ variant: "destructive", title: "Información Faltante", description: "El número de DNI es obligatorio." });
+      if (!formData.role) return toast({ variant: "destructive", title: "Información Faltante", description: "Debe seleccionar un Rol operativo." });
+    }
+    if (step === 2 && formData.role === 'driver') {
+      if (!formData.licenseNumber) return toast({ variant: "destructive", title: "Información Faltante", description: "El número de licencia es obligatorio para choferes." });
+      if (!formData.licenseExpiry) return toast({ variant: "destructive", title: "Información Faltante", description: "Debe indicar la fecha de vencimiento de la licencia." });
+      if (!formData.licenseClasses || formData.licenseClasses.length === 0) return toast({ variant: "destructive", title: "Información Faltante", description: "Debe marcar al menos una Clase de licencia." });
+    }
+    if (step === 3) {
+      if (!formData.email) return toast({ variant: "destructive", title: "Información Faltante", description: "El correo electrónico es necesario para el acceso." });
+      if (!driverId && !formData.password) return toast({ variant: "destructive", title: "Información Faltante", description: "Debe definir una contraseña inicial para el usuario." });
+    }
+    setStep(s => s + 1);
+  };
+
   const handleBack = () => setStep(s => s - 1);
 
   const handleFileClick = (key: string) => {
@@ -156,6 +175,16 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
 
   const handleSubmit = async () => {
     if (!db) return;
+
+    // Validación final exhaustiva
+    const required = ['firstName', 'lastName', 'dni', 'email', 'role'];
+    for (const field of required) {
+      if (!formData[field as keyof typeof formData]) {
+        toast({ variant: "destructive", title: "Datos Incompletos", description: `Falta completar el campo: ${field}.` });
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
       if (driverId) {
