@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect, Suspense } from "react";
@@ -13,6 +12,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from "@/components/ui/table";
 import { 
   Box, 
   Warehouse, 
@@ -39,7 +46,8 @@ import {
   ChevronRight,
   XCircle,
   Clock,
-  ScanBarcode
+  ScanBarcode,
+  ArrowRightLeft
 } from "lucide-react";
 import { Hub, WarehouseLayout, Product } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -267,4 +275,3 @@ export default function WarehouseLayoutPage() {
     </Suspense>
   );
 }
-
