@@ -103,12 +103,29 @@ export default function SuperAdminTenantsPage() {
   const { data: tenants, loading } = useCollection<Tenant>(tenantsQuery);
 
   const handleDeleteTenant = async (id: string, name: string) => {
-    if (!db || !confirm(`¿Eliminar la empresa ${name} y TODA su base de datos? Esta acción es irreversible.`)) return;
+    if (!db) return;
+    
+    const ok = window.confirm(`¿ELIMINAR DEFINITIVAMENTE la empresa ${name}? Esta acción borrará la configuración de la instancia y es irreversible.`);
+    if (!ok) return;
+
+    setIsSubmitting(true);
     try {
-      await deleteDoc(doc(db, "tenants", id));
-      toast({ title: "Empresa eliminada" });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Error" });
+      const tenantRef = doc(db, "tenants", id);
+      await deleteDoc(tenantRef);
+      
+      toast({ 
+        title: "Empresa Eliminada", 
+        description: `La organización ${name} ha sido removida del ecosistema.` 
+      });
+    } catch (e: any) {
+      console.error("Delete error:", e);
+      toast({ 
+        variant: "destructive", 
+        title: "Error al eliminar", 
+        description: e.message || "Verifique los permisos de SuperAdmin." 
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -135,30 +152,26 @@ export default function SuperAdminTenantsPage() {
     if (!db || !selectedTenant || !adminEmail || !adminPass) return;
     setIsSubmitting(true);
     
-    // Instancia secundaria para crear usuario sin cerrar sesión del admin actual
     const secondaryApp = initializeApp(firebaseConfig, "secondary-auth");
     const secondaryAuth = getAuth(secondaryApp);
     const cleanEmail = adminEmail.toLowerCase().trim();
 
     try {
-      // 1. Crear usuario en Firebase Authentication
       const userCredential = await createUserWithEmailAndPassword(secondaryAuth, cleanEmail, adminPass);
       const uid = userCredential.user.uid;
 
       const batch = writeBatch(db);
       
-      // 2. Registro en la colección global de usuarios (Mapeo por Email para Reglas y useTenant)
       const globalUserRef = doc(db, "users", cleanEmail);
       batch.set(globalUserRef, {
         uid,
         email: cleanEmail,
         tenantId: selectedTenant.id,
-        role: "manager", // Siempre gerente para el primer usuario
+        role: "manager",
         status: "active",
         createdAt: serverTimestamp()
       });
 
-      // 3. Registro en la subcolección interna de la empresa
       const tenantUserRef = doc(db, "tenants", selectedTenant.id, "users", uid);
       batch.set(tenantUserRef, {
         uid,
@@ -184,7 +197,6 @@ export default function SuperAdminTenantsPage() {
       if (e.code === 'auth/email-already-in-use') msg = "El correo ya está registrado en Firebase.";
       toast({ variant: "destructive", title: "Error Auth", description: msg });
     } finally {
-      // Limpiar instancia secundaria
       await deleteApp(secondaryApp);
       setIsSubmitting(false);
     }
@@ -365,7 +377,10 @@ export default function SuperAdminTenantsPage() {
                           <DropdownMenuLabel className="text-[10px] font-black uppercase text-red-400 tracking-widest p-2">Zona de Peligro</DropdownMenuLabel>
                           <DropdownMenuItem 
                             className="text-red-600 focus:bg-red-50 focus:text-red-600 font-bold h-11 rounded-xl cursor-pointer"
-                            onSelect={() => handleDeleteTenant(tenant.id, tenant.name)}
+                            onSelect={(e) => { 
+                              e.preventDefault(); 
+                              handleDeleteTenant(tenant.id, tenant.name); 
+                            }}
                           >
                             <Trash2 size={16} className="mr-3" /> Eliminar Definitiva
                           </DropdownMenuItem>
