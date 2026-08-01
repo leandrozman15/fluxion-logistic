@@ -4,6 +4,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { collection, query, orderBy, doc, updateDoc, serverTimestamp, deleteDoc } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -32,6 +33,7 @@ import { formatSafeDate } from "@/lib/utils/date-utils";
 
 export default function RemitosDashboardPage() {
   const db = useFirestore();
+  const { tenantId } = useTenant();
   const router = useRouter();
   const { toast } = useToast();
   
@@ -40,13 +42,12 @@ export default function RemitosDashboardPage() {
   const [isResettingId, setIsResettingId] = useState<string | null>(null);
 
   const remitosQuery = useMemo(() => {
-    if (!db) return null;
-    return query(collection(db, "pending_remitos"), orderBy("createdAt", "desc"));
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "pending_remitos"), orderBy("createdAt", "desc"));
+  }, [db, tenantId]);
 
   const { data: allRemitos, loading } = useCollection<PendingRemito>(remitosQuery);
 
-  // Filtramos remitos que NO estén archivados para el buzón activo
   const filteredRemitos = useMemo(() => {
     if (!allRemitos) return [];
     return allRemitos.filter(r => 
@@ -58,10 +59,10 @@ export default function RemitosDashboardPage() {
   }, [allRemitos, searchTerm]);
 
   const handleArchive = async (id: string) => {
-    if (!db) return;
+    if (!db || !tenantId) return;
     setIsArchivingId(id);
     try {
-      await updateDoc(doc(db, "pending_remitos", id), {
+      await updateDoc(doc(db, "tenants", tenantId, "pending_remitos", id), {
         status: 'archived',
         updatedAt: serverTimestamp()
       });
@@ -74,10 +75,10 @@ export default function RemitosDashboardPage() {
   };
 
   const handleResetToPending = async (id: string) => {
-    if (!db || !confirm("¿Liberar este remito? Volverá a estar disponible para ser programado en un nuevo viaje.")) return;
+    if (!db || !tenantId || !confirm("¿Liberar este remito? Volverá a estar disponible para ser programado en un nuevo viaje.")) return;
     setIsResettingId(id);
     try {
-      await updateDoc(doc(db, "pending_remitos", id), {
+      await updateDoc(doc(db, "tenants", tenantId, "pending_remitos", id), {
         status: 'pending',
         loadId: null,
         dispatchedDate: null,
@@ -92,9 +93,9 @@ export default function RemitosDashboardPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!db || !confirm("¿Eliminar este remito definitivamente? Esta acción no se puede deshacer.")) return;
+    if (!db || !tenantId || !confirm("¿Eliminar este remito definitivamente? Esta acción no se puede deshacer.")) return;
     try {
-      await deleteDoc(doc(db, "pending_remitos", id));
+      await deleteDoc(doc(db, "tenants", tenantId, "pending_remitos", id));
       toast({ title: "Remito eliminado" });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al eliminar remito" });
@@ -206,7 +207,7 @@ export default function RemitosDashboardPage() {
               </TableHeader>
               <TableBody>
                 {filteredRemitos.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-center py-32 text-slate-400 italic font-bold uppercase text-xs">No hay remitos activos en el buzón.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={5} className="text-center py-20 text-slate-400 italic font-bold uppercase text-xs">No hay remitos activos en el buzón.</TableCell></TableRow>
                 ) : (
                   filteredRemitos.map((remito) => (
                     <TableRow key={remito.id} className="hover:bg-slate-50/50 transition-all group">
