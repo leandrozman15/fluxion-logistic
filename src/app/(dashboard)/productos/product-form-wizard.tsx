@@ -21,9 +21,9 @@ import {
   Scale, Layers, ShieldCheck, CheckCircle2, 
   Info, Tag, Ship, ThermometerSnowflake, 
   AlertTriangle, ScanBarcode, Camera, Image as ImageIcon, 
-  ChevronRight, ChevronLeft, Package, LayoutGrid, Building2, User, DollarSign, Activity, TrendingUp, Zap, ShoppingCart, Warehouse, MoveRight, X, BellRing, Calculator, Percent
+  ChevronRight, ChevronLeft, Package, LayoutGrid, Building2, User, DollarSign, Activity, TrendingUp, Zap, ShoppingCart, Warehouse, MoveRight, X, BellRing, Calculator, Percent, Plus, Trash2
 } from "lucide-react";
-import { Product, Hub, ProductWarehouse } from "@/app/lib/types";
+import { Product, Hub, ProductWarehouse, ProductVariant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { compressImage } from "@/lib/utils/image-compression";
@@ -51,17 +51,20 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const variantFileInputRef = useRef<HTMLInputElement>(null);
+  const [activeVariantUploadId, setActiveVariantUploadId] = useState<string | null>(null);
 
   const isManager = useMemo(() => role === 'manager' || role === 'admin', [role]);
 
   const steps = useMemo(() => {
     const s = [
       { id: 1, label: "Gral", icon: Info },
-      { id: 2, label: "Logística", icon: Scale },
-      { id: 3, label: "Stock/Depósitos", icon: Warehouse },
+      { id: 2, label: "Variantes", icon: Layers },
+      { id: 3, label: "Logística", icon: Scale },
+      { id: 4, label: "Stock/Depósitos", icon: Warehouse },
     ];
     if (isManager) {
-      s.push({ id: 4, label: "Ventas/Compras", icon: DollarSign });
+      s.push({ id: 5, label: "Ventas/Compras", icon: DollarSign });
     }
     return s;
   }, [isManager]);
@@ -74,6 +77,7 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
     unitType: 'unit', conversionFactor: 1, unitsPerBox: 0, unitsPerPallet: 0, origin: 'nacional',
     managesStock: true, allowNegativeStock: false, isLotTracked: false, isSerialTracked: false, expiryControl: false,
     minStockAlert: 5, maxStockAlert: 100, stockQuantity: 0, ivaRate: 21, dangerLevel: 'none', requiresReefer: false,
+    hasVariants: false, variants: [],
     warehouses: [], markup: 0, avgCost: 0, listPrice: 0, wholesaleDiscount: 10, retailPrice: 0, wholesalePrice: 0
   });
 
@@ -122,7 +126,7 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
     }
   }, [formData.listPrice, formData.ivaRate, formData.wholesaleDiscount]);
 
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>, variantId?: string) => {
     const file = e.target.files?.[0];
     if (file) {
       setIsProcessingPhoto(true);
@@ -131,11 +135,20 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
         const base64 = event.target?.result as string;
         try {
           const compressed = await compressImage(base64, 800, 800, 0.7);
-          setFormData(prev => ({ ...prev, photoUrl: compressed }));
+          if (variantId) {
+            handleUpdateVariant(variantId, 'photoUrl', compressed);
+          } else {
+            setFormData(prev => ({ ...prev, photoUrl: compressed }));
+          }
         } catch (err) {
-          setFormData(prev => ({ ...prev, photoUrl: base64 }));
+          if (variantId) {
+            handleUpdateVariant(variantId, 'photoUrl', base64);
+          } else {
+            setFormData(prev => ({ ...prev, photoUrl: base64 }));
+          }
         } finally {
           setIsProcessingPhoto(false);
+          setActiveVariantUploadId(null);
         }
       };
       reader.readAsDataURL(file);
@@ -183,11 +196,55 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
     toast({ title: "SKU Generado", description: `Código: ${newSku}` });
   };
 
+  // --- LÓGICA DE VARIANTES ---
+  const handleAddVariant = () => {
+    const suffix = (formData.variants?.length || 0) + 1;
+    const variantSku = `${formData.sku || 'NUEVO'}-${suffix}`;
+    const newVariant: ProductVariant = {
+      id: Math.random().toString(36).substring(7),
+      sku: variantSku,
+      value: "",
+      cost: formData.avgCost || 0,
+      markup: formData.markup || 0,
+      price: formData.listPrice || 0,
+      stockQuantity: 0
+    };
+    setFormData(prev => ({ ...prev, hasVariants: true, variants: [...(prev.variants || []), newVariant] }));
+  };
+
+  const handleUpdateVariant = (id: string, field: keyof ProductVariant, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      variants: (prev.variants || []).map(v => {
+        if (v.id === id) {
+          const updated = { ...v, [field]: value };
+          // Re-calculate price if cost or markup changes
+          if (field === 'cost' || field === 'markup') {
+            updated.price = (updated.cost || 0) * (1 + ((updated.markup || 0) / 100));
+          }
+          return updated;
+        }
+        return v;
+      })
+    }));
+  };
+
+  const handleRemoveVariant = (id: string) => {
+    setFormData(prev => ({
+      ...prev,
+      variants: (prev.variants || []).filter(v => v.id !== id),
+      hasVariants: (prev.variants || []).length > 1
+    }));
+  };
+
   const handleSubmit = async () => {
     if (!db || !tenantId || !formData.name || !formData.sku) return;
     setIsSubmitting(true);
     try {
-      const totalStock = (formData.warehouses || []).reduce((acc, w) => acc + (w.stockQuantity || 0), 0);
+      const totalStock = formData.hasVariants 
+        ? (formData.variants || []).reduce((acc, v) => acc + (v.stockQuantity || 0), 0)
+        : (formData.warehouses || []).reduce((acc, w) => acc + (w.stockQuantity || 0), 0);
+      
       const finalData = { ...formData, stockQuantity: totalStock, updatedAt: serverTimestamp() };
 
       if (productId) {
@@ -241,24 +298,15 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
                        {formData.photoUrl ? <img src={formData.photoUrl} className="w-full h-full object-cover" /> : <Package size={64} className="text-slate-200" />}
                        {isProcessingPhoto && <div className="absolute inset-0 bg-white/80 flex items-center justify-center"><Loader2 className="animate-spin" /></div>}
                      </div>
-                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handlePhotoChange} />
+                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => handlePhotoChange(e)} />
                      <Button variant="outline" className="rounded-xl h-10 w-full" onClick={() => fileInputRef.current?.click()} disabled={isProcessingPhoto}><Camera size={16} className="mr-2" /> SUBIR FOTO</Button>
                    </div>
-                   
-                   {formData.sku && (
-                     <div className="p-4 bg-white border rounded-2xl flex flex-col items-center justify-center gap-2 shadow-sm">
-                        <p className="text-[9px] font-black uppercase text-slate-400">Vista Previa Code 128</p>
-                        <div className="bg-white p-2">
-                           <Barcode value={formData.sku} format="CODE128" width={1.5} height={40} fontSize={10} />
-                        </div>
-                     </div>
-                   )}
                 </div>
                 
                 <div className="md:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <Label className="text-[10px] font-black uppercase text-slate-400">SKU / Código Interno</Label>
+                      <Label className="text-[10px] font-black uppercase text-slate-400">SKU / Código Madre</Label>
                       <Button 
                         variant="ghost" 
                         size="sm" 
@@ -271,9 +319,9 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
                     <Input value={formData.sku ?? ''} onChange={e => setFormData({...formData, sku: e.target.value.toUpperCase()})} />
                   </div>
                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">EAN-13 / GTIN</Label><Input value={formData.gtin ?? ''} onChange={e => setFormData({...formData, gtin: e.target.value})} /></div>
-                  <div className="md:col-span-2 space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Nombre Comercial</Label><Input className="font-bold text-lg" value={formData.name ?? ''} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
+                  <div className="md:col-span-2 space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Título del Producto (Vencitas, etc)</Label><Input className="font-bold text-lg" value={formData.name ?? ''} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Marca</Label><Input value={formData.brand ?? ''} onChange={e => setFormData({...formData, brand: e.target.value})} /></div>
-                  <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Modelo / Fabricante</Label><Input value={formData.model ?? ''} onChange={e => setFormData({...formData, model: e.target.value})} /></div>
+                  <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Modelo / Línea</Label><Input value={formData.model ?? ''} onChange={e => setFormData({...formData, model: e.target.value})} /></div>
                 </div>
               </CardContent>
             </Card>
@@ -282,16 +330,83 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
                <CardHeader><CardTitle className="text-sm uppercase tracking-widest">2. Clasificación</CardTitle></CardHeader>
                <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6 p-8">
                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Categoría</Label><Select value={formData.category} onValueChange={v => setFormData({...formData, category: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></div>
-                  <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Subcategoría / Línea</Label><Input value={formData.subCategory ?? ''} onChange={e => setFormData({...formData, subCategory: e.target.value})} /></div>
-                  <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Rubro AFIP (Opcional)</Label><Input value={formData.afipRubro ?? ''} onChange={e => setFormData({...formData, afipRubro: e.target.value})} /></div>
-                  <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Origen</Label><Select value={formData.origin} onValueChange={(v: any) => setFormData({...formData, origin: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="nacional">🇦🇷 Nacional</SelectItem><SelectItem value="importado">🌎 Importado</SelectItem></SelectContent></Select></div>
-                  <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Estado</Label><Select value={formData.status} onValueChange={(v: any) => setFormData({...formData, status: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Activo</SelectItem><SelectItem value="inactive">Inactivo</SelectItem><SelectItem value="suspended">Suspendido</SelectItem></SelectContent></Select></div>
+                  <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Subcategoría</Label><Input value={formData.subCategory ?? ''} onChange={e => setFormData({...formData, subCategory: e.target.value})} /></div>
+                  <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Estado</Label><Select value={formData.status} onValueChange={(v: any) => setFormData({...formData, status: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Activo</SelectItem><SelectItem value="inactive">Inactivo</SelectItem></SelectContent></Select></div>
                </CardContent>
             </Card>
           </div>
         )}
 
         {step === 2 && (
+          <div className="space-y-6 animate-in slide-in-from-right-4">
+             <div className="flex justify-between items-center px-4">
+                <div>
+                   <h2 className="text-lg font-black uppercase italic tracking-tighter">Variantes del Producto</h2>
+                   <p className="text-xs text-slate-500">Gestione diferentes modelos, colores o medidas bajo el mismo código madre.</p>
+                </div>
+                <Button className="bg-blue-600 rounded-xl" onClick={handleAddVariant}>
+                   <Plus className="w-4 h-4 mr-2" /> Adicionar Variante
+                </Button>
+             </div>
+
+             <div className="space-y-4">
+                {formData.variants?.map((v, i) => (
+                  <Card key={v.id} className="border-none shadow-md rounded-[2rem] overflow-hidden group">
+                     <div className="bg-slate-900 text-white px-8 py-3 flex justify-between items-center">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-blue-400">Variante #{i + 1}</p>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-white/40 hover:text-red-400" onClick={() => handleRemoveVariant(v.id)}><Trash2 size={14}/></Button>
+                     </div>
+                     <CardContent className="p-8 grid grid-cols-1 md:grid-cols-12 gap-8">
+                        <div className="md:col-span-3 flex flex-col items-center gap-3">
+                           <div 
+                             className="w-32 h-32 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden cursor-pointer hover:border-blue-400 transition-all"
+                             onClick={() => { setActiveVariantUploadId(v.id); variantFileInputRef.current?.click(); }}
+                           >
+                              {v.photoUrl ? <img src={v.photoUrl} className="w-full h-full object-cover" /> : <Camera size={32} className="text-slate-300" />}
+                           </div>
+                           <p className="text-[8px] font-black uppercase text-slate-400">+ Foto</p>
+                        </div>
+                        <div className="md:col-span-9 grid grid-cols-2 md:grid-cols-4 gap-4">
+                           <div className="space-y-1">
+                              <Label className="text-[10px] font-black uppercase">Valor (Ex: #40)</Label>
+                              <Input className="h-10 bg-slate-50 border-none font-bold" value={v.value} onChange={e => handleUpdateVariant(v.id, 'value', e.target.value)} />
+                           </div>
+                           <div className="space-y-1">
+                              <Label className="text-[10px] font-black uppercase">SKU</Label>
+                              <Input className="h-10 bg-slate-100 border-none font-mono text-[10px] font-black" value={v.sku} readOnly />
+                           </div>
+                           <div className="space-y-1">
+                              <Label className="text-[10px] font-black uppercase">Custo (ARS)</Label>
+                              <Input type="number" className="h-10 bg-slate-50 border-none" value={v.cost} onChange={e => handleUpdateVariant(v.id, 'cost', parseFloat(e.target.value) || 0)} />
+                           </div>
+                           <div className="space-y-1">
+                              <Label className="text-[10px] font-black uppercase">Estoque</Label>
+                              <Input type="number" className="h-10 bg-blue-50 border-none font-black text-blue-700" value={v.stockQuantity} onChange={e => handleUpdateVariant(v.id, 'stockQuantity', parseInt(e.target.value) || 0)} />
+                           </div>
+                           <div className="space-y-1 col-span-2">
+                              <Label className="text-[10px] font-black uppercase">Preço Final</Label>
+                              <div className="h-10 flex items-center px-4 bg-green-50 rounded-xl text-green-700 font-black italic">
+                                 ${(v.price || 0).toLocaleString()}
+                              </div>
+                           </div>
+                        </div>
+                     </CardContent>
+                  </Card>
+                ))}
+
+                {(!formData.variants || formData.variants.length === 0) && (
+                  <div className="py-20 text-center border-2 border-dashed rounded-[3rem] space-y-4">
+                     <Layers className="w-16 h-16 mx-auto text-slate-200" />
+                     <p className="text-sm font-bold text-slate-400 uppercase italic">Este produto não possui variantes ainda.</p>
+                     <Button variant="outline" onClick={handleAddVariant}>Habilitar Variantes</Button>
+                  </div>
+                )}
+             </div>
+             <input type="file" ref={variantFileInputRef} className="hidden" accept="image/*" onChange={(e) => handlePhotoChange(e, activeVariantUploadId!)} />
+          </div>
+        )}
+
+        {step === 3 && (
           <div className="space-y-6">
             <Card className="border-none shadow-sm rounded-3xl overflow-hidden">
                <CardHeader className="bg-blue-600 text-white"><CardTitle className="text-sm uppercase">Unidad de Medida y Conversión</CardTitle></CardHeader>
@@ -304,29 +419,15 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
                     </div>
                   </div>
                   <div className="space-y-4">
-                     <Label className="text-[10px] font-black uppercase text-slate-400">Dimensiones de Embalaje</Label>
-                     <div className="grid grid-cols-3 gap-3">
-                        <div className="space-y-1"><Label className="text-[8px] uppercase">Largo (cm)</Label><Input type="number" value={formData.dimensions?.l || 0} onChange={e => setFormData({...formData, dimensions: {...(formData.dimensions || {l:0, w:0, h:0}), l: parseFloat(e.target.value) || 0}})} /></div>
-                        <div className="space-y-1"><Label className="text-[8px] uppercase">Ancho (cm)</Label><Input type="number" value={formData.dimensions?.w || 0} onChange={e => setFormData({...formData, dimensions: {...(formData.dimensions || {l:0, w:0, h:0}), w: parseFloat(e.target.value) || 0}})} /></div>
-                        <div className="space-y-1"><Label className="text-[8px] uppercase">Alto (cm)</Label><Input type="number" value={formData.dimensions?.h || 0} onChange={e => setFormData({...formData, dimensions: {...(formData.dimensions || {l:0, w:0, h:0}), h: parseFloat(e.target.value) || 0}})} /></div>
-                     </div>
-                     <div className="pt-4"><Label className="text-[10px] font-black uppercase text-slate-400">Volumen Calculado (M³)</Label><Input type="number" step="0.001" value={formData.unitVolumeM3} onChange={e => setFormData({...formData, unitVolumeM3: parseFloat(e.target.value) || 0})} /></div>
+                     <Label className="text-[10px] font-black uppercase text-slate-400">Peso Bruto (Kg)</Label>
+                     <Input type="number" value={formData.unitWeightKg} onChange={e => setFormData({...formData, unitWeightKg: parseFloat(e.target.value) || 0})} />
                   </div>
-               </CardContent>
-            </Card>
-
-            <Card className="border-none shadow-sm rounded-3xl">
-               <CardHeader><CardTitle className="text-sm uppercase">Palletización y Carga</CardTitle></CardHeader>
-               <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6 p-8">
-                  <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Peso Bruto (Kg)</Label><Input type="number" value={formData.unitWeightKg} onChange={e => setFormData({...formData, unitWeightKg: parseFloat(e.target.value) || 0})} /></div>
-                  <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Unidades x Caja</Label><Input type="number" value={formData.unitsPerBox} onChange={e => setFormData({...formData, unitsPerBox: parseInt(e.target.value) || 0})} /></div>
-                  <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Unidades x Pallet</Label><Input type="number" value={formData.unitsPerPallet} onChange={e => setFormData({...formData, unitsPerPallet: parseInt(e.target.value) || 0})} /></div>
                </CardContent>
             </Card>
           </div>
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <div className="space-y-6">
             <Card className="border-none shadow-sm rounded-3xl">
                <CardHeader><CardTitle className="text-sm uppercase flex items-center gap-2"><Zap className="text-blue-600" /> Política de Inventario</CardTitle></CardHeader>
@@ -339,104 +440,65 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
                </CardContent>
             </Card>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-               <Card className="border-none shadow-sm rounded-3xl md:col-span-1">
-                  <CardHeader className="bg-slate-50 border-b py-4">
-                     <CardTitle className="text-xs uppercase flex items-center gap-2 text-slate-500"><BellRing size={16} /> Niveles de Alerta Global</CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-6 space-y-4">
-                     <div className="space-y-1.5">
-                        <Label className="text-[10px] font-black uppercase text-slate-400">Stock Mínimo Global</Label>
-                        <Input type="number" value={formData.minStockAlert} onChange={e => setFormData({...formData, minStockAlert: parseInt(e.target.value) || 0})} />
-                        <p className="text-[8px] text-slate-400 italic">Disparará alertas de reposición.</p>
-                     </div>
-                     <div className="space-y-1.5 pt-2">
-                        <Label className="text-[10px] font-black uppercase text-slate-400">Stock Máximo Global</Label>
-                        <Input type="number" value={formData.maxStockAlert} onChange={e => setFormData({...formData, maxStockAlert: parseInt(e.target.value) || 0})} />
-                        <p className="text-[8px] text-slate-400 italic">Límite para evitar sobrestock.</p>
-                     </div>
-                  </CardContent>
-               </Card>
-
-               <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden md:col-span-2">
-                  <CardHeader className="bg-slate-900 text-white py-6 px-8 flex flex-row items-center justify-between">
-                     <div>
-                       <CardTitle className="text-sm uppercase tracking-widest">Control por Depósitos</CardTitle>
-                       <CardDescription className="text-white/40 text-[10px]">Parámetros específicos por sede operativa</CardDescription>
-                     </div>
-                     <div className="text-right">
-                       <p className="text-[10px] font-black uppercase text-blue-400">Total Global</p>
-                       <p className="text-2xl font-black italic">{(formData.warehouses || []).reduce((acc, w) => acc + (w.stockQuantity || 0), 0)} u.</p>
-                     </div>
-                  </CardHeader>
-                  <CardContent className="p-0">
-                     <Table>
-                       <TableHeader className="bg-slate-50/50">
-                         <TableRow>
-                           <TableHead className="px-8 text-[10px] font-black uppercase">Sede / Depósito</TableHead>
-                           <TableHead className="text-[10px] font-black uppercase text-center">Stock Actual</TableHead>
-                           <TableHead className="text-[10px] font-black uppercase text-center">Mín/Máx</TableHead>
-                         </TableRow>
-                       </TableHeader>
-                       <TableBody>
-                         {formData.warehouses?.map(w => (
-                           <TableRow key={w.hubId}>
-                              <TableCell className="px-8 py-4">
-                                 <p className="font-bold text-slate-700">{w.hubName}</p>
-                                 <Input className="h-6 text-[9px] w-24 mt-1 border-none bg-slate-50" placeholder="Locación" value={w.location} onChange={e => handleWarehouseChange(w.hubId, 'location', e.target.value)} />
-                              </TableCell>
-                              <TableCell className="text-center"><Input type="number" className="h-10 text-sm text-center font-black w-24 mx-auto" value={w.stockQuantity} onChange={e => handleWarehouseChange(w.hubId, 'stockQuantity', parseInt(e.target.value) || 0)} /></TableCell>
-                              <TableCell className="text-center">
-                                 <div className="flex items-center gap-2 justify-center">
-                                   <Input type="number" className="h-10 text-[10px] w-16 text-center" value={w.minStock} onChange={e => handleWarehouseChange(w.hubId, 'minStock', parseInt(e.target.value) || 0)} title="Mínimo" />
-                                   <span className="text-slate-300">/</span>
-                                   <Input type="number" className="h-10 text-[10px] w-16 text-center" value={w.maxStock} onChange={e => handleWarehouseChange(w.hubId, 'maxStock', parseInt(e.target.value) || 0)} title="Máximo" />
-                                 </div>
-                              </TableCell>
-                           </TableRow>
-                         ))}
-                       </TableBody>
-                     </Table>
-                  </CardContent>
-               </Card>
-            </div>
+            {!formData.hasVariants && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden md:col-span-3">
+                    <CardHeader className="bg-slate-900 text-white py-6 px-8 flex flex-row items-center justify-between">
+                      <div>
+                        <CardTitle className="text-sm uppercase tracking-widest">Control por Depósitos</CardTitle>
+                        <CardDescription className="text-white/40 text-[10px]">Asigne stock si no utiliza variantes</CardDescription>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <Table>
+                        <TableHeader className="bg-slate-50/50">
+                          <TableRow>
+                            <TableHead className="px-8 text-[10px] font-black uppercase">Sede / Depósito</TableHead>
+                            <TableHead className="text-[10px] font-black uppercase text-center">Stock Actual</TableHead>
+                            <TableHead className="text-[10px] font-black uppercase text-center">Mín/Máx</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {formData.warehouses?.map(w => (
+                            <TableRow key={w.hubId}>
+                                <TableCell className="px-8 py-4">
+                                  <p className="font-bold text-slate-700">{w.hubName}</p>
+                                </TableCell>
+                                <TableCell className="text-center"><Input type="number" className="h-10 text-sm text-center font-black w-24 mx-auto" value={w.stockQuantity} onChange={e => handleWarehouseChange(w.hubId, 'stockQuantity', parseInt(e.target.value) || 0)} /></TableCell>
+                                <TableCell className="text-center">
+                                  <div className="flex items-center gap-2 justify-center">
+                                    <Input type="number" className="h-10 text-[10px] w-16 text-center" value={w.minStock} onChange={e => handleWarehouseChange(w.hubId, 'minStock', parseInt(e.target.value) || 0)} />
+                                    <span className="text-slate-300">/</span>
+                                    <Input type="number" className="h-10 text-[10px] w-16 text-center" value={w.maxStock} onChange={e => handleWarehouseChange(w.hubId, 'maxStock', parseInt(e.target.value) || 0)} />
+                                  </div>
+                                </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                </Card>
+              </div>
+            )}
           </div>
         )}
 
-        {step === 4 && isManager && (
+        {step === 5 && isManager && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                <Card className="border-none shadow-sm rounded-3xl">
                   <CardHeader className="bg-slate-50 border-b py-4">
                     <CardTitle className="text-sm uppercase flex items-center gap-2">
-                      <ShoppingCart size={16} className="text-blue-600" /> Parámetros de Compra
+                      <ShoppingCart size={16} className="text-blue-600" /> Parámetros de Compra Madre
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4 p-8">
                      <div className="space-y-1.5">
-                        <Label className="text-[10px] font-black uppercase text-slate-400">Costo Última Compra</Label>
-                        <div className="relative">
-                          <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-300" />
-                          <Input type="number" className="pl-9" value={formData.lastCost || 0} onChange={e => setFormData({...formData, lastCost: parseFloat(e.target.value) || 0})} />
-                        </div>
-                     </div>
-                     <div className="space-y-1.5">
-                        <Label className="text-[10px] font-black uppercase text-blue-400">Costo Promedio Ponderado (Auditado)</Label>
+                        <Label className="text-[10px] font-black uppercase text-blue-400">Costo Promedio Ponderado</Label>
                         <div className="relative">
                           <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-blue-400" />
                           <Input type="number" className="pl-9 bg-blue-50/30 border-blue-100 font-bold" value={formData.avgCost || 0} onChange={e => handlePriceChange('avgCost', e.target.value)} />
                         </div>
-                     </div>
-                     <div className="space-y-1.5">
-                        <Label className="text-[10px] font-black uppercase text-slate-400">Moneda de Gestión</Label>
-                        <Select value={formData.currency || 'ARS'} onValueChange={v => setFormData({...formData, currency: v})}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="ARS">ARS ($)</SelectItem>
-                            <SelectItem value="USD">USD (U$S)</SelectItem>
-                            <SelectItem value="BRL">BRL (R$)</SelectItem>
-                          </SelectContent>
-                        </Select>
                      </div>
                   </CardContent>
                </Card>
@@ -444,72 +506,18 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
                <Card className="border-none shadow-sm rounded-3xl">
                   <CardHeader className="bg-slate-50 border-b py-4">
                     <CardTitle className="text-sm uppercase flex items-center gap-2">
-                      <TrendingUp size={16} className="text-green-600" /> Estructura de Precios y Markup
+                      <TrendingUp size={16} className="text-green-600" /> Margen y Precio Base
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6 p-8">
                      <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1.5">
                            <Label className="text-[10px] font-black uppercase text-blue-600">Markup (%)</Label>
-                           <div className="relative">
-                              <Percent className="absolute right-3 top-2.5 h-4 w-4 text-blue-300" />
-                              <Input 
-                                type="number" 
-                                className="pr-9 font-black text-blue-600 bg-blue-50/50 border-blue-200" 
-                                value={formData.markup || 0} 
-                                onChange={e => handlePriceChange('markup', e.target.value)} 
-                              />
-                           </div>
+                           <Input type="number" value={formData.markup || 0} onChange={e => handlePriceChange('markup', e.target.value)} />
                         </div>
                         <div className="space-y-1.5">
                            <Label className="text-[10px] font-black uppercase text-slate-400">Precio Lista</Label>
-                           <div className="relative">
-                              <Calculator className="absolute left-3 top-2.5 h-4 w-4 text-slate-300" />
-                              <Input 
-                                type="number" 
-                                className="pl-9 font-black text-slate-900" 
-                                value={formData.listPrice || 0} 
-                                onChange={e => handlePriceChange('listPrice', e.target.value)} 
-                              />
-                           </div>
-                        </div>
-                     </div>
-
-                     <div className="p-4 bg-green-50 border border-green-100 rounded-2xl flex items-center justify-between">
-                        <div className="space-y-0.5">
-                           <p className="text-[10px] font-black uppercase text-green-700 tracking-widest">Margen Real Calculado</p>
-                           <p className="text-[8px] text-green-600 font-bold uppercase">(Sobre Precio Venta)</p>
-                        </div>
-                        <p className="text-3xl font-black italic text-green-700">{calculatedMargin}%</p>
-                     </div>
-
-                     <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                        <div className="space-y-1.5">
-                           <Label className="text-[10px] font-black uppercase text-slate-400">Alícuota IVA</Label>
-                           <Select value={formData.ivaRate?.toString()} onValueChange={(v: any) => setFormData({...formData, ivaRate: parseFloat(v) as any})}>
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="0">Exento (0%)</SelectItem>
-                                <SelectItem value="10.5">10.5%</SelectItem>
-                                <SelectItem value="21">21%</SelectItem>
-                                <SelectItem value="27">27%</SelectItem>
-                              </SelectContent>
-                           </Select>
-                        </div>
-                        <div className="space-y-1.5">
-                           <Label className="text-[10px] font-black uppercase text-blue-600">Precio Minorista (IVA Incl.)</Label>
-                           <Input type="number" readOnly className="bg-slate-100 font-black" value={formData.retailPrice} />
-                        </div>
-                     </div>
-
-                     <div className="grid grid-cols-2 gap-4 pt-4 border-t bg-slate-50/50 p-4 rounded-2xl border border-dashed">
-                        <div className="space-y-1.5">
-                           <Label className="text-[10px] font-black uppercase text-orange-600">Desc. Mayorista (%)</Label>
-                           <Input type="number" className="font-bold border-orange-200" value={formData.wholesaleDiscount} onChange={e => handlePriceChange('wholesaleDiscount', e.target.value)} />
-                        </div>
-                        <div className="space-y-1.5">
-                           <Label className="text-[10px] font-black uppercase text-orange-600">Precio Mayorista (Final)</Label>
-                           <Input type="number" readOnly className="bg-orange-50 font-black border-orange-200 text-orange-700" value={formData.wholesalePrice} />
+                           <Input type="number" value={formData.listPrice || 0} onChange={e => handlePriceChange('listPrice', e.target.value)} />
                         </div>
                      </div>
                   </CardContent>
@@ -517,20 +525,20 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
             </div>
             
             <Card className="border-none shadow-xl bg-slate-900 text-white rounded-3xl">
-              <CardHeader className="border-b border-white/5"><CardTitle className="text-sm uppercase tracking-widest">Resumen Final de Registro</CardTitle></CardHeader>
+              <CardHeader className="border-b border-white/5"><CardTitle className="text-sm uppercase tracking-widest">Finalizar Registro de Familia</CardTitle></CardHeader>
               <CardContent className="p-8">
                  <div className="flex flex-col md:flex-row justify-between items-center gap-8">
                     <div className="text-center md:text-left">
-                       <p className="text-[10px] font-black uppercase text-blue-400 mb-1 tracking-widest">Impacto en Inventario</p>
-                       <p className="text-3xl font-black italic">{(formData.warehouses || []).reduce((acc, w) => acc + (w.stockQuantity || 0), 0)} u. <span className="text-sm font-normal text-white/30 uppercase">{formData.unitType}s</span></p>
+                       <p className="text-[10px] font-black text-blue-400 mb-1 tracking-widest">Impacto en Inventario</p>
+                       <p className="text-3xl font-black italic">
+                        {formData.hasVariants 
+                          ? (formData.variants || []).reduce((acc, v) => acc + (v.stockQuantity || 0), 0)
+                          : (formData.warehouses || []).reduce((acc, w) => acc + (w.stockQuantity || 0), 0)
+                        } u.
+                       </p>
                     </div>
-                    <div className="h-16 w-[1px] bg-white/10 hidden md:block"></div>
-                    <div className="text-center md:text-left">
-                       <p className="text-[10px] font-black uppercase text-blue-400 mb-1 tracking-widest">Rédito Bruto (Margen)</p>
-                       <p className="text-3xl font-black italic text-green-400">{calculatedMargin}% <span className="text-sm font-normal text-white/30 uppercase">Final</span></p>
-                    </div>
-                    <Button onClick={handleSubmit} className="h-16 px-12 bg-blue-600 hover:bg-blue-700 text-white font-black text-xl rounded-2xl shadow-2xl shadow-blue-900/40" disabled={isSubmitting}>
-                      {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} FINALIZAR ALTA
+                    <Button onClick={handleSubmit} className="h-16 px-12 bg-blue-600 hover:bg-blue-700 text-white font-black text-xl rounded-2xl shadow-2xl" disabled={isSubmitting}>
+                      {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} FINALIZAR
                     </Button>
                  </div>
               </CardContent>
@@ -548,7 +556,7 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
             ) : (
               <Button onClick={handleSubmit} className="bg-green-600 font-bold px-8 shadow-lg shadow-green-100" disabled={isSubmitting}>
                 {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" size={16} />}
-                {productId ? 'GUARDAR CAMBIOS' : 'GUARDAR PRODUCTO'}
+                GUARDAR FAMILIA
               </Button>
             )}
           </div>

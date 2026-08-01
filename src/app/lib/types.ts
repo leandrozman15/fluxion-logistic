@@ -38,6 +38,17 @@ export interface ProductWarehouse {
   maxStock: number;
 }
 
+export interface ProductVariant {
+  id: string;
+  sku: string; // Mother SKU + suffix (e.g., 1111-1)
+  value: string; // e.g., Color, Size, Model, #40
+  photoUrl?: string;
+  cost?: number;
+  markup?: number;
+  price?: number;
+  stockQuantity: number;
+}
+
 export interface Product {
   id: string;
   sku: string;
@@ -77,6 +88,10 @@ export interface Product {
   isSerialTracked: boolean;
   expiryControl: boolean;
   
+  // Variants
+  hasVariants: boolean;
+  variants: ProductVariant[];
+
   // Stock Levels
   reorderPoint?: number;
   safetyStock?: number;
@@ -259,6 +274,13 @@ export interface Hub {
   createdAt: any;
   settings?: {
     layoutId?: string;
+    layoutConfig?: {
+      corridors: string[];
+      positions: number;
+      levels: number;
+      prefix: string;
+    };
+    mapApiKey?: string;
   }
 }
 
