@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect, Suspense } from "react";
@@ -42,7 +41,8 @@ import {
   Package,
   Settings2,
   ChevronRight,
-  Maximize2
+  Maximize2,
+  Zap
 } from "lucide-react";
 import { Hub, Product } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
