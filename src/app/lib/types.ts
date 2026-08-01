@@ -70,6 +70,7 @@ export interface Product {
   // Inventory Policy
   stockQuantity: number; // Total consolidado
   minStockAlert?: number;
+  maxStockAlert?: number;
   managesStock: boolean;
   allowNegativeStock: boolean;
   isLotTracked: boolean;

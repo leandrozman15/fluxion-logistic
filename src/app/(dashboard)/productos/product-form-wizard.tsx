@@ -21,7 +21,7 @@ import {
   Scale, Layers, ShieldCheck, CheckCircle2, 
   Info, Tag, Ship, ThermometerSnowflake, 
   AlertTriangle, ScanBarcode, Camera, Image as ImageIcon, 
-  ChevronRight, ChevronLeft, Package, LayoutGrid, Building2, User, DollarSign, Activity, TrendingUp, Zap, ShoppingCart, Warehouse, MoveRight, X
+  ChevronRight, ChevronLeft, Package, LayoutGrid, Building2, User, DollarSign, Activity, TrendingUp, Zap, ShoppingCart, Warehouse, MoveRight, X, BellRing
 } from "lucide-react";
 import { Product, Hub, ProductWarehouse } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -57,7 +57,7 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
     unitWeightKg: 0, unitVolumeM3: 0, packagingType: 'pallet', status: 'active', photoUrl: "",
     unitType: 'unit', conversionFactor: 1, unitsPerBox: 0, unitsPerPallet: 0, origin: 'nacional',
     managesStock: true, allowNegativeStock: false, isLotTracked: false, isSerialTracked: false, expiryControl: false,
-    minStockAlert: 5, stockQuantity: 0, ivaRate: 21, dangerLevel: 'none', requiresReefer: false,
+    minStockAlert: 5, maxStockAlert: 100, stockQuantity: 0, ivaRate: 21, dangerLevel: 'none', requiresReefer: false,
     warehouses: []
   });
 
@@ -284,7 +284,7 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
           <div className="space-y-6">
             <Card className="border-none shadow-sm rounded-3xl">
                <CardHeader><CardTitle className="text-sm uppercase flex items-center gap-2"><Zap className="text-blue-600" /> Política de Inventario</CardTitle></CardHeader>
-               <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6 p-8">
+               <CardContent className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 p-8">
                   <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border"><Label className="text-xs uppercase font-bold">Maneja Stock</Label><Switch checked={formData.managesStock} onCheckedChange={v => setFormData({...formData, managesStock: v})} /></div>
                   <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border"><Label className="text-xs uppercase font-bold">Stock Negativo</Label><Switch checked={formData.allowNegativeStock} onCheckedChange={v => setFormData({...formData, allowNegativeStock: v})} /></div>
                   <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border"><Label className="text-xs uppercase font-bold">Loteado</Label><Switch checked={formData.isLotTracked} onCheckedChange={v => setFormData({...formData, isLotTracked: v})} /></div>
@@ -293,46 +293,67 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
                </CardContent>
             </Card>
 
-            <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden">
-               <CardHeader className="bg-slate-900 text-white py-6 px-8 flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle className="text-sm uppercase tracking-widest">Control por Depósitos</CardTitle>
-                    <CardDescription className="text-white/40 text-[10px]">Parámetros específicos por sede operativa</CardDescription>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] font-black uppercase text-blue-400">Total Global</p>
-                    <p className="text-2xl font-black italic">{(formData.warehouses || []).reduce((acc, w) => acc + (w.stockQuantity || 0), 0)} u.</p>
-                  </div>
-               </CardHeader>
-               <CardContent className="p-0">
-                  <Table>
-                    <TableHeader className="bg-slate-50/50">
-                      <TableRow>
-                        <TableHead className="px-8 text-[10px] font-black uppercase">Sede / Depósito</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase">Ubicación</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase text-center">Stock Actual</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase text-center">Mín/Máx</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {formData.warehouses?.map(w => (
-                        <TableRow key={w.hubId}>
-                           <TableCell className="px-8 py-4 font-bold text-slate-700">{w.hubName}</TableCell>
-                           <TableCell><Input className="h-8 text-xs" placeholder="Ej: A-01" value={w.location} onChange={e => handleWarehouseChange(w.hubId, 'location', e.target.value)} /></TableCell>
-                           <TableCell className="text-center"><Input type="number" className="h-8 text-xs text-center font-black w-24 mx-auto" value={w.stockQuantity} onChange={e => handleWarehouseChange(w.hubId, 'stockQuantity', parseInt(e.target.value) || 0)} /></TableCell>
-                           <TableCell className="text-center">
-                              <div className="flex items-center gap-2 justify-center">
-                                <Input type="number" className="h-8 text-[10px] w-16" value={w.minStock} onChange={e => handleWarehouseChange(w.hubId, 'minStock', parseInt(e.target.value) || 0)} />
-                                <span className="text-slate-300">/</span>
-                                <Input type="number" className="h-8 text-[10px] w-16" value={w.maxStock} onChange={e => handleWarehouseChange(w.hubId, 'maxStock', parseInt(e.target.value) || 0)} />
-                              </div>
-                           </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-               </CardContent>
-            </Card>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+               <Card className="border-none shadow-sm rounded-3xl md:col-span-1">
+                  <CardHeader className="bg-slate-50 border-b py-4">
+                     <CardTitle className="text-xs uppercase flex items-center gap-2 text-slate-500"><BellRing size={16} /> Niveles de Alerta Global</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6 space-y-4">
+                     <div className="space-y-1.5">
+                        <Label className="text-[10px] font-black uppercase text-slate-400">Stock Mínimo Global</Label>
+                        <Input type="number" value={formData.minStockAlert} onChange={e => setFormData({...formData, minStockAlert: parseInt(e.target.value) || 0})} />
+                        <p className="text-[8px] text-slate-400 italic">Disparará alertas de reposición.</p>
+                     </div>
+                     <div className="space-y-1.5 pt-2">
+                        <Label className="text-[10px] font-black uppercase text-slate-400">Stock Máximo Global</Label>
+                        <Input type="number" value={formData.maxStockAlert} onChange={e => setFormData({...formData, maxStockAlert: parseInt(e.target.value) || 0})} />
+                        <p className="text-[8px] text-slate-400 italic">Límite para evitar sobrestock.</p>
+                     </div>
+                  </CardContent>
+               </Card>
+
+               <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden md:col-span-2">
+                  <CardHeader className="bg-slate-900 text-white py-6 px-8 flex flex-row items-center justify-between">
+                     <div>
+                       <CardTitle className="text-sm uppercase tracking-widest">Control por Depósitos</CardTitle>
+                       <CardDescription className="text-white/40 text-[10px]">Parámetros específicos por sede operativa</CardDescription>
+                     </div>
+                     <div className="text-right">
+                       <p className="text-[10px] font-black uppercase text-blue-400">Total Global</p>
+                       <p className="text-2xl font-black italic">{(formData.warehouses || []).reduce((acc, w) => acc + (w.stockQuantity || 0), 0)} u.</p>
+                     </div>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                     <Table>
+                       <TableHeader className="bg-slate-50/50">
+                         <TableRow>
+                           <TableHead className="px-8 text-[10px] font-black uppercase">Sede / Depósito</TableHead>
+                           <TableHead className="text-[10px] font-black uppercase text-center">Stock Actual</TableHead>
+                           <TableHead className="text-[10px] font-black uppercase text-center">Mín/Máx</TableHead>
+                         </TableRow>
+                       </TableHeader>
+                       <TableBody>
+                         {formData.warehouses?.map(w => (
+                           <TableRow key={w.hubId}>
+                              <TableCell className="px-8 py-4">
+                                 <p className="font-bold text-slate-700">{w.hubName}</p>
+                                 <Input className="h-6 text-[9px] w-24 mt-1 border-none bg-slate-50" placeholder="Locación" value={w.location} onChange={e => handleWarehouseChange(w.hubId, 'location', e.target.value)} />
+                              </TableCell>
+                              <TableCell className="text-center"><Input type="number" className="h-10 text-sm text-center font-black w-24 mx-auto" value={w.stockQuantity} onChange={e => handleWarehouseChange(w.hubId, 'stockQuantity', parseInt(e.target.value) || 0)} /></TableCell>
+                              <TableCell className="text-center">
+                                 <div className="flex items-center gap-2 justify-center">
+                                   <Input type="number" className="h-10 text-[10px] w-16 text-center" value={w.minStock} onChange={e => handleWarehouseChange(w.hubId, 'minStock', parseInt(e.target.value) || 0)} title="Mínimo" />
+                                   <span className="text-slate-300">/</span>
+                                   <Input type="number" className="h-10 text-[10px] w-16 text-center" value={w.maxStock} onChange={e => handleWarehouseChange(w.hubId, 'maxStock', parseInt(e.target.value) || 0)} title="Máximo" />
+                                 </div>
+                              </TableCell>
+                           </TableRow>
+                         ))}
+                       </TableBody>
+                     </Table>
+                  </CardContent>
+               </Card>
+            </div>
           </div>
         )}
 
@@ -352,7 +373,7 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
                   <CardHeader><CardTitle className="text-sm uppercase flex items-center gap-2"><TrendingUp size={16} className="text-green-600" /> Estructura de Precios</CardTitle></CardHeader>
                   <CardContent className="space-y-4 p-8">
                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Precio Lista</Label><Input type="number" value={formData.listPrice || 0} onChange={e => setFormData({...formData, listPrice: parseFloat(e.target.value) || 0})} /></div>
+                        <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Precio Lista</Label><Input type="number" value={formData.listPrice || 0} onChange={e => setFormData({...formData, lastCost: parseFloat(e.target.value) || 0})} /></div>
                         <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Alícuota IVA</Label><Select value={formData.ivaRate?.toString()} onValueChange={(v: any) => setFormData({...formData, ivaRate: parseFloat(v) as any})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="0">Exento (0%)</SelectItem><SelectItem value="10.5">10.5%</SelectItem><SelectItem value="21">21%</SelectItem><SelectItem value="27">27%</SelectItem></SelectContent></Select></div>
                      </div>
                      <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Precio Mayorista</Label><Input type="number" value={formData.wholesalePrice || 0} onChange={e => setFormData({...formData, wholesalePrice: parseFloat(e.target.value) || 0})} /></div>
