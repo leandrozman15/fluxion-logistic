@@ -4,6 +4,7 @@
 import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { doc, collection, query, where } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,23 +37,24 @@ export default function DriverProfilePage() {
   const { id } = useParams();
   const router = useRouter();
   const db = useFirestore();
+  const { tenantId } = useTenant();
   const [activeDoc, setActiveDoc] = useState<ActiveDoc | null>(null);
   const [viewingBack, setViewingBack] = useState(false);
 
   const driverRef = useMemo(() => {
-    if (!db || !id) return null;
-    return doc(db, "drivers", id as string);
-  }, [db, id]);
+    if (!db || !id || !tenantId) return null;
+    return doc(db, "tenants", tenantId, "drivers", id as string);
+  }, [db, id, tenantId]);
 
   const { data: driver, loading: driverLoading } = useDoc<Driver>(driverRef);
 
   const tripsQuery = useMemo(() => {
-    if (!db || !id) return null;
+    if (!db || !id || !tenantId) return null;
     return query(
-      collection(db, "loads"),
+      collection(db, "tenants", tenantId, "loads"),
       where("assignedDriverId", "==", id as string)
     );
-  }, [db, id]);
+  }, [db, id, tenantId]);
 
   const { data: trips, loading: tripsLoading } = useCollection<Load>(tripsQuery);
 
@@ -71,9 +73,9 @@ export default function DriverProfilePage() {
   }, [trips]);
 
   const trucksQuery = useMemo(() => {
-    if (!db || !id) return null;
-    return query(collection(db, "trucks"), where("assignedDriverId", "==", id as string));
-  }, [db, id]);
+    if (!db || !id || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "trucks"), where("assignedDriverId", "==", id as string));
+  }, [db, id, tenantId]);
 
   const { data: assignedTrucks } = useCollection<Truck>(trucksQuery);
 

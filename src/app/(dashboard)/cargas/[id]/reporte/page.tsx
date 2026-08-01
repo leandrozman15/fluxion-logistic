@@ -4,6 +4,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { doc, collection, query, orderBy, updateDoc, serverTimestamp } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ export default function TripReportPage() {
   const { id } = useParams();
   const router = useRouter();
   const db = useFirestore();
+  const { tenantId } = useTenant();
   const { toast } = useToast();
   const [L, setL] = useState<any>(null);
   const [isUpdatingExpenseId, setIsUpdatingExpenseId] = useState<string | null>(null);
@@ -56,16 +58,16 @@ export default function TripReportPage() {
   }, []);
 
   const loadRef = useMemo(() => {
-    if (!db || !id) return null;
-    return doc(db, "loads", id as string);
-  }, [db, id]);
+    if (!db || !id || !tenantId) return null;
+    return doc(db, "tenants", tenantId, "loads", id as string);
+  }, [db, id, tenantId]);
 
   const { data: load, loading: loadLoading } = useDoc<Load>(loadRef);
 
   const expensesQuery = useMemo(() => {
-    if (!db || !id) return null;
-    return query(collection(db, "loads", id as string, "expenses"), orderBy("createdAt", "asc"));
-  }, [db, id]);
+    if (!db || !id || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "loads", id as string, "expenses"), orderBy("createdAt", "asc"));
+  }, [db, id, tenantId]);
 
   const { data: expenses } = useCollection<Expense>(expensesQuery);
 
@@ -138,10 +140,10 @@ export default function TripReportPage() {
   }, [load?.tracking?.history]);
 
   const handleUpdateExpenseStatus = async (expId: string, status: 'approved' | 'rejected') => {
-    if (!db || !id) return;
+    if (!db || !id || !tenantId) return;
     setIsUpdatingExpenseId(expId);
     try {
-      const expRef = doc(db, "loads", id as string, "expenses", expId);
+      const expRef = doc(db, "tenants", tenantId, "loads", id as string, "expenses", expId);
       await updateDoc(expRef, { status, updatedAt: serverTimestamp() });
       toast({ title: `Gasto ${status === 'approved' ? 'Aprobado' : 'Rechazado'}` });
     } catch (e) {
@@ -152,9 +154,9 @@ export default function TripReportPage() {
   };
 
   const handleUpdateReceiptNumber = async (expId: string, receiptNumber: string) => {
-    if (!db || !id) return;
+    if (!db || !id || !tenantId) return;
     try {
-      const expRef = doc(db, "loads", id as string, "expenses", expId);
+      const expRef = doc(db, "tenants", tenantId, "loads", id as string, "expenses", expId);
       await updateDoc(expRef, { receiptNumber, updatedAt: serverTimestamp() });
     } catch (e) {
       console.error(e);
@@ -162,9 +164,9 @@ export default function TripReportPage() {
   };
 
   const handleToggleDocsPresented = async (expId: string, docsPresented: boolean) => {
-    if (!db || !id) return;
+    if (!db || !id || !tenantId) return;
     try {
-      const expRef = doc(db, "loads", id as string, "expenses", expId);
+      const expRef = doc(db, "tenants", tenantId, "loads", id as string, "expenses", expId);
       await updateDoc(expRef, { docsPresented, updatedAt: serverTimestamp() });
     } catch (e) {
       console.error(e);

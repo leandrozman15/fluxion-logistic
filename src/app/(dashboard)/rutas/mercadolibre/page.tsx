@@ -3,7 +3,8 @@
 
 import { useState, useRef, useMemo, Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useFirestore, useUser, useDoc, useTenant } from "@/firebase";
+import { useFirestore, useUser, useDoc } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { collection, serverTimestamp, doc, setDoc, updateDoc } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

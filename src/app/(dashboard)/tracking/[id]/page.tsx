@@ -5,6 +5,7 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { doc, updateDoc, serverTimestamp, increment, arrayUnion } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ export default function LiveTrackingPage() {
   const { id } = useParams();
   const router = useRouter();
   const db = useFirestore();
+  const { tenantId } = useTenant();
   const { toast } = useToast();
   const [isSimulating, setIsSimulating] = useState(false);
   const [L, setL] = useState<any>(null);
@@ -52,9 +54,9 @@ export default function LiveTrackingPage() {
   }, []);
 
   const loadRef = useMemo(() => {
-    if (!db || !id) return null;
-    return doc(db, "loads", id as string);
-  }, [db, id]);
+    if (!db || !id || !tenantId) return null;
+    return doc(db, "tenants", tenantId, "loads", id as string);
+  }, [db, id, tenantId]);
 
   const { data: load, loading } = useDoc<Load>(loadRef);
 
@@ -90,7 +92,7 @@ export default function LiveTrackingPage() {
 
       const fuelDelta = (estimateFuelFactor(newSpeed) * 0.016); // Estimación consumo en 1 min
 
-      // Usamos increment() y arrayUnion() para eficiencia extrema (Fix Resource Exhausted)
+      // Usamos increment() y arrayUnion() para eficiencia extrema
       await updateDoc(loadRef, {
         "tracking.currentLat": newLat,
         "tracking.currentLng": newLng,

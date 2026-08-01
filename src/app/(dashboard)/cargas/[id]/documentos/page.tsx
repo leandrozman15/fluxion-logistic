@@ -4,6 +4,7 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ export default function LoadDocumentsPage() {
   const { id } = useParams();
   const router = useRouter();
   const db = useFirestore();
+  const { tenantId } = useTenant();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -32,9 +34,9 @@ export default function LoadDocumentsPage() {
   const [isProcessingFile, setIsProcessingFile] = useState(false);
 
   const loadRef = useMemo(() => {
-    if (!db || !id) return null;
-    return doc(db, "loads", id as string);
-  }, [db, id]);
+    if (!db || !id || !tenantId) return null;
+    return doc(db, "tenants", tenantId, "loads", id as string);
+  }, [db, id, tenantId]);
 
   const { data: load, loading } = useDoc<Load>(loadRef);
 
@@ -210,7 +212,7 @@ export default function LoadDocumentsPage() {
                             placeholder="Ej: 0001-00045678" 
                             className="bg-white h-11 rounded-xl border-none shadow-sm font-mono font-bold"
                             value={newDoc.number}
-                            onChange={e => setNewDoc({...newDoc, number: e.target.value})}
+                            onChange={e => setNewDoc({...newDoc, number: e.target.value.toUpperCase()})}
                           />
                        </div>
                        <div className="space-y-1.5">
