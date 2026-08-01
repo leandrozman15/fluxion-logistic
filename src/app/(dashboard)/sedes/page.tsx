@@ -2,22 +2,21 @@
 'use client';
 
 import { useState, useMemo } from "react";
-import { useFirestore, useCollection, useUser } from "@/firebase";
+import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, writeBatch, getDocs } from "firebase/firestore";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { collection, query, orderBy, addDoc, serverTimestamp, deleteDoc, doc, updateDoc } from "firebase/firestore";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
-  Building2, MapPin, Plus, Phone, Search, 
-  MoreVertical, Trash2, Globe, Loader2, Map as MapIcon, Crosshair, Star, Edit2, Save, X, Anchor, Warehouse,
-  TrendingUp, AlertTriangle, Clock, Layers, LayoutGrid, BarChart3, PieChart as PieChartIcon, ArrowRight,
-  PackageSearch, CheckCircle2
+  Building2, MapPin, Plus, Search, 
+  MoreVertical, Trash2, Globe, Loader2, Map as MapIcon, Crosshair, Edit2, Save, Warehouse,
+  AlertTriangle, Clock, LayoutGrid, CheckCircle2, PackageSearch
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -28,7 +27,7 @@ import {
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { Hub, HubType, Country, LoadingBay, Product } from "@/app/lib/types";
+import { Hub, HubType, Country, Product } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -58,7 +57,6 @@ export default function SedesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [newBayName, setNewBayName] = useState("");
 
   const [formData, setFormData] = useState<Partial<Hub>>(INITIAL_FORM_DATA);
 
@@ -154,14 +152,35 @@ export default function SedesPage() {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
           {filteredHubs.map(hub => {
-            // Simulación de datos para el prototipo visual
-            const occupied = 60 + Math.floor(Math.random() * 30);
-            const data = [{ value: occupied }, { value: 100 - occupied }];
-            const expiryCount = Math.floor(Math.random() * 8);
-            const criticalStock = products?.filter(p => p.warehouses?.some(w => w.hubId === hub.id && w.stockQuantity <= w.minStock)).length || 0;
+            // CÁLCULO DE INFORMACIÓN REAL
+            const config = hub.settings?.layoutConfig;
+            
+            // 1. Capacidad Técnica (Slots de Rack)
+            const totalCapacity = config ? (config.corridors?.length || 1) * (config.positions || 1) * (config.levels || 1) : 100;
+            
+            // 2. Stock Actual en esta sede
+            const currentStock = products?.reduce((acc, p) => {
+               const wh = p.warehouses?.find(w => w.hubId === hub.id);
+               return acc + (wh?.stockQuantity || 0);
+            }, 0) || 0;
+
+            // 3. Alertas de Stock Crítico
+            const criticalStockCount = products?.filter(p => {
+               const wh = p.warehouses?.find(w => w.hubId === hub.id);
+               return wh && wh.stockQuantity <= wh.minStock;
+            }).length || 0;
+
+            // 4. Vencimientos Próximos (Lógica basada en expiryControl activo)
+            const expiryCount = products?.filter(p => {
+               const wh = p.warehouses?.find(w => w.hubId === hub.id);
+               return wh && wh.stockQuantity > 0 && p.expiryControl;
+            }).length || 0;
+
+            const occupiedPercent = Math.min(100, Math.round((currentStock / totalCapacity) * 100));
+            const pieData = [{ value: occupiedPercent }, { value: 100 - occupiedPercent }];
 
             return (
-              <Card key={hub.id} className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-white group hover:scale-[1.02] transition-all duration-300">
+              <Card key={hub.id} className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-white group hover:scale-[1.01] transition-all duration-300">
                 <CardHeader className="bg-slate-900 text-white p-8 relative">
                    <div className="absolute top-0 right-0 p-8 opacity-10"><Building2 size={80}/></div>
                    <div className="flex justify-between items-start relative z-10">
@@ -186,26 +205,32 @@ export default function SedesPage() {
                    </div>
                 </CardHeader>
                 <CardContent className="p-8 space-y-8">
-                   {/* CAPACIDAD Y GRÁFICO */}
+                   {/* CAPACIDAD Y GRÁFICO REAL */}
                    <div className="flex items-center justify-between gap-6">
                       <div className="flex-1 space-y-4">
                          <div className="space-y-1">
-                            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Ocupación</p>
+                            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Ocupación Real</p>
                             <div className="flex items-end gap-2">
-                               <p className="text-4xl font-black text-slate-900 italic leading-none">{occupied}%</p>
+                               <p className="text-4xl font-black text-slate-900 italic leading-none">{occupiedPercent}%</p>
                                <Badge className="bg-blue-50 text-blue-700 border-none text-[9px] mb-1">CAPACIDAD</Badge>
                             </div>
                          </div>
                          <div className="space-y-1">
                             <p className="text-[9px] font-bold text-slate-400 uppercase">Estado Operativo</p>
-                            <p className="text-xs font-black text-green-600 uppercase flex items-center gap-1"><CheckCircle2 size={12}/> Flujo Normal</p>
+                            <p className={cn(
+                              "text-xs font-black uppercase flex items-center gap-1",
+                              occupiedPercent > 90 ? "text-red-600" : "text-green-600"
+                            )}>
+                              {occupiedPercent > 90 ? <AlertTriangle size={12}/> : <CheckCircle2 size={12}/>}
+                              {occupiedPercent > 90 ? 'Saturación Crítica' : 'Flujo Normal'}
+                            </p>
                          </div>
                       </div>
                       <div className="h-28 w-28 shrink-0">
                          <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
-                               <Pie data={data} innerRadius={35} outerRadius={50} paddingAngle={5} dataKey="value" stroke="none">
-                                  <Cell fill="#2563eb" />
+                               <Pie data={pieData} innerRadius={35} outerRadius={50} paddingAngle={5} dataKey="value" stroke="none">
+                                  <Cell fill={occupiedPercent > 90 ? "#ef4444" : "#2563eb"} />
                                   <Cell fill="#f1f5f9" />
                                </Pie>
                                <Tooltip content={() => null} />
@@ -214,7 +239,7 @@ export default function SedesPage() {
                       </div>
                    </div>
 
-                   {/* ALERTAS Y MÉTRICAS */}
+                   {/* MÉTRICAS REALES */}
                    <div className="grid grid-cols-2 gap-4">
                       <div className={cn("p-4 rounded-2xl border transition-all", expiryCount > 0 ? "bg-orange-50 border-orange-100" : "bg-slate-50 border-slate-100")}>
                          <div className="flex justify-between items-center mb-1">
@@ -223,16 +248,15 @@ export default function SedesPage() {
                          </div>
                          <p className="text-[8px] font-black uppercase text-slate-500 tracking-tighter">Vencimientos</p>
                       </div>
-                      <div className={cn("p-4 rounded-2xl border transition-all", criticalStock > 0 ? "bg-red-50 border-red-100" : "bg-slate-50 border-slate-100")}>
+                      <div className={cn("p-4 rounded-2xl border transition-all", criticalStockCount > 0 ? "bg-red-50 border-red-100" : "bg-slate-50 border-slate-100")}>
                          <div className="flex justify-between items-center mb-1">
-                            <AlertTriangle size={14} className={criticalStock > 0 ? "text-red-500" : "text-slate-300"} />
-                            <span className={cn("text-lg font-black italic", criticalStock > 0 ? "text-red-700" : "text-slate-400")}>{criticalStock}</span>
+                            <AlertTriangle size={14} className={criticalStockCount > 0 ? "text-red-500" : "text-slate-300"} />
+                            <span className={cn("text-lg font-black italic", criticalStockCount > 0 ? "text-red-700" : "text-slate-400")}>{criticalStockCount}</span>
                          </div>
                          <p className="text-[8px] font-black uppercase text-slate-500 tracking-tighter">Stock Crítico</p>
                       </div>
                    </div>
 
-                   {/* ACCESO A MAPEO */}
                    <div className="space-y-3 pt-2">
                       <Button className="w-full h-14 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-xs uppercase italic tracking-widest shadow-lg shadow-slate-200" asChild>
                          <Link href={`/stock/layout?hubId=${hub.id}`}>
