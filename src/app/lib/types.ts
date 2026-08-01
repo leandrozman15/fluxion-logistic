@@ -119,6 +119,47 @@ export interface Product {
   updatedAt: any;
 }
 
+// NUEVO: MODELO DE LAYOUT FÍSICO DE DEPÓSITO
+export interface WarehouseSlot {
+  id: string; // Ej: P01-R02-N03-C01
+  coordinate: string;
+  productId?: string;
+  productSku?: string;
+  productName?: string;
+  status: 'empty' | 'occupied' | 'reserved' | 'blocked';
+  capacityKg?: number;
+  currentWeightKg?: number;
+  lastAuditAt?: any;
+}
+
+export interface WarehouseRack {
+  id: string;
+  name: string; // Ej: Rack 02
+  levels: number; // Alturas
+  columns: number; // Columnas
+  slots: WarehouseSlot[];
+}
+
+export interface WarehouseAisle {
+  id: string;
+  name: string; // Ej: Pasillo 01 (A)
+  racks: WarehouseRack[];
+}
+
+export interface WarehouseSection {
+  id: string;
+  name: string; // Ej: Sector Refrigerados, Sector A, etc.
+  aisles: WarehouseAisle[];
+}
+
+export interface WarehouseLayout {
+  id: string;
+  hubId: string;
+  name: string;
+  sections: WarehouseSection[];
+  updatedAt: any;
+}
+
 export type StockMovementType = 'in' | 'out' | 'adjustment';
 
 export interface StockMovement {
@@ -216,6 +257,9 @@ export interface Hub {
   isMainBase?: boolean;
   loadingBays?: LoadingBay[];
   createdAt: any;
+  settings?: {
+    layoutId?: string;
+  }
 }
 
 export interface Client {

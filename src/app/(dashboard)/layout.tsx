@@ -36,7 +36,8 @@ import {
   Archive,
   ShoppingBag,
   ShieldCheck,
-  Layers
+  Layers,
+  Map as MapIcon
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth, useFirestore, useDoc, useUser } from "@/firebase";
@@ -81,6 +82,7 @@ function DashboardSidebar() {
     { id: 'clientes', title: "Cartera Clientes", icon: Briefcase, href: "/clientes" },
     { id: 'productos', title: "Catálogo Productos", icon: Box, href: "/productos" },
     { id: 'stock', title: "Stock Almacén", icon: Layers, href: "/stock" },
+    { id: 'stock-layout', title: "Layout de Racks", icon: MapIcon, href: "/stock/layout" },
     { id: 'cargas', title: "Cargas y Fletes", icon: Package, href: "/cargas" },
     { id: 'remitos', title: "Buzón de Remitos", icon: Files, href: "/remitos" },
     { id: 'mantenimiento', title: "Mantenimiento", icon: Wrench, href: "/mantenimiento" },
@@ -88,17 +90,12 @@ function DashboardSidebar() {
     { id: 'analytics', title: "Análisis de Datos", icon: BarChart3, href: "/analytics" },
   ];
 
-  // FILTRADO DE MENÚ BASADO EN MÓDULOS HABILITADOS
   const filteredMenu = useMemo(() => {
-    if (!tenant) return adminMenu; // Carga inicial
+    if (!tenant) return adminMenu;
     const enabled = tenant.settings?.enabledModules;
-    if (!enabled || enabled.length === 0) return adminMenu; // Fallback legacy
+    if (!enabled || enabled.length === 0) return adminMenu;
     return adminMenu.filter(item => enabled.includes(item.id));
   }, [tenant, adminMenu]);
-
-  const driverMenu = [
-    { title: "App Chofer (Mis Viajes)", icon: Smartphone, href: "/rutas" },
-  ];
 
   const handleLinkClick = () => {
     if (isMobile) setOpenMobile(false);
@@ -169,7 +166,8 @@ function DashboardSidebar() {
                       <item.icon className={cn(
                         item.title.includes("Remitos") && "text-indigo-600",
                         item.title === "Mercado Libre" && "text-yellow-500",
-                        item.id === 'stock' && "text-orange-500"
+                        item.id === 'stock' && "text-orange-500",
+                        item.id === 'stock-layout' && "text-blue-600"
                       )} />
                       <span className={cn(
                         item.title.includes("Remitos") && "font-bold text-indigo-700",
@@ -187,22 +185,20 @@ function DashboardSidebar() {
           <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden text-blue-600 dark:text-blue-400 font-black">Área Conductores</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {driverMenu.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton 
-                    asChild 
-                    tooltip={item.title} 
-                    isActive={pathname.startsWith(item.href)}
-                    onClick={handleLinkClick}
-                    className="hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                  >
-                    <Link href={item.href}>
-                      <item.icon className="text-blue-600" />
-                      <span className="font-bold">{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              <SidebarMenuItem>
+                <SidebarMenuButton 
+                  asChild 
+                  tooltip="App Chofer (Mis Viajes)" 
+                  isActive={pathname.startsWith("/rutas")}
+                  onClick={handleLinkClick}
+                  className="hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                >
+                  <Link href="/rutas">
+                    <Smartphone className="text-blue-600" />
+                    <span className="font-bold">App Chofer</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
