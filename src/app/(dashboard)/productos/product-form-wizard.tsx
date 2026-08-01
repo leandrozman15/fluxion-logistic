@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useDoc, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
@@ -44,13 +43,29 @@ const UNIT_TYPES = [
 
 export default function ProductFormWizard({ productId }: ProductFormWizardProps) {
   const db = useFirestore();
-  const { tenantId } = useTenant();
+  const { tenantId, role } = useTenant();
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isManager = useMemo(() => role === 'manager' || role === 'admin', [role]);
+
+  const steps = useMemo(() => {
+    const s = [
+      { id: 1, label: "Gral", icon: Info },
+      { id: 2, label: "Logística", icon: Scale },
+      { id: 3, label: "Stock/Depósitos", icon: Warehouse },
+    ];
+    if (isManager) {
+      s.push({ id: 4, label: "Ventas/Compras", icon: DollarSign });
+    }
+    return s;
+  }, [isManager]);
+
+  const maxSteps = steps.length;
 
   const [formData, setFormData] = useState<Partial<Product>>({
     sku: "", gtin: "", name: "", shortName: "", brand: "", model: "", manufacturer: "", description: "", category: "Alimentos y Bebidas",
@@ -62,7 +77,7 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
   });
 
   const handleBack = () => setStep(prev => Math.max(1, prev - 1));
-  const handleNext = () => setStep(prev => Math.min(4, prev + 1));
+  const handleNext = () => setStep(prev => Math.min(maxSteps, prev + 1));
 
   const productRef = useMemo(() => (productId && db && tenantId) ? doc(db, "tenants", tenantId, "products", productId) : null, [db, tenantId, productId]);
   const { data: existingProduct, loading: loadingExisting } = useDoc<Product>(productRef);
@@ -117,27 +132,21 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
     }));
   };
 
-  // FINANCIAL LOGIC
   const handlePriceChange = (field: 'listPrice' | 'avgCost' | 'markup', value: string) => {
     const numVal = value === "" ? 0 : parseFloat(value);
     setFormData(prev => {
       const updated = { ...prev, [field]: numVal };
-      
-      // Si cambia Markup o Costo -> Recalcular Precio Lista
       if (field === 'markup' || field === 'avgCost') {
         const cost = field === 'avgCost' ? numVal : (prev.avgCost || 0);
         const mkp = field === 'markup' ? numVal : (prev.markup || 0);
         updated.listPrice = cost * (1 + (mkp / 100));
       }
-      
-      // Si cambia Precio Lista -> Recalcular Markup
       if (field === 'listPrice') {
         const cost = prev.avgCost || 0;
         if (cost > 0) {
           updated.markup = ((numVal - cost) / cost) * 100;
         }
       }
-      
       return updated;
     });
   };
@@ -192,18 +201,13 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
       </div>
 
       <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between overflow-x-auto">
-         {[
-            { id: 1, label: "Gral", icon: Info },
-            { id: 2, label: "Logística", icon: Scale },
-            { id: 3, label: "Stock/Depósitos", icon: Warehouse },
-            { id: 4, label: "Ventas/Compras", icon: DollarSign }
-          ].map(s => (
+         {steps.map(s => (
             <div key={s.id} className={cn("flex flex-col items-center gap-1.5 flex-1 relative min-w-[80px]", step === s.id ? "text-blue-600" : "text-slate-400")}>
                <div className={cn("w-9 h-9 rounded-full flex items-center justify-center border z-10 transition-all", step >= s.id ? "bg-blue-600 text-white border-blue-600 shadow-lg" : "bg-white")}>
                  {step > s.id ? <CheckCircle2 size={18} /> : <s.icon size={18} />}
                </div>
                <span className="text-[9px] font-black uppercase text-center">{s.label}</span>
-               {s.id < 4 && <div className={cn("absolute top-4.5 left-1/2 w-full h-[2px] -z-0", step > s.id ? "bg-blue-600" : "bg-slate-100")}></div>}
+               {s.id < maxSteps && <div className={cn("absolute top-4.5 left-1/2 w-full h-[2px] -z-0", step > s.id ? "bg-blue-600" : "bg-slate-100")}></div>}
             </div>
           ))}
       </div>
@@ -382,10 +386,9 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
           </div>
         )}
 
-        {step === 4 && (
+        {step === 4 && isManager && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-               {/* COMPRAS */}
                <Card className="border-none shadow-sm rounded-3xl">
                   <CardHeader className="bg-slate-50 border-b py-4">
                     <CardTitle className="text-sm uppercase flex items-center gap-2">
@@ -421,7 +424,6 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
                   </CardContent>
                </Card>
 
-               {/* VENTAS Y MARGENES */}
                <Card className="border-none shadow-sm rounded-3xl">
                   <CardHeader className="bg-slate-50 border-b py-4">
                     <CardTitle className="text-sm uppercase flex items-center gap-2">
@@ -513,12 +515,12 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
         <div className="max-w-5xl w-full flex justify-between items-center px-4">
           <Button variant="ghost" onClick={handleBack} disabled={step === 1 || isSubmitting} className="font-bold"><ChevronLeft size={16} className="mr-1" /> VOLVER</Button>
           <div className="flex gap-2">
-            {step < 4 ? (
+            {step < maxSteps ? (
               <Button onClick={handleNext} className="bg-blue-600 font-bold px-8">SIGUIENTE <ChevronRight size={16} className="ml-1" /></Button>
             ) : (
               <Button onClick={handleSubmit} className="bg-green-600 font-bold px-8 shadow-lg shadow-green-100" disabled={isSubmitting}>
                 {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" size={16} />}
-                GUARDAR CAMBIOS
+                {productId ? 'GUARDAR CAMBIOS' : 'GUARDAR PRODUCTO'}
               </Button>
             )}
           </div>
