@@ -5,13 +5,21 @@ import { useState, useMemo, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, doc } from "firebase/firestore";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { collection, query, orderBy, doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogFooter, 
+  DialogHeader, 
+  DialogTitle, 
+} from "@/components/ui/dialog";
 import { 
   Box, 
   Warehouse, 
@@ -31,7 +39,10 @@ import {
   XCircle,
   ScanBarcode,
   ArrowRightLeft,
-  Package
+  Package,
+  Settings2,
+  ChevronRight,
+  Maximize2
 } from "lucide-react";
 import { Hub, Product } from "@/app/lib/types";
 import { cn } from "@/lib/utils";
@@ -102,12 +113,22 @@ function LayoutContent() {
   const db = useFirestore();
   const { tenantId } = useTenant();
   const router = useRouter();
+  const { toast } = useToast();
   const searchParams = useSearchParams();
   
   const hubIdFromUrl = searchParams.get('hubId');
   const [selectedHubId, setSelectedHubId] = useState<string>(hubIdFromUrl || "");
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Formulario de Configuración
+  const [configForm, setConfigForm] = useState({
+    corridors: "A,B,C",
+    positions: 4,
+    levels: 2,
+    prefix: ""
+  });
 
   const hubsQuery = useMemo(() => {
     if (!db || !tenantId) return null;
@@ -124,23 +145,72 @@ function LayoutContent() {
 
   const activeHub = useMemo(() => hubs?.find(h => h.id === selectedHubId), [hubs, selectedHubId]);
 
-  // Estructura de racks virtuales (Simulada para visualización)
-  const MOCK_RACKS = [
-    { corridor: 'A', positions: ['01', '02', '03', '04', '05'], levels: ['03', '02', '01'] },
-    { corridor: 'B', positions: ['01', '02', '03', '04', '05'], levels: ['03', '02', '01'] },
-  ];
+  // Cargar configuración existente del Hub
+  useEffect(() => {
+    if (activeHub?.settings?.layoutConfig) {
+      const cfg = activeHub.settings.layoutConfig;
+      setConfigForm({
+        corridors: Array.isArray(cfg.corridors) ? cfg.corridors.join(',') : cfg.corridors,
+        positions: cfg.positions || 4,
+        levels: cfg.levels || 2,
+        prefix: cfg.prefix || activeHub.name.substring(0, 5).toUpperCase()
+      });
+    } else if (activeHub) {
+      setConfigForm(prev => ({ ...prev, prefix: activeHub.name.substring(0, 5).toUpperCase() }));
+    }
+  }, [activeHub]);
 
-  const prefix = activeHub?.name.substring(0, 5).toUpperCase() || "TIGRE";
+  // Generar estructura de racks basada en la configuración
+  const displayRacks = useMemo(() => {
+    const corridorsArray = configForm.corridors.split(',').map(s => s.trim().toUpperCase()).filter(s => s !== "");
+    
+    return corridorsArray.map(c => ({
+      corridor: c,
+      positions: Array.from({ length: configForm.positions }, (_, i) => String(i + 1).padStart(2, '0')),
+      levels: Array.from({ length: configForm.levels }, (_, i) => String(configForm.levels - i).padStart(2, '0'))
+    }));
+  }, [configForm]);
 
-  // Simulación de productos en racks para el demo visual
+  const totalPositions = useMemo(() => {
+    const corridorsCount = configForm.corridors.split(',').filter(s => s.trim() !== "").length;
+    return corridorsCount * configForm.positions * configForm.levels;
+  }, [configForm]);
+
+  const handleSaveConfig = async () => {
+    if (!db || !tenantId || !selectedHubId) return;
+    setIsSaving(true);
+    try {
+      const corridorsArray = configForm.corridors.split(',').map(s => s.trim().toUpperCase()).filter(s => s !== "");
+      const layoutConfig = {
+        corridors: corridorsArray,
+        positions: configForm.positions,
+        levels: configForm.levels,
+        prefix: configForm.prefix
+      };
+      
+      await updateDoc(doc(db, "tenants", tenantId, "hubs", selectedHubId), {
+        "settings.layoutConfig": layoutConfig,
+        updatedAt: serverTimestamp()
+      });
+      
+      toast({ title: "Estructura Actualizada", description: "El mapa se ha regenerado según los nuevos parámetros." });
+      setIsConfigOpen(false);
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al guardar configuración" });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const getProductAt = (coord: string) => {
     if (!products || products.length === 0) return null;
-    // Lógica determinística para el demo
     const sum = coord.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    if (sum % 5 === 0) return products[0];
-    if (sum % 7 === 0) return products[1 % products.length];
+    if (sum % 7 === 0) return products[0];
+    if (sum % 11 === 0) return products[1 % products.length];
     return null;
   };
+
+  const prefix = configForm.prefix || activeHub?.name.substring(0, 5).toUpperCase() || "TIGRE";
 
   return (
     <div className="space-y-6 pb-20">
@@ -155,11 +225,11 @@ function LayoutContent() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-           <Button variant="outline" className="h-10 rounded-xl font-bold text-[10px] uppercase border-slate-200">
-             <Camera size={14} className="mr-2" /> Scanner Picking
+           <Button variant="outline" className="h-10 rounded-xl font-bold text-[10px] uppercase border-slate-200" onClick={() => setIsConfigOpen(true)}>
+             <Settings2 size={14} className="mr-2 text-blue-600" /> Configurar Estructura
            </Button>
            <Button className="bg-blue-600 h-10 rounded-xl font-black text-[10px] uppercase shadow-lg px-6">
-             Configurar Estructura
+             <Camera size={14} className="mr-2" /> Scanner Picking
            </Button>
         </div>
       </div>
@@ -168,8 +238,8 @@ function LayoutContent() {
          <Card className="border-none shadow-sm bg-white">
             <CardContent className="p-4 flex items-center justify-between">
                <div>
-                 <p className="text-[10px] font-bold text-slate-400 uppercase">Capacidad Total</p>
-                 <p className="text-2xl font-black italic text-slate-900">120 <span className="text-xs font-normal opacity-30">SLOTS</span></p>
+                 <p className="text-[10px] font-bold text-slate-400 uppercase">Capacidad Técnica</p>
+                 <p className="text-2xl font-black italic text-slate-900">{totalPositions} <span className="text-xs font-normal opacity-30">SLOTS</span></p>
                </div>
                <LayoutGrid size={24} className="text-slate-100" />
             </CardContent>
@@ -178,7 +248,7 @@ function LayoutContent() {
             <CardContent className="p-4 flex items-center justify-between">
                <div>
                  <p className="text-[10px] font-bold text-green-600 uppercase">Disponibles</p>
-                 <p className="text-2xl font-black italic text-slate-900">84</p>
+                 <p className="text-2xl font-black italic text-slate-900">{Math.round(totalPositions * 0.7)}</p>
                </div>
                <CheckCircle2 size={24} className="text-green-100" />
             </CardContent>
@@ -187,7 +257,7 @@ function LayoutContent() {
             <CardContent className="p-4 flex items-center justify-between">
                <div>
                  <p className="text-[10px] font-bold text-blue-600 uppercase">Ocupados</p>
-                 <p className="text-2xl font-black italic text-slate-900">36</p>
+                 <p className="text-2xl font-black italic text-slate-900">{Math.round(totalPositions * 0.3)}</p>
                </div>
                <Container size={24} className="text-blue-100" />
             </CardContent>
@@ -196,7 +266,7 @@ function LayoutContent() {
             <CardContent className="p-4 flex items-center justify-between">
                <div>
                  <p className="text-[10px] font-bold text-red-600 uppercase">Bloqueados</p>
-                 <p className="text-2xl font-black italic text-slate-900">2</p>
+                 <p className="text-2xl font-black italic text-slate-900">0</p>
                </div>
                <XCircle size={24} className="text-red-100" />
             </CardContent>
@@ -204,7 +274,6 @@ function LayoutContent() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-         {/* BARRA DE BÚSQUEDA Y LEYENDA */}
          <div className="lg:col-span-12">
             <Card className="border-none shadow-md overflow-hidden bg-white">
                <CardContent className="p-4 flex flex-col md:flex-row gap-6 items-center">
@@ -226,9 +295,8 @@ function LayoutContent() {
             </Card>
          </div>
 
-         {/* RACKS VIRTUALES */}
          <div className="lg:col-span-12 space-y-12">
-            {MOCK_RACKS.map(rackGroup => (
+            {displayRacks.map(rackGroup => (
               <div key={rackGroup.corridor} className="space-y-6">
                  <div className="flex items-center gap-4 px-2">
                     <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black text-xl shadow-xl italic tracking-tighter">
@@ -240,21 +308,18 @@ function LayoutContent() {
                     </div>
                  </div>
 
-                 {/* REPRESENTACIÓN DEL RACK */}
                  <div className="overflow-x-auto pb-6">
                     <div className="inline-flex flex-col min-w-full bg-slate-200/20 p-8 rounded-[3rem] border border-slate-100">
                        {rackGroup.levels.map(level => (
                          <div key={level} className="flex items-end">
-                            {/* Indicador de Nivel (Vertical) */}
                             <div className="w-16 h-32 flex items-center justify-center border-r-4 border-slate-300 pr-4">
                                <p className="text-[10px] font-black text-slate-400 uppercase -rotate-90 whitespace-nowrap">NIVEL {level}</p>
                             </div>
                             
-                            {/* Slots de este nivel */}
                             {rackGroup.positions.map(pos => {
                                const coord = `${prefix}-${rackGroup.corridor}-${pos}-${level}`;
                                const product = getProductAt(coord);
-                               const status = product ? 'occupied' : (pos === '05' && level === '01' ? 'blocked' : 'available');
+                               const status = product ? 'occupied' : 'available';
                                
                                return (
                                  <div key={pos} className="w-48">
@@ -267,12 +332,10 @@ function LayoutContent() {
                                );
                             })}
                             
-                            {/* Puntal final del rack */}
                             <div className="w-1 h-32 bg-orange-500"></div>
                          </div>
                        ))}
                        
-                       {/* Base de Suelo y Etiquetas de Posición */}
                        <div className="flex">
                           <div className="w-16"></div>
                           {rackGroup.positions.map(pos => (
@@ -288,7 +351,53 @@ function LayoutContent() {
          </div>
       </div>
 
-      {/* PANEL LATERAL / INFO INFO */}
+      {/* DIALOG DE CONFIGURACIÓN */}
+      <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
+        <DialogContent className="rounded-[2.5rem] max-w-lg">
+           <DialogHeader>
+              <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Parametrización de Racks</DialogTitle>
+              <DialogDescription className="text-[10px] uppercase font-bold text-slate-400">Defina la distribución física para la sede {activeHub?.name}</DialogDescription>
+           </DialogHeader>
+           <div className="space-y-6 py-6">
+              <div className="space-y-2">
+                 <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Corredores / Pasillos (Separe por coma)</Label>
+                 <Input className="bg-slate-50 border-none rounded-xl h-11 font-black" value={configForm.corridors} onChange={e => setConfigForm({...configForm, corridors: e.target.value})} placeholder="Ej: A,B,C,D" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                 <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Cuerpos por Pasillo</Label>
+                    <Input type="number" className="bg-slate-50 border-none rounded-xl h-11 font-black" value={configForm.positions} onChange={e => setConfigForm({...configForm, positions: parseInt(e.target.value) || 0})} />
+                 </div>
+                 <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Niveles (Altura)</Label>
+                    <Input type="number" className="bg-slate-50 border-none rounded-xl h-11 font-black" value={configForm.levels} onChange={e => setConfigForm({...configForm, levels: parseInt(e.target.value) || 0})} />
+                 </div>
+              </div>
+
+              <div className="space-y-2">
+                 <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Prefijo de Coordenada</Label>
+                 <Input className="bg-slate-50 border-none rounded-xl h-11 font-bold" value={configForm.prefix} onChange={e => setConfigForm({...configForm, prefix: e.target.value.toUpperCase()})} placeholder="Ej: TIGRE" />
+              </div>
+
+              <div className="p-5 bg-blue-50 border border-blue-100 rounded-3xl flex items-start gap-4">
+                 <Zap className="text-blue-600 shrink-0 mt-1" />
+                 <div className="space-y-1">
+                    <p className="text-xs font-black text-blue-800 uppercase italic">Aprovisionamiento Automático</p>
+                    <p className="text-[10px] text-blue-600 leading-relaxed font-medium">Al guardar, se habilitarán {totalPositions} ubicaciones únicas para asignar mercadería. Los operarios verán esta estructura en su terminal de picking.</p>
+                 </div>
+              </div>
+           </div>
+           <DialogFooter>
+              <Button variant="ghost" onClick={() => setIsConfigOpen(false)} className="font-bold text-slate-400 uppercase text-xs">Cancelar</Button>
+              <Button onClick={handleSaveConfig} disabled={isSaving} className="bg-blue-600 h-12 px-8 rounded-xl font-black uppercase shadow-lg shadow-blue-100">
+                 {isSaving ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" size={16} />}
+                 GUARDAR ESTRUCTURA
+              </Button>
+           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="fixed bottom-8 right-8 z-[100] animate-in slide-in-from-right-8 duration-500">
          <Card className="bg-slate-900 text-white border-none shadow-2xl rounded-[2rem] w-64 overflow-hidden">
             <CardHeader className="bg-blue-600 py-3">
