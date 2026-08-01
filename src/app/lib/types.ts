@@ -29,43 +29,88 @@ export interface AppUser {
   createdAt: any;
 }
 
+export interface ProductWarehouse {
+  hubId: string;
+  hubName: string;
+  location?: string; // Ej: Pasillo A, Estante 4
+  stockQuantity: number;
+  minStock: number;
+  maxStock: number;
+}
+
 export interface Product {
   id: string;
   sku: string;
+  gtin?: string; // EAN-13
   name: string;
+  shortName?: string;
   brand?: string;
+  model?: string;
+  manufacturer?: string;
   description: string;
   category: string;
+  subCategory?: string;
+  productLine?: string;
+  family?: string;
+  afipRubro?: string;
   
   // Logistics
   unitWeightKg: number;
-  unitVolumeM3: number;
   dimensions?: { l: number; w: number; h: number };
-  unitType: 'unit' | 'kg' | 'liter';
+  unitVolumeM3: number;
+  unitType: 'unit' | 'kg' | 'liter' | 'meter' | 'box' | 'bag';
+  conversionFactor?: number; // Ej: 1 caja = 12 unidades
   
   // Packaging
   packagingType: 'box' | 'bag' | 'drum' | 'pallet' | 'loose' | 'container';
   unitsPerBox?: number;
+  cajasPerPallet?: number;
   unitsPerPallet?: number;
   
-  // Inventory
-  stockQuantity: number;
+  // Inventory Policy
+  stockQuantity: number; // Total consolidado
   minStockAlert?: number;
+  managesStock: boolean;
+  allowNegativeStock: boolean;
+  isLotTracked: boolean;
+  isSerialTracked: boolean;
+  expiryControl: boolean;
   
+  // Stock Levels
+  reorderPoint?: number;
+  safetyStock?: number;
+  leadTimeDays?: number;
+  economicOrderQty?: number;
+  
+  // Multi-Warehouse
+  warehouses: ProductWarehouse[];
+  
+  // Purchasing
+  mainSupplierId?: string;
+  altSupplierId?: string;
+  supplierCode?: string;
+  lastCost?: number;
+  avgCost?: number;
+  currency?: string;
+  
+  // Sales
+  listPrice?: number;
+  wholesalePrice?: number;
+  distributorPrice?: number;
+  retailPrice?: number;
+  ivaRate: 0 | 10.5 | 21 | 27;
+
   // Compliance / Argentina
   ncmCode?: string; // Nomenclatura Común Mercosur
-  gtin?: string;
   origin: 'nacional' | 'importado';
   
   // Regulatory
   dangerLevel: 'none' | 'low' | 'medium' | 'high';
-  onuNumber?: string; // N° ONU for dangerous goods
+  onuNumber?: string;
   requiresReefer: boolean;
   tempRange?: { min: number; max: number };
-  senasaHabilitation?: string;
-  anmatHabilitation?: string;
   
-  status: 'active' | 'discontinued';
+  status: 'active' | 'inactive' | 'suspended';
   photoUrl?: string;
   createdAt: any;
   updatedAt: any;
