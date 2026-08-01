@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { 
   Building2, MapPin, Plus, Search, 
   MoreVertical, Trash2, Globe, Loader2, Map as MapIcon, Crosshair, Edit2, Save, Warehouse,
-  AlertTriangle, Clock, LayoutGrid, CheckCircle2, PackageSearch
+  AlertTriangle, Clock, LayoutGrid, CheckCircle2, PackageSearch, Container
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -33,7 +33,6 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 const COUNTRIES: Country[] = ["Argentina", "Chile", "Paraguay", "Bolivia", "Uruguay", "Brasil"];
-const COLORS = ['#2563eb', '#f1f5f9'];
 
 const INITIAL_FORM_DATA: Partial<Hub> = {
   name: "",
@@ -152,11 +151,10 @@ export default function SedesPage() {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
           {filteredHubs.map(hub => {
-            // CÁLCULO DE INFORMACIÓN REAL
             const config = hub.settings?.layoutConfig;
             
             // 1. Capacidad Técnica (Slots de Rack)
-            const totalCapacity = config ? (config.corridors?.length || 1) * (config.positions || 1) * (config.levels || 1) : 100;
+            const totalCapacity = config ? (config.corridors?.length || 1) * (config.positions || 1) * (config.levels || 1) : 32;
             
             // 2. Stock Actual en esta sede
             const currentStock = products?.reduce((acc, p) => {
@@ -170,7 +168,7 @@ export default function SedesPage() {
                return wh && wh.stockQuantity <= wh.minStock;
             }).length || 0;
 
-            // 4. Vencimientos Próximos (Lógica basada en expiryControl activo)
+            // 4. Vencimientos Próximos
             const expiryCount = products?.filter(p => {
                const wh = p.warehouses?.find(w => w.hubId === hub.id);
                return wh && wh.stockQuantity > 0 && p.expiryControl;
@@ -233,13 +231,12 @@ export default function SedesPage() {
                                   <Cell fill={occupiedPercent > 90 ? "#ef4444" : "#2563eb"} />
                                   <Cell fill="#f1f5f9" />
                                </Pie>
-                               <Tooltip content={() => null} />
                             </PieChart>
                          </ResponsiveContainer>
                       </div>
                    </div>
 
-                   {/* MÉTRICAS REALES */}
+                   {/* MÉTRICAS DE ALERTAS */}
                    <div className="grid grid-cols-2 gap-4">
                       <div className={cn("p-4 rounded-2xl border transition-all", expiryCount > 0 ? "bg-orange-50 border-orange-100" : "bg-slate-50 border-slate-100")}>
                          <div className="flex justify-between items-center mb-1">
@@ -254,6 +251,28 @@ export default function SedesPage() {
                             <span className={cn("text-lg font-black italic", criticalStockCount > 0 ? "text-red-700" : "text-slate-400")}>{criticalStockCount}</span>
                          </div>
                          <p className="text-[8px] font-black uppercase text-slate-500 tracking-tighter">Stock Crítico</p>
+                      </div>
+                   </div>
+
+                   {/* DESGLOSE DE SLOTS - NUEVO */}
+                   <div className="p-6 bg-slate-50 rounded-3xl space-y-4 border border-slate-100">
+                      <div className="flex items-center justify-between text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-200 pb-2">
+                         <span>Métricas de Espacio</span>
+                         <LayoutGrid size={12} />
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                         <div>
+                            <p className="text-[7px] font-bold text-slate-400 uppercase mb-0.5">Total</p>
+                            <p className="text-base font-black text-slate-900 italic leading-none">{totalCapacity}</p>
+                         </div>
+                         <div className="border-x border-slate-200">
+                            <p className="text-[7px] font-bold text-blue-500 uppercase mb-0.5">Uso</p>
+                            <p className="text-base font-black text-blue-600 italic leading-none">{currentStock}</p>
+                         </div>
+                         <div>
+                            <p className="text-[7px] font-bold text-green-500 uppercase mb-0.5">Libre</p>
+                            <p className="text-base font-black text-green-600 italic leading-none">{Math.max(0, totalCapacity - currentStock)}</p>
+                         </div>
                       </div>
                    </div>
 
