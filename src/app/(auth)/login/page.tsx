@@ -32,9 +32,11 @@ export default function LoginPage() {
     setIsLoading(true);
     setErrorMessage(null);
     
+    const cleanEmail = email.toLowerCase().trim();
+    
     try {
       // Intento de inicio de sesión real contra Firebase Auth
-      await signInWithEmailAndPassword(auth, email, password);
+      await signInWithEmailAndPassword(auth, cleanEmail, password);
       
       toast({
         title: "Acceso Concedido",
@@ -47,7 +49,7 @@ export default function LoginPage() {
       let message = "Error de conexión. Verifique su internet.";
       
       if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-        message = "El email o la contraseña son incorrectos. Asegúrese de haber creado este usuario (leozman15@gmail.com) en la Consola de Firebase -> Authentication.";
+        message = "El email o la contraseña son incorrectos. Asegúrese de que su cuenta haya sido habilitada.";
       } else if (error.code === 'auth/invalid-email') {
         message = "El formato del correo electrónico no es válido.";
       } else if (error.code === 'auth/too-many-requests') {
@@ -107,7 +109,7 @@ export default function LoginPage() {
                 <Input 
                   id="email" 
                   type="email" 
-                  placeholder="leozman15@gmail.com" 
+                  placeholder="usuario@empresa.com" 
                   className="h-12 rounded-xl bg-slate-50 border-none font-bold"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -151,7 +153,7 @@ export default function LoginPage() {
                 Conexión segura y encriptada
              </div>
              <p className="text-[9px] text-slate-300 italic">
-               Si no puede ingresar, verifique que el usuario esté habilitado en la consola de administración.
+               Si no puede ingresar, verifique que su cuenta haya sido vinculada a una organización por el administrador.
              </p>
           </CardFooter>
         </Card>

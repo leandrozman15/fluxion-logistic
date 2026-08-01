@@ -138,21 +138,22 @@ export default function SuperAdminTenantsPage() {
     // Instancia secundaria para crear usuario sin cerrar sesión del admin actual
     const secondaryApp = initializeApp(firebaseConfig, "secondary-auth");
     const secondaryAuth = getAuth(secondaryApp);
+    const cleanEmail = adminEmail.toLowerCase().trim();
 
     try {
       // 1. Crear usuario en Firebase Authentication
-      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, adminEmail, adminPass);
+      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, cleanEmail, adminPass);
       const uid = userCredential.user.uid;
 
       const batch = writeBatch(db);
       
-      // 2. Registro en la colección global de usuarios (Mapeo por Email para Reglas)
-      const globalUserRef = doc(db, "users", adminEmail);
+      // 2. Registro en la colección global de usuarios (Mapeo por Email para Reglas y useTenant)
+      const globalUserRef = doc(db, "users", cleanEmail);
       batch.set(globalUserRef, {
         uid,
-        email: adminEmail,
+        email: cleanEmail,
         tenantId: selectedTenant.id,
-        role: "manager",
+        role: "manager", // Siempre gerente para el primer usuario
         status: "active",
         createdAt: serverTimestamp()
       });
@@ -161,7 +162,7 @@ export default function SuperAdminTenantsPage() {
       const tenantUserRef = doc(db, "tenants", selectedTenant.id, "users", uid);
       batch.set(tenantUserRef, {
         uid,
-        email: adminEmail,
+        email: cleanEmail,
         tenantId: selectedTenant.id,
         displayName: "Gerente Inicial",
         role: "manager",
@@ -172,8 +173,8 @@ export default function SuperAdminTenantsPage() {
       await batch.commit();
 
       toast({ 
-        title: "Usuario Creado Exitosamente", 
-        description: `El acceso para ${adminEmail} ya está activo en la plataforma.` 
+        title: "Gerente Creado Exitosamente", 
+        description: `El acceso para ${cleanEmail} ya está activo con rol de GERENTE.` 
       });
       setIsAdminDialogOpen(false);
       setAdminEmail("");
