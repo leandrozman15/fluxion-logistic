@@ -35,9 +35,13 @@ export function initializeFirebase(): {
   }
 
   try {
+    // Initialize App Singleton
     if (!appInstance) {
       appInstance = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-      
+    }
+
+    // Initialize Firestore Singleton with Persistence
+    if (!firestoreInstance && appInstance) {
       // Modern way to enable persistent cache in Firestore
       // Allows the driver app to open and work without internet
       firestoreInstance = initializeFirestore(appInstance, {
@@ -45,18 +49,26 @@ export function initializeFirebase(): {
           tabManager: persistentMultipleTabManager()
         })
       });
-      
+    }
+
+    // Initialize Auth Singleton
+    if (!authInstance && appInstance) {
       authInstance = getAuth(appInstance);
     }
 
     return { 
-      firebaseApp: appInstance, 
-      firestore: firestoreInstance, 
-      auth: authInstance 
+      firebaseApp: appInstance || null, 
+      firestore: firestoreInstance || null, 
+      auth: authInstance || null 
     };
   } catch (error) {
     console.error("Error al inicializar Firebase:", error);
-    return { firebaseApp: null, firestore: null, auth: null };
+    // Return existing instances if any error occurs during re-initialization attempt
+    return { 
+      firebaseApp: appInstance || null, 
+      firestore: firestoreInstance || null, 
+      auth: authInstance || null 
+    };
   }
 }
 
