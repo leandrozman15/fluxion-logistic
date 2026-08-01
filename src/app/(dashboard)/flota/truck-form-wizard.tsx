@@ -15,7 +15,7 @@ import { Progress } from "@/components/ui/progress";
 import { 
   Truck, ArrowLeft, Save, Loader2, 
   Scale, CheckCircle2, ChevronRight, ChevronLeft, Info, Camera, DollarSign, Zap, Gauge, Fuel,
-  ShieldCheck, Wrench, RefreshCw, Smartphone
+  ShieldCheck, Wrench, RefreshCw, Smartphone, TrendingUp
 } from "lucide-react";
 import { Truck as TruckType, TruckCosts } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -56,7 +56,6 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     costs: INITIAL_COSTS
   });
 
-  // Funciones de navegación definidas al inicio para evitar ReferenceError durante el pre-render
   const handleNext = () => {
     if (step === 1) {
       if (!formData.plate) return toast({ variant: "destructive", title: "Falta Patente", description: "El dominio de la unidad es obligatorio." });
@@ -155,7 +154,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
            { id: 4, label: "Costos Fijos", icon: DollarSign },
            { id: 5, label: "Variables", icon: TrendingUp }
          ].map(s => (
-           <div key={s.id} className="flex flex-col items-center gap-1.5 flex-1 relative min-w-[100px]">
+           <div key={s.id} className={cn("flex flex-col items-center gap-1.5 flex-1 relative min-w-[100px]")}>
              <div className={cn(
                "w-10 h-10 rounded-full flex items-center justify-center border-2 z-10 transition-all", 
                step === s.id ? "bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100 scale-110" : 
