@@ -1,4 +1,3 @@
-
 'use client';
 
 import { 
@@ -54,6 +53,23 @@ import { cn } from '@/lib/utils';
 
 const SUPER_ADMIN_EMAIL = "leozman15@gmail.com";
 
+const ADMIN_MENU_ITEMS = [
+  { id: 'dashboard', title: "Monitor Operativo", icon: LayoutDashboard, href: "/dashboard" },
+  { id: 'mercadolibre', title: "Mercado Libre", icon: ShoppingBag, href: "/mercadolibre" },
+  { id: 'despacho', title: "Despacho Inteligente", icon: Zap, href: "/despacho" },
+  { id: 'flota', title: "Flota de Camiones", icon: Truck, href: "/flota" },
+  { id: 'choferes', title: "Gestión Choferes", icon: Users, href: "/choferes" },
+  { id: 'clientes', title: "Cartera Clientes", icon: Briefcase, href: "/clientes" },
+  { id: 'productos', title: "Catálogo Productos", icon: Box, href: "/productos" },
+  { id: 'stock', title: "Stock Almacén", icon: Layers, href: "/stock" },
+  { id: 'stock-layout', title: "Layout de Racks", icon: MapIcon, href: "/stock/layout" },
+  { id: 'cargas', title: "Cargas y Fletes", icon: Package, href: "/cargas" },
+  { id: 'remitos', title: "Buzón de Remitos", icon: Files, href: "/remitos" },
+  { id: 'mantenimiento', title: "Mantenimiento", icon: Wrench, href: "/mantenimiento" },
+  { id: 'sedes', title: "Depósitos y Sedes", icon: Building2, href: "/sedes" },
+  { id: 'analytics', title: "Análisis de Datos", icon: BarChart3, href: "/analytics" },
+];
+
 function DashboardSidebar() {
   const { setOpenMobile, isMobile } = useSidebar();
   const auth = useAuth();
@@ -63,6 +79,11 @@ function DashboardSidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const { toast } = useToast();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
 
@@ -73,29 +94,12 @@ function DashboardSidebar() {
 
   const { data: tenant } = useDoc<Tenant>(tenantRef);
 
-  const adminMenu = [
-    { id: 'dashboard', title: "Monitor Operativo", icon: LayoutDashboard, href: "/dashboard" },
-    { id: 'mercadolibre', title: "Mercado Libre", icon: ShoppingBag, href: "/mercadolibre" },
-    { id: 'despacho', title: "Despacho Inteligente", icon: Zap, href: "/despacho" },
-    { id: 'flota', title: "Flota de Camiones", icon: Truck, href: "/flota" },
-    { id: 'choferes', title: "Gestión Choferes", icon: Users, href: "/choferes" },
-    { id: 'clientes', title: "Cartera Clientes", icon: Briefcase, href: "/clientes" },
-    { id: 'productos', title: "Catálogo Productos", icon: Box, href: "/productos" },
-    { id: 'stock', title: "Stock Almacén", icon: Layers, href: "/stock" },
-    { id: 'stock-layout', title: "Layout de Racks", icon: MapIcon, href: "/stock/layout" },
-    { id: 'cargas', title: "Cargas y Fletes", icon: Package, href: "/cargas" },
-    { id: 'remitos', title: "Buzón de Remitos", icon: Files, href: "/remitos" },
-    { id: 'mantenimiento', title: "Mantenimiento", icon: Wrench, href: "/mantenimiento" },
-    { id: 'sedes', title: "Depósitos y Sedes", icon: Building2, href: "/sedes" },
-    { id: 'analytics', title: "Análisis de Datos", icon: BarChart3, href: "/analytics" },
-  ];
-
   const filteredMenu = useMemo(() => {
-    if (!tenant) return adminMenu;
+    if (!tenant) return ADMIN_MENU_ITEMS;
     const enabled = tenant.settings?.enabledModules;
-    if (!enabled || enabled.length === 0) return adminMenu;
-    return adminMenu.filter(item => enabled.includes(item.id));
-  }, [tenant, adminMenu]);
+    if (!enabled || enabled.length === 0) return ADMIN_MENU_ITEMS;
+    return ADMIN_MENU_ITEMS.filter(item => enabled.includes(item.id));
+  }, [tenant]);
 
   const handleLinkClick = () => {
     if (isMobile) setOpenMobile(false);
@@ -115,6 +119,8 @@ function DashboardSidebar() {
 
   const logoUrl = tenant?.settings?.logoUrl || "/icono.png";
   const orgName = tenant?.name || "LogísticaAr";
+
+  if (!mounted) return null;
 
   return (
     <Sidebar variant="sidebar" collapsible="icon" className="transition-all duration-200">
@@ -155,7 +161,7 @@ function DashboardSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {filteredMenu.map((item) => (
-                <SidebarMenuItem key={item.title}>
+                <SidebarMenuItem key={item.id}>
                   <SidebarMenuButton 
                     asChild 
                     tooltip={item.title} 
