@@ -5,7 +5,10 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, serverTimestamp, doc, updateDoc, setDoc } from "firebase/firestore";
+import { collection, serverTimestamp, doc, updateDoc, setDoc, writeBatch } from "firebase/firestore";
+import { initializeApp, deleteApp } from "firebase/app";
+import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
+import { firebaseConfig } from "@/firebase/config";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -188,28 +191,68 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
     }
 
     setIsSubmitting(true);
+    
+    // Instancia secundaria para Auth para no cerrar sesión del administrador actual
+    const appName = `invite-auth-${Date.now()}`;
+    const secondaryApp = initializeApp(firebaseConfig, appName);
+    const secondaryAuth = getAuth(secondaryApp);
+
     try {
-      if (driverId) {
-        await updateDoc(doc(db, "tenants", tenantId, "drivers", driverId), {
-          ...formData,
-          updatedAt: serverTimestamp()
+      let uid = driverId;
+
+      const batch = writeBatch(db);
+
+      if (!driverId) {
+        // 1. Crear usuario en Firebase Authentication real
+        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, formData.email!, formData.password || "LogisticaAr2026");
+        uid = userCredential.user.uid;
+
+        // 2. Registro en la colección global de usuarios (Mapeo por Email para Reglas)
+        const globalUserRef = doc(db, "users", formData.email!);
+        batch.set(globalUserRef, {
+          uid,
+          email: formData.email,
+          tenantId,
+          role: formData.role,
+          status: "active",
+          createdAt: serverTimestamp()
         });
-        toast({ title: "Perfil Actualizado", description: `${formData.firstName} ${formData.lastName} ha sido guardado.` });
-      } else {
-        const newRef = doc(collection(db, "tenants", tenantId, "drivers"));
-        await setDoc(newRef, {
-          ...formData,
-          id: newRef.id,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
-        toast({ title: "Alta Exitosa", description: "El personal ha sido habilitado." });
       }
+
+      // 3. Registro en la subcolección interna de la empresa
+      const tenantUserRef = doc(db, "tenants", tenantId, "drivers", uid!);
+      const finalData = {
+        ...formData,
+        id: uid,
+        updatedAt: serverTimestamp(),
+        ...(driverId ? {} : { createdAt: serverTimestamp() })
+      };
+      
+      // Limpiamos el password antes de guardar en Firestore por seguridad
+      delete finalData.password;
+
+      if (driverId) {
+        batch.update(tenantUserRef, finalData);
+      } else {
+        batch.set(tenantUserRef, finalData);
+      }
+
+      await batch.commit();
+      
+      toast({ 
+        title: driverId ? "Perfil Actualizado" : "Alta Exitosa", 
+        description: `${formData.firstName} ${formData.lastName} ha sido registrado y su acceso habilitado.` 
+      });
+      
       router.push('/choferes');
     } catch (error: any) {
       console.error(error);
-      toast({ variant: "destructive", title: "Error al guardar", description: error.message || "Verifique los datos e intente nuevamente." });
+      let msg = error.message || "Verifique los datos e intente nuevamente.";
+      if (error.code === 'auth/email-already-in-use') msg = "El correo ya está registrado en el sistema.";
+      toast({ variant: "destructive", title: "Error al guardar", description: msg });
     } finally {
+      // Limpiar instancia secundaria
+      await deleteApp(secondaryApp);
       setIsSubmitting(false);
     }
   };
