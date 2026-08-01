@@ -1,10 +1,11 @@
+
 'use client';
 
 import { useMemo, useState } from "react";
 import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { collection, query, orderBy, doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { initializeApp, getApps, deleteApp } from "firebase/app";
+import { initializeApp, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import { firebaseConfig } from "@/firebase/config";
 import { Button } from "@/components/ui/button";
@@ -52,22 +53,22 @@ export default function UsersSettingsPage() {
     const secondaryAuth = getAuth(secondaryApp);
 
     try {
-      // 1. Crear usuario en Auth
-      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, newEmail, newPass);
+      // 1. Crear usuario en Firebase Authentication real
+      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, newEmail.toLowerCase().trim(), newPass);
       const uid = userCredential.user.uid;
 
       // 2. Registro global (Mapping para Reglas de Seguridad)
-      const globalUserRef = doc(db, "users", newEmail);
+      const globalUserRef = doc(db, "users", newEmail.toLowerCase().trim());
       const globalData = {
         uid,
-        email: newEmail,
+        email: newEmail.toLowerCase().trim(),
         tenantId,
         role: newRole,
         status: "active",
         createdAt: serverTimestamp()
       };
 
-      setDoc(globalUserRef, globalData).catch(async (err) => {
+      await setDoc(globalUserRef, globalData).catch(async (err) => {
         const pError = new FirestorePermissionError({
           path: globalUserRef.path,
           operation: 'create',
@@ -81,14 +82,14 @@ export default function UsersSettingsPage() {
       const tenantUserData = {
         uid,
         tenantId,
-        email: newEmail,
+        email: newEmail.toLowerCase().trim(),
         displayName: newEmail.split('@')[0],
         role: newRole,
         createdAt: serverTimestamp(),
         status: "active" as const
       };
 
-      setDoc(tenantUserRef, tenantUserData).catch(async (err) => {
+      await setDoc(tenantUserRef, tenantUserData).catch(async (err) => {
         const pError = new FirestorePermissionError({
           path: tenantUserRef.path,
           operation: 'create',
@@ -97,15 +98,22 @@ export default function UsersSettingsPage() {
         errorEmitter.emit('permission-error', pError);
       });
 
-      toast({ title: "Colaborador Habilitado", description: `La cuenta para ${newEmail} ha sido creada con éxito.` });
+      toast({ title: "Colaborador Habilitado", description: `La cuenta para ${newEmail} ha sido creada en Auth con éxito.` });
       setIsInviteOpen(false);
       setNewEmail("");
+      setNewPass("LogisticaAr2026");
     } catch (error: any) {
       console.error("Auth Error:", error);
-      toast({ variant: "destructive", title: "Error al habilitar", description: error.message });
+      let msg = error.message || "Error desconocido.";
+      if (error.code === 'auth/email-already-in-use') msg = "El correo ya está registrado en Firebase Auth.";
+      toast({ variant: "destructive", title: "Error al habilitar", description: msg });
     } finally {
       // Limpiar la app secundaria
-      await deleteApp(secondaryApp);
+      try {
+        await deleteApp(secondaryApp);
+      } catch (e) {
+        console.error("Error cleaning app:", e);
+      }
       setIsSubmitting(false);
     }
   };
@@ -169,7 +177,7 @@ export default function UsersSettingsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-[10px) font-black uppercase text-slate-400">Definir Contraseña</Label>
+                  <Label className="text-[10px] font-black uppercase text-slate-400">Definir Contraseña</Label>
                   <div className="relative">
                     <Key className="absolute left-3 top-3.5 h-5 w-5 text-slate-300" />
                     <Input 

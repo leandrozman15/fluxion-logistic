@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useFirestore, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { collection, serverTimestamp, doc, updateDoc, setDoc, writeBatch } from "firebase/firestore";
-import { initializeApp, deleteApp } from "firebase/app";
+import { initializeApp, deleteApp, getApps, getApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import { firebaseConfig } from "@/firebase/config";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -172,23 +172,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   };
 
   const handleSubmit = async () => {
-    if (!db || !tenantId) return;
-
-    // Validación final
-    const requiredLabels: Record<string, string> = {
-      firstName: "Nombres",
-      lastName: "Apellidos",
-      dni: "DNI",
-      email: "Correo Electrónico",
-      role: "Rol Operativo"
-    };
-
-    for (const key in requiredLabels) {
-      if (!formData[key as keyof typeof formData]) {
-        toast({ variant: "destructive", title: "Datos Incompletos", description: `Falta completar: ${requiredLabels[key]}` });
-        return;
-      }
-    }
+    if (!db || !tenantId || !formData.email) return;
 
     setIsSubmitting(true);
     
@@ -199,19 +183,20 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
 
     try {
       let uid = driverId;
-
       const batch = writeBatch(db);
 
+      // 1. Si es un alta nueva, crear primero en Firebase Auth
       if (!driverId) {
-        // 1. Crear usuario en Firebase Authentication real
-        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, formData.email!, formData.password || "LogisticaAr2026");
+        if (!formData.password) throw new Error("Debe definir una contraseña para el alta.");
+        
+        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, formData.email, formData.password);
         uid = userCredential.user.uid;
 
         // 2. Registro en la colección global de usuarios (Mapeo por Email para Reglas)
-        const globalUserRef = doc(db, "users", formData.email!);
+        const globalUserRef = doc(db, "users", formData.email.toLowerCase().trim());
         batch.set(globalUserRef, {
           uid,
-          email: formData.email,
+          email: formData.email.toLowerCase().trim(),
           tenantId,
           role: formData.role,
           status: "active",
@@ -224,6 +209,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
       const finalData = {
         ...formData,
         id: uid,
+        email: formData.email.toLowerCase().trim(),
         updatedAt: serverTimestamp(),
         ...(driverId ? {} : { createdAt: serverTimestamp() })
       };
@@ -241,18 +227,22 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
       
       toast({ 
         title: driverId ? "Perfil Actualizado" : "Alta Exitosa", 
-        description: `${formData.firstName} ${formData.lastName} ha sido registrado y su acceso habilitado.` 
+        description: `${formData.firstName} ${formData.lastName} ha sido registrado y su acceso habilitado en Authentication.` 
       });
       
       router.push('/choferes');
     } catch (error: any) {
-      console.error(error);
+      console.error("Error en alta completa:", error);
       let msg = error.message || "Verifique los datos e intente nuevamente.";
-      if (error.code === 'auth/email-already-in-use') msg = "El correo ya está registrado en el sistema.";
-      toast({ variant: "destructive", title: "Error al guardar", description: msg });
+      if (error.code === 'auth/email-already-in-use') msg = "El correo ya está registrado en Firebase Auth.";
+      toast({ variant: "destructive", title: "Error al dar de alta", description: msg });
     } finally {
       // Limpiar instancia secundaria
-      await deleteApp(secondaryApp);
+      try {
+        await deleteApp(secondaryApp);
+      } catch (e) {
+        console.error("Error al limpiar app secundaria:", e);
+      }
       setIsSubmitting(false);
     }
   };
@@ -439,20 +429,22 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                     <Label>Email de Login (Corporativo o Personal)</Label>
                     <Input type="email" placeholder="usuario@logistica-ar.com" value={formData.email ?? ''} onChange={e => setFormData({...formData, email: e.target.value})} />
                   </div>
-                  <div className="space-y-2">
-                    <Label>Contraseña Provisoria</Label>
-                    <div className="flex gap-2">
-                      <Input placeholder="••••••••" value={formData.password ?? ''} onChange={e => setFormData({...formData, password: e.target.value})} />
-                      <Button variant="secondary" size="icon" onClick={generateProvisionalPassword} title="Generar Contraseña">
-                        <Sparkles size={16} className="text-blue-600" />
-                      </Button>
+                  {!driverId && (
+                    <div className="space-y-2">
+                      <Label>Contraseña Provisoria</Label>
+                      <div className="flex gap-2">
+                        <Input placeholder="••••••••" value={formData.password ?? ''} onChange={e => setFormData({...formData, password: e.target.value})} />
+                        <Button variant="secondary" size="icon" onClick={generateProvisionalPassword} title="Generar Contraseña">
+                          <Sparkles size={16} className="text-blue-600" />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
                 <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-3">
                    <Info size={18} className="text-blue-600 shrink-0 mt-0.5" />
                    <p className="text-[10px] text-blue-700 leading-relaxed font-medium">
-                     El sistema registrará estas credenciales vinculadas al rol seleccionado. Informe al usuario su email y contraseña para que pueda ingresar.
+                     El sistema registrará estas credenciales en Authentication. Informe al usuario su email y contraseña para que pueda ingresar.
                    </p>
                 </div>
               </CardContent>
@@ -584,3 +576,4 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
     </div>
   );
 }
+
