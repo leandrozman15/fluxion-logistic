@@ -45,6 +45,7 @@ import {
   Maximize2
 } from "lucide-react";
 import { Hub, Product } from "@/app/lib/types";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 /**
@@ -211,6 +212,13 @@ function LayoutContent() {
   };
 
   const prefix = configForm.prefix || activeHub?.name.substring(0, 5).toUpperCase() || "TIGRE";
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
 
   return (
     <div className="space-y-6 pb-20">
@@ -397,25 +405,6 @@ function LayoutContent() {
            </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <div className="fixed bottom-8 right-8 z-[100] animate-in slide-in-from-right-8 duration-500">
-         <Card className="bg-slate-900 text-white border-none shadow-2xl rounded-[2rem] w-64 overflow-hidden">
-            <CardHeader className="bg-blue-600 py-3">
-               <CardTitle className="text-[10px] font-black uppercase flex items-center gap-2">
-                 <ScanBarcode size={14} /> Auditoría Rápida
-               </CardTitle>
-            </CardHeader>
-            <CardContent className="p-5 space-y-4">
-               <div className="space-y-1">
-                  <p className="text-[8px] font-bold text-white/40 uppercase">Siguiente Inventario Ciclo</p>
-                  <p className="text-xs font-black italic">Sector A - Pasillo 02</p>
-               </div>
-               <Button className="w-full h-10 bg-white/10 hover:bg-white/20 text-white rounded-xl text-[9px] font-black uppercase tracking-widest">
-                  Comenzar Conteo
-               </Button>
-            </CardContent>
-         </Card>
-      </div>
     </div>
   );
 }
