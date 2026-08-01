@@ -43,7 +43,8 @@ import {
   Info,
   ExternalLink,
   UserCheck,
-  Key
+  Key,
+  Edit2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tenant, AppUser } from "@/app/lib/types";
@@ -344,6 +345,12 @@ export default function SuperAdminTenantsPage() {
                         <DropdownMenuContent align="end" className="w-64 p-2 rounded-2xl shadow-2xl border-none">
                           <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Acciones de Tenant</DropdownMenuLabel>
                           
+                          <DropdownMenuItem asChild className="font-bold h-11 rounded-xl cursor-pointer">
+                            <Link href={`/admin/tenants/${tenant.id}/editar`}>
+                              <Edit2 size={16} className="mr-3 text-blue-600" /> Editar Información
+                            </Link>
+                          </DropdownMenuItem>
+
                           <DropdownMenuItem onSelect={(e) => { e.preventDefault(); openAdminModal(tenant); }} className="font-bold h-11 rounded-xl cursor-pointer">
                             <UserCheck size={16} className="mr-3 text-blue-600" /> Crear Primer Usuario (Auth)
                           </DropdownMenuItem>
