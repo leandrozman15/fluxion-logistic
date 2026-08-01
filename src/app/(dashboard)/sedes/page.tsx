@@ -17,7 +17,7 @@ import {
   Building2, MapPin, Plus, Phone, Search, 
   MoreVertical, Trash2, Globe, Loader2, Map as MapIcon, Crosshair, Star, Edit2, Save, X, Anchor, Warehouse,
   TrendingUp, AlertTriangle, Clock, Layers, LayoutGrid, BarChart3, PieChart as PieChartIcon, ArrowRight,
-  PackageSearch
+  PackageSearch, CheckCircle2
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -252,7 +252,7 @@ export default function SedesPage() {
         </div>
       )}
 
-      {/* DIALOG DE ALTA/EDICIÓN (MANTENIDO) */}
+      {/* DIALOG DE ALTA/EDICIÓN */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto rounded-[2.5rem]">
           <DialogHeader>
