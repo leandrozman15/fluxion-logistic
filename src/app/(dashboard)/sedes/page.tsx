@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
   Building2, MapPin, Plus, Search, 
-  MoreVertical, Trash2, Globe, Loader2, Map as MapIcon, Crosshair, Edit2, Save, Warehouse,
+  MoreVertical, Trash2, Globe, Loader2, Crosshair, Edit2, Save, Warehouse,
   AlertTriangle, Clock, LayoutGrid, CheckCircle2, PackageSearch, Container
 } from "lucide-react";
 import { 
@@ -26,7 +26,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { Hub, HubType, Country, Product } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
@@ -203,7 +203,6 @@ export default function SedesPage() {
                    </div>
                 </CardHeader>
                 <CardContent className="p-8 space-y-8">
-                   {/* CAPACIDAD Y GRÁFICO REAL */}
                    <div className="flex items-center justify-between gap-6">
                       <div className="flex-1 space-y-4">
                          <div className="space-y-1">
@@ -236,7 +235,6 @@ export default function SedesPage() {
                       </div>
                    </div>
 
-                   {/* MÉTRICAS DE ALERTAS */}
                    <div className="grid grid-cols-2 gap-4">
                       <div className={cn("p-4 rounded-2xl border transition-all", expiryCount > 0 ? "bg-orange-50 border-orange-100" : "bg-slate-50 border-slate-100")}>
                          <div className="flex justify-between items-center mb-1">
@@ -254,7 +252,6 @@ export default function SedesPage() {
                       </div>
                    </div>
 
-                   {/* DESGLOSE DE SLOTS - NUEVO */}
                    <div className="p-6 bg-slate-50 rounded-3xl space-y-4 border border-slate-100">
                       <div className="flex items-center justify-between text-[10px] font-black uppercase text-slate-400 tracking-widest border-b border-slate-200 pb-2">
                          <span>Métricas de Espacio</span>
@@ -295,7 +292,6 @@ export default function SedesPage() {
         </div>
       )}
 
-      {/* DIALOG DE ALTA/EDICIÓN */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto rounded-[2.5rem]">
           <DialogHeader>

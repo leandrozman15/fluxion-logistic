@@ -13,15 +13,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import Barcode from "react-barcode";
 import { 
-  Box, ArrowLeft, ArrowRight, Save, Loader2, 
-  Scale, Layers, ShieldCheck, CheckCircle2, 
-  Info, Tag, Ship, ThermometerSnowflake, 
-  AlertTriangle, ScanBarcode, Camera, Image as ImageIcon, 
-  ChevronRight, ChevronLeft, Package, LayoutGrid, Building2, User, DollarSign, Activity, TrendingUp, Zap, ShoppingCart, Warehouse, MoveRight, X, BellRing, Calculator, Percent, Plus, Trash2
+  Box, ArrowLeft, Save, Loader2, 
+  Scale, Layers, CheckCircle2, 
+  Info, Camera, ChevronRight, ChevronLeft, Warehouse, Plus, Trash2, Zap, DollarSign
 } from "lucide-react";
 import { Product, Hub, ProductWarehouse, ProductVariant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -50,7 +46,8 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState<string | null>(null);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const variantFileInputRef = useRef<HTMLInputElement>(null);
   const [activeVariantUploadId, setActiveVariantUploadId] = useState<string | null>(null);
@@ -73,21 +70,19 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
   const maxSteps = steps.length;
 
   const [formData, setFormData] = useState<Partial<Product>>({
-    sku: "", gtin: "", name: "", shortName: "", brand: "", model: "", manufacturer: "", description: "", category: "Alimentos y Bebidas",
+    sku: "", gtin: "", name: "", brand: "", model: "", description: "", category: "Alimentos y Bebidas",
     unitWeightKg: 0, unitVolumeM3: 0, packagingType: 'pallet', status: 'active', photoUrl: "",
-    unitType: 'unit', conversionFactor: 1, unitsPerBox: 0, unitsPerPallet: 0, origin: 'nacional',
-    managesStock: true, allowNegativeStock: false, isLotTracked: false, isSerialTracked: false, expiryControl: false,
-    minStockAlert: 5, maxStockAlert: 100, stockQuantity: 0, ivaRate: 21, dangerLevel: 'none', requiresReefer: false,
-    hasVariants: false, variants: [],
-    warehouses: [], markup: 0, avgCost: 0, listPrice: 0, wholesaleDiscount: 10, retailPrice: 0, wholesalePrice: 0
+    unitType: 'unit', unitsPerBox: 0, unitsPerPallet: 0, origin: 'nacional',
+    managesStock: true, minStockAlert: 5, stockQuantity: 0, ivaRate: 21, dangerLevel: 'none', requiresReefer: false,
+    hasVariants: false, variants: [], warehouses: [], listPrice: 0, avgCost: 0, markup: 0
   });
 
   const handleBack = () => setStep(prev => Math.max(1, prev - 1));
   
   const handleNext = () => {
     if (step === 1) {
-      if (!formData.name) return toast({ variant: "destructive", title: "Campo Obligatorio", description: "Por favor, ingrese el nombre del producto." });
-      if (!formData.sku) return toast({ variant: "destructive", title: "Campo Obligatorio", description: "Debe definir un código SKU madre." });
+      if (!formData.name) return toast({ variant: "destructive", title: "Falta Nombre", description: "El nombre del producto es obligatorio." });
+      if (!formData.sku) return toast({ variant: "destructive", title: "Falta SKU", description: "Debe definir un código SKU madre." });
     }
     setStep(prev => Math.min(maxSteps, prev + 1));
   };
@@ -116,53 +111,33 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
     }
   }, [hubs]);
 
-  // CÁLCULO EN CASCADA DE PRECIOS
-  useEffect(() => {
-    const listPrice = formData.listPrice || 0;
-    const iva = formData.ivaRate || 0;
-    const discount = formData.wholesaleDiscount || 0;
-
-    const retail = listPrice * (1 + (iva / 100));
-    const wholesale = retail * (1 - (discount / 100));
-
-    if (retail !== formData.retailPrice || wholesale !== formData.wholesalePrice) {
-      setFormData(prev => ({ 
-        ...prev, 
-        retailPrice: Number(retail.toFixed(2)), 
-        wholesalePrice: Number(wholesale.toFixed(2)) 
-      }));
-    }
-  }, [formData.listPrice, formData.ivaRate, formData.wholesaleDiscount]);
-
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>, variantId?: string) => {
+  const onFileChange = (key: string, e: React.ChangeEvent<HTMLInputElement>, variantId?: string) => {
     const file = e.target.files?.[0];
-    if (file && tenantId) {
-      setIsProcessingPhoto(true);
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        try {
-          const base64 = event.target?.result as string;
-          const compressed = await compressImage(base64, 800, 800, 0.7);
-          
-          // SUBIDA REAL A STORAGE
-          const storagePath = `tenants/${tenantId}/products/${formData.sku || 'temp'}/${variantId ? `var_${variantId}` : 'main'}_${Date.now()}.jpg`;
-          const downloadUrl = await uploadBase64(storagePath, compressed);
+    if (!file || !tenantId) return;
 
-          if (variantId) {
-            handleUpdateVariant(variantId, 'photoUrl', downloadUrl);
-          } else {
-            setFormData(prev => ({ ...prev, photoUrl: downloadUrl }));
-          }
-          toast({ title: "Imagen guardada en Storage" });
-        } catch (err) {
-          toast({ variant: "destructive", title: "Error al procesar foto" });
-        } finally {
-          setIsProcessingPhoto(false);
-          setActiveVariantUploadId(null);
+    setIsProcessingPhoto(variantId || 'main');
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const base64 = event.target?.result as string;
+        const compressed = await compressImage(base64);
+        const fileName = `product_${Date.now()}.jpg`;
+        const storagePath = `tenants/${tenantId}/products/${formData.sku || 'temp'}/${variantId ? `var_${variantId}` : 'main'}_${fileName}`;
+        const url = await uploadBase64(storagePath, compressed);
+
+        if (variantId) {
+          handleUpdateVariant(variantId, 'photoUrl', url);
+        } else {
+          setFormData(prev => ({ ...prev, photoUrl: url }));
         }
-      };
-      reader.readAsDataURL(file);
-    }
+        toast({ title: "Imagen subida" });
+      } catch (err) {
+        toast({ variant: "destructive", title: "Error al subir" });
+      } finally {
+        setIsProcessingPhoto(null);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleWarehouseChange = (hubId: string, field: keyof ProductWarehouse, value: any) => {
@@ -174,39 +149,11 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
     }));
   };
 
-  const handlePriceChange = (field: 'listPrice' | 'avgCost' | 'markup' | 'wholesaleDiscount', value: string) => {
-    const numVal = value === "" ? 0 : parseFloat(value);
-    setFormData(prev => {
-      const updated = { ...prev, [field]: numVal };
-      if (field === 'markup' || field === 'avgCost') {
-        const cost = field === 'avgCost' ? numVal : (prev.avgCost || 0);
-        const mkp = field === 'markup' ? numVal : (prev.markup || 0);
-        updated.listPrice = cost * (1 + (mkp / 100));
-      }
-      if (field === 'listPrice') {
-        const cost = prev.avgCost || 0;
-        if (cost > 0) {
-          updated.markup = ((numVal - cost) / cost) * 100;
-        }
-      }
-      return updated;
-    });
-  };
-
-  const generateAutoSku = () => {
-    const categoryPrefix = (formData.category || "PROD").substring(0, 3).toUpperCase();
-    const randomPart = Math.floor(10000 + Math.random() * 90000);
-    const newSku = `${categoryPrefix}-${randomPart}`;
-    setFormData(prev => ({ ...prev, sku: newSku }));
-    toast({ title: "SKU Generado", description: `Código: ${newSku}` });
-  };
-
   const handleAddVariant = () => {
     const suffix = (formData.variants?.length || 0) + 1;
-    const variantSku = `${formData.sku || 'NUEVO'}-${suffix}`;
     const newVariant: ProductVariant = {
       id: Math.random().toString(36).substring(7),
-      sku: variantSku,
+      sku: `${formData.sku || 'PROD'}-${suffix}`,
       value: "",
       cost: formData.avgCost || 0,
       markup: formData.markup || 0,
@@ -219,16 +166,7 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
   const handleUpdateVariant = (id: string, field: keyof ProductVariant, value: any) => {
     setFormData(prev => ({
       ...prev,
-      variants: (prev.variants || []).map(v => {
-        if (v.id === id) {
-          const updated = { ...v, [field]: value };
-          if (field === 'cost' || field === 'markup') {
-            updated.price = (updated.cost || 0) * (1 + ((updated.markup || 0) / 100));
-          }
-          return updated;
-        }
-        return v;
-      })
+      variants: (prev.variants || []).map(v => v.id === id ? { ...v, [field]: value } : v)
     }));
   };
 
@@ -241,14 +179,11 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
   };
 
   const handleSubmit = async () => {
-    if (!db || !tenantId || !formData.name || !formData.sku) {
-      return toast({ variant: "destructive", title: "Error al Guardar", description: "El nombre y el SKU son campos obligatorios." });
-    }
+    if (!db || !tenantId || !formData.name || !formData.sku) return;
     setIsSubmitting(true);
     try {
       const batch = writeBatch(db);
 
-      // CASO A: EL USUARIO CARGÓ VARIANTES -> CREAR UN PRODUCTO POR CADA UNA
       if (formData.hasVariants && formData.variants && formData.variants.length > 0) {
         for (const variant of formData.variants) {
           const variantRef = doc(collection(db, "tenants", tenantId, "products"));
@@ -256,58 +191,53 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
             ...formData,
             id: variantRef.id,
             sku: variant.sku,
-            name: `${formData.name} - ${variant.value}`, // Nombre Madre + Valor Variante
+            name: `${formData.name} - ${variant.value}`,
             photoUrl: variant.photoUrl || formData.photoUrl,
             stockQuantity: variant.stockQuantity,
             avgCost: variant.cost,
             markup: variant.markup,
             listPrice: variant.price,
-            hasVariants: false, // El producto resultante es individual
+            hasVariants: false,
             variants: [],
             updatedAt: serverTimestamp(),
             createdAt: serverTimestamp()
           };
           batch.set(variantRef, variantData);
         }
-        toast({ title: "Productos creados", description: `Se han generado ${formData.variants.length} productos en el catálogo.` });
-      } 
-      // CASO B: PRODUCTO ÚNICO
-      else {
+      } else {
         const totalStock = (formData.warehouses || []).reduce((acc, w) => acc + (w.stockQuantity || 0), 0);
         const finalData = { ...formData, stockQuantity: totalStock, updatedAt: serverTimestamp() };
-
         if (productId) {
           batch.update(doc(db, "tenants", tenantId, "products", productId), finalData);
         } else {
           const newRef = doc(collection(db, "tenants", tenantId, "products"));
           batch.set(newRef, { ...finalData, id: newRef.id, createdAt: serverTimestamp() });
         }
-        toast({ title: "Producto Guardado" });
       }
 
       await batch.commit();
+      toast({ title: "Guardado exitoso" });
       router.push('/productos');
-    } catch (error) {
-      console.error(error);
+    } catch (e) {
       toast({ variant: "destructive", title: "Error al guardar" });
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  if (loadingExisting && productId) return <div className="h-[60vh] flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
+
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-24 px-4 sm:px-0">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between pt-6">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => router.back()}><ArrowLeft /></Button>
-          <div><h1 className="text-2xl font-bold">Maestro de Productos</h1><p className="text-sm text-slate-500">Configuración integral de artículos y depósitos.</p></div>
+          <div><h1 className="text-2xl font-bold">Maestro de Productos</h1><p className="text-sm text-slate-500">Configuración integral de artículos y variantes.</p></div>
         </div>
-        <div className="flex items-center gap-4">
-          <Badge variant="outline" className="h-8 px-4 font-mono text-blue-600 bg-blue-50 border-blue-100">{formData.sku || 'NUEVO SKU'}</Badge>
-        </div>
+        <Badge variant="outline" className="h-8 px-4 font-mono text-blue-600 bg-blue-50 border-blue-100">{formData.sku || 'NUEVO SKU'}</Badge>
       </div>
 
-      <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between overflow-x-auto">
+      <div className="bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between">
          {steps.map(s => (
             <div key={s.id} className={cn("flex flex-col items-center gap-1.5 flex-1 relative min-w-[80px]", step === s.id ? "text-blue-600" : "text-slate-400")}>
                <div className={cn("w-9 h-9 rounded-full flex items-center justify-center border z-10 transition-all", step >= s.id ? "bg-blue-600 text-white border-blue-600 shadow-lg" : "bg-white")}>
@@ -321,181 +251,92 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
 
       <div className="animate-in fade-in duration-300">
         {step === 1 && (
-          <div className="space-y-6">
-            <Card className="border-none shadow-sm rounded-3xl overflow-hidden">
-              <CardHeader className="bg-slate-900 text-white"><CardTitle className="text-sm uppercase tracking-widest">1. Información de Identidad</CardTitle></CardHeader>
-              <CardContent className="grid grid-cols-1 md:grid-cols-12 gap-8 pt-8 p-8">
-                <div className="md:col-span-4 space-y-6">
-                   <div className="flex flex-col items-center justify-center p-6 bg-slate-50 border-2 border-dashed rounded-[2rem] space-y-4">
-                     <div className="relative w-48 h-48 bg-white rounded-3xl border-2 border-slate-200 shadow-md flex items-center justify-center overflow-hidden">
-                       {formData.photoUrl ? <img src={formData.photoUrl} className="w-full h-full object-cover" /> : <Package size={64} className="text-slate-200" />}
-                       {isProcessingPhoto && <div className="absolute inset-0 bg-white/80 flex items-center justify-center"><Loader2 className="animate-spin" /></div>}
-                     </div>
-                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => handlePhotoChange(e)} />
-                     <Button variant="outline" className="rounded-xl h-10 w-full" onClick={() => fileInputRef.current?.click()} disabled={isProcessingPhoto}><Camera size={16} className="mr-2" /> SUBIR FOTO</Button>
-                   </div>
-                </div>
-                
-                <div className="md:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-[10px] font-black uppercase text-slate-400">SKU Madre</Label>
-                      <Button variant="ghost" size="sm" className="h-6 text-[9px] font-black text-blue-600 uppercase hover:bg-blue-50" onClick={(e) => { e.preventDefault(); generateAutoSku(); }}>
-                        <Zap size={10} className="mr-1" /> Auto
-                      </Button>
-                    </div>
-                    <Input value={formData.sku ?? ''} onChange={e => setFormData({...formData, sku: e.target.value.toUpperCase()})} />
-                  </div>
-                  <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">EAN-13 / GTIN</Label><Input value={formData.gtin ?? ''} onChange={e => setFormData({...formData, gtin: e.target.value})} /></div>
-                  <div className="md:col-span-2 space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Nombre Base (Venecitas, etc)</Label><Input className="font-bold text-lg" value={formData.name ?? ''} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
-                  <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Marca</Label><Input value={formData.brand ?? ''} onChange={e => setFormData({...formData, brand: e.target.value})} /></div>
-                  <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Modelo / Línea</Label><Input value={formData.model ?? ''} onChange={e => setFormData({...formData, model: e.target.value})} /></div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-none shadow-sm rounded-3xl">
-               <CardHeader><CardTitle className="text-sm uppercase tracking-widest">2. Clasificación</CardTitle></CardHeader>
-               <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6 p-8">
-                  <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Categoría</Label><Select value={formData.category} onValueChange={v => setFormData({...formData, category: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></div>
-                  <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Estado</Label><Select value={formData.status} onValueChange={(v: any) => setFormData({...formData, status: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Activo</SelectItem><SelectItem value="inactive">Inactivo</SelectItem></SelectContent></Select></div>
-               </CardContent>
-            </Card>
-          </div>
+          <Card className="border-none shadow-sm rounded-3xl overflow-hidden">
+            <CardHeader className="bg-slate-900 text-white"><CardTitle className="text-sm uppercase tracking-widest">1. Información de Identidad</CardTitle></CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-12 gap-8 p-8">
+              <div className="md:col-span-4 flex flex-col items-center gap-4 p-6 bg-slate-50 border-2 border-dashed rounded-[2rem]">
+                 <div className="relative w-48 h-48 bg-white rounded-3xl border-2 border-slate-200 shadow-md flex items-center justify-center overflow-hidden">
+                   {formData.photoUrl ? <img src={formData.photoUrl} className="w-full h-full object-cover" /> : <Box size={64} className="text-slate-200" />}
+                   {isProcessingPhoto === 'main' && <div className="absolute inset-0 bg-white/80 flex items-center justify-center"><Loader2 className="animate-spin" /></div>}
+                 </div>
+                 <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => onFileChange('photoUrl', e)} />
+                 <Button variant="outline" className="w-full" onClick={() => fileInputRef.current?.click()} disabled={!!isProcessingPhoto}><Camera size={16} className="mr-2" /> SUBIR FOTO</Button>
+              </div>
+              <div className="md:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">SKU Madre</Label><Input value={formData.sku ?? ''} onChange={e => setFormData({...formData, sku: e.target.value.toUpperCase()})} /></div>
+                 <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Nombre Base</Label><Input className="font-bold text-lg" value={formData.name ?? ''} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
+                 <div className="md:col-span-2 space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Categoría</Label>
+                    <Select value={formData.category} onValueChange={v => setFormData({...formData, category: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select>
+                 </div>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {step === 2 && (
-          <div className="space-y-6 animate-in slide-in-from-right-4">
+          <div className="space-y-6">
              <div className="flex justify-between items-center px-4">
-                <div>
-                   <h2 className="text-lg font-black uppercase italic tracking-tighter">Creación por Variantes</h2>
-                   <p className="text-xs text-slate-500">Se creará un producto independiente por cada variante añadida aquí.</p>
-                </div>
-                <Button className="bg-blue-600 rounded-xl" onClick={handleAddVariant}>
-                   <Plus className="w-4 h-4 mr-2" /> Adicionar Variante
-                </Button>
+                <div><h2 className="text-lg font-black uppercase italic">Variantes del Producto</h2><p className="text-xs text-slate-500">Cada variante generará un registro único en el catálogo.</p></div>
+                <Button className="bg-blue-600" onClick={handleAddVariant}><Plus className="w-4 h-4 mr-2" /> Agregar Variante</Button>
              </div>
-
-             <div className="space-y-4">
-                {formData.variants?.map((v, i) => (
-                  <Card key={v.id} className="border-none shadow-md rounded-[2rem] overflow-hidden group">
-                     <div className="bg-slate-900 text-white px-8 py-3 flex justify-between items-center">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-blue-400">Variante #{i + 1}</p>
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-white/40 hover:text-red-400" onClick={() => handleRemoveVariant(v.id)}><Trash2 size={14}/></Button>
+             {formData.variants?.map((v, i) => (
+               <Card key={v.id} className="border-none shadow-md rounded-[2rem] overflow-hidden">
+                  <div className="bg-slate-900 text-white px-8 py-3 flex justify-between items-center"><p className="text-[10px] font-black uppercase text-blue-400">Variante #{i + 1}</p><Button variant="ghost" size="icon" className="text-white/40" onClick={() => handleRemoveVariant(v.id)}><Trash2 size={14}/></Button></div>
+                  <CardContent className="p-8 grid grid-cols-1 md:grid-cols-12 gap-8">
+                     <div className="md:col-span-3 flex flex-col items-center gap-3">
+                        <div className="w-32 h-32 bg-slate-50 rounded-2xl border-2 border-dashed flex items-center justify-center overflow-hidden cursor-pointer" onClick={() => { setActiveVariantUploadId(v.id); variantFileInputRef.current?.click(); }}>
+                           {v.photoUrl ? <img src={v.photoUrl} className="w-full h-full object-cover" /> : <Camera size={32} className="text-slate-300" />}
+                           {isProcessingPhoto === v.id && <div className="absolute inset-0 bg-white/80 flex items-center justify-center"><Loader2 className="animate-spin" /></div>}
+                        </div>
+                        <p className="text-[8px] font-black uppercase text-slate-400">FOTO VAR</p>
                      </div>
-                     <CardContent className="p-8 grid grid-cols-1 md:grid-cols-12 gap-8">
-                        <div className="md:col-span-3 flex flex-col items-center gap-3">
-                           <div 
-                             className="w-32 h-32 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden cursor-pointer hover:border-blue-400 transition-all"
-                             onClick={() => { setActiveVariantUploadId(v.id); variantFileInputRef.current?.click(); }}
-                           >
-                              {v.photoUrl ? <img src={v.photoUrl} className="w-full h-full object-cover" /> : <Camera size={32} className="text-slate-300" />}
-                           </div>
-                           <p className="text-[8px] font-black uppercase text-slate-400">+ Foto</p>
-                        </div>
-                        <div className="md:col-span-9 grid grid-cols-2 md:grid-cols-4 gap-4">
-                           <div className="space-y-1">
-                              <Label className="text-[10px] font-black uppercase">Valor (Ex: Rojo)</Label>
-                              <Input className="h-10 bg-slate-50 border-none font-bold" value={v.value} onChange={e => handleUpdateVariant(v.id, 'value', e.target.value)} />
-                           </div>
-                           <div className="space-y-1">
-                              <Label className="text-[10px] font-black uppercase">SKU</Label>
-                              <Input className="h-10 bg-slate-100 border-none font-mono text-[10px] font-black" value={v.sku} readOnly />
-                           </div>
-                           <div className="space-y-1">
-                              <Label className="text-[10px] font-black uppercase">Costo (ARS)</Label>
-                              <Input type="number" className="h-10 bg-slate-50 border-none" value={v.cost} onChange={e => handleUpdateVariant(v.id, 'cost', parseFloat(e.target.value) || 0)} />
-                           </div>
-                           <div className="space-y-1">
-                              <Label className="text-[10px] font-black uppercase">Stock Inicial</Label>
-                              <Input type="number" className="h-10 bg-blue-50 border-none font-black text-blue-700" value={v.stockQuantity} onChange={e => handleUpdateVariant(v.id, 'stockQuantity', parseInt(e.target.value) || 0)} />
-                           </div>
-                        </div>
-                     </CardContent>
-                  </Card>
-                ))}
-
-                {(!formData.variants || formData.variants.length === 0) && (
-                  <div className="py-20 text-center border-2 border-dashed rounded-[3rem] space-y-4">
-                     <Layers className="w-16 h-16 mx-auto text-slate-200" />
-                     <p className="text-sm font-bold text-slate-400 uppercase italic">Sin variantes (Producto Único)</p>
-                     <Button variant="outline" onClick={handleAddVariant}>Habilitar Desglose</Button>
-                  </div>
-                )}
-             </div>
-             <input type="file" ref={variantFileInputRef} className="hidden" accept="image/*" onChange={(e) => handlePhotoChange(e, activeVariantUploadId!)} />
+                     <div className="md:col-span-9 grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase">Valor (Ex: #40)</Label><Input className="h-10 bg-slate-50 border-none font-bold" value={v.value} onChange={e => handleUpdateVariant(v.id, 'value', e.target.value)} /></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase">SKU</Label><Input className="h-10 bg-slate-100 border-none font-mono" value={v.sku} readOnly /></div>
+                        <div className="space-y-1"><Label className="text-[10px] font-black uppercase">Stock Inicial</Label><Input type="number" className="h-10 bg-blue-50 border-none font-black text-blue-700" value={v.stockQuantity} onChange={e => handleUpdateVariant(v.id, 'stockQuantity', parseInt(e.target.value) || 0)} /></div>
+                     </div>
+                  </CardContent>
+               </Card>
+             ))}
+             <input type="file" ref={variantFileInputRef} className="hidden" accept="image/*" onChange={(e) => onFileChange('photoUrl', e, activeVariantUploadId!)} />
           </div>
         )}
 
         {step === 3 && (
-          <div className="space-y-6">
-            <Card className="border-none shadow-sm rounded-3xl overflow-hidden">
-               <CardHeader className="bg-blue-600 text-white"><CardTitle className="text-sm uppercase">Logística y Peso</CardTitle></CardHeader>
-               <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-8 p-8">
-                  <div className="space-y-4">
-                    <Label className="text-[10px] font-black uppercase text-slate-400">Unidad Base</Label>
-                    <Select value={formData.unitType} onValueChange={(v: any) => setFormData({...formData, unitType: v})}><SelectTrigger className="h-12"><SelectValue /></SelectTrigger><SelectContent>{UNIT_TYPES.map(u => <SelectItem key={u.id} value={u.id}>{u.label}</SelectItem>)}</SelectContent></Select>
-                  </div>
-                  <div className="space-y-4">
-                     <Label className="text-[10px] font-black uppercase text-slate-400">Peso por Unidad (Kg)</Label>
-                     <Input type="number" value={formData.unitWeightKg} onChange={e => setFormData({...formData, unitWeightKg: parseFloat(e.target.value) || 0})} />
-                  </div>
-               </CardContent>
-            </Card>
-          </div>
+          <Card className="border-none shadow-sm rounded-3xl p-8">
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-4"><Label className="text-[10px] font-black uppercase text-slate-400">Unidad de Medida</Label><Select value={formData.unitType} onValueChange={(v: any) => setFormData({...formData, unitType: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{UNIT_TYPES.map(u => <SelectItem key={u.id} value={u.id}>{u.label}</SelectItem>)}</SelectContent></Select></div>
+                <div className="space-y-4"><Label className="text-[10px] font-black uppercase text-slate-400">Peso Bruto (Kg)</Label><Input type="number" value={formData.unitWeightKg} onChange={e => setFormData({...formData, unitWeightKg: parseFloat(e.target.value) || 0})} /></div>
+             </div>
+          </Card>
         )}
 
         {step === 4 && (
-          <div className="space-y-6">
-            <Card className="border-none shadow-sm rounded-3xl">
-               <CardHeader><CardTitle className="text-sm uppercase flex items-center gap-2"><Warehouse className="text-blue-600" /> Depósitos</CardTitle></CardHeader>
-               <CardContent className="p-0">
-                  <Table>
-                    <TableHeader className="bg-slate-50/50">
-                      <TableRow>
-                        <TableHead className="px-8 text-[10px] font-black uppercase">Sede</TableHead>
-                        <TableHead className="text-[10px] font-black uppercase text-center">Stock Actual</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {formData.warehouses?.map(w => (
-                        <TableRow key={w.hubId}>
-                            <TableCell className="px-8 py-4"><p className="font-bold text-slate-700">{w.hubName}</p></TableCell>
-                            <TableCell className="text-center"><Input type="number" className="h-10 text-sm text-center font-black w-24 mx-auto" value={w.stockQuantity} onChange={e => handleWarehouseChange(w.hubId, 'stockQuantity', parseInt(e.target.value) || 0)} /></TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-               </CardContent>
-            </Card>
-          </div>
+          <Card className="border-none shadow-sm rounded-3xl overflow-hidden">
+             <Table>
+                <TableHeader className="bg-slate-50"><TableRow><TableHead className="px-8">Sede / Almacén</TableHead><TableHead className="text-center">Stock Físico Actual</TableHead></TableRow></TableHeader>
+                <TableBody>
+                   {formData.warehouses?.map(w => (
+                     <TableRow key={w.hubId}><TableCell className="px-8 font-bold">{w.hubName}</TableCell><TableCell className="text-center"><Input type="number" className="w-32 mx-auto text-center font-black" value={w.stockQuantity} onChange={e => handleWarehouseChange(w.hubId, 'stockQuantity', parseInt(e.target.value) || 0)} /></TableCell></TableRow>
+                   ))}
+                </TableBody>
+             </Table>
+          </Card>
         )}
 
         {step === 5 && isManager && (
-          <div className="space-y-6">
-            <Card className="border-none shadow-sm rounded-3xl">
-              <CardHeader><CardTitle className="text-sm">Costos y Precios</CardTitle></CardHeader>
-              <CardContent className="grid grid-cols-2 gap-6 p-8">
-                 <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase">Costo (ARS)</Label><Input type="number" value={formData.avgCost || 0} onChange={e => handlePriceChange('avgCost', e.target.value)} /></div>
-                 <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase">Precio Lista</Label><Input type="number" value={formData.listPrice || 0} onChange={e => handlePriceChange('listPrice', e.target.value)} /></div>
-              </CardContent>
-            </Card>
-          </div>
+          <Card className="border-none shadow-sm rounded-3xl p-8 grid grid-cols-2 gap-6">
+             <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase">Costo Promedio (ARS)</Label><Input type="number" value={formData.avgCost || 0} onChange={e => setFormData({...formData, avgCost: parseFloat(e.target.value) || 0})} /></div>
+             <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase">Precio Lista</Label><Input type="number" value={formData.listPrice || 0} onChange={e => setFormData({...formData, listPrice: parseFloat(e.target.value) || 0})} /></div>
+          </Card>
         )}
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center z-50">
         <div className="max-w-5xl w-full flex justify-between items-center px-4">
-          <Button variant="ghost" onClick={handleBack} disabled={step === 1 || isSubmitting} className="font-bold"><ChevronLeft size={16} className="mr-1" /> VOLVER</Button>
+          <Button variant="ghost" onClick={handleBack} disabled={step === 1 || isSubmitting}>VOLVER</Button>
           <div className="flex gap-2">
-            {step < maxSteps ? (
-              <Button onClick={handleNext} className="bg-blue-600 font-bold px-8">SIGUIENTE <ChevronRight size={16} className="ml-1" /></Button>
-            ) : (
-              <Button onClick={handleSubmit} className="bg-green-600 font-bold px-8 shadow-lg shadow-green-100" disabled={isSubmitting}>
-                {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" size={16} />}
-                {formData.hasVariants ? 'CREAR PRODUCTOS' : 'GUARDAR PRODUCTO'}
-              </Button>
-            )}
+            {step < maxSteps ? <Button onClick={handleNext} className="bg-blue-600">SIGUIENTE</Button> : <Button onClick={handleSubmit} className="bg-green-600" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} GUARDAR</Button>}
           </div>
         </div>
       </div>
