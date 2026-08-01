@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect, Suspense } from "react";
@@ -35,13 +34,13 @@ import {
   BarChart3,
   MapPin,
   ArrowRight,
-  ArrowLeft
-} from "lucide-center";
+  ArrowLeft,
+  LucideIcon
+} from "lucide-react";
 import { Hub, WarehouseLayout, WarehouseSection, WarehouseAisle, WarehouseRack, WarehouseSlot } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { LucideIcon } from "lucide-react";
 
 function LayoutContent() {
   const db = useFirestore();
