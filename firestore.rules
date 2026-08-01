@@ -8,14 +8,22 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.email == 'leozman15@gmail.com';
     }
 
-    // Obtiene los datos del perfil del usuario (mapeo global por email)
+    // Valida si existe el perfil del usuario
+    function hasProfile() {
+      return request.auth != null && exists(/databases/$(database)/documents/users/$(request.auth.token.email.lower()));
+    }
+
+    // Obtiene los datos del perfil del usuario de forma segura
     function getUserProfile() {
-      return get(/databases/$(database)/documents/users/$(request.auth.token.email)).data;
+      return get(/databases/$(database)/documents/users/$(request.auth.token.email.lower())).data;
     }
 
     // Valida si el usuario pertenece al tenant o es SuperAdmin
     function belongsToTenant(tenantId) {
-      return request.auth != null && (isSuperAdmin() || getUserProfile().tenantId == tenantId);
+      return request.auth != null && (
+        isSuperAdmin() || 
+        (hasProfile() && getUserProfile().tenantId == tenantId)
+      );
     }
 
     // Colección global de mapeo: permite saber a qué empresa pertenece un email
@@ -23,7 +31,7 @@ service cloud.firestore {
       allow read: if request.auth != null;
       // Permite escribir si es SuperAdmin o si es un Gerente creando un usuario para su propia empresa
       allow write: if isSuperAdmin() || (
-        request.auth != null && 
+        hasProfile() && 
         getUserProfile().role in ['manager', 'admin'] && 
         request.resource.data.tenantId == getUserProfile().tenantId
       );
@@ -35,23 +43,9 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
 
       // AISLAMIENTO TOTAL: Toda la data operativa vive aquí dentro
-      match /trucks/{id} { allow read, write: if belongsToTenant(tenantId); }
-      match /drivers/{id} { allow read, write: if belongsToTenant(tenantId); }
-      match /clients/{id} { allow read, write: if belongsToTenant(tenantId); }
-      match /products/{id} { allow read, write: if belongsToTenant(tenantId); }
-      match /loads/{id} { 
-        allow read, write: if belongsToTenant(tenantId); 
-        match /expenses/{expId} { allow read, write: if belongsToTenant(tenantId); }
+      match /{allPaths=**} {
+        allow read, write: if belongsToTenant(tenantId);
       }
-      match /hubs/{id} { allow read, write: if belongsToTenant(tenantId); }
-      match /maintenance/{id} { allow read, write: if belongsToTenant(tenantId); }
-      match /pending_remitos/{id} { allow read, write: if belongsToTenant(tenantId); }
-      match /expenses/{id} { allow read, write: if belongsToTenant(tenantId); }
-      match /users/{id} { allow read, write: if belongsToTenant(tenantId); }
-      match /events/{id} { allow read, write: if belongsToTenant(tenantId); }
-      match /outbox/{id} { allow read, write: if belongsToTenant(tenantId); }
-      match /templates/{id} { allow read, write: if belongsToTenant(tenantId); }
-      match /campaigns/{id} { allow read, write: if belongsToTenant(tenantId); }
     }
 
     // Bloqueo por defecto para rutas no mapeadas

@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -14,14 +13,14 @@ import { UserRole } from '@/app/lib/types';
 export function useTenant() {
   const { user } = useUser();
   const db = useFirestore();
-  const [tenantId, setTenantId] = useState<string>("default_tenant");
+  const [tenantId, setTenantId] = useState<string | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Si no hay usuario, mantenemos el default (o redireccionamos)
+    // Si no hay usuario, no podemos determinar el tenant
     if (!user || !db) {
-      setLoading(false);
+      if (!user) setLoading(false);
       return;
     }
 
@@ -39,16 +38,15 @@ export function useTenant() {
     // El ID del documento debe estar siempre en minúsculas
     const userRef = doc(db, "users", userEmail!);
     
+    setLoading(true);
     const unsubscribe = onSnapshot(userRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
-        console.log("Tenant Hook: User profile found", data);
         setTenantId(data.tenantId || "default_tenant");
         setRole(data.role as UserRole || null);
       } else {
         console.warn("Tenant Hook: User profile NOT found for email:", userEmail);
-        // Fallback para evitar bloqueo total
-        setTenantId("default_tenant");
+        setTenantId(null);
         setRole(null);
       }
       setLoading(false);
@@ -60,5 +58,10 @@ export function useTenant() {
     return () => unsubscribe();
   }, [user, db]);
 
-  return { tenantId, role, loading };
+  return { 
+    tenantId: tenantId || "default_tenant", 
+    role, 
+    loading,
+    isAuthenticated: !!user 
+  };
 }
