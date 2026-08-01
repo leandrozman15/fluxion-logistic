@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from "react";
@@ -73,7 +74,7 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
     unitType: 'unit', conversionFactor: 1, unitsPerBox: 0, unitsPerPallet: 0, origin: 'nacional',
     managesStock: true, allowNegativeStock: false, isLotTracked: false, isSerialTracked: false, expiryControl: false,
     minStockAlert: 5, maxStockAlert: 100, stockQuantity: 0, ivaRate: 21, dangerLevel: 'none', requiresReefer: false,
-    warehouses: [], markup: 0, avgCost: 0, listPrice: 0
+    warehouses: [], markup: 0, avgCost: 0, listPrice: 0, wholesaleDiscount: 10, retailPrice: 0, wholesalePrice: 0
   });
 
   const handleBack = () => setStep(prev => Math.max(1, prev - 1));
@@ -102,6 +103,24 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
       setFormData(prev => ({ ...prev, warehouses: initialWarehouses }));
     }
   }, [hubs]);
+
+  // CÁLCULO EN CASCADA DE PRECIOS
+  useEffect(() => {
+    const listPrice = formData.listPrice || 0;
+    const iva = formData.ivaRate || 0;
+    const discount = formData.wholesaleDiscount || 0;
+
+    const retail = listPrice * (1 + (iva / 100));
+    const wholesale = retail * (1 - (discount / 100));
+
+    if (retail !== formData.retailPrice || wholesale !== formData.wholesalePrice) {
+      setFormData(prev => ({ 
+        ...prev, 
+        retailPrice: Number(retail.toFixed(2)), 
+        wholesalePrice: Number(wholesale.toFixed(2)) 
+      }));
+    }
+  }, [formData.listPrice, formData.ivaRate, formData.wholesaleDiscount]);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -132,7 +151,7 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
     }));
   };
 
-  const handlePriceChange = (field: 'listPrice' | 'avgCost' | 'markup', value: string) => {
+  const handlePriceChange = (field: 'listPrice' | 'avgCost' | 'markup' | 'wholesaleDiscount', value: string) => {
     const numVal = value === "" ? 0 : parseFloat(value);
     setFormData(prev => {
       const updated = { ...prev, [field]: numVal };
@@ -185,8 +204,6 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
       setIsSubmitting(false);
     }
   };
-
-  if (loadingExisting && productId) return <div className="h-[60vh] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-24 px-4 sm:px-0">
@@ -404,7 +421,7 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
                         </div>
                      </div>
                      <div className="space-y-1.5">
-                        <Label className="text-[10px] font-black uppercase text-slate-400">Costo Promedio Ponderado (Auditado)</Label>
+                        <Label className="text-[10px] font-black uppercase text-blue-400">Costo Promedio Ponderado (Auditado)</Label>
                         <div className="relative">
                           <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-blue-400" />
                           <Input type="number" className="pl-9 bg-blue-50/30 border-blue-100 font-bold" value={formData.avgCost || 0} onChange={e => handlePriceChange('avgCost', e.target.value)} />
@@ -480,8 +497,19 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
                            </Select>
                         </div>
                         <div className="space-y-1.5">
-                           <Label className="text-[10px] font-black uppercase text-slate-400">Precio Minorista</Label>
-                           <Input type="number" value={formData.retailPrice || 0} onChange={e => setFormData({...formData, retailPrice: parseFloat(e.target.value) || 0})} />
+                           <Label className="text-[10px] font-black uppercase text-blue-600">Precio Minorista (IVA Incl.)</Label>
+                           <Input type="number" readOnly className="bg-slate-100 font-black" value={formData.retailPrice} />
+                        </div>
+                     </div>
+
+                     <div className="grid grid-cols-2 gap-4 pt-4 border-t bg-slate-50/50 p-4 rounded-2xl border border-dashed">
+                        <div className="space-y-1.5">
+                           <Label className="text-[10px] font-black uppercase text-orange-600">Desc. Mayorista (%)</Label>
+                           <Input type="number" className="font-bold border-orange-200" value={formData.wholesaleDiscount} onChange={e => handlePriceChange('wholesaleDiscount', e.target.value)} />
+                        </div>
+                        <div className="space-y-1.5">
+                           <Label className="text-[10px] font-black uppercase text-orange-600">Precio Mayorista (Final)</Label>
+                           <Input type="number" readOnly className="bg-orange-50 font-black border-orange-200 text-orange-700" value={formData.wholesalePrice} />
                         </div>
                      </div>
                   </CardContent>

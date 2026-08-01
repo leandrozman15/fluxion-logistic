@@ -98,6 +98,7 @@ export interface Product {
   markup?: number; // Porcentaje de recargo sobre costo
   listPrice?: number;
   wholesalePrice?: number;
+  wholesaleDiscount?: number; // Porcentaje de descuento sobre minorista
   distributorPrice?: number;
   retailPrice?: number;
   ivaRate: 0 | 10.5 | 21 | 27;
