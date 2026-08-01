@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useFirestore, useCollection } from "@/firebase";
+import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { collection, query, orderBy, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -131,6 +131,10 @@ function LayoutContent() {
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Local storage for assigned slots (for the prototype)
+  // In a real app, this would be a subcollection 'slots'
+  const [assignedSlots, setAssignedSlots] = useState<Record<string, Partial<WarehouseSlot>>>({});
+
   // Slot Management State
   const [selectedSlotCoord, setSelectedSlotCoord] = useState<string | null>(null);
   const [slotForm, setSlotForm] = useState<Partial<WarehouseSlot>>({
@@ -194,6 +198,21 @@ function LayoutContent() {
     return corridorsCount * configForm.positions * configForm.levels;
   }, [configForm]);
 
+  const stats = useMemo(() => {
+    const total = totalPositions;
+    const occupied = Object.values(assignedSlots).filter(s => s.status === 'occupied').length;
+    const blocked = Object.values(assignedSlots).filter(s => s.status === 'blocked').length;
+    const reserved = Object.values(assignedSlots).filter(s => s.status === 'reserved').length;
+    
+    return {
+      total,
+      occupied,
+      blocked,
+      reserved,
+      available: total - occupied - blocked - reserved
+    };
+  }, [totalPositions, assignedSlots]);
+
   const handleSaveConfig = async () => {
     if (!db || !tenantId || !selectedHubId) return;
     setIsSaving(true);
@@ -222,15 +241,12 @@ function LayoutContent() {
 
   const handleOpenSlot = (coord: string) => {
     setSelectedSlotCoord(coord);
-    // Simulación de carga de datos del slot
-    const product = getProductAt(coord);
+    const existingData = assignedSlots[coord] || { status: 'empty' };
+    
     setSlotForm({
       coordinate: coord,
-      status: product ? 'occupied' : 'empty',
-      productId: product?.id || "",
-      productSku: product?.sku || "",
-      productName: product?.name || "",
-      currentWeightKg: product?.unitWeightKg || 0,
+      ...existingData,
+      currentWeightKg: existingData.productId ? products?.find(p => p.id === existingData.productId)?.unitWeightKg : 0,
       capacityKg: 1000
     });
   };
@@ -238,7 +254,12 @@ function LayoutContent() {
   const handleSaveSlot = async () => {
     setIsSaving(true);
     try {
-      // Aquí se guardaría la persistencia real por coordenada en una subcolección de Hubs o similar
+      if (selectedSlotCoord) {
+        setAssignedSlots(prev => ({
+          ...prev,
+          [selectedSlotCoord]: { ...slotForm }
+        }));
+      }
       toast({ title: "Ubicación Actualizada", description: `Se han guardado los cambios en ${selectedSlotCoord}` });
       setSelectedSlotCoord(null);
     } catch (e) {
@@ -257,18 +278,24 @@ function LayoutContent() {
       productName: "",
       currentWeightKg: 0
     });
+    if (selectedSlotCoord) {
+      const newAssigned = { ...assignedSlots };
+      delete newAssigned[selectedSlotCoord];
+      setAssignedSlots(newAssigned);
+    }
     toast({ title: "Ubicación liberada", description: "El espacio se marcará como disponible." });
+    setSelectedSlotCoord(null);
   };
 
   const getProductAt = (coord: string) => {
-    if (!products || products.length === 0) return null;
-    const sum = coord.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    if (sum % 7 === 0) return products[0];
-    if (sum % 11 === 0) return products[1 % products.length];
+    const slot = assignedSlots[coord];
+    if (slot && slot.status === 'occupied' && slot.productId) {
+      return products?.find(p => p.id === slot.productId) || null;
+    }
     return null;
   };
 
-  const prefix = configForm.prefix || activeHub?.name.substring(0, 5).toUpperCase() || "TIGRE";
+  const prefix = configForm.prefix || activeHub?.name.substring(0, 5).toUpperCase() || "DEPO";
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -304,7 +331,7 @@ function LayoutContent() {
             <CardContent className="p-4 flex items-center justify-between">
                <div>
                  <p className="text-[10px] font-bold text-slate-400 uppercase">Capacidad Técnica</p>
-                 <p className="text-2xl font-black italic text-slate-900">{totalPositions} <span className="text-xs font-normal opacity-30">SLOTS</span></p>
+                 <p className="text-2xl font-black italic text-slate-900">{stats.total} <span className="text-xs font-normal opacity-30">SLOTS</span></p>
                </div>
                <LayoutGrid size={24} className="text-slate-100" />
             </CardContent>
@@ -313,7 +340,7 @@ function LayoutContent() {
             <CardContent className="p-4 flex items-center justify-between">
                <div>
                  <p className="text-[10px] font-bold text-green-600 uppercase">Disponibles</p>
-                 <p className="text-2xl font-black italic text-slate-900">{Math.round(totalPositions * 0.7)}</p>
+                 <p className="text-2xl font-black italic text-slate-900">{stats.available}</p>
                </div>
                <CheckCircle2 size={24} className="text-green-100" />
             </CardContent>
@@ -322,7 +349,7 @@ function LayoutContent() {
             <CardContent className="p-4 flex items-center justify-between">
                <div>
                  <p className="text-[10px] font-bold text-blue-600 uppercase">Ocupados</p>
-                 <p className="text-2xl font-black italic text-slate-900">{Math.round(totalPositions * 0.3)}</p>
+                 <p className="text-2xl font-black italic text-slate-900">{stats.occupied}</p>
                </div>
                <Container size={24} className="text-blue-100" />
             </CardContent>
@@ -331,7 +358,7 @@ function LayoutContent() {
             <CardContent className="p-4 flex items-center justify-between">
                <div>
                  <p className="text-[10px] font-bold text-red-600 uppercase">Bloqueados</p>
-                 <p className="text-2xl font-black italic text-slate-900">0</p>
+                 <p className="text-2xl font-black italic text-slate-900">{stats.blocked}</p>
                </div>
                <XCircle size={24} className="text-red-100" />
             </CardContent>
@@ -384,13 +411,13 @@ function LayoutContent() {
                             {rackGroup.positions.map(pos => {
                                const coord = `${prefix}-${rackGroup.corridor}-${pos}-${level}`;
                                const product = getProductAt(coord);
-                               const status = product ? 'occupied' : 'empty';
+                               const slotData = assignedSlots[coord] || { status: 'empty' };
                                
                                return (
                                  <div key={pos} className="w-48">
                                     <RackSlot 
                                       coordinate={coord}
-                                      status={status}
+                                      status={slotData.status || 'empty'}
                                       product={product}
                                       onClick={() => handleOpenSlot(coord)}
                                     />
