@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from "react";
@@ -30,7 +29,8 @@ import {
   Wrench,
   Files,
   BarChart3,
-  ShoppingBag
+  ShoppingBag,
+  Info
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
