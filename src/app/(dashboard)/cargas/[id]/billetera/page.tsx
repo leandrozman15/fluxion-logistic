@@ -4,6 +4,7 @@
 import { useMemo, useState, useEffect, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useFirestore, useDoc, useCollection } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { doc, collection, query, orderBy, getDoc } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ function LoadWalletContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const db = useFirestore();
+  const { tenantId } = useTenant();
   
   const [driver, setDriver] = useState<Driver | null>(null);
   const [truck, setTruck] = useState<TruckType | null>(null);
@@ -37,37 +39,37 @@ function LoadWalletContent() {
   const autoPrint = searchParams.get('print') === 'true';
 
   const loadRef = useMemo(() => {
-    if (!db || !id) return null;
-    return doc(db, "loads", id as string);
-  }, [db, id]);
+    if (!db || !id || !tenantId) return null;
+    return doc(db, "tenants", tenantId, "loads", id as string);
+  }, [db, id, tenantId]);
 
   const { data: load, loading } = useDoc<Load>(loadRef);
 
   const tenantRef = useMemo(() => {
-    if (!db) return null;
-    return doc(db, "tenants", "default_tenant");
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return doc(db, "tenants", tenantId);
+  }, [db, tenantId]);
 
   const { data: tenant } = useDoc<Tenant>(tenantRef);
 
   const expensesQuery = useMemo(() => {
-    if (!db || !id) return null;
-    return query(collection(db, "loads", id as string, "expenses"), orderBy("createdAt", "desc"));
-  }, [db, id]);
+    if (!db || !id || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "loads", id as string, "expenses"), orderBy("createdAt", "desc"));
+  }, [db, id, tenantId]);
 
   const { data: expenses } = useCollection<Expense>(expensesQuery);
 
   useEffect(() => {
     async function fetchExtras() {
-      if (!db || !load) return;
+      if (!db || !load || !tenantId) return;
       setLoadingExtras(true);
       try {
         if (load.assignedDriverId && load.assignedDriverId !== 'none') {
-          const dSnap = await getDoc(doc(db, "drivers", load.assignedDriverId));
+          const dSnap = await getDoc(doc(db, "tenants", tenantId, "drivers", load.assignedDriverId));
           if (dSnap.exists()) setDriver(dSnap.data() as Driver);
         }
         if (load.assignedTruckId) {
-          const tSnap = await getDoc(doc(db, "trucks", load.assignedTruckId));
+          const tSnap = await getDoc(doc(db, "tenants", tenantId, "trucks", load.assignedTruckId));
           if (tSnap.exists()) setTruck(tSnap.data() as TruckType);
         }
       } catch (e) {
@@ -77,7 +79,7 @@ function LoadWalletContent() {
       }
     }
     fetchExtras();
-  }, [db, load]);
+  }, [db, load, tenantId]);
 
   useEffect(() => {
     if (autoPrint && !loading && !loadingExtras && expenses) {

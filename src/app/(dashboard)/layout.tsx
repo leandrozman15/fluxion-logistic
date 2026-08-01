@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth, useFirestore, useDoc, useUser } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { signOut } from "firebase/auth";
 import { useRouter, usePathname } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
@@ -56,6 +57,7 @@ function DashboardSidebar() {
   const auth = useAuth();
   const db = useFirestore();
   const { user } = useUser();
+  const { tenantId } = useTenant();
   const router = useRouter();
   const pathname = usePathname();
   const { toast } = useToast();
@@ -63,9 +65,9 @@ function DashboardSidebar() {
   const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
 
   const tenantRef = useMemo(() => {
-    if (!db) return null;
-    return doc(db, "tenants", "default_tenant");
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return doc(db, "tenants", tenantId);
+  }, [db, tenantId]);
 
   const { data: tenant } = useDoc<Tenant>(tenantRef);
 
@@ -126,7 +128,6 @@ function DashboardSidebar() {
                  <SidebarMenuItem>
                     <SidebarMenuButton 
                       asChild 
-                      tooltip="Panel de Control Maestro" 
                       isActive={pathname === "/admin/tenants"}
                       onClick={handleLinkClick}
                       className="bg-slate-900 text-blue-400 hover:bg-slate-800 hover:text-blue-300"
@@ -233,6 +234,7 @@ function DashboardSidebar() {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { theme, setTheme } = useTheme();
   const db = useFirestore();
+  const { tenantId } = useTenant();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -240,9 +242,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, []);
   
   const tenantRef = useMemo(() => {
-    if (!db) return null;
-    return doc(db, "tenants", "default_tenant");
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return doc(db, "tenants", tenantId);
+  }, [db, tenantId]);
 
   const { data: tenant } = useDoc<Tenant>(tenantRef);
   const logoUrl = tenant?.settings?.logoUrl || "/icono.png";

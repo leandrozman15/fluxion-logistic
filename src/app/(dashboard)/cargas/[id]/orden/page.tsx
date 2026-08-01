@@ -4,6 +4,7 @@
 import { useMemo, useEffect, useState, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useFirestore, useDoc } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { doc, getDoc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +20,7 @@ function LoadOrderContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const db = useFirestore();
+  const { tenantId } = useTenant();
   
   const [driver, setDriver] = useState<Driver | null>(null);
   const [truck, setTruck] = useState<TruckType | null>(null);
@@ -27,29 +29,29 @@ function LoadOrderContent() {
   const autoPrint = searchParams.get('print') === 'true';
 
   const loadRef = useMemo(() => {
-    if (!db || !id) return null;
-    return doc(db, "loads", id as string);
-  }, [db, id]);
+    if (!db || !id || !tenantId) return null;
+    return doc(db, "tenants", tenantId, "loads", id as string);
+  }, [db, id, tenantId]);
 
   const { data: load, loading: loadLoading } = useDoc<Load>(loadRef);
 
   const tenantRef = useMemo(() => {
-    if (!db) return null;
-    return doc(db, "tenants", "default_tenant");
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return doc(db, "tenants", tenantId);
+  }, [db, tenantId]);
 
   const { data: tenant } = useDoc<Tenant>(tenantRef);
 
   useEffect(() => {
     async function fetchExtras() {
-      if (!db || !load) return;
+      if (!db || !load || !tenantId) return;
       try {
         if (load.assignedDriverId && load.assignedDriverId !== 'none') {
-          const dSnap = await getDoc(doc(db, "drivers", load.assignedDriverId));
+          const dSnap = await getDoc(doc(db, "tenants", tenantId, "drivers", load.assignedDriverId));
           if (dSnap.exists()) setDriver(dSnap.data() as Driver);
         }
         if (load.assignedTruckId) {
-          const tSnap = await getDoc(doc(db, "trucks", load.assignedTruckId));
+          const tSnap = await getDoc(doc(db, "tenants", tenantId, "trucks", load.assignedTruckId));
           if (tSnap.exists()) setTruck(tSnap.data() as TruckType);
         }
       } catch (e) {
@@ -59,7 +61,7 @@ function LoadOrderContent() {
       }
     }
     if (load) fetchExtras();
-  }, [db, load]);
+  }, [db, load, tenantId]);
 
   useEffect(() => {
     if (autoPrint && !loadLoading && !loadingExtras && load) {
@@ -131,7 +133,7 @@ function LoadOrderContent() {
                         <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-800"><User size={20}/></div>
                         <div>
                           <p className="text-sm font-black uppercase leading-none">{driver ? `${driver.lastName}, ${driver.firstName}` : 'S/D'}</p>
-                          <p className="text-[10px] font-bold text-slate-400">DNI: {driver?.dni || '---'}</p>
+                          <p className="text-[10px] font-bold text-slate-400">DNI: {driver?.dni || "---"}</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-3">

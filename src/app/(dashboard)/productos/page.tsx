@@ -4,6 +4,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { collection, query, orderBy, deleteDoc, doc } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -31,19 +32,20 @@ import { generateProductPDF } from "@/lib/pdf-service";
 
 export default function ProductosPage() {
   const db = useFirestore();
+  const { tenantId } = useTenant();
   const router = useRouter();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [isDownloadingId, setIsDownloadingId] = useState<string | null>(null);
 
   const productsQuery = useMemo(() => {
-    if (!db) return null;
-    return query(collection(db, "products"), orderBy("name"));
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return query(collection(db, "tenants", tenantId, "products"), orderBy("name"));
+  }, [db, tenantId]);
 
   const { data: products, loading } = useCollection<Product>(productsQuery);
 
-  const tenantRef = useMemo(() => (db) ? doc(db, "tenants", "default_tenant") : null, [db]);
+  const tenantRef = useMemo(() => (db && tenantId) ? doc(db, "tenants", tenantId) : null, [db, tenantId]);
   const { data: tenant } = useDoc<Tenant>(tenantRef);
 
   const filteredProducts = useMemo(() => {
@@ -75,9 +77,9 @@ export default function ProductosPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!db || !confirm("¿Eliminar este producto del catálogo definitivamente?")) return;
+    if (!db || !tenantId || !confirm("¿Eliminar este producto del catálogo definitivamente?")) return;
     try {
-      await deleteDoc(doc(db, "products", id));
+      await deleteDoc(doc(db, "tenants", tenantId, "products", id));
       toast({ title: "Producto eliminado" });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al eliminar" });

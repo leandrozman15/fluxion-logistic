@@ -4,6 +4,7 @@
 import { useMemo, useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useFirestore, useDoc } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
 import { doc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,7 @@ export default function ProductTechnicalSheetPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const db = useFirestore();
+  const { tenantId } = useTenant();
   const [mounted, setMounted] = useState(false);
 
   const autoPrint = searchParams.get('print') === 'true';
@@ -44,16 +46,16 @@ export default function ProductTechnicalSheetPage() {
   }, []);
 
   const productRef = useMemo(() => {
-    if (!db || !id) return null;
-    return doc(db, "products", id as string);
-  }, [db, id]);
+    if (!db || !id || !tenantId) return null;
+    return doc(db, "tenants", tenantId, "products", id as string);
+  }, [db, id, tenantId]);
 
   const { data: product, loading } = useDoc<Product>(productRef);
 
   const tenantRef = useMemo(() => {
-    if (!db) return null;
-    return doc(db, "tenants", "default_tenant");
-  }, [db]);
+    if (!db || !tenantId) return null;
+    return doc(db, "tenants", tenantId);
+  }, [db, tenantId]);
 
   const { data: tenant } = useDoc<Tenant>(tenantRef);
 

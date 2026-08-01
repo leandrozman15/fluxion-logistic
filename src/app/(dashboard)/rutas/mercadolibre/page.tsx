@@ -1,8 +1,9 @@
+
 'use client';
 
 import { useState, useRef, useMemo, Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useFirestore, useUser, useDoc } from "@/firebase";
+import { useFirestore, useUser, useDoc, useTenant } from "@/firebase";
 import { collection, serverTimestamp, doc, setDoc, updateDoc } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ function MercadoLibreScanner() {
   const searchParams = useSearchParams();
   const db = useFirestore();
   const { user } = useUser();
+  const { tenantId } = useTenant();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -37,7 +39,7 @@ function MercadoLibreScanner() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { data: tenant } = useDoc<Tenant>(useMemo(() => (db ? doc(db, "tenants", "default_tenant") : null), [db]));
+  const { data: tenant } = useDoc<Tenant>(useMemo(() => (db && tenantId ? doc(db, "tenants", tenantId) : null), [db, tenantId]));
 
   const handleOpenScanner = () => {
     fileInputRef.current?.click();
@@ -93,7 +95,7 @@ function MercadoLibreScanner() {
   };
 
   const handleStartReparto = async () => {
-    if (!db || scannedDestinations.length === 0) return;
+    if (!db || !tenantId || scannedDestinations.length === 0) return;
     setIsSubmitting(true);
     try {
       const stops = scannedDestinations.map(d => ({
@@ -117,7 +119,7 @@ function MercadoLibreScanner() {
       }));
 
       if (preAssignedLoadId) {
-        await updateDoc(doc(db, "loads", preAssignedLoadId), {
+        await updateDoc(doc(db, "tenants", tenantId, "loads", preAssignedLoadId), {
           outboundStops: stops,
           status: 'on_route',
           updatedAt: serverTimestamp()
@@ -126,7 +128,7 @@ function MercadoLibreScanner() {
         router.push(`/rutas/${preAssignedLoadId}`);
       } else {
         const orderNum = `ML-${new Date().getFullYear()}-${Math.floor(Math.random() * 9000)}`;
-        const newRef = doc(collection(db, "loads"));
+        const newRef = doc(collection(db, "tenants", tenantId, "loads"));
         await setDoc(newRef, {
           id: newRef.id,
           orderNumber: orderNum,
