@@ -2,15 +2,16 @@
 'use client';
 
 import { useState, useMemo } from "react";
-import { useFirestore, useCollection, useDoc } from "@/firebase";
+import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc, updateDoc, serverTimestamp, collection, setDoc, query, orderBy } from "firebase/firestore";
+import { collection, updateDoc, serverTimestamp, setDoc, query, orderBy, doc } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Progress } from "@/components/ui/progress";
 import { 
   Box, 
   Warehouse, 
@@ -26,7 +27,13 @@ import {
   ChevronRight,
   Grid3X3,
   Container,
-  PackageCheck
+  PackageCheck,
+  TrendingUp,
+  Activity,
+  CheckCircle2,
+  BarChart3,
+  MapPin,
+  ArrowRight
 } from "lucide-react";
 import { Hub, WarehouseLayout, WarehouseSection, WarehouseAisle, WarehouseRack, WarehouseSlot } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -41,6 +48,7 @@ export default function WarehouseLayoutPage() {
   const [selectedHubId, setSelectedHubId] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
   const [activeRackId, setActiveRackId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'editor' | 'overview'>('overview');
 
   const hubsQuery = useMemo(() => {
     if (!db || !tenantId) return null;
@@ -55,6 +63,27 @@ export default function WarehouseLayoutPage() {
   });
 
   const activeHub = useMemo(() => hubs?.find(h => h.id === selectedHubId), [hubs, selectedHubId]);
+
+  // Cálculos de ocupación (Simulados para el prototipo visual)
+  const warehouseStats = useMemo(() => {
+    if (!layout.sections) return { total: 0, occupied: 0, free: 0, percent: 0 };
+    let total = 0;
+    layout.sections.forEach(s => {
+      s.aisles.forEach(a => {
+        a.racks.forEach(r => {
+          total += (r.levels * r.columns);
+        });
+      });
+    });
+    // Simulación de ocupación aleatoria persistente para visualización
+    const occupied = Math.floor(total * 0.64); 
+    return {
+      total,
+      occupied,
+      free: total - occupied,
+      percent: total > 0 ? Math.round((occupied / total) * 100) : 0
+    };
+  }, [layout]);
 
   const addSection = () => {
     const newSection: WarehouseSection = {
@@ -129,7 +158,7 @@ export default function WarehouseLayoutPage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-900 italic tracking-tighter uppercase leading-none">Mapeo de Depósito</h1>
-          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Configuración técnica de estanterías y ubicaciones fijas.</p>
+          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Configuración técnica de estanterías y control de capacidad.</p>
         </div>
         <div className="flex items-center gap-3">
           <Select value={selectedHubId} onValueChange={setSelectedHubId}>
@@ -165,13 +194,16 @@ export default function WarehouseLayoutPage() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-           {/* BARRA DE HERRAMIENTAS / ESTRUCTURA */}
+           {/* BARRA LATERAL: ÁRBOL Y HERRAMIENTAS */}
            <div className="lg:col-span-4 space-y-6">
               <Card className="border-none shadow-xl rounded-[2rem] overflow-hidden bg-white">
                  <CardHeader className="bg-slate-900 text-white p-6">
-                    <CardTitle className="text-xs uppercase tracking-widest flex items-center gap-2">
-                       <LayoutGrid size={16} className="text-blue-400" /> Árbol de Estructura
-                    </CardTitle>
+                    <div className="flex justify-between items-center">
+                       <CardTitle className="text-xs uppercase tracking-widest flex items-center gap-2">
+                          <LayoutGrid size={16} className="text-blue-400" /> Estructura Física
+                       </CardTitle>
+                       <Button variant="ghost" size="sm" className="h-6 text-[8px] font-black uppercase text-blue-400" onClick={() => { setViewMode('overview'); setActiveRackId(null); }}>Ver Todo</Button>
+                    </div>
                  </CardHeader>
                  <CardContent className="p-4 space-y-4">
                     <Button variant="outline" className="w-full border-dashed border-2 h-12 rounded-xl text-blue-600 font-black text-[10px] uppercase" onClick={addSection}>
@@ -200,7 +232,7 @@ export default function WarehouseLayoutPage() {
                                             "cursor-pointer font-mono text-[9px] h-5 transition-all",
                                             activeRackId === rack.id ? "bg-blue-600 text-white" : "bg-white text-slate-500 border-slate-200"
                                           )}
-                                          onClick={() => setActiveRackId(rack.id)}
+                                          onClick={() => { setActiveRackId(rack.id); setViewMode('editor'); }}
                                          >
                                             {rack.name}
                                          </Badge>
@@ -226,14 +258,103 @@ export default function WarehouseLayoutPage() {
               </div>
            </div>
 
-           {/* VISUALIZADOR REALISTA DE RACK */}
+           {/* ÁREA PRINCIPAL: OVERVIEW O EDITOR */}
            <div className="lg:col-span-8">
-              {!activeRackId ? (
-                <div className="h-full min-h-[500px] border-2 border-dashed rounded-[3rem] flex flex-col items-center justify-center text-center p-20 bg-white">
-                   <Maximize2 size={64} className="text-slate-100 mb-4" />
-                   <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Seleccione un rack del árbol para editar su malla</p>
+              {viewMode === 'overview' && !activeRackId ? (
+                <div className="space-y-6 animate-in fade-in duration-500">
+                   {/* RESUMEN DE CAPACIDAD GLOBAL */}
+                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <Card className="border-none shadow-md bg-white">
+                         <CardContent className="p-6 flex items-center justify-between">
+                            <div>
+                               <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Capacidad Total</p>
+                               <p className="text-3xl font-black italic text-slate-900">{warehouseStats.total} <span className="text-xs font-normal opacity-40">Slots</span></p>
+                            </div>
+                            <LayoutGrid size={32} className="text-blue-100" />
+                         </CardContent>
+                      </Card>
+                      <Card className="border-none shadow-md bg-white">
+                         <CardContent className="p-6 flex items-center justify-between">
+                            <div>
+                               <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Ocupación Actual</p>
+                               <p className="text-3xl font-black italic text-blue-600">{warehouseStats.occupied} <span className="text-xs font-normal opacity-40">Pallets</span></p>
+                            </div>
+                            <TrendingUp size={32} className="text-blue-100" />
+                         </CardContent>
+                      </Card>
+                      <Card className="border-none shadow-md bg-slate-900 text-white">
+                         <CardContent className="p-6 flex items-center justify-between">
+                            <div>
+                               <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Estado General</p>
+                               <p className="text-2xl font-black italic text-blue-400">{warehouseStats.percent}% <span className="text-xs font-normal opacity-40">USO</span></p>
+                            </div>
+                            <Activity size={32} className="text-blue-500/20" />
+                         </CardContent>
+                      </Card>
+                   </div>
+
+                   {/* TARJETAS DE SECTORES / PASILLOS */}
+                   <div className="space-y-8">
+                      <h3 className="text-[11px] font-black uppercase text-slate-400 tracking-[0.3em] flex items-center gap-3">
+                         <BarChart3 size={16} className="text-blue-600" /> Monitor de Capacidad por Zona
+                      </h3>
+                      
+                      {layout.sections?.length === 0 ? (
+                        <div className="p-20 text-center border-2 border-dashed rounded-[3rem] bg-white space-y-4">
+                           <Box size={48} className="mx-auto text-slate-100" />
+                           <p className="text-xs font-black text-slate-300 uppercase italic">Depósito sin configuración física</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                           {layout.sections?.map(section => (
+                             <Card key={section.id} className="border-none shadow-xl rounded-[2.5rem] bg-white overflow-hidden group">
+                                <CardHeader className="bg-slate-50 border-b p-6 flex flex-row items-center justify-between">
+                                   <div>
+                                      <CardTitle className="text-base font-black uppercase italic text-slate-800">{section.name}</CardTitle>
+                                      <CardDescription className="text-[9px] font-bold uppercase">{section.aisles.length} Pasillos Operativos</CardDescription>
+                                   </div>
+                                   <Badge className="bg-blue-600 text-white border-none">ZONA ACTIVA</Badge>
+                                </CardHeader>
+                                <CardContent className="p-6 space-y-6">
+                                   {section.aisles.map(aisle => {
+                                      const aisleTotal = aisle.racks.reduce((acc, r) => acc + (r.levels * r.columns), 0);
+                                      const aisleOccupied = Math.floor(aisleTotal * (0.4 + Math.random() * 0.4)); // Simulación x pasillo
+                                      const percent = aisleTotal > 0 ? Math.round((aisleOccupied / aisleTotal) * 100) : 0;
+                                      
+                                      return (
+                                        <div key={aisle.id} className="space-y-2">
+                                           <div className="flex justify-between items-center">
+                                              <p className="text-[10px] font-black uppercase text-slate-500 flex items-center gap-2">
+                                                 <ArrowRight size={10} className="text-blue-600" /> {aisle.name}
+                                              </p>
+                                              <span className="text-[10px] font-black text-slate-400 italic">{percent}%</span>
+                                           </div>
+                                           <Progress value={percent} className="h-1.5 bg-slate-100" />
+                                           <div className="flex gap-2 pt-1">
+                                              {aisle.racks.map(r => (
+                                                <div 
+                                                  key={r.id} 
+                                                  className="w-8 h-2 rounded-full bg-slate-100 border border-slate-200 cursor-pointer hover:bg-blue-400 transition-colors"
+                                                  onClick={() => { setActiveRackId(r.id); setViewMode('editor'); }}
+                                                  title={`Rack ${r.name}`}
+                                                />
+                                              ))}
+                                           </div>
+                                        </div>
+                                      );
+                                   })}
+                                </CardContent>
+                                <CardFooter className="bg-slate-50 p-4 flex justify-center border-t">
+                                   <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Optimización de espacio por IA habilitada</p>
+                                </CardFooter>
+                             </Card>
+                           ))}
+                        </div>
+                      )}
+                   </div>
                 </div>
               ) : (
+                /* EDITOR DE RACK (ACTUALIZADO) */
                 <Card className="border-none shadow-2xl rounded-[3rem] overflow-hidden bg-white animate-in zoom-in-95 duration-200">
                    <CardHeader className="bg-blue-600 text-white p-8">
                       <div className="flex justify-between items-center">
@@ -246,7 +367,7 @@ export default function WarehouseLayoutPage() {
                               <CardDescription className="text-white/60 text-[10px] font-bold uppercase">Configuración de Niveles y Celdas</CardDescription>
                            </div>
                         </div>
-                        <Badge className="bg-white text-blue-600 border-none font-mono">RACK-ID: {activeRackId}</Badge>
+                        <Button variant="outline" className="bg-white/10 border-white/20 text-white hover:bg-white/20 h-10 rounded-xl font-black text-[10px] uppercase" onClick={() => setViewMode('overview')}>Cerrar Editor</Button>
                       </div>
                    </CardHeader>
                    <CardContent className="p-10 space-y-10">
