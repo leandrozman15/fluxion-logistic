@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from "react";
@@ -15,7 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { 
   Truck, ArrowLeft, Save, Loader2, 
-  Scale, CheckCircle2, ChevronRight, ChevronLeft, Info, Camera, DollarSign, Zap, Gauge, Fuel
+  Scale, CheckCircle2, ChevronRight, ChevronLeft, Info, Camera, DollarSign, Zap, Gauge, Fuel,
+  ShieldCheck, Wrench, RefreshCw, Smartphone
 } from "lucide-react";
 import { Truck as TruckType, TruckCosts } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -56,6 +56,22 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     costs: INITIAL_COSTS
   });
 
+  // Funciones de navegación definidas al inicio para evitar ReferenceError durante el pre-render
+  const handleNext = () => {
+    if (step === 1) {
+      if (!formData.plate) return toast({ variant: "destructive", title: "Falta Patente", description: "El dominio de la unidad es obligatorio." });
+      if (!formData.brand) return toast({ variant: "destructive", title: "Falta Marca", description: "Debe ingresar la marca del tractor." });
+    }
+    if (step === 2) {
+      if (!formData.grossCombinedWeightKg || !formData.unladenWeightKg) {
+        return toast({ variant: "destructive", title: "Datos Técnicos", description: "PBTC y Tara son obligatorios para el balance legal." });
+      }
+    }
+    setStep(s => Math.min(5, s + 1));
+  };
+
+  const handleBack = () => setStep(s => Math.max(1, s - 1));
+
   const truckRef = useMemo(() => (truckId && db && tenantId) ? doc(db, "tenants", tenantId, "trucks", truckId) : null, [db, tenantId, truckId]);
   const { data: existingTruck, loading: loadingExisting } = useDoc<TruckType>(truckRef);
 
@@ -64,16 +80,6 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
       setFormData({ ...existingTruck, costs: existingTruck.costs || INITIAL_COSTS });
     }
   }, [existingTruck]);
-
-  const handleNext = () => {
-    if (step === 1) {
-      if (!formData.plate) return toast({ variant: "destructive", title: "Falta Patente", description: "El dominio de la unidad es obligatorio." });
-      if (!formData.brand) return toast({ variant: "destructive", title: "Falta Marca", description: "Debe ingresar la marca del tractor." });
-    }
-    setStep(s => Math.min(4, s + 1));
-  };
-
-  const handleBack = () => setStep(s => Math.max(1, s - 1));
 
   const onAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -84,12 +90,12 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
         try {
           const base64 = event.target?.result as string;
           const compressed = await compressImage(base64);
-          const storagePath = `tenants/${tenantId}/fleet/${formData.plate || 'temp'}/avatar.jpg`;
+          const fileName = `truck_${Date.now()}.jpg`;
+          const storagePath = `tenants/${tenantId}/fleet/${formData.plate || 'temp'}/avatar_${fileName}`;
           const url = await uploadBase64(storagePath, compressed);
           setFormData(prev => ({ ...prev, avatarUrl: url }));
           
           await logSystemEvent(db, tenantId, user, 'document_upload', 'truck', formData.plate || 'unknown', { fileType: 'avatar' });
-          
           toast({ title: "Foto guardada" });
         } catch (err) {
           toast({ variant: "destructive", title: "Error al subir foto" });
@@ -105,17 +111,22 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     if (!db || !tenantId || !formData.plate) return;
     setIsSubmitting(true);
     try {
-      let finalId = truckId;
+      const finalCapacity = (formData.grossCombinedWeightKg || 0) - (formData.unladenWeightKg || 0);
+      const dataToSave = { 
+        ...formData, 
+        capacityKg: finalCapacity,
+        updatedAt: serverTimestamp() 
+      };
+
       if (truckId) {
-        await updateDoc(doc(db, "tenants", tenantId, "trucks", truckId), { ...formData, updatedAt: serverTimestamp() });
+        await updateDoc(doc(db, "tenants", tenantId, "trucks", truckId), dataToSave);
         await logSystemEvent(db, tenantId, user, 'update', 'truck', truckId, { plate: formData.plate });
       } else {
         const newRef = doc(collection(db, "tenants", tenantId, "trucks"));
-        finalId = newRef.id;
-        await setDoc(newRef, { ...formData, id: finalId, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-        await logSystemEvent(db, tenantId, user, 'create', 'truck', finalId, { plate: formData.plate });
+        await setDoc(newRef, { ...dataToSave, id: newRef.id, createdAt: serverTimestamp() });
+        await logSystemEvent(db, tenantId, user, 'create', 'truck', newRef.id, { plate: formData.plate });
       }
-      toast({ title: "Cambios guardados" });
+      toast({ title: "Ficha Técnica Guardada", description: `La unidad ${formData.plate} ha sido actualizada.` });
       router.push('/flota');
     } catch (e) {
       toast({ variant: "destructive", title: "Error al guardar" });
@@ -124,92 +135,202 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     }
   };
 
-  if (loadingExisting && truckId) return <div className="h-[60vh] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
+  if (loadingExisting && truckId) return <div className="h-[60vh] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600 w-10 h-10" /></div>;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-24 px-4 sm:px-0">
+    <div className="max-w-5xl mx-auto space-y-6 pb-24 px-4 sm:px-0">
       <div className="flex items-center gap-4 pt-6">
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full bg-white shadow-sm border"><ArrowLeft size={18} /></Button>
-        <div><h1 className="text-2xl font-bold">Ficha Técnica de Camión</h1><p className="text-sm text-slate-500">Configuración de activos y parámetros operativos.</p></div>
+        <div>
+          <h1 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Ficha Técnica de Camión</h1>
+          <p className="text-sm text-slate-500 font-medium">Configuración de activos, pesos y parámetros de costos.</p>
+        </div>
       </div>
 
-      <div className="bg-white p-4 rounded-xl border flex justify-between shadow-sm">
+      <div className="bg-white p-4 rounded-2xl border shadow-sm flex items-center justify-between overflow-x-auto gap-4">
          {[
            { id: 1, label: "Identidad", icon: Info },
-           { id: 2, label: "Técnica", icon: Scale },
+           { id: 2, label: "Pesos/Técnica", icon: Scale },
            { id: 3, label: "Operación", icon: Zap },
-           { id: 4, label: "Costos", icon: DollarSign }
+           { id: 4, label: "Costos Fijos", icon: DollarSign },
+           { id: 5, label: "Variables", icon: TrendingUp }
          ].map(s => (
-           <div key={s.id} className="flex flex-col items-center gap-1.5 flex-1 relative">
-             <div className={cn("w-9 h-9 rounded-full flex items-center justify-center border z-10 transition-all", step >= s.id ? "bg-blue-600 text-white border-blue-600 shadow-lg" : "bg-white")}>
-               {step > s.id ? <CheckCircle2 size={18} /> : <s.icon size={16} />}
+           <div key={s.id} className="flex flex-col items-center gap-1.5 flex-1 relative min-w-[100px]">
+             <div className={cn(
+               "w-10 h-10 rounded-full flex items-center justify-center border-2 z-10 transition-all", 
+               step === s.id ? "bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100 scale-110" : 
+               step > s.id ? "bg-green-500 text-white border-green-500" : "bg-white text-slate-300 border-slate-100"
+             )}>
+               {step > s.id ? <CheckCircle2 size={20} /> : <s.icon size={18} />}
              </div>
-             <span className={cn("text-[9px] font-black uppercase", step === s.id ? "text-blue-600" : "text-slate-400")}>{s.label}</span>
+             <span className={cn("text-[9px] font-black uppercase text-center", step === s.id ? "text-blue-600" : "text-slate-400")}>{s.label}</span>
+             {s.id < 5 && <div className={cn("absolute top-5 left-1/2 w-full h-[2px] -z-0", step > s.id ? "bg-green-200" : "bg-slate-100")}></div>}
            </div>
          ))}
       </div>
 
-      <div className="animate-in fade-in duration-300">
+      <div className="animate-in fade-in zoom-in-95 duration-300">
+        {/* PASO 1: IDENTIDAD */}
         {step === 1 && (
-          <Card className="border-none shadow-sm rounded-3xl overflow-hidden p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="flex flex-col items-center gap-4 p-6 bg-slate-50 border-2 border-dashed rounded-2xl">
-                 <Avatar className="w-32 h-32 rounded-xl border-2 border-white shadow-lg">
-                   <AvatarImage src={formData.avatarUrl} className="object-cover" />
-                   <AvatarFallback className="bg-blue-50 text-blue-600"><Truck size={48} /></AvatarFallback>
-                 </Avatar>
-                 <input type="file" ref={avatarInputRef} className="hidden" accept="image/*" onChange={onAvatarChange} />
-                 <Button variant="outline" className="rounded-xl h-10 w-full" onClick={() => avatarInputRef.current?.click()} disabled={isProcessingAvatar}><Camera size={16} className="mr-2" /> SUBIR FOTO</Button>
-              </div>
-              <div className="space-y-4">
-                 <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-400">Patente / Dominio</Label><Input className="font-mono font-black text-lg h-12" placeholder="Ej: AA123BB" value={formData.plate} onChange={e => setFormData({...formData, plate: e.target.value.toUpperCase()})} /></div>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1"><Label className="text-[10px] font-black uppercase">Marca</Label><Input value={formData.brand} onChange={e => setFormData({...formData, brand: e.target.value})} /></div>
-                    <div className="space-y-1"><Label className="text-[10px] font-black uppercase">Modelo</Label><Input value={formData.model} onChange={e => setFormData({...formData, model: e.target.value})} /></div>
-                 </div>
-              </div>
+          <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden">
+             <CardHeader className="bg-slate-900 text-white p-8"><CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2"><Truck size={18} className="text-blue-400"/> 1. Identificación de la Unidad</CardTitle></CardHeader>
+             <CardContent className="grid grid-cols-1 md:grid-cols-12 gap-8 p-8">
+                <div className="md:col-span-4 flex flex-col items-center gap-4 p-6 bg-slate-50 border-2 border-dashed rounded-[2rem]">
+                   <Avatar className="w-40 h-40 rounded-[2rem] border-4 border-white shadow-2xl relative">
+                      <AvatarImage src={formData.avatarUrl} className="object-cover" />
+                      <AvatarFallback className="bg-blue-100 text-blue-600"><Truck size={48} /></AvatarFallback>
+                      {isProcessingAvatar && <div className="absolute inset-0 bg-white/60 flex items-center justify-center rounded-[2rem]"><Loader2 className="animate-spin text-blue-600" /></div>}
+                   </Avatar>
+                   <input type="file" ref={avatarInputRef} className="hidden" accept="image/*" onChange={onAvatarChange} />
+                   <Button variant="outline" className="w-full rounded-xl h-11 font-bold text-xs uppercase" onClick={() => avatarInputRef.current?.click()} disabled={isProcessingAvatar}>
+                     <Camera size={16} className="mr-2 text-blue-500" /> Capturar Imagen
+                   </Button>
+                </div>
+                <div className="md:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Dominio / Patente</Label><Input className="h-12 bg-slate-50 border-none rounded-xl font-mono font-black text-2xl uppercase tracking-tighter" value={formData.plate} onChange={e => setFormData({...formData, plate: e.target.value.toUpperCase()})} /></div>
+                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Año de Fabricación</Label><Input type="number" className="h-12 bg-slate-50 border-none rounded-xl font-bold" value={formData.year} onChange={e => setFormData({...formData, year: parseInt(e.target.value) || 0})} /></div>
+                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Marca del Tractor</Label><Input className="h-12 bg-slate-50 border-none rounded-xl font-bold" value={formData.brand} onChange={e => setFormData({...formData, brand: e.target.value})} /></div>
+                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Modelo / Versión</Label><Input className="h-12 bg-slate-50 border-none rounded-xl font-bold" value={formData.model} onChange={e => setFormData({...formData, model: e.target.value})} /></div>
+                   <div className="space-y-1.5">
+                      <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Titularidad</Label>
+                      <Select value={formData.ownershipType} onValueChange={(v: any) => setFormData({...formData, ownershipType: v})}>
+                         <SelectTrigger className="h-12 bg-slate-50 border-none rounded-xl"><SelectValue /></SelectTrigger>
+                         <SelectContent><SelectItem value="company">Propiedad Empresa (Directa)</SelectItem><SelectItem value="third_party">Unidad Tercerizada / Contratada</SelectItem></SelectContent>
+                      </Select>
+                   </div>
+                </div>
+             </CardContent>
           </Card>
         )}
 
+        {/* PASO 2: TÉCNICA */}
         {step === 2 && (
-          <Card className="border-none shadow-sm rounded-3xl p-8 space-y-8">
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="space-y-1"><Label className="text-[10px] font-black uppercase">PBTC Máximo (KG)</Label><Input type="number" value={formData.grossCombinedWeightKg} onChange={e => setFormData({...formData, grossCombinedWeightKg: parseInt(e.target.value) || 0})} /></div>
-                  <div className="space-y-1"><Label className="text-[10px] font-black uppercase">Tara Unidad (KG)</Label><Input type="number" value={formData.unladenWeightKg} onChange={e => setFormData({...formData, unladenWeightKg: parseInt(e.target.value) || 0})} /></div>
-               </div>
-               <div className="p-6 bg-green-50 border-2 border-green-100 rounded-3xl flex items-center justify-between">
-                  <div><p className="text-[10px] font-black text-green-700 uppercase tracking-widest">Carga Útil Calculada</p><p className="text-3xl font-black italic text-green-600">{((formData.grossCombinedWeightKg || 0) - (formData.unladenWeightKg || 0)).toLocaleString()} KG</p></div>
-                  <Badge className="bg-green-600 uppercase italic font-black">Habilitado</Badge>
-               </div>
+          <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden">
+             <CardHeader className="bg-blue-600 text-white p-8"><CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2"><Scale size={18}/> 2. Parámetros Técnicos y de Carga</CardTitle></CardHeader>
+             <CardContent className="p-8 space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400 ml-1">PBTC Máximo (KG)</Label><Input type="number" className="h-12 bg-slate-50 border-none rounded-xl font-black text-xl" value={formData.grossCombinedWeightKg} onChange={e => setFormData({...formData, grossCombinedWeightKg: parseInt(e.target.value) || 0})} /></div>
+                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Tara Real (KG)</Label><Input type="number" className="h-12 bg-slate-50 border-none rounded-xl font-black text-xl" value={formData.unladenWeightKg} onChange={e => setFormData({...formData, unladenWeightKg: parseInt(e.target.value) || 0})} /></div>
+                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Ejes del Tractor</Label><Input type="number" className="h-12 bg-slate-50 border-none rounded-xl" value={formData.axles} onChange={e => setFormData({...formData, axles: parseInt(e.target.value) || 2})} /></div>
+                </div>
+
+                <div className="p-8 bg-green-50 border-2 border-green-100 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-6">
+                   <div className="flex items-center gap-4 text-green-700">
+                      <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-lg"><Scale size={32} /></div>
+                      <div className="space-y-1">
+                         <p className="text-[10px] font-black uppercase tracking-widest">Carga Útil Habilitada (Estimada)</p>
+                         <p className="text-4xl font-black italic tracking-tighter">{((formData.grossCombinedWeightKg || 0) - (formData.unladenWeightKg || 0)).toLocaleString()} KG</p>
+                      </div>
+                   </div>
+                   <Badge className="bg-green-600 text-white font-black uppercase italic px-6 py-2 rounded-xl text-xs">Cumple Normativa Vial</Badge>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                   <div className="space-y-3">
+                      <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Configuración de Remolque</Label>
+                      <Select value={formData.haulingType} onValueChange={(v: any) => setFormData({...formData, haulingType: v})}>
+                         <SelectTrigger className="h-12 bg-slate-50 border-none rounded-xl"><SelectValue /></SelectTrigger>
+                         <SelectContent><SelectItem value="standard">Semirremolque Estandard (1 batea)</SelectItem><SelectItem value="bitren">Bitrén (Doble Semirremolque)</SelectItem><SelectItem value="chassis">Chasis Rígido (Fijo)</SelectItem></SelectContent>
+                      </Select>
+                   </div>
+                </div>
+             </CardContent>
           </Card>
         )}
 
+        {/* PASO 3: OPERACIÓN */}
         {step === 3 && (
-          <Card className="border-none shadow-sm rounded-3xl p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
-               <div className="space-y-4">
-                  <div className="space-y-1"><Label className="text-[10px] font-black uppercase">Odómetro Actual (KM)</Label><Input type="number" className="font-bold" value={formData.odometerKm} onChange={e => setFormData({...formData, odometerKm: parseInt(e.target.value) || 0})} /></div>
-                  <div className="space-y-1"><Label className="text-[10px] font-black uppercase">Consumo Promedio (L/100km)</Label><Input type="number" value={formData.avgConsumption} onChange={e => setFormData({...formData, avgConsumption: parseFloat(e.target.value) || 32})} /></div>
-               </div>
+          <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden">
+             <CardHeader className="bg-slate-900 text-white p-8"><CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2"><Zap size={18} className="text-blue-400"/> 3. Parámetros de Operación Directa</CardTitle></CardHeader>
+             <CardContent className="p-8 space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                   <div className="p-6 bg-slate-50 rounded-3xl border space-y-4">
+                      <p className="text-[10px] font-black uppercase text-blue-600 tracking-widest">Monitoreo de Uso</p>
+                      <div className="space-y-1.5">
+                         <Label className="text-[9px] font-black uppercase text-slate-400">Odómetro Actual (KM)</Label>
+                         <div className="relative"><Gauge size={16} className="absolute left-3 top-3 text-slate-300"/><Input type="number" className="h-12 pl-10 font-mono font-black text-xl" value={formData.odometerKm} onChange={e => setFormData({...formData, odometerKm: parseInt(e.target.value) || 0})} /></div>
+                      </div>
+                      <div className="space-y-1.5">
+                         <Label className="text-[9px] font-black uppercase text-slate-400">Consumo Promedio (L/100km)</Label>
+                         <div className="relative"><Fuel size={16} className="absolute left-3 top-3 text-slate-300"/><Input type="number" className="h-12 pl-10 font-bold" value={formData.avgConsumption} onChange={e => setFormData({...formData, avgConsumption: parseFloat(e.target.value) || 32})} /></div>
+                      </div>
+                   </div>
+
+                   <div className="p-6 bg-blue-50 border-2 border-blue-100 rounded-3xl space-y-6">
+                      <div className="flex items-center gap-2"><Smartphone className="text-blue-600"/><p className="text-[10px] font-black uppercase text-blue-700 tracking-widest">Meta de Rendimiento Mensual</p></div>
+                      <div className="space-y-1.5">
+                         <Label className="text-[9px] font-bold text-blue-400 uppercase">Kilometraje Estimado Mensual</Label>
+                         <Input type="number" className="h-11 bg-white border-blue-100 font-black" value={formData.costs?.operational.estimatedMonthlyKm} onChange={e => setFormData({...formData, costs: {...formData.costs!, operational: {estimatedMonthlyKm: parseInt(e.target.value) || 10000}}})} />
+                         <p className="text-[9px] text-blue-400 italic">Este valor se utiliza para diluir los gastos fijos por KM.</p>
+                      </div>
+                   </div>
+                </div>
+             </CardContent>
           </Card>
         )}
 
+        {/* PASO 4: COSTOS FIJOS */}
         {step === 4 && (
-          <Card className="border-none shadow-sm rounded-3xl p-8 space-y-6">
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-1"><Label className="text-[10px] font-black uppercase">Seguro Total Mensual (ARS)</Label><Input type="number" value={formData.costs?.fixed.insuranceTotal} onChange={e => setFormData({...formData, costs: {...formData.costs!, fixed: {...formData.costs!.fixed, insuranceTotal: parseFloat(e.target.value) || 0}}})} /></div>
-                  <div className="space-y-1"><Label className="text-[10px] font-black uppercase">Sueldo + Cargas Sociales (ARS)</Label><Input type="number" value={formData.costs?.fixed.salaryWithSocial} onChange={e => setFormData({...formData, costs: {...formData.costs!, fixed: {...formData.costs!.fixed, salaryWithSocial: parseFloat(e.target.value) || 0}}})} /></div>
-               </div>
-               <div className="p-6 bg-slate-900 text-white rounded-3xl flex items-center justify-between shadow-xl">
-                  <div><p className="text-[10px] font-black uppercase text-blue-400">Finalizar Auditoría</p><p className="text-sm font-medium">Al guardar, se recalculará el costo por KM de la flota.</p></div>
-                  <Button onClick={handleSubmit} className="bg-blue-600 h-14 px-10 rounded-2xl font-black shadow-xl" disabled={isSubmitting}>{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} FINALIZAR FICHA</Button>
-               </div>
+          <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden">
+             <CardHeader className="bg-slate-900 text-white p-8"><CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2"><DollarSign size={18}/> 4. Auditoría de Gastos Fijos Mensuales</CardTitle></CardHeader>
+             <CardContent className="p-8 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Sueldo + Cargas Sociales Chofer (ARS)</Label><Input type="number" className="h-11 bg-slate-50 border-none rounded-xl" value={formData.costs?.fixed.salaryWithSocial} onChange={e => setFormData({...formData, costs: {...formData.costs!, fixed: {...formData.costs!.fixed, salaryWithSocial: parseFloat(e.target.value) || 0}}})} /></div>
+                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Seguro Total (Casco + RC) Mensual</Label><Input type="number" className="h-11 bg-slate-50 border-none rounded-xl" value={formData.costs?.fixed.insuranceTotal} onChange={e => setFormData({...formData, costs: {...formData.costs!, fixed: {...formData.costs!.fixed, insuranceTotal: parseFloat(e.target.value) || 0}}})} /></div>
+                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Patente (Cuota Mensualizada)</Label><Input type="number" className="h-11 bg-slate-50 border-none rounded-xl" value={formData.costs?.fixed.patenteMonthly} onChange={e => setFormData({...formData, costs: {...formData.costs!, fixed: {...formData.costs!.fixed, patenteMonthly: parseFloat(e.target.value) || 0}}})} /></div>
+                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Gasto Garage / Playa / Admin</Label><Input type="number" className="h-11 bg-slate-50 border-none rounded-xl" value={formData.costs?.fixed.garageAdmin} onChange={e => setFormData({...formData, costs: {...formData.costs!, fixed: {...formData.costs!.fixed, garageAdmin: parseFloat(e.target.value) || 0}}})} /></div>
+                </div>
+             </CardContent>
+          </Card>
+        )}
+
+        {/* PASO 5: VARIABLES Y FINALIZACIÓN */}
+        {step === 5 && (
+          <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden">
+             <CardHeader className="bg-green-600 text-white p-8"><CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2"><TrendingUp size={18}/> 5. Costos Variables y Amortización</CardTitle></CardHeader>
+             <CardContent className="p-8 space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                   <div className="p-6 bg-slate-50 rounded-3xl border space-y-4">
+                      <p className="text-[10px] font-black uppercase text-blue-600 tracking-widest">Mantenimiento y Lubricación</p>
+                      <div className="grid grid-cols-2 gap-4">
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase">Costo Service</Label><Input type="number" className="bg-white" value={formData.costs?.variable.preventiveMaintenance.cost} onChange={e => setFormData({...formData, costs: {...formData.costs!, variable: {...formData.costs!.variable, preventiveMaintenance: {...formData.costs!.variable.preventiveMaintenance, cost: parseFloat(e.target.value) || 0}}}})} /></div>
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase">Frecuencia (KM)</Label><Input type="number" className="bg-white" value={formData.costs?.variable.preventiveMaintenance.frequencyKm} onChange={e => setFormData({...formData, costs: {...formData.costs!, variable: {...formData.costs!.variable, preventiveMaintenance: {...formData.costs!.variable.preventiveMaintenance, frequencyKm: parseInt(e.target.value) || 20000}}}})} /></div>
+                      </div>
+                   </div>
+
+                   <div className="p-6 bg-slate-50 rounded-3xl border space-y-4">
+                      <p className="text-[10px] font-black uppercase text-orange-600 tracking-widest">Amortización Neumáticos</p>
+                      <div className="grid grid-cols-2 gap-4">
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase">Costo Set Completo</Label><Input type="number" className="bg-white" value={formData.costs?.variable.tires.costFullSet} onChange={e => setFormData({...formData, costs: {...formData.costs!, variable: {...formData.costs!.variable, tires: {...formData.costs!.variable.tires, costFullSet: parseFloat(e.target.value) || 0}}}})} /></div>
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase">Vida Útil (KM)</Label><Input type="number" className="bg-white" value={formData.costs?.variable.tires.lifeSpanKm} onChange={e => setFormData({...formData, costs: {...formData.costs!, variable: {...formData.costs!.variable, tires: {...formData.costs!.variable.tires, lifeSpanKm: parseInt(e.target.value) || 100000}}}})} /></div>
+                      </div>
+                   </div>
+                </div>
+
+                <div className="pt-8 border-t flex flex-col md:flex-row justify-between items-center gap-6">
+                   <div className="bg-slate-50 p-6 rounded-3xl border-2 border-dashed flex items-center gap-4">
+                      <Info size={24} className="text-slate-400" />
+                      <p className="text-[10px] text-slate-500 font-medium max-w-sm">Al guardar, el sistema recalculará la tarifa mínima sugerida por KM para mantener la rentabilidad de esta unidad.</p>
+                   </div>
+                   <Button onClick={handleSubmit} disabled={isSubmitting} className="bg-green-600 hover:bg-green-700 h-16 px-16 rounded-2xl font-black text-lg shadow-2xl shadow-green-100 transition-all active:scale-95">
+                      {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} FINALIZAR AUDITORÍA
+                   </Button>
+                </div>
+             </CardContent>
           </Card>
         )}
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center z-50">
-        <div className="max-w-4xl w-full flex justify-between items-center px-4">
-          <Button variant="ghost" onClick={handleBack} disabled={step === 1}>VOLVER</Button>
-          {step < 4 ? <Button onClick={handleNext} className="bg-blue-600">SIGUIENTE <ChevronRight size={16} /></Button> : null}
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t flex justify-center z-50">
+        <div className="max-w-5xl w-full flex justify-between items-center px-4">
+          <Button variant="ghost" className="font-black text-slate-400 text-xs uppercase" onClick={handleBack} disabled={step === 1 || isSubmitting}>
+            <ChevronLeft className="mr-1" size={16} /> VOLVER
+          </Button>
+          {step < 5 ? (
+            <Button onClick={handleNext} className="bg-blue-600 hover:bg-blue-700 h-11 px-8 rounded-xl font-black text-xs uppercase shadow-lg shadow-blue-100">
+               SIGUIENTE PASO <ChevronRight className="ml-1" size={16} />
+            </Button>
+          ) : null}
         </div>
       </div>
     </div>
