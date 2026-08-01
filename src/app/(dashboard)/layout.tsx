@@ -35,7 +35,8 @@ import {
   Files,
   Archive,
   ShoppingBag,
-  ShieldCheck
+  ShieldCheck,
+  Layers
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth, useFirestore, useDoc, useUser } from "@/firebase";
@@ -79,6 +80,7 @@ function DashboardSidebar() {
     { id: 'choferes', title: "Gestión Choferes", icon: Users, href: "/choferes" },
     { id: 'clientes', title: "Cartera Clientes", icon: Briefcase, href: "/clientes" },
     { id: 'productos', title: "Catálogo Productos", icon: Box, href: "/productos" },
+    { id: 'stock', title: "Stock Almacén", icon: Layers, href: "/stock" },
     { id: 'cargas', title: "Cargas y Fletes", icon: Package, href: "/cargas" },
     { id: 'remitos', title: "Buzón de Remitos", icon: Files, href: "/remitos" },
     { id: 'mantenimiento', title: "Mantenimiento", icon: Wrench, href: "/mantenimiento" },
@@ -166,7 +168,8 @@ function DashboardSidebar() {
                     <Link href={item.href}>
                       <item.icon className={cn(
                         item.title.includes("Remitos") && "text-indigo-600",
-                        item.title === "Mercado Libre" && "text-yellow-500"
+                        item.title === "Mercado Libre" && "text-yellow-500",
+                        item.id === 'stock' && "text-orange-500"
                       )} />
                       <span className={cn(
                         item.title.includes("Remitos") && "font-bold text-indigo-700",

@@ -36,7 +36,8 @@ import {
   Users,
   Wrench,
   Files,
-  BarChart3
+  BarChart3,
+  Layers
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -53,6 +54,7 @@ const AVAILABLE_MODULES = [
   { id: 'mercadolibre', label: 'Mercado Libre (Last Mile)', icon: ShoppingBag, group: 'E-commerce' },
   { id: 'remitos', label: 'Buzón de Remitos', icon: Files, group: 'Administración' },
   { id: 'productos', label: 'Catálogo Productos', icon: Box, group: 'Administración' },
+  { id: 'stock', label: 'Gestión de Stock', icon: Layers, group: 'Administración' },
   { id: 'despacho', label: 'Despacho Inteligente (IA)', icon: Zap, group: 'Inteligencia' },
   { id: 'analytics', label: 'Análisis de Datos', icon: BarChart3, group: 'Inteligencia' },
   { id: 'sedes', label: 'Sedes Logísticas', icon: MapPin, group: 'Infraestructura' },

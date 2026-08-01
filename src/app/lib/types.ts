@@ -48,6 +48,10 @@ export interface Product {
   unitsPerBox?: number;
   unitsPerPallet?: number;
   
+  // Inventory
+  stockQuantity: number;
+  minStockAlert?: number;
+  
   // Compliance / Argentina
   ncmCode?: string; // Nomenclatura Común Mercosur
   gtin?: string;
@@ -65,6 +69,23 @@ export interface Product {
   photoUrl?: string;
   createdAt: any;
   updatedAt: any;
+}
+
+export type StockMovementType = 'in' | 'out' | 'adjustment';
+
+export interface StockMovement {
+  id: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  type: StockMovementType;
+  quantity: number;
+  previousStock: number;
+  newStock: number;
+  reason: string;
+  referenceId?: string; // e.g., Load ID or Remito ID
+  actorEmail: string;
+  createdAt: any;
 }
 
 export interface Maintenance {

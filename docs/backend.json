@@ -1,3 +1,4 @@
+
 {
   "auth": {
     "providers": [
@@ -44,6 +45,10 @@
       "tenants/{tenantId}/hubs": {
         "description": "Sedes y bases operativas propias.",
         "schema": { "$ref": "#/backend/entities/Hub" }
+      },
+      "tenants/{tenantId}/stock_movements": {
+        "description": "Historial de movimientos de inventario.",
+        "schema": { "$ref": "#/backend/entities/StockMovement" }
       }
     }
   },
