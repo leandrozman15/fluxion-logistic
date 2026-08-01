@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { 
-  ArrowLeft, Save, Loader2, User, FileText, Phone, Camera, Upload, CheckCircle2, ShieldCheck, Sparkles, Key
+  ArrowLeft, Save, Loader2, User, FileText, Phone, Camera, Upload, CheckCircle2, ShieldCheck, Sparkles, Key, ChevronRight
 } from "lucide-react";
 import { Driver } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -87,6 +87,8 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
     }
     setStep(s => s + 1);
   };
+
+  const handleBack = () => setStep(s => Math.max(1, s - 1));
 
   const handleSubmit = async () => {
     if (!db || !tenantId || !formData.email) return;
@@ -214,7 +216,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex justify-center gap-4">
-        <Button variant="ghost" onClick={() => setStep(s => s - 1)} disabled={step === 1}>VOLVER</Button>
+        <Button variant="ghost" onClick={handleBack} disabled={step === 1}>VOLVER</Button>
         {step < 4 ? <Button onClick={handleNext} className="bg-blue-600">SIGUIENTE <ChevronRight size={16} /></Button> : null}
       </div>
     </div>
