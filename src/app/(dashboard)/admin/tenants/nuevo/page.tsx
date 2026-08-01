@@ -195,7 +195,7 @@ export default function NewTenantPage() {
                       <SelectItem value="Chile">🇨L Chile</SelectItem>
                       <SelectItem value="Paraguay">🇵🇾 Paraguay</SelectItem>
                       <SelectItem value="Brasil">🇧🇷 Brasil</SelectItem>
-                      <SelectItem value="Uruguay">🇺🇾 Uruguay</SelectItem>
+                      <SelectItem value="Ushort">🇺🇾 Uruguay</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -208,6 +208,34 @@ export default function NewTenantPage() {
                     value={formData.adminEmail}
                     onChange={e => setFormData({...formData, adminEmail: e.target.value})}
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Plan de Servicio</Label>
+                  <Select value={formData.plan} onValueChange={(v: any) => setFormData({...formData, plan: v})}>
+                    <SelectTrigger className="h-12 bg-slate-50 border-none rounded-xl font-bold">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="free">Free Tier</SelectItem>
+                      <SelectItem value="pro">Industrial PRO</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Mensualidad Sugerida (ARS)</Label>
+                  <div className="relative">
+                    <DollarSign className="absolute left-3 top-3.5 h-5 w-5 text-slate-300" />
+                    <Input 
+                      type="number"
+                      placeholder="0" 
+                      className="h-12 bg-slate-50 border-none rounded-xl font-black text-lg pl-10"
+                      value={formData.monthlyFee}
+                      onChange={e => setFormData({...formData, monthlyFee: parseFloat(e.target.value) || 0})}
+                    />
+                  </div>
                 </div>
               </div>
             </CardContent>
