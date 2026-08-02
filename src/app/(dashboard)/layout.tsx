@@ -1,4 +1,3 @@
-
 'use client';
 
 import { 
@@ -38,7 +37,8 @@ import {
   ShieldCheck,
   Layers,
   Map as MapIcon,
-  User as UserIcon
+  User as UserIcon,
+  Loader2
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth, useFirestore, useDoc, useUser } from "@/firebase";
