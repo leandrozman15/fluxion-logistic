@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
@@ -37,7 +36,10 @@ import {
   ScanBarcode, 
   Coffee, 
   Home,
-  Siren
+  Siren,
+  ChevronDown,
+  ChevronUp,
+  Radio
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,11 +49,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from "@/hooks/use-toast";
 import { calculateDistance } from "@/lib/utils/tracking-math";
 import { Truck, Driver, Load, Hub, Client } from "@/app/lib/types";
-import { isToday, format, addDays } from "date-fns";
+import { isToday, format, addDays, addMinutes } from "date-fns";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
@@ -231,7 +234,6 @@ export default function MonitorOperativoPage() {
     iconSize: [36, 36], iconAnchor: [18, 18]
   }) : null;
 
-  // NUEVO: truckIcon Dinámico para Alertas
   const getTruckIcon = (hasAlert: boolean = false) => {
     if (!L) return null;
     return L.divIcon({
@@ -326,7 +328,7 @@ export default function MonitorOperativoPage() {
                                   <ArrowRight size={12} className={cn("shrink-0", !isStarted ? "text-slate-200" : "text-green-500")} />
                                   {stops.length > 0 && (
                                     <>
-                                      <div className={cn("w-2.5 h-2.5 rounded-full shrink-0 shadow-sm", lastDeliveredIdx >= 0 ? "bg-green-500" : "bg-slate-200")} />
+                                      <div className={cn("w-2.5 h-2.5 rounded-full shrink-0 shadow-sm", lastDeliveredIdx >= 0 ? "bg-green-50" : "bg-slate-200")} />
                                       <ArrowRight size={12} className={cn("shrink-0", isFinished || isReturnPhase ? "text-orange-500" : "text-slate-200")} />
                                     </>
                                   )}
@@ -471,6 +473,3 @@ export default function MonitorOperativoPage() {
     </div>
   );
 }
-
-import { addMinutes } from "date-fns";
-import { Radio } from "lucide-react";
