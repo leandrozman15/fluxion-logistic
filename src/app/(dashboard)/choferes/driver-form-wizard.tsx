@@ -27,20 +27,17 @@ import {
   Upload, 
   CheckCircle2, 
   ShieldCheck, 
-  Sparkles, 
   Key, 
   ChevronRight, 
   ChevronLeft,
-  MapPin, 
   HeartPulse, 
   Briefcase, 
   Award, 
-  Zap, 
   Info,
   RefreshCw,
   Smartphone
 } from "lucide-react";
-import { Driver, DriverRole, DriverStatus } from "@/app/lib/types";
+import { Driver, DriverRole } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -64,7 +61,6 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isProcessingFile, setIsProcessingFile] = useState<string | null>(null);
 
-  // Refs para inputs de archivos
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const dniFRef = useRef<HTMLInputElement>(null);
   const dniBRef = useRef<HTMLInputElement>(null);
@@ -161,12 +157,6 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   const handleSubmit = async () => {
     if (!db || !tenantId) return;
     
-    // Solo requerimos email para crear el usuario en Auth si es nuevo y se desea habilitar acceso
-    if (!driverId && !formData.email && step === 6) {
-      toast({ variant: "destructive", title: "Faltan credenciales", description: "El email es necesario para crear la cuenta de acceso en el paso final." });
-      return;
-    }
-
     setIsSubmitting(true);
     
     const appName = `auth-worker-${Date.now()}`;
@@ -178,13 +168,11 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
       const batch = writeBatch(db);
       const cleanEmail = formData.email?.toLowerCase().trim() || "";
 
-      // Alta en Auth solo para nuevos registros con email definido
       if (!driverId && cleanEmail) {
         if (!formData.password) throw new Error("Debe definir una contraseña inicial para crear el acceso.");
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, cleanEmail, formData.password);
         uid = userCredential.user.uid;
 
-        // Registro de Mapeo Global para Seguridad
         batch.set(doc(db, "users", cleanEmail), {
           uid,
           email: cleanEmail,
@@ -197,32 +185,38 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
         if (user) {
           await logSystemEvent(db, tenantId, user, 'create', 'driver', uid, { email: cleanEmail, dni: formData.dni });
         }
-      } else if (driverId && user) {
-        await logSystemEvent(db, tenantId, user, 'update', 'driver', uid!, { email: cleanEmail, dni: formData.dni });
       }
 
-      // Si no hay email, usamos un ID aleatorio o el DNI para la colección local
       if (!uid) {
         uid = formData.dni || Math.random().toString(36).substring(7);
       }
 
       const tenantUserRef = doc(db, "tenants", tenantId, "drivers", uid!);
-      const { password, ...dataToSave } = formData;
-      const finalData = { 
-        ...dataToSave, 
-        id: uid, 
-        email: cleanEmail,
-        updatedAt: serverTimestamp(), 
-        createdAt: driverId ? undefined : serverTimestamp() 
-      };
+      
+      const { password, ...restData } = formData;
+      const finalData: any = {};
+      
+      // Sanitizar datos para evitar undefined
+      Object.entries(restData).forEach(([key, value]) => {
+        if (value !== undefined) finalData[key] = value;
+      });
 
-      if (driverId) batch.update(tenantUserRef, finalData);
-      else batch.set(tenantUserRef, finalData);
+      finalData.id = uid;
+      finalData.email = cleanEmail;
+      finalData.updatedAt = serverTimestamp();
+      
+      if (!driverId) {
+        finalData.createdAt = serverTimestamp();
+        batch.set(tenantUserRef, finalData);
+      } else {
+        batch.update(tenantUserRef, finalData);
+      }
 
       await batch.commit();
       toast({ title: "Legajo Digital Guardado", description: `El perfil ha sido actualizado correctamente.` });
       router.push('/choferes');
     } catch (e: any) {
+      console.error(e);
       toast({ variant: "destructive", title: "Error en el alta", description: e.message });
     } finally {
       await deleteApp(secondaryApp);
@@ -259,7 +253,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
              <div className={cn(
                "w-10 h-10 rounded-full flex items-center justify-center border-2 z-10 transition-all", 
                step === s.id ? "bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100 scale-110" : 
-               step > s.id ? "bg-green-50 text-white border-green-500" : "bg-white text-slate-300 border-slate-100"
+               step > s.id ? "bg-green-500 text-white border-green-500" : "bg-white text-slate-300 border-slate-100"
              )}>
                {step > s.id ? <CheckCircle2 size={20} /> : <s.icon size={18} />}
              </div>
@@ -270,18 +264,17 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
       </div>
 
       <div className="animate-in fade-in zoom-in-95 duration-300">
-        {/* PASO 1: IDENTIDAD */}
         {step === 1 && (
           <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden">
              <CardHeader className="bg-slate-900 text-white p-8"><CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2"><User size={18} className="text-blue-400"/> 1. Identidad y Datos Personales</CardTitle></CardHeader>
              <CardContent className="grid grid-cols-1 md:grid-cols-12 gap-8 p-8">
                 <div className="md:col-span-4 flex flex-col items-center gap-4 p-6 bg-slate-50 border-2 border-dashed rounded-[2rem]">
-                   <Avatar className="w-40 h-40 rounded-[2rem] border-4 border-white shadow-2xl relative">
+                   <Avatar className="w-48 h-48 rounded-[2rem] border-4 border-white shadow-2xl relative">
                       <AvatarImage src={formData.avatarUrl} className="object-cover" />
-                      <AvatarFallback className="bg-blue-100 text-blue-600 text-3xl font-black uppercase">{formData.firstName?.[0]}{formData.lastName?.[0] || '?'}</AvatarFallback>
+                      <AvatarFallback className="bg-blue-100 text-blue-600 text-3xl font-black uppercase">{formData.firstName?.[0] || '?'}{formData.lastName?.[0] || '?'}</AvatarFallback>
                       {isProcessingFile === 'avatarUrl' && <div className="absolute inset-0 bg-white/60 flex items-center justify-center rounded-[2rem]"><Loader2 className="animate-spin text-blue-600" /></div>}
                    </Avatar>
-                   <input type="file" ref={avatarInputRef} className="hidden" accept="image/*" capture="user" onChange={(e) => onFileChange('avatarUrl', e)} />
+                   <input type="file" ref={avatarInputRef} className="hidden" accept="image/*" onChange={(e) => onFileChange('avatarUrl', e)} />
                    <Button variant="outline" className="w-full rounded-xl h-11 font-bold text-xs uppercase" onClick={() => avatarInputRef.current?.click()} disabled={!!isProcessingFile}>
                      <Camera size={16} className="mr-2 text-blue-500" /> Capturar Foto
                    </Button>
@@ -319,7 +312,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                          <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Clases Habilitadas</Label>
                          <div className="flex flex-wrap gap-2">
                             {LICENSE_CLASSES.map(cls => (
-                              <button key={cls} onClick={() => toggleClass(cls)} className={cn("h-10 w-12 rounded-xl border-2 font-black text-xs transition-all", formData.licenseClasses?.includes(cls) ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100" : "bg-white border-slate-100 text-slate-300 hover:border-blue-200")}>{cls}</button>
+                              <button key={cls} type="button" onClick={() => toggleClass(cls)} className={cn("h-10 w-12 rounded-xl border-2 font-black text-xs transition-all", formData.licenseClasses?.includes(cls) ? "bg-blue-600 border-blue-600 text-white shadow-lg" : "bg-white border-slate-100 text-slate-300")}>{cls}</button>
                             ))}
                          </div>
                       </div>
@@ -331,10 +324,12 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                             <p className="text-[10px] font-black uppercase text-orange-700 tracking-widest">LINTI (Interjurisdiccional)</p>
                             <Switch checked={formData.hasLinti} onCheckedChange={v => setFormData({...formData, hasLinti: v})} />
                          </div>
-                         <div className="space-y-4 animate-in fade-in duration-300" style={{ display: formData.hasLinti ? 'block' : 'none' }}>
-                            <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-orange-400">N° de Trámite LINTI</Label><Input className="h-11 bg-white border-orange-100 rounded-xl font-bold" value={formData.lintiNumber} onChange={e => setFormData({...formData, lintiNumber: e.target.value})} /></div>
-                            <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-orange-400">Vencimiento</Label><Input type="date" className="h-11 bg-white border-orange-100 rounded-xl" value={formData.lintiExpiry} onChange={e => setFormData({...formData, lintiExpiry: e.target.value})} /></div>
-                         </div>
+                         {formData.hasLinti && (
+                           <div className="space-y-4 animate-in fade-in duration-300">
+                              <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-orange-400">N° de Trámite LINTI</Label><Input className="h-11 bg-white border-orange-100 rounded-xl font-bold" value={formData.lintiNumber} onChange={e => setFormData({...formData, lintiNumber: e.target.value})} /></div>
+                              <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-orange-400">Vencimiento</Label><Input type="date" className="h-11 bg-white border-orange-100 rounded-xl" value={formData.lintiExpiry} onChange={e => setFormData({...formData, lintiExpiry: e.target.value})} /></div>
+                           </div>
+                         )}
                       </div>
 
                       <div className="p-6 bg-slate-900 text-white rounded-3xl space-y-4">
@@ -342,10 +337,12 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                             <p className="text-[10px] font-black uppercase text-blue-400 tracking-widest">Aptitud CNRT / Psicofísico</p>
                             <Switch checked={formData.hasCnrt} onCheckedChange={v => setFormData({...formData, hasCnrt: v})} />
                          </div>
-                         <div className="space-y-1.5" style={{ display: formData.hasCnrt ? 'block' : 'none' }}>
-                            <Label className="text-[9px] font-black uppercase text-white/40">Certificado Médico Vence</Label>
-                            <Input type="date" className="h-11 bg-white/10 border-none rounded-xl text-white" value={formData.medicalCertificateExpiry} onChange={e => setFormData({...formData, medicalCertificateExpiry: e.target.value})} />
-                         </div>
+                         {formData.hasCnrt && (
+                           <div className="space-y-1.5 animate-in fade-in">
+                              <Label className="text-[9px] font-black text-white/40">Certificado Médico Vence</Label>
+                              <Input type="date" className="h-11 bg-white/10 border-none rounded-xl text-white" value={formData.medicalCertificateExpiry} onChange={e => setFormData({...formData, medicalCertificateExpiry: e.target.value})} />
+                           </div>
+                         )}
                       </div>
                    </div>
                 </div>
@@ -415,8 +412,8 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                       </div>
                    </div>
                    <div className="space-y-1.5">
-                      <Label className="text-[10px] font-black uppercase text-slate-400">Observaciones Generales / Antecedentes</Label>
-                      <Textarea className="min-h-[160px] bg-slate-50 border-none rounded-[2rem] p-6 text-xs leading-relaxed" placeholder="Detalle cualquier información relevante para recursos humanos..." value={formData.observations} onChange={e => setFormData({...formData, observations: e.target.value})} />
+                      <Label className="text-[10px] font-black uppercase text-slate-400">Observaciones Generales</Label>
+                      <Textarea className="min-h-[160px] bg-slate-50 border-none rounded-[2rem] p-6 text-xs" placeholder="Detalle cualquier información relevante..." value={formData.observations} onChange={e => setFormData({...formData, observations: e.target.value})} />
                    </div>
                 </div>
              </CardContent>
@@ -435,8 +432,8 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                       <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center mx-auto text-slate-400">
                          {isProcessingFile === 'dniFileUrl' ? <Loader2 className="animate-spin" /> : <Smartphone size={24} />}
                       </div>
-                      <div><p className="text-xs font-black uppercase">DNI (Frente)</p><p className="text-[8px] text-slate-400 font-bold">PDF o Imagen HD</p></div>
-                      <Button size="sm" variant={formData.dniFileUrl ? "outline" : "default"} className="w-full rounded-xl h-9" onClick={() => dniFRef.current?.click()} disabled={!!isProcessingFile}>
+                      <div><p className="text-xs font-black uppercase">DNI (Frente)</p></div>
+                      <Button size="sm" variant={formData.dniFileUrl ? "outline" : "default"} className="w-full rounded-xl" onClick={() => dniFRef.current?.click()} disabled={!!isProcessingFile}>
                         {formData.dniFileUrl ? 'Cambiar Archivo' : 'Cargar Archivo'}
                       </Button>
                    </div>
@@ -447,8 +444,8 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                       <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center mx-auto text-slate-400">
                          {isProcessingFile === 'dniBackFileUrl' ? <Loader2 className="animate-spin" /> : <Smartphone size={24} />}
                       </div>
-                      <div><p className="text-xs font-black uppercase">DNI (Dorso)</p><p className="text-[8px] text-slate-400 font-bold">PDF o Imagen HD</p></div>
-                      <Button size="sm" variant={formData.dniBackFileUrl ? "outline" : "default"} className="w-full rounded-xl h-9" onClick={() => dniBRef.current?.click()} disabled={!!isProcessingFile}>
+                      <div><p className="text-xs font-black uppercase">DNI (Dorso)</p></div>
+                      <Button size="sm" variant={formData.dniBackFileUrl ? "outline" : "default"} className="w-full rounded-xl" onClick={() => dniBRef.current?.click()} disabled={!!isProcessingFile}>
                         {formData.dniBackFileUrl ? 'Cambiar Archivo' : 'Cargar Archivo'}
                       </Button>
                    </div>
@@ -459,39 +456,15 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                       <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center mx-auto text-slate-400">
                          {isProcessingFile === 'licenseFileUrl' ? <Loader2 className="animate-spin" /> : <Award size={24} />}
                       </div>
-                      <div><p className="text-xs font-black uppercase">Licencia (Frente)</p><p className="text-[8px] text-slate-400 font-bold">Carnet Nacional</p></div>
-                      <Button size="sm" variant={formData.licenseFileUrl ? "outline" : "default"} className="w-full rounded-xl h-9" onClick={() => licFRef.current?.click()} disabled={!!isProcessingFile}>
+                      <div><p className="text-xs font-black uppercase">Licencia (Frente)</p></div>
+                      <Button size="sm" variant={formData.licenseFileUrl ? "outline" : "default"} className="w-full rounded-xl" onClick={() => licFRef.current?.click()} disabled={!!isProcessingFile}>
                         {formData.licenseFileUrl ? 'Cambiar Archivo' : 'Cargar Archivo'}
-                      </Button>
-                   </div>
-
-                   {/* LICENCIA DORSO */}
-                   <div className={cn("p-6 border-2 border-dashed rounded-[2rem] text-center space-y-3 transition-all", formData.licenseBackFileUrl ? "bg-green-50 border-green-200" : "bg-slate-50 border-slate-100")}>
-                      <input type="file" ref={licBRef} className="hidden" accept="image/*" onChange={e => onFileChange('licenseBackFileUrl', e)} />
-                      <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center mx-auto text-slate-400">
-                         {isProcessingFile === 'licenseBackFileUrl' ? <Loader2 className="animate-spin" /> : <Award size={24} />}
-                      </div>
-                      <div><p className="text-xs font-black uppercase">Licencia (Dorso)</p><p className="text-[8px] text-slate-400 font-bold">Carnet Nacional</p></div>
-                      <Button size="sm" variant={formData.licenseBackFileUrl ? "outline" : "default"} className="w-full rounded-xl h-9" onClick={() => licBRef.current?.click()} disabled={!!isProcessingFile}>
-                        {formData.licenseBackFileUrl ? 'Cambiar Archivo' : 'Cargar Archivo'}
-                      </Button>
-                   </div>
-
-                   {/* LINTI */}
-                   <div className={cn("p-6 border-2 border-dashed rounded-[2rem] text-center space-y-3 transition-all", formData.lintiFileUrl ? "bg-green-50 border-green-200" : "bg-slate-50 border-slate-100")}>
-                      <input type="file" ref={lintiRef} className="hidden" accept="image/*" onChange={e => onFileChange('lintiFileUrl', e)} />
-                      <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center mx-auto text-slate-400">
-                         {isProcessingFile === 'lintiFileUrl' ? <Loader2 className="animate-spin" /> : <ShieldCheck size={24} />}
-                      </div>
-                      <div><p className="text-xs font-black uppercase">Certificado LINTI</p><p className="text-[8px] text-slate-400 font-bold">Carga Interjurisdiccional</p></div>
-                      <Button size="sm" variant={formData.lintiFileUrl ? "outline" : "default"} className="w-full rounded-xl h-9" onClick={() => lintiRef.current?.click()} disabled={!!isProcessingFile}>
-                        {formData.lintiFileUrl ? 'Cambiar Archivo' : 'Cargar Archivo'}
                       </Button>
                    </div>
                 </div>
 
                 <div className="p-6 bg-blue-50 border-2 border-blue-100 rounded-3xl flex items-start gap-4">
-                   <Zap size={24} className="text-blue-600 shrink-0 mt-1" />
+                   <Info size={24} className="text-blue-600 shrink-0 mt-1" />
                    <div className="space-y-1">
                       <p className="text-xs font-black text-blue-800 uppercase italic">Seguridad de la Información</p>
                       <p className="text-[10px] text-blue-600 leading-relaxed font-medium">Todos los archivos se cifran y almacenan en servidores dedicados. Solo personal de Administración y el propio usuario pueden visualizar estos documentos.</p>
@@ -517,13 +490,12 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
                         <Input className="h-12 bg-slate-50 border-none rounded-xl font-mono font-black text-lg flex-1" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
                         <Button variant="secondary" className="h-12 w-12 rounded-xl" onClick={() => setFormData({...formData, password: Math.random().toString(36).substring(2, 10).toUpperCase()})}><RefreshCw size={18}/></Button>
                      </div>
-                     <p className="text-[10px] text-slate-400 italic">El usuario podrá cambiarla al iniciar sesión por primera vez.</p>
                   </div>
                 )}
                 
                 <div className="pt-8 border-t flex justify-end">
                    <Button onClick={handleSubmit} disabled={isSubmitting} className="bg-green-600 hover:bg-green-700 h-16 px-16 rounded-2xl font-black text-lg shadow-2xl shadow-green-100 transition-all active:scale-95">
-                      {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} FINALIZAR ALTA REAL
+                      {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} FINALIZAR ALTA
                    </Button>
                 </div>
              </CardContent>
