@@ -14,7 +14,7 @@ import {
   Truck as TruckIcon, MapPin, Navigation, Clock, Gauge, 
   Fuel, ArrowLeft, RefreshCw, 
   Activity, Phone, MessageSquare, ShieldAlert,
-  Compass, Zap, Loader2, Siren
+  Compass, Zap, Loader2, Siren, CheckCircle2
 } from "lucide-react";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, 
@@ -25,7 +25,6 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { estimateFuelFactor } from "@/lib/utils/tracking-math";
 
-// Dynamic import for the Map
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
   { ssr: false, loading: () => <div className="h-full w-full bg-slate-100 flex items-center justify-center"><Loader2 className="animate-spin" /></div> }
@@ -35,6 +34,12 @@ const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), 
 const Popup = dynamic(() => import("react-leaflet").then((mod) => mod.Popup), { ssr: false });
 const Polyline = dynamic(() => import("react-leaflet").then((mod) => mod.Polyline), { ssr: false });
 
+const ALERT_LABELS: Record<string, string> = {
+  security: 'SEGURIDAD / PELIGRO',
+  mechanical: 'FALLA MECÁNICA',
+  accident: 'SINIESTRO VIAL'
+};
+
 export default function LiveTrackingPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -42,6 +47,7 @@ export default function LiveTrackingPage() {
   const { tenantId } = useTenant();
   const { toast } = useToast();
   const [isSimulating, setIsSimulating] = useState(false);
+  const [isResolving, setIsResolving] = useState(false);
   const [L, setL] = useState<any>(null);
   const [mounted, setMounted] = useState(false);
   const loadRefData = useRef<Load | null>(null);
@@ -115,6 +121,30 @@ export default function LiveTrackingPage() {
     return () => clearInterval(interval);
   }, [isSimulating, loadRef]);
 
+  const handleDeactivateAlert = async () => {
+    if (!db || !tenantId || !truck || !loadRef) return;
+    setIsResolving(true);
+    try {
+      const tRef = doc(db, "tenants", tenantId, "trucks", truck.id);
+      await updateDoc(tRef, {
+        hasActiveAlert: false,
+        alertType: null,
+        updatedAt: serverTimestamp()
+      });
+
+      await updateDoc(loadRef, {
+        status: 'on_route',
+        updatedAt: serverTimestamp()
+      });
+
+      toast({ title: "Situación Resuelta", description: "La alerta ha sido desactivada." });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al resolver" });
+    } finally {
+      setIsResolving(false);
+    }
+  };
+
   const getTruckIcon = (hasAlert: boolean = false) => {
     if (!L) return null;
     return L.divIcon({
@@ -165,7 +195,11 @@ export default function LiveTrackingPage() {
               <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-100 font-mono">
                 #{load.orderNumber}
               </Badge>
-              {truck?.hasActiveAlert && <Badge className="bg-red-600 text-white animate-pulse border-none flex items-center gap-1"><Siren size={10}/> EMERGENCIA ACTIVA</Badge>}
+              {truck?.hasActiveAlert && (
+                <Badge className="bg-red-600 text-white animate-pulse border-none flex items-center gap-1">
+                  <Siren size={10}/> ALERT: {ALERT_LABELS[truck.alertType || ''] || 'EMERGENCIA'}
+                </Badge>
+              )}
             </div>
             <p className="text-sm text-slate-500 flex items-center gap-1">
               <TruckIcon size={14} className="text-blue-600" /> {load.clientName} | Ruta: {load.origin.province} → {load.outboundStops?.[load.outboundStops.length-1]?.province || 'Destino'}
@@ -233,7 +267,32 @@ export default function LiveTrackingPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          <Card className="border-none shadow-sm overflow-hidden h-[400px] relative">
+          {truck?.hasActiveAlert && (
+            <Card className="border-2 border-red-500 bg-red-50 shadow-lg animate-in zoom-in-95">
+               <CardHeader className="flex flex-row items-center justify-between">
+                  <div className="flex items-center gap-3">
+                     <div className="w-12 h-12 bg-red-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-red-200">
+                        <Siren size={28} className="animate-bounce" />
+                     </div>
+                     <div>
+                        <CardTitle className="text-red-700 font-black uppercase italic tracking-tighter">Acción de Emergencia Requerida</CardTitle>
+                        <CardDescription className="text-red-500 font-bold text-xs">Tipo detectado: {ALERT_LABELS[truck.alertType || ''] || 'DESCONOCIDO'}</CardDescription>
+                     </div>
+                  </div>
+                  <Button 
+                    variant="destructive" 
+                    className="font-black h-12 px-8 rounded-xl shadow-xl"
+                    onClick={handleDeactivateAlert}
+                    disabled={isResolving}
+                  >
+                    {isResolving ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2" />}
+                    RESOLVER INCIDENTE
+                  </Button>
+               </CardHeader>
+            </Card>
+          )}
+
+          <Card className="border-none shadow-sm overflow-hidden h-[450px] relative">
              {mounted && (
                <MapContainer 
                  center={[tracking?.currentLat || -34.6037, tracking?.currentLng || -58.3816]} 
@@ -246,7 +305,7 @@ export default function LiveTrackingPage() {
                    attribution='&copy; OpenStreetMap contributors'
                  />
                  
-                 {breadcrumbs.length > 0 && (
+                 {breadcrumbs.length > 1 && (
                    <Polyline positions={breadcrumbs} color="#2563eb" weight={4} opacity={0.6} />
                  )}
 
@@ -255,21 +314,11 @@ export default function LiveTrackingPage() {
                    icon={getTruckIcon(!!truck?.hasActiveAlert)}
                  >
                    <Popup>
-                     <div className="font-bold">Orden: {load.orderNumber}</div>
-                     <div className="text-xs">Estado: {load.status.toUpperCase()}</div>
+                     <div className="p-1 font-bold">Unidad: {truck?.plate}</div>
                    </Popup>
                  </Marker>
                </MapContainer>
              )}
-             
-             <div className="absolute bottom-4 left-4 z-[500] space-y-2 pointer-events-none">
-                <div className="bg-white/90 backdrop-blur p-3 rounded-lg border shadow-sm space-y-2 pointer-events-auto">
-                   <p className="text-[10px] font-bold uppercase text-slate-400">Ubicación Actual (GPS)</p>
-                   <p className="text-xs font-mono font-bold">
-                     {tracking?.currentLat?.toFixed(4) || "0.0000"}, {tracking?.currentLng?.toFixed(4) || "0.0000"}
-                   </p>
-                </div>
-             </div>
           </Card>
 
           <Card className="border-none shadow-sm">
@@ -277,9 +326,8 @@ export default function LiveTrackingPage() {
               <CardTitle className="text-sm flex items-center gap-2">
                 <Activity size={16} className="text-blue-600" /> Análisis de Velocidad (Historial)
               </CardTitle>
-              <CardDescription className="text-xs">Monitoreo de estabilidad y excesos en tiempo real.</CardDescription>
             </CardHeader>
-            <CardContent className="h-[250px] pt-4">
+            <CardContent className="h-[200px] pt-4">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
@@ -305,14 +353,14 @@ export default function LiveTrackingPage() {
            <Card className="border-none shadow-sm bg-slate-900 text-white">
               <CardHeader>
                 <CardTitle className="text-sm flex items-center gap-2">
-                  <ShieldAlert size={16} className="text-yellow-400" /> Seguridad de Conducción
+                  <ShieldAlert size={16} className="text-yellow-400" /> Seguridad y Eventos
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                  <div className="space-y-3">
                     {tracking?.alerts?.map((alert, i) => (
                       <div key={i} className="flex gap-3 text-xs border-l border-white/10 pl-3">
-                         <span className="opacity-40 font-mono">{(alert.timestamp as any)?.toDate ? format((alert.timestamp as any).toDate(), "HH:mm") : '14:35'}</span>
+                         <span className="opacity-40 font-mono">{(alert.timestamp as any)?.toDate ? format((alert.timestamp as any).toDate(), "HH:mm") : '---'}</span>
                          <span className={alert.type === 'warning' ? "text-yellow-400" : alert.type === 'critical' ? "text-red-500 font-bold" : "text-green-400"}>{alert.message}</span>
                       </div>
                     )) || (
@@ -323,20 +371,20 @@ export default function LiveTrackingPage() {
                     <p className="text-[10px] uppercase font-bold text-white/40">Score del Conductor</p>
                     <div className="flex items-center justify-between">
                        <span className="text-3xl font-bold text-green-400">92<span className="text-xs opacity-50">/100</span></span>
-                       <Badge variant="outline" className="border-green-400 text-green-400">Nivel Pro</Badge>
+                       <Badge variant="outline" className="border-green-400 text-green-400 text-[10px] font-black uppercase">Nivel Pro</Badge>
                     </div>
                  </div>
               </CardContent>
            </Card>
 
            <Card className="border-none shadow-sm">
-             <CardHeader><CardTitle className="text-sm">Comunicación Directa</CardTitle></CardHeader>
-             <CardContent className="space-y-3">
-                <Button className="w-full bg-green-600 hover:bg-green-700 h-12 text-lg font-bold" onClick={() => window.open(`https://wa.me/${load.origin.phone}`, '_blank')}>
-                   <MessageSquare className="mr-2" /> WhatsApp
+             <CardHeader className="pb-3 border-b bg-slate-50"><CardTitle className="text-xs uppercase font-black text-slate-400">Comunicación Directa</CardTitle></CardHeader>
+             <CardContent className="p-4 space-y-3">
+                <Button className="w-full bg-green-600 hover:bg-green-700 h-14 text-sm font-black uppercase" onClick={() => window.open(`https://wa.me/${load.origin.phone}`, '_blank')}>
+                   <MessageSquare className="mr-2" /> WhatsApp Chofer
                 </Button>
-                <Button variant="outline" className="w-full h-12 text-slate-700 font-bold">
-                   <Phone className="mr-2" /> Llamar Conductor
+                <Button variant="outline" className="w-full h-14 text-slate-700 font-black uppercase border-slate-200">
+                   <Phone className="mr-2" /> Llamada de Voz
                 </Button>
              </CardContent>
            </Card>

@@ -66,6 +66,12 @@ const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), 
 const Popup = dynamic(() => import("react-leaflet").then((mod) => mod.Popup), { ssr: false });
 const Polyline = dynamic(() => import("react-leaflet").then((mod) => mod.Polyline), { ssr: false });
 
+const ALERT_LABELS: Record<string, string> = {
+  security: 'SEGURIDAD',
+  mechanical: 'MECÁNICA',
+  accident: 'ACCIDENTE'
+};
+
 export default function MonitorOperativoPage() {
   const db = useFirestore();
   const { tenantId } = useTenant();
@@ -190,6 +196,20 @@ export default function MonitorOperativoPage() {
       toast({ variant: "destructive", title: "Error al asignar boca" });
     } finally {
       setIsUpdatingDock(false);
+    }
+  };
+
+  const handleDeactivateAlert = async (truckId: string) => {
+    if (!db || !tenantId) return;
+    try {
+      await updateDoc(doc(db, "tenants", tenantId, "trucks", truckId), {
+        hasActiveAlert: false,
+        alertType: null,
+        updatedAt: serverTimestamp()
+      });
+      toast({ title: "Alerta Desactivada", description: "La unidad ha vuelto a estado normal." });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al desactivar alerta" });
     }
   };
 
@@ -328,7 +348,7 @@ export default function MonitorOperativoPage() {
                             <div className="flex items-center gap-2">
                                <p className="text-base font-black text-slate-900 tracking-tighter">{load.orderNumber}</p>
                                {load.international?.containerNumber && <Badge variant="secondary" className="bg-blue-900 text-white border-none text-[8px] h-4 font-mono px-2"><ScanBarcode size={10} className="mr-1" /> {load.international.containerNumber}</Badge>}
-                               {truck?.hasActiveAlert && <Badge className="bg-red-600 text-white animate-pulse border-none text-[8px] h-4">S.O.S ACTIVO</Badge>}
+                               {truck?.hasActiveAlert && <Badge className="bg-red-600 text-white animate-pulse border-none text-[8px] h-4 uppercase">{ALERT_LABELS[truck.alertType || ''] || 'S.O.S'}</Badge>}
                             </div>
                             <div className="space-y-1.5 min-w-0">
                                 <div className="flex items-center gap-1.5 overflow-hidden">
@@ -364,6 +384,16 @@ export default function MonitorOperativoPage() {
                          <div className="space-y-1"><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Avance Ruta</p><div className="space-y-1"><div className="flex items-center gap-1.5"><TrendingUp size={10} className="text-blue-500" /><span className="text-xs font-black text-slate-700">{Math.round(tracking?.distanceTraveledKm || 0)} KM</span></div><Progress value={load.status === 'delivered' ? 100 : (tracking?.distanceTraveledKm || 0)} className="h-1 w-20 bg-slate-100" /></div></div>
                       </div>
                       <div className="flex items-center gap-2 mt-4 lg:mt-0 w-full lg:w-auto">
+                        {truck?.hasActiveAlert && (
+                          <Button 
+                            variant="destructive" 
+                            size="sm" 
+                            className="flex-1 lg:flex-none text-[10px] font-black h-8 px-4"
+                            onClick={(e) => { e.stopPropagation(); handleDeactivateAlert(truck.id); }}
+                          >
+                            RESOLVER
+                          </Button>
+                        )}
                         <Button variant="ghost" size="sm" className="flex-1 lg:flex-none text-[10px] font-bold text-blue-600 bg-blue-100 hover:bg-blue-200" asChild><Link href={`/tracking/${load.id}`}><Zap size={12} className="mr-1" /> VIVO</Link></Button>
                         <CollapsibleTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8">{isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</Button></CollapsibleTrigger>
                       </div>
@@ -478,7 +508,29 @@ export default function MonitorOperativoPage() {
               );
             })}
             {L && trucks?.filter(t => t.status === 'in_trip' && t.location?.lat).map((truck) => (
-              <Marker key={truck.id} position={[truck.location!.lat!, truck.location!.lng!]} icon={getTruckIcon(!!truck.hasActiveAlert)}><Popup><div className="p-1 font-bold text-sm">Patente: {truck.plate}</div></Popup></Marker>
+              <Marker key={truck.id} position={[truck.location!.lat!, truck.location!.lng!]} icon={getTruckIcon(!!truck.hasActiveAlert)}>
+                <Popup>
+                  <div className="p-2 space-y-2">
+                    <div className="font-bold text-sm">Unidad: {truck.plate}</div>
+                    {truck.hasActiveAlert && (
+                      <div className="space-y-2">
+                        <Badge variant="destructive" className="animate-pulse w-full justify-center text-[10px] h-6 border-none">
+                          S.O.S: {ALERT_LABELS[truck.alertType || ''] || 'EMERGENCIA'}
+                        </Badge>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="w-full text-[10px] h-7 font-black uppercase border-slate-200"
+                          onClick={() => handleDeactivateAlert(truck.id)}
+                        >
+                          RESOLVER ALERTA
+                        </Button>
+                      </div>
+                    )}
+                    <div className="text-[10px] text-slate-500 font-bold uppercase">Última conexión: {format(new Date(), "HH:mm")} hs</div>
+                  </div>
+                </Popup>
+              </Marker>
             ))}
           </MapContainer>
         )}
