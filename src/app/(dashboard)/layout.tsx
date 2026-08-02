@@ -1,3 +1,4 @@
+
 'use client';
 
 import { 
@@ -77,7 +78,7 @@ function DashboardSidebar() {
   const auth = useAuth();
   const db = useFirestore();
   const { user } = useUser();
-  const { tenantId } = useTenant();
+  const { tenantId, role } = useTenant();
   const router = useRouter();
   const pathname = usePathname();
   const { toast } = useToast();
@@ -88,6 +89,7 @@ function DashboardSidebar() {
   }, []);
 
   const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
+  const isDriver = role === 'driver';
 
   const tenantRef = useMemo(() => {
     if (!db || !tenantId) return null;
@@ -97,11 +99,14 @@ function DashboardSidebar() {
   const { data: tenant } = useDoc<Tenant>(tenantRef);
 
   const filteredMenu = useMemo(() => {
+    // Si es chofer, no mostramos ningún ítem administrativo
+    if (isDriver) return [];
+    
     if (!tenant) return ADMIN_MENU_ITEMS;
     const enabled = tenant.settings?.enabledModules;
     if (!enabled || enabled.length === 0) return ADMIN_MENU_ITEMS;
     return ADMIN_MENU_ITEMS.filter(item => enabled.includes(item.id));
-  }, [tenant]);
+  }, [tenant, isDriver]);
 
   const handleLinkClick = () => {
     if (isMobile) setOpenMobile(false);
@@ -127,7 +132,7 @@ function DashboardSidebar() {
   return (
     <Sidebar variant="sidebar" collapsible="icon" className="transition-all duration-200">
       <SidebarHeader className="h-16 flex items-center px-4 border-b overflow-hidden">
-        <Link href="/dashboard" className="flex items-center gap-2 font-bold text-blue-600" onClick={handleLinkClick}>
+        <Link href="/" className="flex items-center gap-2 font-bold text-blue-600" onClick={handleLinkClick}>
           <div className="w-8 h-8 rounded flex items-center justify-center shrink-0 overflow-hidden relative">
             <img src={logoUrl} alt="Logo" className="w-full h-full object-contain" />
           </div>
@@ -158,36 +163,38 @@ function DashboardSidebar() {
           </SidebarGroup>
         )}
 
-        <SidebarGroup>
-          <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Administración</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {filteredMenu.map((item) => (
-                <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton 
-                    asChild 
-                    tooltip={item.title} 
-                    isActive={pathname === item.href}
-                    onClick={handleLinkClick}
-                  >
-                    <Link href={item.href}>
-                      <item.icon className={cn(
-                        item.title.includes("Remitos") && "text-indigo-600",
-                        item.title === "Mercado Libre" && "text-yellow-500",
-                        item.id === 'stock' && "text-orange-500",
-                        item.id === 'stock-layout' && "text-blue-600"
-                      )} />
-                      <span className={cn(
-                        item.title.includes("Remitos") && "font-bold text-indigo-700",
-                        item.title === "Mercado Libre" && "font-black text-slate-900"
-                      )}>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {!isDriver && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Administración</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredMenu.map((item) => (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton 
+                      asChild 
+                      tooltip={item.title} 
+                      isActive={pathname === item.href}
+                      onClick={handleLinkClick}
+                    >
+                      <Link href={item.href}>
+                        <item.icon className={cn(
+                          item.title.includes("Remitos") && "text-indigo-600",
+                          item.title === "Mercado Libre" && "text-yellow-500",
+                          item.id === 'stock' && "text-orange-500",
+                          item.id === 'stock-layout' && "text-blue-600"
+                        )} />
+                        <span className={cn(
+                          item.title.includes("Remitos") && "font-bold text-indigo-700",
+                          item.title === "Mercado Libre" && "font-black text-slate-900"
+                        )}>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         <SidebarGroup>
           <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden text-blue-600 dark:text-blue-400 font-black">Área Conductores</SidebarGroupLabel>
@@ -207,30 +214,47 @@ function DashboardSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              {isDriver && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton 
+                    asChild 
+                    tooltip="Mi Perfil" 
+                    isActive={pathname === "/rutas/perfil"}
+                    onClick={handleLinkClick}
+                  >
+                    <Link href="/rutas/perfil">
+                      <UserIcon className="text-slate-400" />
+                      <span>Mi Perfil Técnico</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Configuración</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton 
-                  asChild 
-                  isActive={pathname === "/settings/tenant"}
-                  tooltip="Ajustes del Sistema"
-                  onClick={handleLinkClick}
-                >
-                  <Link href="/settings/tenant">
-                    <Settings />
-                    <span>Ajustes del Sistema</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {!isDriver && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Configuración</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={pathname === "/settings/tenant"}
+                    tooltip="Ajustes del Sistema"
+                    onClick={handleLinkClick}
+                  >
+                    <Link href="/settings/tenant">
+                      <Settings />
+                      <span>Ajustes del Sistema</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
       <div className="mt-auto p-2 border-t">
         <SidebarMenuButton 
@@ -250,12 +274,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { theme, setTheme } = useTheme();
   const db = useFirestore();
   const { user } = useUser();
-  const { tenantId, role } = useTenant();
+  const { tenantId, role, loading } = useTenant();
+  const router = useRouter();
+  const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Proteger rutas administrativas si el usuario es Chofer
+  useEffect(() => {
+    if (!loading && role === 'driver') {
+      const isTryingAdminPath = !pathname.startsWith('/rutas') && pathname !== '/';
+      if (isTryingAdminPath) {
+        router.replace('/rutas');
+      }
+    }
+  }, [role, loading, pathname, router]);
   
   const tenantRef = useMemo(() => {
     if (!db || !tenantId) return null;
@@ -263,6 +299,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [db, tenantId]);
 
   const { data: tenant } = useDoc<Tenant>(tenantRef);
+
+  if (loading || !mounted) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
   return (
     <SidebarProvider defaultOpen={false}>
@@ -272,7 +316,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <header className="h-16 flex items-center justify-between px-4 border-b bg-white dark:bg-slate-900 sticky top-0 z-10 shadow-sm">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="text-blue-600" />
-              <h2 className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest truncate">Panel de Control Nacional</h2>
+              <h2 className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest truncate">
+                {role === 'driver' ? 'Terminal Móvil del Conductor' : 'Panel de Control Nacional'}
+              </h2>
             </div>
             <div className="flex items-center gap-4">
                <Button 
@@ -300,7 +346,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                      {user?.email?.split('@')[0] || 'Usuario'}
                    </span>
                    <span className="text-[8px] font-bold text-slate-400 uppercase mt-0.5">
-                     {role === 'admin' ? 'Super Administrador' : (role?.replace('_', ' ') || 'Colaborador')}
+                     {role === 'admin' ? 'Super Administrador' : (role === 'driver' ? 'Conductor Profesional' : (role?.replace('_', ' ') || 'Colaborador'))}
                    </span>
                  </div>
                </div>

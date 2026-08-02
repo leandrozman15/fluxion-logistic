@@ -35,17 +35,16 @@ export default function LoginPage() {
     const cleanEmail = email.toLowerCase().trim();
     
     try {
-      // Intento de inicio de sesión real contra Firebase Auth
       await signInWithEmailAndPassword(auth, cleanEmail, password);
       
       toast({
         title: "Acceso Concedido",
-        description: "Bienvenido al Panel de Control de LogísticaAr.",
+        description: "Iniciando sesión segura...",
       });
       
-      router.push("/dashboard");
+      // Redirigimos a la raíz para que el despachador de roles actúe
+      router.push("/");
     } catch (error: any) {
-      // Capturamos el error para mostrarlo en el UI y evitar el Red Screen
       let message = "Error de conexión. Verifique su internet.";
       
       if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
