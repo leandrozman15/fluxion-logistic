@@ -12,6 +12,16 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
+  AlertDialog, 
+  AlertDialogAction, 
+  AlertDialogCancel, 
+  AlertDialogContent, 
+  AlertDialogDescription, 
+  AlertDialogFooter, 
+  AlertDialogHeader, 
+  AlertDialogTitle 
+} from "@/components/ui/alert-dialog";
+import { 
   Package, Plus, Search, Scale, 
   Loader2, MoreVertical, Trash2, CheckCircle2, 
   Clock, AlertTriangle, FileText, Printer, Wallet, Navigation, Edit, Calendar, Truck, User, History,
@@ -41,6 +51,10 @@ export default function CargasPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [mounted, setMounted] = useState(false);
   const [isDownloadingId, setIsDownloadingId] = useState<string | null>(null);
+  
+  // AlertDialog state
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -116,15 +130,13 @@ export default function CargasPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!db || !tenantId || !id) return;
+  const confirmDelete = async () => {
+    if (!db || !tenantId || !deleteId) return;
     
-    const ok = window.confirm("¿Está seguro de eliminar esta operación? Los remitos vinculados volverán a estar pendientes.");
-    if (!ok) return;
-
+    setIsDeleting(true);
     try {
       const batch = writeBatch(db);
-      const remitosQuery = query(collection(db, "tenants", tenantId, "pending_remitos"), where("loadId", "==", id));
+      const remitosQuery = query(collection(db, "tenants", tenantId, "pending_remitos"), where("loadId", "==", deleteId));
       const remitosSnap = await getDocs(remitosQuery);
       
       remitosSnap.docs.forEach(docSnap => {
@@ -136,11 +148,14 @@ export default function CargasPage() {
         });
       });
 
-      batch.delete(doc(db, "tenants", tenantId, "loads", id));
+      batch.delete(doc(db, "tenants", tenantId, "loads", deleteId));
       await batch.commit();
       toast({ title: "Operación eliminada" });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al eliminar" });
+    } finally {
+      setIsDeleting(false);
+      setDeleteId(null);
     }
   };
 
@@ -255,14 +270,14 @@ export default function CargasPage() {
                         <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-slate-100 transition-all"><MoreVertical size={16} /></Button>
+                              <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full hover:bg-slate-100 transition-all"><MoreVertical size={20} /></Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-72 p-2 rounded-2xl shadow-2xl border-none">
                               <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Exportación Directa PDF (Vectorial)</DropdownMenuLabel>
                               
                               <DropdownMenuItem 
                                 onClick={() => handleDownloadDirect(load, 'orden')} 
-                                className="font-black text-blue-700 bg-blue-50 h-12 rounded-xl mb-1"
+                                className="font-black text-blue-700 bg-blue-50 h-12 rounded-xl mb-1 cursor-pointer"
                                 disabled={isDownloadingId === `${load.id}-orden`}
                               >
                                 {isDownloadingId === `${load.id}-orden` ? <Loader2 className="w-5 h-5 animate-spin mr-3" /> : <Download className="w-5 h-5 mr-3" />}
@@ -271,7 +286,7 @@ export default function CargasPage() {
                               
                               <DropdownMenuItem 
                                 onClick={() => handleDownloadDirect(load, 'billetera')} 
-                                className="font-black text-green-700 bg-green-50 h-12 rounded-xl mb-1"
+                                className="font-black text-green-700 bg-green-50 h-12 rounded-xl mb-1 cursor-pointer"
                                 disabled={isDownloadingId === `${load.id}-billetera`}
                               >
                                 {isDownloadingId === `${load.id}-billetera` ? <Loader2 className="w-5 h-5 animate-spin mr-3" /> : <Download className="w-5 h-5 mr-3" />}
@@ -280,18 +295,18 @@ export default function CargasPage() {
 
                               <DropdownMenuSeparator className="my-1" />
                               <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Acciones</DropdownMenuLabel>
-                              <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/reporte`)} className="font-bold h-10 rounded-xl">
+                              <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/reporte`)} className="font-bold h-10 rounded-xl cursor-pointer">
                                 <BarChart3 className="w-4 h-4 mr-2" /> Auditoría Telemetría
                               </DropdownMenuItem>
                               
-                              <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/editar`)} className="font-bold h-10 rounded-xl">
+                              <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/editar`)} className="font-bold h-10 rounded-xl cursor-pointer">
                                 <Edit className="w-4 h-4 mr-2" /> Editar Operación
                               </DropdownMenuItem>
                               
                               <DropdownMenuSeparator className="my-1" />
                               <DropdownMenuItem 
-                                className="text-red-600 focus:bg-red-50 focus:text-red-600 font-bold h-10 rounded-xl" 
-                                onSelect={() => handleDelete(load.id)}
+                                className="text-red-600 focus:bg-red-50 focus:text-red-600 font-bold h-10 rounded-xl cursor-pointer" 
+                                onSelect={(e) => { e.preventDefault(); setDeleteId(load.id); }}
                               >
                                 <Trash2 className="w-4 h-4 mr-2" /> Eliminar Definitivo
                               </DropdownMenuItem>
@@ -307,6 +322,28 @@ export default function CargasPage() {
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
+        <AlertDialogContent className="rounded-[2rem]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-xl font-black uppercase italic tracking-tighter">¿Eliminar Operación?</AlertDialogTitle>
+            <AlertDialogDescription className="text-sm font-medium text-slate-500">
+              Esta acción es definitiva. Los remitos vinculados volverán al estado de "Pendiente" para ser asignados en una nueva hoja de ruta.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl font-bold uppercase text-[10px]">Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDelete} 
+              className="bg-red-600 hover:bg-red-700 rounded-xl font-black uppercase text-[10px] shadow-lg shadow-red-100"
+              disabled={isDeleting}
+            >
+              {isDeleting ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
+              ELIMINAR DEFINITIVAMENTE
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

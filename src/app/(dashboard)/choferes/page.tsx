@@ -11,9 +11,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { 
+  AlertDialog, 
+  AlertDialogAction, 
+  AlertDialogCancel, 
+  AlertDialogContent, 
+  AlertDialogDescription, 
+  AlertDialogFooter, 
+  AlertDialogHeader, 
+  AlertDialogTitle 
+} from "@/components/ui/alert-dialog";
+import { 
   Users, UserPlus, Search, Loader2, ShieldCheck, AlertTriangle, 
   CheckCircle2, MoreVertical, Eye, FileText, Calendar, Truck as TruckIcon, Package,
-  Camera, Edit2, Shield, BadgeCheck, HardHat, Briefcase, UserCircle2
+  Camera, Edit2, Shield, BadgeCheck, HardHat, Briefcase, UserCircle2, Trash2
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -37,6 +47,11 @@ export default function ChoferesPage() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  
+  // AlertDialog state
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteName, setDeleteName] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const driversQuery = useMemo(() => {
     if (!db || !tenantId) return null;
@@ -69,16 +84,17 @@ export default function ChoferesPage() {
     });
   }, [drivers, searchTerm, statusFilter]);
 
-  const handleDeleteDriver = async (id: string, name: string) => {
-    if (!db || !tenantId || !id) return;
-    const ok = window.confirm(`¿Está seguro de eliminar a ${name}? Esta acción no se puede deshacer.`);
-    if (!ok) return;
-
+  const confirmDelete = async () => {
+    if (!db || !tenantId || !deleteId) return;
+    setIsDeleting(true);
     try {
-      await deleteDoc(doc(db, "tenants", tenantId, "drivers", id));
+      await deleteDoc(doc(db, "tenants", tenantId, "drivers", deleteId));
       toast({ title: "Registro eliminado", description: "El registro ha sido removido del sistema." });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al eliminar" });
+    } finally {
+      setIsDeleting(false);
+      setDeleteId(null);
     }
   };
 
@@ -229,19 +245,24 @@ export default function ChoferesPage() {
                           </div>
                         </TableCell>
                         <TableCell>{getStatusBadge(driver.status)}</TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical size={16} /></Button></DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56">
-                              <DropdownMenuLabel>Gestión de Personal</DropdownMenuLabel>
-                              <DropdownMenuItem onClick={() => router.push(`/choferes/${driver.id}`)}>
+                            <DropdownMenuContent align="end" className="w-56 p-2 rounded-xl border-none shadow-2xl">
+                              <DropdownMenuLabel className="text-[10px] font-bold uppercase text-slate-400">Gestión de Personal</DropdownMenuLabel>
+                              <DropdownMenuItem onClick={() => router.push(`/choferes/${driver.id}`)} className="font-bold h-10 rounded-lg cursor-pointer">
                                 <Eye className="w-4 h-4 mr-2" /> Ver Expediente
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => router.push(`/choferes/${driver.id}/editar`)}>
+                              <DropdownMenuItem onClick={() => router.push(`/choferes/${driver.id}/editar`)} className="font-bold h-10 rounded-lg cursor-pointer">
                                 <Edit2 className="w-4 h-4 mr-2" /> Editar Perfil
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem className="text-red-600 focus:bg-red-50 focus:text-red-600" onSelect={() => handleDeleteDriver(driver.id, `${driver.firstName} ${driver.lastName}`)}>Eliminar Registro</DropdownMenuItem>
+                              <DropdownMenuItem 
+                                className="text-red-600 focus:bg-red-50 focus:text-red-600 font-bold h-10 rounded-lg cursor-pointer" 
+                                onSelect={(e) => { e.preventDefault(); setDeleteId(driver.id); setDeleteName(`${driver.firstName} ${driver.lastName}`); }}
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" /> Eliminar Registro
+                              </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
@@ -254,6 +275,28 @@ export default function ChoferesPage() {
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
+        <AlertDialogContent className="rounded-[2rem]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-xl font-black uppercase italic tracking-tighter">¿Eliminar Personal?</AlertDialogTitle>
+            <AlertDialogDescription className="text-sm font-medium text-slate-500">
+              Está por remover el legajo digital de <span className="font-bold text-slate-900">{deleteName}</span>. Esta acción es irreversible y se perderá el historial de documentos adjuntos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl font-bold uppercase text-[10px]">Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDelete} 
+              className="bg-red-600 hover:bg-red-700 rounded-xl font-black uppercase text-[10px] shadow-lg shadow-red-100"
+              disabled={isDeleting}
+            >
+              {isDeleting ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
+              ELIMINAR DEFINITIVAMENTE
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

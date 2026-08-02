@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo } from "react";
@@ -11,6 +10,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { 
+  AlertDialog, 
+  AlertDialogAction, 
+  AlertDialogCancel, 
+  AlertDialogContent, 
+  AlertDialogDescription, 
+  AlertDialogFooter, 
+  AlertDialogHeader, 
+  AlertDialogTitle 
+} from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
   Building2, Plus, Search, MoreVertical, Trash2, Edit2, 
@@ -36,6 +45,11 @@ export default function ClientesPage() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+  
+  // AlertDialog state
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteName, setDeleteName] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const clientsQuery = useMemo(() => {
     if (!db || !tenantId) return null;
@@ -44,7 +58,7 @@ export default function ClientesPage() {
 
   const hubsQuery = useMemo(() => {
     if (!db || !tenantId) return null;
-    return collection(db, "tenants", tenantId, "hubs");
+    return query(collection(db, "tenants", tenantId, "hubs"));
   }, [db, tenantId]);
 
   const { data: clients, loading } = useCollection<Client>(clientsQuery);
@@ -65,13 +79,17 @@ export default function ClientesPage() {
     );
   }, [clients, searchTerm]);
 
-  const handleDelete = async (id: string) => {
-    if (!db || !tenantId || !confirm("¿Eliminar este cliente de la base de datos?")) return;
+  const confirmDelete = async () => {
+    if (!db || !tenantId || !deleteId) return;
+    setIsDeleting(true);
     try {
-      await deleteDoc(doc(db, "tenants", tenantId, "clients", id));
+      await deleteDoc(doc(db, "tenants", tenantId, "clients", deleteId));
       toast({ title: "Cliente eliminado" });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al eliminar" });
+    } finally {
+      setIsDeleting(false);
+      setDeleteId(null);
     }
   };
 
@@ -182,24 +200,27 @@ export default function ClientesPage() {
                             <Badge variant="outline" className="bg-red-50 text-red-700 border-red-100 text-[8px] h-4">Sin GPS</Badge>
                           )}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                            <DropdownMenu>
                              <DropdownMenuTrigger asChild>
-                               <Button variant="ghost" size="icon"><MoreVertical size={16} /></Button>
+                               <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full"><MoreVertical size={20} /></Button>
                              </DropdownMenuTrigger>
-                             <DropdownMenuContent align="end">
-                               <DropdownMenuLabel>Logística de Destino</DropdownMenuLabel>
-                               <DropdownMenuItem onClick={() => router.push(`/clientes/${client.id}/editar`)}>
+                             <DropdownMenuContent align="end" className="w-56 p-2 rounded-xl border-none shadow-2xl">
+                               <DropdownMenuLabel className="text-[10px] uppercase font-bold text-slate-400">Logística de Destino</DropdownMenuLabel>
+                               <DropdownMenuItem onClick={() => router.push(`/clientes/${client.id}/editar`)} className="font-bold h-10 rounded-lg cursor-pointer">
                                  <Edit2 className="w-4 h-4 mr-2" /> Editar Punto de Entrega
                                </DropdownMenuItem>
-                               <DropdownMenuItem onClick={() => window.open(`https://www.google.com/maps?q=${client.address?.lat},${client.address?.lng}`, '_blank')}>
+                               <DropdownMenuItem onClick={() => window.open(`https://www.google.com/maps?q=${client.address?.lat},${client.address?.lng}`, '_blank')} className="font-bold h-10 rounded-lg cursor-pointer">
                                  <Locate className="w-4 h-4 mr-2" /> Ver en Google Maps
                                </DropdownMenuItem>
-                               <DropdownMenuItem disabled={!client.facadePhotoUrl} onClick={() => setViewerUrl(client.facadePhotoUrl!)}>
+                               <DropdownMenuItem disabled={!client.facadePhotoUrl} onClick={() => setViewerUrl(client.facadePhotoUrl!)} className="font-bold h-10 rounded-lg cursor-pointer">
                                  <Eye className="w-4 h-4 mr-2" /> Ver Fachada
                                </DropdownMenuItem>
                                <DropdownMenuSeparator />
-                               <DropdownMenuItem className="text-red-600" onClick={() => handleDelete(client.id)}>
+                               <DropdownMenuItem 
+                                className="text-red-600 focus:bg-red-50 focus:text-red-600 font-bold h-10 rounded-lg cursor-pointer" 
+                                onSelect={(e) => { e.preventDefault(); setDeleteId(client.id); setDeleteName(client.name); }}
+                               >
                                  <Trash2 className="w-4 h-4 mr-2" /> Eliminar Punto
                                </DropdownMenuItem>
                            </DropdownMenuContent>
@@ -216,13 +237,35 @@ export default function ClientesPage() {
       </Card>
 
       <Dialog open={!!viewerUrl} onOpenChange={(o) => !o && setViewerUrl(null)}>
-        <DialogContent className="max-w-2xl h-[60vh] flex flex-col">
-          <DialogHeader><DialogTitle>Foto de Fachada / Destino</DialogTitle></DialogHeader>
-          <div className="flex-1 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden border mt-2">
+        <DialogContent className="max-w-2xl h-[60vh] flex flex-col rounded-[2rem]">
+          <DialogHeader><DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Foto de Fachada / Destino</DialogTitle></DialogHeader>
+          <div className="flex-1 bg-slate-100 rounded-2xl flex items-center justify-center overflow-hidden border mt-2">
             <img src={viewerUrl || undefined} className="max-w-full max-h-full object-contain" alt="Fachada" />
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
+        <AlertDialogContent className="rounded-[2rem]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-xl font-black uppercase italic tracking-tighter">¿Eliminar Cliente?</AlertDialogTitle>
+            <AlertDialogDescription className="text-sm font-medium text-slate-500">
+              Está por eliminar a <span className="font-bold text-slate-900">{deleteName}</span> de la cartera regional. Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl font-bold uppercase text-[10px]">Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDelete} 
+              className="bg-red-600 hover:bg-red-700 rounded-xl font-black uppercase text-[10px] shadow-lg shadow-red-100"
+              disabled={isDeleting}
+            >
+              {isDeleting ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
+              CONFIRMAR ELIMINACIÓN
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

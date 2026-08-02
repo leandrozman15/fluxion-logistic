@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
@@ -11,6 +10,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { 
+  AlertDialog, 
+  AlertDialogAction, 
+  AlertDialogCancel, 
+  AlertDialogContent, 
+  AlertDialogDescription, 
+  AlertDialogFooter, 
+  AlertDialogHeader, 
+  AlertDialogTitle 
+} from "@/components/ui/alert-dialog";
 import { 
   Box, Plus, Search, MoreVertical, Trash2, Edit2, 
   Loader2, Scale, AlertTriangle, ThermometerSnowflake, 
@@ -37,6 +46,11 @@ export default function ProductosPage() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [isDownloadingId, setIsDownloadingId] = useState<string | null>(null);
+  
+  // AlertDialog state
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteSku, setDeleteSku] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const productsQuery = useMemo(() => {
     if (!db || !tenantId) return null;
@@ -58,9 +72,6 @@ export default function ProductosPage() {
     );
   }, [products, searchTerm]);
 
-  /**
-   * DESCARGA DIRECTA DE FICHA TÉCNICA (Programática jsPDF)
-   */
   const handleDownloadDirect = async (product: Product) => {
     setIsDownloadingId(product.id);
     try {
@@ -76,13 +87,17 @@ export default function ProductosPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!db || !tenantId || !confirm("¿Eliminar este producto del catálogo definitivamente?")) return;
+  const confirmDelete = async () => {
+    if (!db || !tenantId || !deleteId) return;
+    setIsDeleting(true);
     try {
-      await deleteDoc(doc(db, "tenants", tenantId, "products", id));
+      await deleteDoc(doc(db, "tenants", tenantId, "products", deleteId));
       toast({ title: "Producto eliminado" });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al eliminar" });
+    } finally {
+      setIsDeleting(false);
+      setDeleteId(null);
     }
   };
 
@@ -188,7 +203,7 @@ export default function ProductosPage() {
                             <Badge className={cn(
                               "text-[8px] h-4 uppercase font-black border-none",
                               product.dangerLevel === 'high' ? "bg-red-600 text-white" :
-                              product.dangerLevel === 'medium' ? "bg-orange-500 text-white" :
+                              product.dangerLevel === 'medium' ? "bg-orange-50 text-white" :
                               "bg-yellow-400 text-slate-900"
                             )}>
                               <AlertTriangle size={10} className="mr-1" /> {product.onuNumber || 'PELIGRO'}
@@ -198,17 +213,17 @@ export default function ProductosPage() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right" onClick={e => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical size={16} /></Button>
+                            <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full"><MoreVertical size={20} /></Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-56 p-2 rounded-xl">
+                          <DropdownMenuContent align="end" className="w-56 p-2 rounded-xl border-none shadow-2xl">
                             <DropdownMenuLabel className="text-[10px] uppercase font-bold text-slate-400 px-2 py-1">Documentación A4</DropdownMenuLabel>
                             
                             <DropdownMenuItem 
                               onClick={() => handleDownloadDirect(product)}
-                              className="font-black text-blue-700 bg-blue-50 h-10 rounded-lg mb-1"
+                              className="font-black text-blue-700 bg-blue-50 h-10 rounded-lg mb-1 cursor-pointer"
                               disabled={isDownloadingId === product.id}
                             >
                               {isDownloadingId === product.id ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <Download className="w-4 h-4 mr-2" />}
@@ -218,17 +233,20 @@ export default function ProductosPage() {
                             <DropdownMenuSeparator className="my-1" />
                             <DropdownMenuLabel className="text-[10px] uppercase font-bold text-slate-400 px-2 py-1">Acciones</DropdownMenuLabel>
                             
-                            <DropdownMenuItem asChild>
-                              <Link href={`/productos/${product.id}/editar`} className="font-bold"><Edit2 className="w-4 h-4 mr-2" /> Editar Ficha</Link>
+                            <DropdownMenuItem asChild className="cursor-pointer font-bold h-10 rounded-lg">
+                              <Link href={`/productos/${product.id}/editar`}><Edit2 className="w-4 h-4 mr-2" /> Editar Ficha</Link>
                             </DropdownMenuItem>
                             
-                            <DropdownMenuItem onClick={() => router.push(`/productos/${product.id}/ficha`)} className="font-bold">
+                            <DropdownMenuItem onClick={() => router.push(`/productos/${product.id}/ficha`)} className="font-bold h-10 rounded-lg cursor-pointer">
                               <Eye className="w-4 h-4 mr-2" /> Vista Previa App
                             </DropdownMenuItem>
 
                             <DropdownMenuSeparator className="my-1" />
                             
-                            <DropdownMenuItem className="text-red-600 focus:bg-red-50 focus:text-red-600 font-bold" onClick={() => handleDelete(product.id)}>
+                            <DropdownMenuItem 
+                              className="text-red-600 focus:bg-red-50 focus:text-red-600 font-bold h-10 rounded-lg cursor-pointer" 
+                              onSelect={(e) => { e.preventDefault(); setDeleteId(product.id); setDeleteSku(product.sku); }}
+                            >
                               <Trash2 className="w-4 h-4 mr-2" /> Eliminar
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -242,6 +260,28 @@ export default function ProductosPage() {
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
+        <AlertDialogContent className="rounded-[2rem]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-xl font-black uppercase italic tracking-tighter">¿Quitar del Catálogo?</AlertDialogTitle>
+            <AlertDialogDescription className="text-sm font-medium text-slate-500">
+              Está por eliminar definitivamente el producto <span className="font-bold text-slate-900">{deleteSku}</span>. Esta acción no se puede deshacer y afectará a los reportes históricos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl font-bold uppercase text-[10px]">Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDelete} 
+              className="bg-red-600 hover:bg-red-700 rounded-xl font-black uppercase text-[10px] shadow-lg shadow-red-100"
+              disabled={isDeleting}
+            >
+              {isDeleting ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
+              CONFIRMAR BAJA
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
