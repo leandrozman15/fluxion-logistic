@@ -17,7 +17,7 @@ import {
   FileText, ArrowLeft, Save, Plus, Trash2, 
   Search, Package, Calculator, ShoppingCart,
   Loader2, CheckCircle2, ChevronRight, User, Receipt,
-  DollarSign
+  DollarSign, Info
 } from "lucide-react";
 import { Client, Product, Quotation, QuotationItem } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
