@@ -22,7 +22,8 @@ import {
   ChevronRight,
   Trophy,
   Activity,
-  ShieldCheck
+  ShieldCheck,
+  Gauge
 } from "lucide-react";
 import { Load, Expense, Truck, Driver } from "@/app/lib/types";
 import { 
@@ -134,7 +135,7 @@ export default function AnalyticsPage() {
   const driverRanking = useMemo(() => {
     if (!drivers || !filteredData.loads) return [];
 
-    const ranking = drivers.map(driver => {
+    return drivers.map(driver => {
       const driverLoads = filteredData.loads.filter(l => l.assignedDriverId === driver.id);
       const driverExpenses = filteredData.expenses.filter(e => e.driverId === driver.id && e.status === 'approved');
       
@@ -154,9 +155,31 @@ export default function AnalyticsPage() {
         efficiency: km > 0 ? revenue / km : 0
       };
     }).filter(d => d.trips > 0 || d.km > 0).sort((a, b) => b.margin - a.margin);
-
-    return ranking;
   }, [drivers, filteredData]);
+
+  // Ranking de Camiones (Costo por KM)
+  const truckRanking = useMemo(() => {
+    if (!trucks || !filteredData.loads || !filteredData.expenses) return [];
+
+    return trucks.map(truck => {
+      const truckLoads = filteredData.loads.filter(l => l.assignedTruckId === truck.id);
+      const truckExpenses = filteredData.expenses.filter(e => e.truckId === truck.id && e.status === 'approved');
+      
+      const totalKm = truckLoads.reduce((acc, l) => acc + (l.tracking?.distanceTraveledKm || 0), 0);
+      const totalCost = truckExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
+      
+      return {
+        id: truck.id,
+        plate: truck.plate,
+        brand: truck.brand,
+        model: truck.model,
+        avatar: truck.avatarUrl,
+        km: Math.round(totalKm),
+        cost: totalCost,
+        costPerKm: totalKm > 0 ? totalCost / totalKm : 0
+      };
+    }).filter(t => t.km > 0).sort((a, b) => a.costPerKm - b.costPerKm); // De menor a mayor costo (más eficientes arriba)
+  }, [trucks, filteredData]);
 
   // Distribución de Gastos por Categoría
   const expenseDistribution = useMemo(() => {
@@ -273,7 +296,7 @@ export default function AnalyticsPage() {
               <div className="h-48 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={expenseDistribution} innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value">
+                    <Pie data={expenseDistribution} innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value" stroke="none">
                       {expenseDistribution.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
@@ -297,7 +320,7 @@ export default function AnalyticsPage() {
         </Card>
 
         {/* ANÁLISIS DE EFICIENCIA (KM MUERTOS) */}
-        <Card className="lg:col-span-6 border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-slate-900 text-white">
+        <Card className="lg:col-span-12 xl:col-span-6 border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-slate-900 text-white">
            <CardHeader className="p-8 border-b border-white/5">
               <CardTitle className="text-sm uppercase font-black tracking-widest text-blue-400 flex items-center gap-2"><Activity size={18} /> Auditoría de Kilómetros Muertos</CardTitle>
               <CardDescription className="text-[9px] font-bold uppercase text-white/30">Desvío real vs. Planificación logística</CardDescription>
@@ -333,14 +356,65 @@ export default function AnalyticsPage() {
            </CardContent>
         </Card>
 
-        {/* RANKING DE CHOFERES */}
-        <Card className="lg:col-span-6 border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-white">
+        {/* RANKING DE COSTOS POR KM (CAMIONES) */}
+        <Card className="lg:col-span-12 xl:col-span-6 border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-white">
            <CardHeader className="bg-slate-50 border-b p-8 flex flex-row items-center justify-between">
               <div>
-                <CardTitle className="text-sm uppercase font-black tracking-widest flex items-center gap-2"><Trophy size={18} className="text-amber-500" /> Ranking de Performance</CardTitle>
-                <CardDescription className="text-[8px] font-bold uppercase text-slate-400">Líderes de eficiencia y rentabilidad</CardDescription>
+                <CardTitle className="text-sm uppercase font-black tracking-widest flex items-center gap-2"><Gauge size={18} className="text-blue-600" /> Eficiencia de Activos (Costo/KM)</CardTitle>
+                <CardDescription className="text-[8px] font-bold uppercase text-slate-400">Unidades ordenadas por menor costo operativo</CardDescription>
               </div>
-              <Badge className="bg-slate-900 text-white border-none font-black text-[10px]">TOP {driverRanking.length}</Badge>
+              <Badge className="bg-slate-900 text-white border-none font-black text-[10px]">TOP EFICIENCIA</Badge>
+           </CardHeader>
+           <CardContent className="p-0">
+              <div className="divide-y divide-slate-100">
+                 {truckRanking.slice(0, 5).map((t, i) => (
+                   <div key={t.id} className="p-6 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                      <div className="flex items-center gap-4">
+                         <div className={cn(
+                           "w-10 h-10 rounded-xl flex items-center justify-center font-black italic",
+                           i === 0 ? "bg-green-100 text-green-700 border-2 border-green-300" : "bg-slate-100 text-slate-400"
+                         )}>
+                            {i + 1}
+                         </div>
+                         <div className="flex items-center gap-3">
+                            <Avatar className="h-10 w-10 border shadow-sm rounded-lg">
+                               <AvatarImage src={t.avatar} className="object-cover" />
+                               <AvatarFallback className="bg-blue-50 text-blue-600 text-[10px] font-bold rounded-lg"><TruckIcon size={18}/></AvatarFallback>
+                            </Avatar>
+                            <div>
+                               <p className="text-sm font-black text-slate-900 font-mono tracking-tighter">{t.plate}</p>
+                               <p className="text-[8px] font-bold text-slate-400 uppercase">{t.brand} {t.model}</p>
+                            </div>
+                         </div>
+                      </div>
+                      <div className="flex items-center gap-12">
+                         <div className="text-right">
+                            <p className="text-[8px] font-black text-slate-400 uppercase">Recorrido</p>
+                            <p className="text-xs font-bold text-slate-700 italic">{t.km.toLocaleString()} KM</p>
+                         </div>
+                         <div className="text-right min-w-[100px]">
+                            <p className="text-[8px] font-black text-blue-600 uppercase">Costo por KM</p>
+                            <p className="text-xl font-black text-blue-700 italic">${t.costPerKm.toFixed(2)}</p>
+                         </div>
+                         <ChevronRight className="text-slate-200" size={16} />
+                      </div>
+                   </div>
+                 ))}
+                 {truckRanking.length === 0 && (
+                   <div className="p-20 text-center text-slate-300 italic text-xs font-bold uppercase tracking-widest">Sin datos de telemetría suficientes para calcular costos.</div>
+                 )}
+              </div>
+           </CardContent>
+        </Card>
+
+        {/* RANKING DE PERFORMANCE (CHOFERES) */}
+        <Card className="lg:col-span-12 border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-white">
+           <CardHeader className="bg-slate-50 border-b p-8 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-sm uppercase font-black tracking-widest flex items-center gap-2"><Trophy size={18} className="text-amber-500" /> Ranking de Performance Conductores</CardTitle>
+                <CardDescription className="text-[8px] font-bold uppercase text-slate-400">Líderes de rentabilidad y cumplimiento de ruta</CardDescription>
+              </div>
+              <Badge className="bg-slate-900 text-white border-none font-black text-[10px]">TOP RENTABILIDAD</Badge>
            </CardHeader>
            <CardContent className="p-0">
               <div className="divide-y divide-slate-100">
@@ -364,14 +438,14 @@ export default function AnalyticsPage() {
                             </div>
                          </div>
                       </div>
-                      <div className="flex items-center gap-8">
+                      <div className="flex items-center gap-12">
                          <div className="text-right">
-                            <p className="text-[8px] font-black text-slate-400 uppercase">KM Recorridos</p>
-                            <p className="text-sm font-black text-slate-700 italic">{d.km.toLocaleString()}</p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase">Eficiencia (Ingreso/KM)</p>
+                            <p className="text-xs font-bold text-slate-700 italic">${d.efficiency.toFixed(2)}/km</p>
                          </div>
-                         <div className="text-right min-w-[80px]">
-                            <p className="text-[8px] font-black text-green-600 uppercase">Margen Real</p>
-                            <p className="text-sm font-black text-green-600 italic">${Math.round(d.margin).toLocaleString()}</p>
+                         <div className="text-right min-w-[120px]">
+                            <p className="text-[8px] font-black text-green-600 uppercase">Margen Generado</p>
+                            <p className="text-xl font-black text-green-600 italic">${Math.round(d.margin).toLocaleString()}</p>
                          </div>
                          <ChevronRight className="text-slate-200" size={16} />
                       </div>
@@ -391,7 +465,7 @@ export default function AnalyticsPage() {
          <div className="space-y-1">
             <p className="text-xs font-black text-blue-800 uppercase italic">Certificación de Inteligencia de Datos</p>
             <p className="text-[10px] text-blue-600 leading-relaxed font-medium">
-               Este panel consolida información de telemetría GPS, registros de carga y auditoría de gastos en tiempo real. Los "Kilómetros Muertos" se calculan mediante la diferencia entre la ruta lógica más corta entre puntos y el recorrido real transmitido por el dispositivo del conductor.
+               Este panel consolida información de telemetría GPS, registros de carga y auditoría de gastos en tiempo real. El **Costo por KM** se calcula dividiendo la suma de gastos auditados aprobados por la distancia real recorrida por el GPS de la unidad. Un costo superior a la media de la flota puede indicar fallas mecánicas o ineficiencia de conducción.
             </p>
          </div>
       </div>
