@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
@@ -135,28 +136,22 @@ export default function MonitorOperativoPage() {
   const nextWeekStr = format(addDays(new Date(), 7), "yyyy-MM-dd");
 
   const stats = useMemo(() => {
-    const today = new Date();
-    const monthStart = startOfMonth(today);
-
-    const deliveredToday = loads?.filter(l => 
+    const todayDelivered = loads?.filter(l => 
       l.status === 'delivered' && 
       (l.updatedAt?.seconds ? isToday(new Date(l.updatedAt.seconds * 1000)) : isToday(new Date(l.updatedAt)))
     ).length || 0;
 
     const scheduledToday = loads?.filter(l => l.pickupDate === todayStr).length || 0;
     const onRouteCount = loads?.filter(l => l.status === 'on_route' || l.status === 'on_pause').length || 0;
-    const activeTrucks = trucks?.filter(t => t.status === 'in_trip').length || 0;
-    
     const incidents = loads?.filter(l => l.status === 'incident').length || 0;
 
     return { 
-      deliveredToday, 
+      deliveredToday: todayDelivered, 
       scheduledToday,
       onRouteCount,
-      activeTrucks: Math.max(activeTrucks, onRouteCount), 
       incidents
     };
-  }, [trucks, loads, todayStr]);
+  }, [loads, todayStr]);
 
   const filteredAgenda = useMemo(() => {
     if (!loads) return [];
@@ -194,7 +189,7 @@ export default function MonitorOperativoPage() {
     if (!db || !selectedLoadForDock || !selectedDock || !tenantId) return;
     setIsUpdatingDock(true);
     try {
-      updateDoc(doc(db, "tenants", tenantId, "loads", selectedLoadForDock.id), {
+      await updateDoc(doc(db, "tenants", tenantId, "loads", selectedLoadForDock.id), {
         "origin.dockName": selectedDock,
         "dockEntryAuthorized": true,
         "dockEntryMessage": `AUTORIZADO: Diríjase a ${selectedDock}`,
@@ -244,61 +239,6 @@ export default function MonitorOperativoPage() {
     }
 
     return Math.round(total);
-  };
-
-  const RouteStatusLine = ({ load }: { load: Load }) => {
-    const isStarted = load.status !== 'pending' && load.status !== 'assigned';
-    const isFinished = load.status === 'delivered';
-    const stops = load.outboundStops || [];
-    const lastDeliveredIdx = stops.reduce((acc, s, idx) => (s.deliveredAt ? idx : acc), -1);
-    const nextStopIdx = lastDeliveredIdx + 1;
-    const isReturnPhase = isStarted && !isFinished && lastDeliveredIdx === stops.length - 1;
-
-    return (
-      <div className="space-y-1.5 min-w-0">
-        <div className="flex items-center gap-1.5 overflow-hidden">
-          <div className={cn("w-2.5 h-2.5 rounded-full shrink-0 flex items-center justify-center shadow-sm", !isStarted ? "bg-red-500" : "bg-green-500")}>
-            <div className="w-1 h-1 bg-white rounded-full"></div>
-          </div>
-          <ArrowRight size={12} className={cn("shrink-0", !isStarted ? "text-slate-200" : "text-green-500")} />
-          
-          {stops.length > 0 && (
-            <>
-              <div className={cn("w-2.5 h-2.5 rounded-full shrink-0 shadow-sm", lastDeliveredIdx >= 0 ? "bg-green-500" : "bg-slate-200")} />
-              <ArrowRight size={12} className={cn("shrink-0", isFinished || isReturnPhase ? "text-orange-500" : "text-slate-200")} />
-            </>
-          )}
-
-          <div className={cn(
-            "w-2.5 h-2.5 rounded-full shrink-0 shadow-sm", 
-            isFinished ? "bg-green-500" : (isReturnPhase ? "bg-orange-500 animate-pulse" : "bg-slate-300")
-          )} />
-
-          <span className="text-[10px] font-black text-slate-500 uppercase tracking-tighter truncate ml-1">
-            {isFinished ? `Finalizado` : !isStarted ? `Base: ${load.origin.name}` : isReturnPhase ? `Retorno a Base` : `A: ${stops[nextStopIdx]?.name || 'Destino'}`}
-          </span>
-        </div>
-        
-        {load.status === 'on_pause' && (
-          <div className="flex items-center gap-2 mt-1">
-            <Badge className="bg-amber-500 hover:bg-amber-600 text-white border-none text-[8px] font-black uppercase flex items-center gap-1 shadow-sm shadow-amber-200 animate-pulse">
-               <Coffee size={8} /> PAUSA: {load.tracking?.lastPauseType || 'Descanso'}
-            </Badge>
-            {load.tracking?.pauseStartedAt && (
-              <span className="text-[9px] font-bold text-amber-600 uppercase">
-                desde hace {formatDistanceToNow(toSafeDate(load.tracking.pauseStartedAt)!, { locale: es })}
-              </span>
-            )}
-          </div>
-        )}
-
-        {load.status === 'on_route' && load.tracking && (
-          <div className="flex items-center gap-1.5 text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
-             <Zap size={10} className="animate-pulse fill-current" /> ETA GPS: {calculateETA(load.tracking.distanceRemainingKm, load.tracking.currentSpeed)}
-          </div>
-        )}
-      </div>
-    );
   };
 
   const hubIcon = (isMain: boolean) => L ? L.divIcon({
@@ -375,7 +315,38 @@ export default function MonitorOperativoPage() {
                            "bg-white text-slate-400 border-slate-200")}>
                            {load.serviceType === 'customs' ? <Ship size={24}/> : (load.status === 'on_route' ? <Navigation size={24} className="animate-pulse" /> : load.status === 'on_pause' ? <Coffee size={24} /> : <Clock size={24} />)}
                          </div>
-                         <div className="space-y-1 min-w-0 flex-1"><div className="flex items-center gap-2"><p className="text-base font-black text-slate-900 tracking-tighter">{load.orderNumber}</p>{load.international?.containerNumber && <Badge variant="secondary" className="bg-blue-900 text-white border-none text-[8px] h-4 font-mono px-2"><ScanBarcode size={10} className="mr-1" /> {load.international.containerNumber}</Badge>}</div><RouteStatusLine load={load} /></div>
+                         <div className="space-y-1 min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                               <p className="text-base font-black text-slate-900 tracking-tighter">{load.orderNumber}</p>
+                               {load.international?.containerNumber && <Badge variant="secondary" className="bg-blue-900 text-white border-none text-[8px] h-4 font-mono px-2"><ScanBarcode size={10} className="mr-1" /> {load.international.containerNumber}</Badge>}
+                            </div>
+                            <div className="space-y-1.5 min-w-0">
+                                <div className="flex items-center gap-1.5 overflow-hidden">
+                                  <div className={cn("w-2.5 h-2.5 rounded-full shrink-0 flex items-center justify-center shadow-sm", !isStarted ? "bg-red-500" : "bg-green-500")}>
+                                    <div className="w-1 h-1 bg-white rounded-full"></div>
+                                  </div>
+                                  <ArrowRight size={12} className={cn("shrink-0", !isStarted ? "text-slate-200" : "text-green-500")} />
+                                  {stops.length > 0 && (
+                                    <>
+                                      <div className={cn("w-2.5 h-2.5 rounded-full shrink-0 shadow-sm", lastDeliveredIdx >= 0 ? "bg-green-500" : "bg-slate-200")} />
+                                      <ArrowRight size={12} className={cn("shrink-0", isFinished || isReturnPhase ? "text-orange-500" : "text-slate-200")} />
+                                    </>
+                                  )}
+                                  <div className={cn(
+                                    "w-2.5 h-2.5 rounded-full shrink-0 shadow-sm", 
+                                    isFinished ? "bg-green-500" : (isReturnPhase ? "bg-orange-500 animate-pulse" : "bg-slate-300")
+                                  )} />
+                                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-tighter truncate ml-1">
+                                    {isFinished ? `Finalizado` : !isStarted ? `Base: ${load.origin.name}` : isReturnPhase ? `Retorno a Base` : `A: ${stops[lastDeliveredIdx + 1]?.name || 'Destino'}`}
+                                  </span>
+                                </div>
+                                {load.status === 'on_route' && load.tracking && (
+                                  <div className="flex items-center gap-1.5 text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 w-fit">
+                                     <Zap size={10} className="animate-pulse fill-current" /> ETA GPS: {calculateETA(load.tracking.distanceRemainingKm, load.tracking.currentSpeed)}
+                                  </div>
+                                )}
+                            </div>
+                         </div>
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-8 gap-y-3 flex-[2] w-full lg:w-auto mt-4 lg:mt-0 border-t lg:border-t-0 pt-4 lg:pt-0">
                          <div className="space-y-1"><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Personal y Unidad</p><div className="space-y-0.5"><p className="text-xs font-bold text-slate-700 flex items-center gap-1.5 truncate"><User size={10} className="text-blue-500" /> {driver ? `${driver.lastName}, ${driver.firstName[0]}.` : 'Sin Chofer'}</p><p className="text-[10px] font-mono font-bold text-blue-600"><ShieldCheck size={10} className="inline mr-1" /> {truck?.plate || 'Sin Camión'}</p></div></div>
@@ -392,7 +363,12 @@ export default function MonitorOperativoPage() {
                          <div className="space-y-4 lg:border-r pr-6">
                             <h4 className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-2 tracking-widest"><Ship size={14} /> Información de Contenedor</h4>
                             {load.international?.containerNumber ? (
-                               <div className="space-y-4"><div className="grid grid-cols-2 gap-4"><Card className="bg-white shadow-none border-slate-200"><CardContent className="p-3"><p className="text-[8px] font-black text-slate-400 uppercase">N° Contenedor</p><p className="text-sm font-black text-blue-600 font-mono uppercase">{load.international.containerNumber}</p></CardContent></Card><Card className="bg-white shadow-none border-slate-200"><CardContent className="p-3"><p className="text-[8px] font-black text-slate-400 uppercase">Precinto</p><p className="text-sm font-black text-slate-700 font-mono">{load.international.sealNumber || 'N/A'}</p></CardContent></Card></div></div>
+                               <div className="space-y-4">
+                                  <div className="grid grid-cols-2 gap-4">
+                                     <Card className="bg-white shadow-none border-slate-200"><CardContent className="p-3"><p className="text-[8px] font-black text-slate-400 uppercase">N° Contenedor</p><p className="text-sm font-black text-blue-600 font-mono uppercase">{load.international.containerNumber}</p></CardContent></Card>
+                                     <Card className="bg-white shadow-none border-slate-200"><CardContent className="p-3"><p className="text-[8px] font-black text-slate-400 uppercase">Precinto</p><p className="text-sm font-black text-slate-700 font-mono">{load.international.sealNumber || 'N/A'}</p></CardContent></Card>
+                                  </div>
+                               </div>
                             ) : <div className="p-8 text-center border-2 border-dashed rounded-2xl"><ScanBarcode size={24} className="mx-auto text-slate-200 mb-2" /><p className="text-[10px] text-slate-400 uppercase font-black">Carga General</p></div>}
                             <div className="pt-4"><Card className="bg-white shadow-none border-slate-200"><CardContent className="p-3 flex justify-between items-center"><div><p className="text-[8px] font-black text-slate-400 uppercase">Recorrido Total Previsto</p><p className="text-xl font-black text-slate-900 italic">{totalPlannedKm} <span className="text-[10px] font-normal opacity-50 uppercase">km</span></p></div><div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600"><RouteIcon size={20} /></div></CardContent></Card></div>
                          </div>
@@ -443,7 +419,7 @@ export default function MonitorOperativoPage() {
                                         )}>
                                            <div className="flex justify-between items-center">
                                               <p className={cn("text-[8px] font-black uppercase tracking-widest", isFinished ? "text-white/70" : "text-blue-400")}>Fin de Jornada / Retorno Definitivo</p>
-                                              {isFinished && <CheckCircle2 size={14} className="text-white/50" />}
+                                              {isFinished && <CircleCheck size={14} className="text-white/50" />}
                                            </div>
                                            <div className="flex items-center gap-2">
                                               <Home size={14} className={isFinished ? "text-white/50" : "text-slate-400"} />
@@ -472,24 +448,13 @@ export default function MonitorOperativoPage() {
         {mounted && (
           <MapContainer center={[-28.0, -58.0]} zoom={5} className="h-full w-full" zoomControl={false}>
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap contributors' />
-            {L && hubIcon && hubs?.map((hub) => {
+            {L && hubs?.map((hub) => {
               const icon = hubIcon(!!hub.isMainBase);
               if (!icon) return null;
               return (<Marker key={hub.id} position={[hub.lat || -34.6, hub.lng || -58.3]} icon={icon}><Popup><div className="p-1"><div className="font-bold text-sm">{hub.name}</div><div className="text-xs text-slate-500">{hub.city}</div></div></Popup></Marker>);
             })}
-            {L && clientIcon && clients?.filter(c => c.address?.lat).map((client) => (
-              <Marker key={client.id} position={[client.address.lat!, client.address.lng!]} icon={clientIcon}>
-                <Popup>
-                  <div className="p-1">
-                    <div className="font-bold text-sm">{client.name}</div>
-                    <div className="text-[10px] text-slate-500 uppercase font-bold">{client.address.city}</div>
-                    <div className="text-[9px] text-blue-600 font-bold mt-1 uppercase tracking-tighter">Punto de Entrega</div>
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
-            {L && truckIcon && filteredAgenda.filter(l => (l.status === 'on_route' || l.status === 'on_pause') && l.tracking?.currentLat).map((load) => (
-              <Marker key={load.id} position={[load.tracking!.currentLat, load.tracking!.currentLng]} icon={truckIcon}><Popup><div className="p-1 font-bold text-sm">Orden: {load.orderNumber}</div></Popup></Marker>
+            {L && trucks?.filter(t => t.status === 'in_trip' && t.location?.lat).map((truck) => (
+              <Marker key={truck.id} position={[truck.location!.lat!, truck.location!.lng!]} icon={truckIcon}><Popup><div className="p-1 font-bold text-sm">Patente: {truck.plate}</div></Popup></Marker>
             ))}
           </MapContainer>
         )}
@@ -502,7 +467,7 @@ export default function MonitorOperativoPage() {
                <div className="space-y-2"><Label className="text-[10px] font-black uppercase text-slate-400">1. Confirmar Boca de Carga / Descarga</Label><Select value={selectedDock} onValueChange={setSelectedDock}><SelectTrigger className="bg-slate-50 h-12"><SelectValue placeholder="Seleccionar Portón" /></SelectTrigger><SelectContent>{hubs?.find(h => h.id === selectedLoadForDock?.origin.id)?.loadingBays?.map(bay => (<SelectItem key={bay.id} value={bay.name}>{bay.name}</SelectItem>))}</SelectContent></Select></div>
                <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl space-y-2"><div className="flex items-center gap-2 text-xs font-bold text-blue-700 uppercase tracking-widest"><Radio className="w-3 h-3 animate-pulse" /> Notificación Chofer</div><p className="text-[10px] text-blue-600 leading-relaxed italic">"El chofer recibirá una señal de VÍA LIBRE en su teléfono indicando que puede ingresar inmediatamente."</p></div>
             </div>
-            <DialogFooter><Button variant="ghost" onClick={() => setIsDockDialogOpen(false)} className="text-slate-500 font-bold">CANCELAR</Button><Button onClick={handleDockAssignment} disabled={isUpdatingDock || !selectedDock} className="bg-green-600 hover:bg-green-700 font-bold min-w-[150px]">{isUpdatingDock ? <Loader2 size={16} className="animate-spin mr-2" /> : <CirclePlay size={16} className="mr-2" />} HABILITAR ENTRADA</Button></DialogFooter>
+            <DialogFooter><Button variant="ghost" onClick={() => setIsDockDialogOpen(false)} className="text-slate-500 font-bold">CANCELAR</Button><Button onClick={handleDockAssignment} disabled={isUpdatingDock || !selectedDock} className="bg-green-600 hover:bg-green-700 font-bold min-w-[150px]">{isUpdatingDock ? <Loader2 className="animate-spin mr-2" /> : <CirclePlay size={16} className="mr-2" />} HABILITAR ENTRADA</Button></DialogFooter>
          </DialogContent>
       </Dialog>
     </div>

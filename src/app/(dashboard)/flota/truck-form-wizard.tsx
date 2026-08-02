@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from "react";
@@ -56,21 +57,6 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     costs: INITIAL_COSTS
   });
 
-  const handleNext = () => {
-    if (step === 1) {
-      if (!formData.plate) return toast({ variant: "destructive", title: "Falta Patente", description: "El dominio de la unidad es obligatorio." });
-      if (!formData.brand) return toast({ variant: "destructive", title: "Falta Marca", description: "Debe ingresar la marca del tractor." });
-    }
-    if (step === 2) {
-      if (!formData.grossCombinedWeightKg || !formData.unladenWeightKg) {
-        return toast({ variant: "destructive", title: "Datos Técnicos", description: "PBTC y Tara son obligatorios para el balance legal." });
-      }
-    }
-    setStep(s => Math.min(5, s + 1));
-  };
-
-  const handleBack = () => setStep(s => Math.max(1, s - 1));
-
   const truckRef = useMemo(() => (truckId && db && tenantId) ? doc(db, "tenants", tenantId, "trucks", truckId) : null, [db, tenantId, truckId]);
   const { data: existingTruck, loading: loadingExisting } = useDoc<TruckType>(truckRef);
 
@@ -106,8 +92,14 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     }
   };
 
+  const handleNext = () => setStep(s => Math.min(5, s + 1));
+  const handleBack = () => setStep(s => Math.max(1, s - 1));
+
   const handleSubmit = async () => {
-    if (!db || !tenantId || !formData.plate) return;
+    if (!db || !tenantId || !formData.plate) {
+      toast({ variant: "destructive", title: "Datos incompletos", description: "El dominio de la unidad es obligatorio." });
+      return;
+    }
     setIsSubmitting(true);
     try {
       const finalCapacity = (formData.grossCombinedWeightKg || 0) - (formData.unladenWeightKg || 0);
@@ -158,7 +150,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
              <div className={cn(
                "w-10 h-10 rounded-full flex items-center justify-center border-2 z-10 transition-all", 
                step === s.id ? "bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100 scale-110" : 
-               step > s.id ? "bg-green-500 text-white border-green-500" : "bg-white text-slate-300 border-slate-100"
+               step > s.id ? "bg-green-50 text-white border-green-500" : "bg-white text-slate-300 border-slate-100"
              )}>
                {step > s.id ? <CheckCircle2 size={20} /> : <s.icon size={18} />}
              </div>

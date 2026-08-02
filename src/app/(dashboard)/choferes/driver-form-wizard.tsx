@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useDoc, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, serverTimestamp, doc, updateDoc, setDoc, writeBatch } from "firebase/firestore";
+import { collection, serverTimestamp, doc, setDoc, writeBatch } from "firebase/firestore";
 import { initializeApp, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import { firebaseConfig } from "@/firebase/config";
@@ -16,7 +16,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { 
   ArrowLeft, 
   Save, 
@@ -147,11 +146,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
     reader.readAsDataURL(file);
   };
 
-  const handleNext = () => {
-    // Ningún campo obligatorio para permitir navegación fluida
-    setStep(s => s + 1);
-  };
-
+  const handleNext = () => setStep(s => Math.min(6, s + 1));
   const handleBack = () => setStep(s => Math.max(1, s - 1));
 
   const toggleClass = (cls: string) => {
@@ -166,9 +161,9 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   const handleSubmit = async () => {
     if (!db || !tenantId) return;
     
-    // Solo requerimos email para crear el usuario en Auth si es nuevo
-    if (!driverId && !formData.email) {
-      toast({ variant: "destructive", title: "Faltan credenciales", description: "El email es necesario para crear la cuenta de acceso." });
+    // Solo requerimos email para crear el usuario en Auth si es nuevo y se desea habilitar acceso
+    if (!driverId && !formData.email && step === 6) {
+      toast({ variant: "destructive", title: "Faltan credenciales", description: "El email es necesario para crear la cuenta de acceso en el paso final." });
       return;
     }
 
@@ -183,6 +178,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
       const batch = writeBatch(db);
       const cleanEmail = formData.email?.toLowerCase().trim() || "";
 
+      // Alta en Auth solo para nuevos registros con email definido
       if (!driverId && cleanEmail) {
         if (!formData.password) throw new Error("Debe definir una contraseña inicial para crear el acceso.");
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, cleanEmail, formData.password);
@@ -263,7 +259,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
              <div className={cn(
                "w-10 h-10 rounded-full flex items-center justify-center border-2 z-10 transition-all", 
                step === s.id ? "bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100 scale-110" : 
-               step > s.id ? "bg-green-500 text-white border-green-500" : "bg-white text-slate-300 border-slate-100"
+               step > s.id ? "bg-green-50 text-white border-green-500" : "bg-white text-slate-300 border-slate-100"
              )}>
                {step > s.id ? <CheckCircle2 size={20} /> : <s.icon size={18} />}
              </div>
