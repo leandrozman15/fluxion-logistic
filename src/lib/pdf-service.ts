@@ -346,23 +346,49 @@ export const generateQuotationPDF = async (quote: Quotation, tenant?: Tenant) =>
     doc.setTextColor(200, 0, 0);
     doc.text(`Válido hasta: ${quote.expiryDate}`, pageWidth - margin, 70, { align: "right" });
   
-    // TABLA DE ITEMS
+    // TABLA DE ITEMS CON IMÁGENES
     const itemRows = quote.items.map(item => [
+      "", // Espacio para la imagen
       item.sku,
       item.name.toUpperCase(),
       item.quantity.toString(),
       `$${item.unitPrice.toLocaleString()}`,
-      `${item.ivaRate}%`,
       `$${(item.quantity * item.unitPrice).toLocaleString()}`
     ]);
   
     autoTable(doc, {
       startY: 80,
-      head: [["SKU", "DESCRIPCIÓN", "CANT", "P. UNIT", "IVA", "SUBTOTAL"]],
+      head: [["IMG", "SKU", "DESCRIPCIÓN", "CANT", "P. UNIT", "SUBTOTAL"]],
       body: itemRows,
       headStyles: { fillColor: EMERALD_SALE },
-      styles: { fontSize: 8 },
-      margin: { left: margin, right: margin }
+      styles: { fontSize: 8, valign: 'middle' },
+      columnStyles: {
+        0: { cellWidth: 15 }, // Columna imagen
+        1: { cellWidth: 25 },
+        2: { cellWidth: 'auto' },
+        3: { cellWidth: 15, halign: 'center' },
+        4: { cellWidth: 25, halign: 'right' },
+        5: { cellWidth: 25, halign: 'right' }
+      },
+      didDrawCell: (data) => {
+        if (data.section === 'body' && data.column.index === 0) {
+          const item = quote.items[data.row.index];
+          if (item.photoUrl) {
+            try {
+              doc.addImage(
+                item.photoUrl, 
+                'JPEG', 
+                data.cell.x + 2, 
+                data.cell.y + 2, 
+                11, 
+                11
+              );
+            } catch (e) {
+              // Falla silenciosa si la imagen no es válida
+            }
+          }
+        }
+      }
     });
   
     // TOTALES

@@ -9,10 +9,11 @@ import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { 
   FileText, ArrowLeft, Loader2, Download, 
   CheckCircle2, XCircle, Send, Printer,
-  User, Calendar, Clock, DollarSign, Calculator, Info
+  User, Calendar, Clock, DollarSign, Calculator, Info, Package
 } from "lucide-react";
 import { Quotation, QuotationStatus, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -125,8 +126,15 @@ export default function QuotationDetailPage() {
                      {quote.items.map((item, i) => (
                        <TableRow key={i}>
                           <TableCell className="px-8 py-4">
-                             <div className="font-bold text-xs uppercase">{item.name}</div>
-                             <div className="text-[9px] text-slate-400 font-mono">{item.sku}</div>
+                             <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-slate-50 border rounded-lg flex items-center justify-center overflow-hidden shrink-0">
+                                   {item.photoUrl ? <img src={item.photoUrl} className="w-full h-full object-cover" /> : <Package size={16} className="text-slate-300" />}
+                                </div>
+                                <div>
+                                   <div className="font-bold text-xs uppercase">{item.name}</div>
+                                   <div className="text-[9px] text-slate-400 font-mono">{item.sku}</div>
+                                </div>
+                             </div>
                           </TableCell>
                           <TableCell className="text-center font-black text-slate-700">{item.quantity}</TableCell>
                           <TableCell className="text-right text-xs font-medium text-slate-500">${item.unitPrice.toLocaleString()}</TableCell>
@@ -174,7 +182,7 @@ export default function QuotationDetailPage() {
                       <XCircle size={16} className="mr-2" /> RECHAZAR PROPUESTA
                    </Button>
                  )}
-                 <p className="text-[9px] text-center text-slate-400 font-bold uppercase mt-4">Actualizado: {new Date(quote.updatedAt?.seconds * 1000).toLocaleString()}</p>
+                 <p className="text-[9px] text-center text-slate-400 font-bold uppercase mt-4">Actualizado: {quote.updatedAt?.seconds ? new Date(quote.updatedAt.seconds * 1000).toLocaleString() : '---'}</p>
               </CardContent>
            </Card>
 

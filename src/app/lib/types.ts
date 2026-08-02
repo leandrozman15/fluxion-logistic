@@ -679,6 +679,7 @@ export interface QuotationItem {
   ivaRate: number;
   subtotal: number;
   total: number;
+  photoUrl?: string;
 }
 
 export interface Quotation {

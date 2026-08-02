@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
@@ -103,7 +104,8 @@ export default function NewQuotationPage() {
       unitPrice: currentPrice,
       ivaRate: selectedProduct.ivaRate || 21,
       subtotal: currentQty * currentPrice,
-      total: (currentQty * currentPrice) * (1 + (selectedProduct.ivaRate || 21) / 100)
+      total: (currentQty * currentPrice) * (1 + (selectedProduct.ivaRate || 21) / 100),
+      photoUrl: selectedProduct.photoUrl || ""
     };
 
     const newItems = [...(formData.items || []), newItem];
@@ -249,7 +251,17 @@ export default function NewQuotationPage() {
                        ) : (
                          formData.items?.map((item, i) => (
                            <TableRow key={i}>
-                              <TableCell className="px-8"><p className="font-bold text-slate-700 uppercase text-xs">{item.name}</p><p className="text-[9px] text-slate-400 font-mono">{item.sku}</p></TableCell>
+                              <TableCell className="px-8">
+                                 <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 bg-slate-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
+                                       {item.photoUrl ? <img src={item.photoUrl} className="w-full h-full object-cover" /> : <Package size={14} className="text-slate-300" />}
+                                    </div>
+                                    <div>
+                                       <p className="font-bold text-slate-700 uppercase text-xs">{item.name}</p>
+                                       <p className="text-[9px] text-slate-400 font-mono">{item.sku}</p>
+                                    </div>
+                                 </div>
+                              </TableCell>
                               <TableCell className="text-center font-bold">{item.quantity}</TableCell>
                               <TableCell className="text-right font-medium text-slate-500">${item.unitPrice.toLocaleString()}</TableCell>
                               <TableCell className="text-right font-black text-slate-900">${(item.quantity * item.unitPrice).toLocaleString()}</TableCell>
