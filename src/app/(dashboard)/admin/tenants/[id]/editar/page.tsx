@@ -34,7 +34,8 @@ import {
   Info,
   Layers,
   Map as MapIcon,
-  DollarSign
+  DollarSign,
+  FileText
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -51,6 +52,7 @@ const AVAILABLE_MODULES = [
   { id: 'mantenimiento', label: 'Taller y Mantenimiento', icon: Wrench, group: 'Activos' },
   { id: 'mercadolibre', label: 'Mercado Libre (Last Mile)', icon: ShoppingBag, group: 'E-commerce' },
   { id: 'remitos', label: 'Buzón de Remitos', icon: Files, group: 'Administración' },
+  { id: 'presupuestos', label: 'Presupuestos Venta', icon: FileText, group: 'Administración' },
   { id: 'productos', label: 'Catálogo Productos', icon: Box, group: 'Almacén' },
   { id: 'stock', label: 'Gestión de Stock', icon: Layers, group: 'Almacén' },
   { id: 'stock-layout', label: 'Mapa de Racks', icon: MapIcon, group: 'Almacén' },
