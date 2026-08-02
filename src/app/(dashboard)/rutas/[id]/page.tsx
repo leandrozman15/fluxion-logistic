@@ -1,11 +1,11 @@
+
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
-import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc, updateDoc, serverTimestamp, arrayUnion } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp, arrayUnion, increment } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +24,10 @@ import {
   Loader2, Navigation, Phone, CheckCircle, 
   XCircle, Camera, Siren, AlertTriangle, ShieldAlert,
   MessageCircle,
-  Headset
+  Headset,
+  Zap,
+  Radio,
+  Compass
 } from "lucide-react";
 import { Load, ProofOfDelivery, Truck, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -58,8 +61,10 @@ export default function RouteDetailPage() {
   const [isPodOpen, setIsPodOpen] = useState(false);
   const [isFailedOpen, setIsFailedOpen] = useState(false);
   const [isEmergencyOpen, setIsEmergencyOpen] = useState(false);
+  const [gpsStatus, setGpsStatus] = useState<'off' | 'requesting' | 'active' | 'error'>('off');
   
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const watchIdRef = useRef<number | null>(null);
 
   const [podForm, setPodForm] = useState<Partial<ProofOfDelivery>>({
     receiverName: "",
@@ -76,10 +81,100 @@ export default function RouteDetailPage() {
   const tenantRef = useMemo(() => (db && tenantId) ? doc(db, "tenants", tenantId) : null, [db, tenantId]);
   const { data: tenant } = useDoc<Tenant>(tenantRef);
 
+  // EFECTO: Seguimiento GPS en tiempo real
+  useEffect(() => {
+    if (!load || load.status !== 'on_route' || !loadRef || !db || !tenantId) {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+        setGpsStatus('off');
+      }
+      return;
+    }
+
+    if (typeof window !== 'undefined' && 'geolocation' in navigator) {
+      setGpsStatus('requesting');
+      
+      const options = {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      };
+
+      const success = async (pos: GeolocationPosition) => {
+        setGpsStatus('active');
+        const { latitude, longitude, speed } = pos.coords;
+        const currentSpeed = speed ? Math.round(speed * 3.6) : 0; // Convert to km/h
+
+        try {
+          // 1. Actualizar el viaje (Historial y telemetría)
+          updateDoc(loadRef, {
+            "tracking.currentLat": latitude,
+            "tracking.currentLng": longitude,
+            "tracking.currentSpeed": currentSpeed,
+            "tracking.lastUpdateAt": serverTimestamp(),
+            "tracking.history": arrayUnion({
+              lat: latitude,
+              lng: longitude,
+              speed: currentSpeed,
+              timestamp: new Date().toISOString()
+            })
+          });
+
+          // 2. Actualizar la ubicación del camión en la flota
+          if (load.assignedTruckId) {
+            const truckRef = doc(db, "tenants", tenantId, "trucks", load.assignedTruckId);
+            updateDoc(truckRef, {
+              "location.lat": latitude,
+              "location.lng": longitude,
+              "location.city": load.tracking?.currentLat === latitude ? "" : "En Tránsito",
+              updatedAt: serverTimestamp()
+            });
+          }
+        } catch (e) {
+          console.error("GPS Update Error:", e);
+        }
+      };
+
+      const error = (err: GeolocationPositionError) => {
+        console.error("Geolocation Error:", err);
+        setGpsStatus('error');
+        if (err.code === err.PERMISSION_DENIED) {
+          toast({ variant: "destructive", title: "GPS Requerido", description: "Por favor, habilite los permisos de ubicación para continuar el viaje." });
+        }
+      };
+
+      watchIdRef.current = navigator.geolocation.watchPosition(success, error, options);
+    }
+
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
+  }, [load?.status, loadRef, db, tenantId, toast]);
+
   const currentStop = useMemo(() => {
     if (!load?.outboundStops) return null;
     return load.outboundStops.find(s => !s.deliveredAt && !s.failedAt);
   }, [load?.outboundStops]);
+
+  const handleStartTrip = async () => {
+    if (!loadRef) return;
+    setIsUpdating(true);
+    try {
+      await updateDoc(loadRef, {
+        status: 'on_route',
+        "tracking.tripStartedAt": serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      toast({ title: "Viaje Iniciado", description: "GPS activo y telemetría sincronizada." });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al iniciar" });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
   const handleAction = (type: 'nav' | 'call') => {
     if (!currentStop) return;
@@ -203,15 +298,51 @@ export default function RouteDetailPage() {
       <div className="flex items-center justify-between pt-6 px-2">
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full bg-white shadow-sm border"><ArrowLeft size={18} /></Button>
         <div className="text-center">
-          <h1 className="font-black text-lg tracking-tighter italic uppercase text-slate-900 leading-none">Reparto Activo</h1>
+          <h1 className="font-black text-lg tracking-tighter italic uppercase text-slate-900 leading-none">Terminal Móvil</h1>
           <p className="text-[9px] text-slate-400 font-mono uppercase tracking-widest mt-1">{load.orderNumber}</p>
         </div>
-        <Badge className={cn("bg-slate-100 text-slate-500 border-none", isMeli && "bg-yellow-400 text-slate-900")}>
-          {isMeli ? 'ML' : 'FTL'}
-        </Badge>
+        <div className="flex flex-col items-center">
+           {gpsStatus === 'active' ? (
+             <Badge className="bg-green-600 text-white border-none text-[8px] h-5 animate-pulse">
+                <Radio size={10} className="mr-1" /> GPS VIVO
+             </Badge>
+           ) : gpsStatus === 'error' ? (
+             <Badge variant="destructive" className="text-[8px] h-5">GPS ERROR</Badge>
+           ) : (
+             <Badge variant="outline" className="text-[8px] h-5">GPS OFF</Badge>
+           )}
+        </div>
       </div>
 
-      {currentStop ? (
+      {load.status === 'assigned' ? (
+        <div className="space-y-6 animate-in fade-in zoom-in-95">
+           <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-white">
+              <CardHeader className="bg-slate-900 text-white p-8 text-center">
+                 <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl">
+                    <Truck size={32} />
+                 </div>
+                 <CardTitle className="text-xl font-black uppercase italic tracking-tighter">Preparado para Salida</CardTitle>
+                 <CardDescription className="text-white/40 text-[10px] font-bold uppercase">Confirme su salida para activar el monitoreo GPS</CardDescription>
+              </CardHeader>
+              <CardContent className="p-8 space-y-4">
+                 <div className="flex justify-between items-center text-sm border-b pb-3">
+                    <span className="font-bold text-slate-400 uppercase">Origen</span>
+                    <span className="font-black text-slate-800 uppercase">{load.origin.name}</span>
+                 </div>
+                 <div className="flex justify-between items-center text-sm border-b pb-3">
+                    <span className="font-bold text-slate-400 uppercase">Destinos</span>
+                    <span className="font-black text-slate-800">{load.outboundStops.length} Paradas</span>
+                 </div>
+              </CardContent>
+              <CardFooter className="p-8 pt-0">
+                 <Button className="w-full h-20 bg-blue-600 hover:bg-blue-700 text-white font-black text-xl rounded-3xl shadow-2xl transition-all active:scale-95" onClick={handleStartTrip} disabled={isUpdating}>
+                    {isUpdating ? <Loader2 className="animate-spin mr-2" /> : <Play className="mr-2 fill-current" />}
+                    INICIAR JORNADA
+                 </Button>
+              </CardFooter>
+           </Card>
+        </div>
+      ) : currentStop ? (
         <div className="space-y-6 animate-in fade-in zoom-in-95">
           <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-slate-900 text-white">
             <CardContent className="p-8 space-y-6">
