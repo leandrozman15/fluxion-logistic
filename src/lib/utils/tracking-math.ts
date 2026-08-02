@@ -1,7 +1,8 @@
 
 /**
- * Utilitários matemáticos para telemetria e rastreamento.
+ * Utilitários matemáticos para telemetría e rastreamiento.
  */
+import { toSafeDate } from "./date-utils";
 
 export const STANDARD_HEAVY_CONSUMPTION = 32; // L/100km (Promedio camión pesado cargado)
 
@@ -41,7 +42,7 @@ export function estimateFuelFactor(speed: number): number {
   if (speed < 70) return 32;
   if (speed <= 85) return 28; // Faixa ótima
   if (speed < 100) return 33;
-  return 42; // Excesso de velocidade aumenta o consumo drasticamente
+  return 42; // Excesso de velocidad aumenta el consumo drasticamente
 }
 
 /**
@@ -50,16 +51,35 @@ export function estimateFuelFactor(speed: number): number {
 export function calculateAdjustedETA(
   distanceRemaining: number,
   currentSpeed: number,
-  avgSpeedLast10Min: number,
-  historicalRouteSpeed: number = 70
+  avgSpeedRecent: number,
+  historicalRouteSpeed: number = 65
 ): number {
   if (distanceRemaining <= 0) return 0;
 
-  // Ponderação: 40% Velocidade Atual, 30% Média Recente, 30% Histórico
-  const weightedSpeed = (currentSpeed * 0.4) + (avgSpeedLast10Min * 0.3) + (historicalRouteSpeed * 0.3);
+  // Ponderación: 40% Velocidad Actual, 30% Média Recente, 30% Histórico
+  const weightedSpeed = (currentSpeed * 0.4) + (avgSpeedRecent * 0.3) + (historicalRouteSpeed * 0.3);
   
-  // Garantir velocidade mínima para cálculo se estiver parado
+  // Garantir velocidad mínima para cálculo si está parado
   const effectiveSpeed = Math.max(weightedSpeed, 10); 
 
   return (distanceRemaining / effectiveSpeed) * 60; // Retorna em minutos
+}
+
+/**
+ * Calcula el retraso acumulado comparando el progreso real contra el plan ideal.
+ */
+export function calculateLiveDelay(
+  tripStartedAt: any,
+  distanceTraveled: number,
+  plannedAvgSpeed: number = 65
+): number {
+  const start = toSafeDate(tripStartedAt);
+  if (!start) return 0;
+
+  const now = new Date();
+  const elapsedMinutes = (now.getTime() - start.getTime()) / (1000 * 60);
+  const expectedMinutes = (distanceTraveled / plannedAvgSpeed) * 60;
+
+  // El resultado es la diferencia entre el tiempo real consumido y el tiempo ideal para esa distancia
+  return Math.round(elapsedMinutes - expectedMinutes);
 }

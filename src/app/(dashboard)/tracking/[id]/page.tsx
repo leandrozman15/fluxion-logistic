@@ -22,8 +22,8 @@ import {
 } from "recharts";
 import { Load, Truck } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
-import { estimateFuelFactor } from "@/lib/utils/tracking-math";
+import { format, addMinutes } from "date-fns";
+import { estimateFuelFactor, calculateAdjustedETA, calculateLiveDelay } from "@/lib/utils/tracking-math";
 
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
@@ -173,6 +173,29 @@ export default function LiveTrackingPage() {
     return load.tracking.history.map(p => [p.lat, p.lng] as [number, number]);
   }, [load?.tracking?.history]);
 
+  const liveStats = useMemo(() => {
+    if (!load?.tracking) return { delay: 0, eta: "---" };
+    const tracking = load.tracking;
+    
+    // Cálculo dinámico de retraso
+    const delay = calculateLiveDelay(tracking.tripStartedAt, tracking.distanceTraveledKm);
+    
+    // Cálculo dinámico de ETA
+    let eta = "---";
+    if (tracking.distanceRemainingKm && tracking.currentSpeed > 5) {
+      const minsRemaining = calculateAdjustedETA(
+        tracking.distanceRemainingKm, 
+        tracking.currentSpeed, 
+        tracking.avgSpeed || 60
+      );
+      eta = format(addMinutes(new Date(), minsRemaining), "HH:mm") + " hs";
+    } else if (tracking.distanceRemainingKm > 0) {
+      eta = "DETENIDO";
+    }
+
+    return { delay, eta };
+  }, [load]);
+
   if (loading) return <div className="h-screen flex items-center justify-center"><Activity className="animate-spin text-blue-600" /></div>;
   if (!load) return <div className="p-10 text-center">Operación no encontrada.</div>;
 
@@ -246,7 +269,7 @@ export default function LiveTrackingPage() {
           <CardContent className="pt-4 flex flex-col items-center text-center gap-1">
             <Clock size={20} className="text-green-600" />
             <p className="text-[10px] uppercase font-bold text-slate-400">ETA Ajustado</p>
-            <p className="text-2xl font-bold">14:45 <span className="text-xs font-normal text-slate-400">hs</span></p>
+            <p className="text-2xl font-bold">{liveStats.eta}</p>
           </CardContent>
         </Card>
         <Card className="border-none shadow-sm">
@@ -256,11 +279,14 @@ export default function LiveTrackingPage() {
             <p className="text-2xl font-bold">{tracking?.estimatedFuelLiters?.toFixed(1) || 0} <span className="text-xs font-normal text-slate-400">L</span></p>
           </CardContent>
         </Card>
-        <Card className="border-none shadow-sm">
+        <Card className={cn("border-none shadow-sm", liveStats.delay > 0 ? "bg-red-50" : "bg-white")}>
           <CardContent className="pt-4 flex flex-col items-center text-center gap-1">
-            <Zap size={20} className="text-yellow-500" />
-            <p className="text-[10px] uppercase font-bold text-slate-400">Delay</p>
-            <p className="text-2xl font-bold text-orange-600">+12 <span className="text-xs font-normal text-slate-400">min</span></p>
+            <Zap size={20} className={cn(liveStats.delay > 0 ? "text-red-500" : "text-yellow-500")} />
+            <p className="text-[10px] uppercase font-bold text-slate-400">Delay Real</p>
+            <p className={cn("text-2xl font-bold", liveStats.delay > 0 ? "text-red-600" : "text-green-600")}>
+              {liveStats.delay > 0 ? `+${liveStats.delay}` : liveStats.delay} 
+              <span className="text-xs font-normal text-slate-400 ml-1">min</span>
+            </p>
           </CardContent>
         </Card>
       </div>
