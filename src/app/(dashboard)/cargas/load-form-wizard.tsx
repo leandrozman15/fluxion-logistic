@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from "react";
@@ -48,10 +49,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Remito selection state
   const [selectedRemitoIds, setSelectedRemitoIds] = useState<string[]>([]);
-
-  // Stop Modal State
   const [isStopModalOpen, setIsStopModalOpen] = useState(false);
   const [activeLeg, setActiveLeg] = useState<'outbound' | 'return'>('outbound');
   const [editingStop, setEditingStop] = useState<Partial<LoadLegStop>>({
@@ -78,7 +76,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     tracking: { currentLat: 0, currentLng: 0, currentSpeed: 0, avgSpeed: 0, maxSpeed: 0, distanceTraveledKm: 0, distanceRemainingKm: 0, timeOnRouteMinutes: 0, timeStoppedMinutes: 0, lastUpdateAt: null, history: [], alerts: [] }
   });
 
-  // Funciones de navegación (Definidas antes del retorno para evitar ReferenceError)
   const handleBack = () => setStep(prev => Math.max(1, prev - 1));
   
   const handleNext = () => {
@@ -89,9 +86,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     if (step === 2) {
       if (!formData.origin?.id) return toast({ variant: "destructive", title: "Datos de Salida", description: "Debe elegir un Punto de Origen." });
       if (!formData.pickupDate) return toast({ variant: "destructive", title: "Datos de Salida", description: "La fecha de carga es obligatoria." });
-      if ((formData.outboundStops?.length || 0) === 0 && formData.serviceType !== 'meli') {
-        return toast({ variant: "destructive", title: "Falta Itinerario", description: "Debe seleccionar al menos un Remito o Parada de entrega." });
-      }
     }
     setStep(prev => Math.min(5, prev + 1));
   };
@@ -108,7 +102,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
         assignedCompanionIds: existingLoad.assignedCompanionIds || [],
         budget: existingLoad.budget || { initialAdvance: 0, totalBudget: 0, categories: {} }
       });
-      // Initialize selected remitos from existing stops
       const remitoIds: string[] = [];
       existingLoad.outboundStops?.forEach(s => {
         s.documents?.forEach(d => {
@@ -126,7 +119,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
   const remitosQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "pending_remitos"), where("status", "in", ["pending", "dispatched"])) : null, [db, tenantId]);
 
   const { data: trucks } = useCollection<TruckType>(trucksQuery);
-  const { data: drivers } = useCollection<Driver>(driversQuery);
+  const { data: personnel } = useCollection<Driver>(driversQuery);
   const { data: clients } = useCollection<Client>(clientsQuery);
   const { data: hubs } = useCollection<Hub>(hubsQuery);
   const { data: allRemitos } = useCollection<PendingRemito>(remitosQuery);
@@ -135,8 +128,8 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     return allRemitos?.filter(r => r.status === 'pending' || r.loadId === loadId) || [];
   }, [allRemitos, loadId]);
 
-  const driversOnly = useMemo(() => drivers?.filter(d => d.role === 'driver' || !d.role) || [], [drivers]);
-  const companionsOnly = useMemo(() => drivers?.filter(d => d.role === 'companion') || [], [drivers]);
+  const driversOnly = useMemo(() => personnel?.filter(d => d.role === 'driver' || !d.role) || [], [personnel]);
+  const companionsOnly = useMemo(() => personnel?.filter(d => d.role === 'companion') || [], [personnel]);
 
   const locationsList = useMemo(() => {
     const list: any[] = [];
@@ -161,12 +154,20 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
   const handleTruckSelect = (id: string) => {
     const truck = trucks?.find(t => t.id === id);
     if (!truck) return;
+    
+    // AUTO-COMPLETAR CHOFER Y ACOMPAÑANTES BASADO EN ASIGNACIÓN DE CAMIÓN
     setFormData(prev => ({
       ...prev,
       assignedTruckId: id,
       assignedDriverId: truck.assignedDriverId && truck.assignedDriverId !== 'none' ? truck.assignedDriverId : prev.assignedDriverId,
-      assignedCompanionIds: truck.assignedCompanionIds || []
+      assignedCompanionIds: truck.assignedCompanionIds && truck.assignedCompanionIds.length > 0 
+        ? truck.assignedCompanionIds 
+        : prev.assignedCompanionIds
     }));
+    
+    if (truck.assignedDriverId && truck.assignedDriverId !== 'none') {
+      toast({ title: "Asignación Automática", description: "Se han cargado los recursos vinculados a la unidad." });
+    }
   };
 
   const handleAddCompanion = (id: string) => {
@@ -258,10 +259,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
   };
 
   const saveStop = () => {
-    if (!editingStop.name || !editingStop.address) {
-      toast({ variant: "destructive", title: "Faltan datos", description: "El nombre y dirección de la parada son obligatorios." });
-      return;
-    }
     const stop = { ...editingStop, id: editingStop.id || Math.random().toString(36).substring(7) } as LoadLegStop;
     const field = activeLeg === 'outbound' ? 'outboundStops' : 'returnStops';
     setFormData(prev => ({ ...prev, [field]: [...(prev[field] || []).filter(s => s.id !== stop.id), stop] }));
@@ -272,17 +269,12 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
   const handleSubmit = async () => {
     if (!db || !tenantId) return;
     
-    // Validación final
-    if (!formData.assignedTruckId || !formData.assignedDriverId) return toast({ variant: "destructive", title: "Error", description: "Faltan recursos asignados (Chofer o Camión)." });
-    if (!formData.origin?.id) return toast({ variant: "destructive", title: "Error", description: "El origen no está definido." });
-
     setIsSubmitting(true);
     try {
       const batch = writeBatch(db);
       let finalLoadId = loadId;
       let finalOrderNumber = formData.orderNumber;
 
-      // 1. AUTO-GENERACIÓN DE NÚMERO DE ORDEN (FL-YEAR-XXXX)
       if (!finalOrderNumber) {
         const loadsSnap = await getDocs(query(collection(db, "tenants", tenantId, "loads"), orderBy("orderNumber", "desc"), limit(1)));
         let nextSeq = 1;
@@ -307,13 +299,12 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
         const newRef = doc(collection(db, "tenants", tenantId, "loads"));
         finalLoadId = newRef.id;
         batch.set(newRef, { ...cleanFormData, id: finalLoadId, createdAt: serverTimestamp() });
-        await logSystemEvent(db, tenantId, user, 'create', 'load', finalLoadId, { orderNumber: finalOrderNumber });
+        if (user) await logSystemEvent(db, tenantId, user, 'create', 'load', finalLoadId, { orderNumber: finalOrderNumber });
       } else {
         batch.update(doc(db, "tenants", tenantId, "loads", loadId), cleanFormData);
-        await logSystemEvent(db, tenantId, user, 'update', 'load', loadId, { orderNumber: finalOrderNumber });
+        if (user) await logSystemEvent(db, tenantId, user, 'update', 'load', loadId, { orderNumber: finalOrderNumber });
       }
 
-      // 2. ACTUALIZACIÓN DE REMITOS EN EL BUZÓN
       for (const rid of selectedRemitoIds) {
         batch.update(doc(db, "tenants", tenantId, "pending_remitos", rid), {
           status: 'dispatched',
@@ -321,27 +312,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
           dispatchedDate: formData.pickupDate,
           updatedAt: serverTimestamp()
         });
-      }
-
-      // 3. DESvincular remitos que ya no están seleccionados (si se editó)
-      if (existingLoad) {
-        const removedRemitoIds = [];
-        existingLoad.outboundStops?.forEach(s => {
-           s.documents?.forEach(d => {
-             if (d.pendingRemitoId && !selectedRemitoIds.includes(d.pendingRemitoId)) {
-               removedRemitoIds.push(d.pendingRemitoId);
-             }
-           });
-        });
-        
-        for (const rid of removedRemitoIds) {
-          batch.update(doc(db, "tenants", tenantId, "pending_remitos", rid), {
-            status: 'pending',
-            loadId: null,
-            dispatchedDate: null,
-            updatedAt: serverTimestamp()
-          });
-        }
       }
 
       await batch.commit();
@@ -394,7 +364,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
               )}>
                 {step > s.id ? <CheckCircle2 size={18} /> : <s.icon size={16} />}
               </div>
-              <span className={cn("text-[9px] uppercase font-bold text-center", step === s.id ? "text-blue-600" : "text-slate-400")}>
+              <span className={cn("text-[9px] font-black uppercase text-center", step === s.id ? "text-blue-600" : "text-slate-400")}>
                 {s.label}
               </span>
               {s.id < 5 && <div className={cn("absolute top-4.5 left-1/2 w-full h-[1px] -z-0", step > s.id ? "bg-green-200" : "bg-slate-100")}></div>}

@@ -110,7 +110,6 @@ export default function TruckDetailPage() {
     const tiresPerKm = (costs.variable.tires?.costFullSet || 0) / (costs.variable.tires?.lifeSpanKm || 1);
     const reservePerKm = costs.variable.unforeseenReservePerKm || 0;
 
-    // CÁLCULO DINÁMICO DE COMBUSTIBLE
     let fuelPerKm = 0;
     if (fuelExpenses && fuelExpenses.length > 0) {
       const validTickets = fuelExpenses.filter(e => !!e.pricePerLiter && e.pricePerLiter > 0);
@@ -333,7 +332,7 @@ export default function TruckDetailPage() {
                       <div className="flex items-center gap-3">
                         <Avatar className="h-10 w-10 border shadow-sm">
                           <AvatarImage src={assignedDriver.avatarUrl} />
-                          <AvatarFallback>{assignedDriver.lastName[0]}</AvatarFallback>
+                          <AvatarFallback className="bg-blue-50 text-blue-600 text-xs font-bold">{assignedDriver.firstName[0]}{assignedDriver.lastName[0]}</AvatarFallback>
                         </Avatar>
                         <div>
                           <p className="text-sm font-bold text-slate-900">{assignedDriver.lastName}, {assignedDriver.firstName}</p>
@@ -344,17 +343,18 @@ export default function TruckDetailPage() {
                   </div>
 
                   {assignedCompanions.length > 0 && (
-                    <div className="pt-2 border-t border-slate-100">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Acompañantes</p>
-                      <div className="space-y-2">
+                    <div className="pt-4 border-t border-slate-100">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Acompañantes / Ayudantes</p>
+                      <div className="space-y-3">
                         {assignedCompanions.map(companion => (
                           <div key={companion.id} className="flex items-center gap-3">
-                            <Avatar className="h-8 w-8 border shadow-sm">
+                            <Avatar className="h-9 w-9 border shadow-sm">
                               <AvatarImage src={companion.avatarUrl} />
-                              <AvatarFallback className="text-[10px]">{companion.lastName[0]}</AvatarFallback>
+                              <AvatarFallback className="bg-slate-50 text-slate-400 text-[10px] font-bold">{companion.firstName[0]}{companion.lastName[0]}</AvatarFallback>
                             </Avatar>
                             <div>
-                              <p className="text-xs font-bold text-slate-700">{companion.lastName}, {companion.firstName}</p>
+                              <p className="text-sm font-bold text-slate-700 leading-none">{companion.lastName}, {companion.firstName}</p>
+                              <p className="text-[8px] text-slate-400 uppercase font-bold mt-1">ACOMPAÑANTE</p>
                             </div>
                           </div>
                         ))}
@@ -544,7 +544,7 @@ export default function TruckDetailPage() {
             <DialogTitle>Visor de Documentos</DialogTitle>
             <DialogDescription>Visualización de archivos adjuntos del vehículo</DialogDescription>
           </DialogHeader>
-          <div className="flex-1 bg-slate-100 flex items-center justify-center overflow-hidden relative">{viewerUrl && (viewerUrl.startsWith('data:application/pdf') ? <iframe src={viewerUrl} className="w-full h-full border-none" /> : <img src={viewerUrl} className="max-w-full max-h-full object-contain" />)}</div>
+          <div className="flex-1 bg-slate-100 flex items-center justify-center overflow-hidden relative">{viewerUrl && (viewerUrl.startsWith('data:application/pdf') ? <iframe src={viewerUrl} className="w-full h-full border-none" title="Visor PDF" /> : <img src={viewerUrl} className="max-w-full max-h-full object-contain" alt="Documento" />)}</div>
           <DialogFooter className="p-4 border-t bg-slate-50"><Button variant="outline" size="sm" onClick={() => setViewerUrl(null)}>CERRAR</Button></DialogFooter>
         </DialogContent>
       </Dialog>

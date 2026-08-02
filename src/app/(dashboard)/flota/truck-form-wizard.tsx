@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useDoc, useUser } from "@/firebase";
+import { useFirestore, useDoc, useCollection, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { collection, serverTimestamp, doc, updateDoc, setDoc, query, orderBy } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -16,9 +16,9 @@ import { Progress } from "@/components/ui/progress";
 import { 
   Truck, ArrowLeft, Save, Loader2, 
   Scale, CheckCircle2, ChevronRight, ChevronLeft, Info, Camera, DollarSign, Zap, Gauge, Fuel,
-  ShieldCheck, Wrench, RefreshCw, Smartphone, TrendingUp
+  ShieldCheck, Wrench, RefreshCw, Smartphone, TrendingUp, User, X, Users
 } from "lucide-react";
-import { Truck as TruckType, TruckCosts } from "@/app/lib/types";
+import { Truck as TruckType, TruckCosts, Driver } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -53,16 +53,28 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     odometerKm: 0, avgConsumption: 32, status: "available",
     ownershipType: 'company', haulingType: 'standard',
     location: { city: "", province: "Buenos Aires", country: "Argentina", lat: 0, lng: 0 },
-    avatarUrl: "", assignedCompanionIds: [],
+    avatarUrl: "", assignedDriverId: "none", assignedCompanionIds: [],
     costs: INITIAL_COSTS
   });
 
   const truckRef = useMemo(() => (truckId && db && tenantId) ? doc(db, "tenants", tenantId, "trucks", truckId) : null, [db, tenantId, truckId]);
   const { data: existingTruck, loading: loadingExisting } = useDoc<TruckType>(truckRef);
 
+  // Fetching drivers and companions
+  const driversQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "drivers"), orderBy("lastName")) : null, [db, tenantId]);
+  const { data: allPersonnel } = useCollection<Driver>(driversQuery);
+
+  const driversOnly = useMemo(() => allPersonnel?.filter(p => p.role === 'driver' || !p.role) || [], [allPersonnel]);
+  const companionsOnly = useMemo(() => allPersonnel?.filter(p => p.role === 'companion') || [], [allPersonnel]);
+
   useEffect(() => {
     if (existingTruck) {
-      setFormData({ ...existingTruck, costs: existingTruck.costs || INITIAL_COSTS });
+      setFormData({ 
+        ...existingTruck, 
+        costs: existingTruck.costs || INITIAL_COSTS,
+        assignedDriverId: existingTruck.assignedDriverId || "none",
+        assignedCompanionIds: existingTruck.assignedCompanionIds || []
+      });
     }
   }, [existingTruck]);
 
@@ -80,7 +92,9 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
           const url = await uploadBase64(storagePath, compressed);
           setFormData(prev => ({ ...prev, avatarUrl: url }));
           
-          await logSystemEvent(db, tenantId, user, 'document_upload', 'truck', formData.plate || 'unknown', { fileType: 'avatar' });
+          if (user) {
+            await logSystemEvent(db, tenantId, user, 'document_upload', 'truck', formData.plate || 'unknown', { fileType: 'avatar' });
+          }
           toast({ title: "Foto guardada" });
         } catch (err) {
           toast({ variant: "destructive", title: "Error al subir foto" });
@@ -94,6 +108,18 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
 
   const handleNext = () => setStep(s => Math.min(5, s + 1));
   const handleBack = () => setStep(s => Math.max(1, s - 1));
+
+  const handleAddCompanion = (id: string) => {
+    if (id === 'none') return;
+    const current = formData.assignedCompanionIds || [];
+    if (!current.includes(id)) {
+      setFormData({ ...formData, assignedCompanionIds: [...current, id] });
+    }
+  };
+
+  const removeCompanion = (id: string) => {
+    setFormData({ ...formData, assignedCompanionIds: (formData.assignedCompanionIds || []).filter(cid => cid !== id) });
+  };
 
   const handleSubmit = async () => {
     if (!db || !tenantId || !formData.plate) {
@@ -111,11 +137,11 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
 
       if (truckId) {
         await updateDoc(doc(db, "tenants", tenantId, "trucks", truckId), dataToSave);
-        await logSystemEvent(db, tenantId, user, 'update', 'truck', truckId, { plate: formData.plate });
+        if (user) await logSystemEvent(db, tenantId, user, 'update', 'truck', truckId, { plate: formData.plate });
       } else {
         const newRef = doc(collection(db, "tenants", tenantId, "trucks"));
         await setDoc(newRef, { ...dataToSave, id: newRef.id, createdAt: serverTimestamp() });
-        await logSystemEvent(db, tenantId, user, 'create', 'truck', newRef.id, { plate: formData.plate });
+        if (user) await logSystemEvent(db, tenantId, user, 'create', 'truck', newRef.id, { plate: formData.plate });
       }
       toast({ title: "Ficha Técnica Guardada", description: `La unidad ${formData.plate} ha sido actualizada.` });
       router.push('/flota');
@@ -140,7 +166,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
 
       <div className="bg-white p-4 rounded-2xl border shadow-sm flex items-center justify-between overflow-x-auto gap-4">
          {[
-           { id: 1, label: "Identidad", icon: Info },
+           { id: 1, label: "Identidad / Personal", icon: Info },
            { id: 2, label: "Pesos/Técnica", icon: Scale },
            { id: 3, label: "Operación", icon: Zap },
            { id: 4, label: "Costos Fijos", icon: DollarSign },
@@ -161,37 +187,88 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
       </div>
 
       <div className="animate-in fade-in zoom-in-95 duration-300">
-        {/* PASO 1: IDENTIDAD */}
+        {/* PASO 1: IDENTIDAD Y PERSONAL */}
         {step === 1 && (
-          <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden">
-             <CardHeader className="bg-slate-900 text-white p-8"><CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2"><Truck size={18} className="text-blue-400"/> 1. Identificación de la Unidad</CardTitle></CardHeader>
-             <CardContent className="grid grid-cols-1 md:grid-cols-12 gap-8 p-8">
-                <div className="md:col-span-4 flex flex-col items-center gap-4 p-6 bg-slate-50 border-2 border-dashed rounded-[2rem]">
-                   <Avatar className="w-40 h-40 rounded-[2rem] border-4 border-white shadow-2xl relative">
-                      <AvatarImage src={formData.avatarUrl} className="object-cover" />
-                      <AvatarFallback className="bg-blue-100 text-blue-600"><Truck size={48} /></AvatarFallback>
-                      {isProcessingAvatar && <div className="absolute inset-0 bg-white/60 flex items-center justify-center rounded-[2rem]"><Loader2 className="animate-spin text-blue-600" /></div>}
-                   </Avatar>
-                   <input type="file" ref={avatarInputRef} className="hidden" accept="image/*" onChange={onAvatarChange} />
-                   <Button variant="outline" className="w-full rounded-xl h-11 font-bold text-xs uppercase" onClick={() => avatarInputRef.current?.click()} disabled={isProcessingAvatar}>
-                     <Camera size={16} className="mr-2 text-blue-500" /> Capturar Imagen
-                   </Button>
-                </div>
-                <div className="md:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Dominio / Patente</Label><Input className="h-12 bg-slate-50 border-none rounded-xl font-mono font-black text-2xl uppercase tracking-tighter" value={formData.plate} onChange={e => setFormData({...formData, plate: e.target.value.toUpperCase()})} /></div>
-                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Año de Fabricación</Label><Input type="number" className="h-12 bg-slate-50 border-none rounded-xl font-bold" value={formData.year} onChange={e => setFormData({...formData, year: parseInt(e.target.value) || 0})} /></div>
-                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Marca del Tractor</Label><Input className="h-12 bg-slate-50 border-none rounded-xl font-bold" value={formData.brand} onChange={e => setFormData({...formData, brand: e.target.value})} /></div>
-                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Modelo / Versión</Label><Input className="h-12 bg-slate-50 border-none rounded-xl font-bold" value={formData.model} onChange={e => setFormData({...formData, model: e.target.value})} /></div>
-                   <div className="space-y-1.5">
-                      <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Titularidad</Label>
-                      <Select value={formData.ownershipType} onValueChange={(v: any) => setFormData({...formData, ownershipType: v})}>
-                         <SelectTrigger className="h-12 bg-slate-50 border-none rounded-xl"><SelectValue /></SelectTrigger>
-                         <SelectContent><SelectItem value="company">Propiedad Empresa (Directa)</SelectItem><SelectItem value="third_party">Unidad Tercerizada / Contratada</SelectItem></SelectContent>
-                      </Select>
-                   </div>
-                </div>
-             </CardContent>
-          </Card>
+          <div className="space-y-6">
+            <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden">
+               <CardHeader className="bg-slate-900 text-white p-8"><CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2"><Truck size={18} className="text-blue-400"/> 1. Identificación de la Unidad</CardTitle></CardHeader>
+               <CardContent className="grid grid-cols-1 md:grid-cols-12 gap-8 p-8">
+                  <div className="md:col-span-4 flex flex-col items-center gap-4 p-6 bg-slate-50 border-2 border-dashed rounded-[2rem]">
+                     <Avatar className="w-40 h-40 rounded-[2rem] border-4 border-white shadow-2xl relative">
+                        <AvatarImage src={formData.avatarUrl} className="object-cover" />
+                        <AvatarFallback className="bg-blue-100 text-blue-600"><Truck size={48} /></AvatarFallback>
+                        {isProcessingAvatar && <div className="absolute inset-0 bg-white/60 flex items-center justify-center rounded-[2rem]"><Loader2 className="animate-spin text-blue-600" /></div>}
+                     </Avatar>
+                     <input type="file" ref={avatarInputRef} className="hidden" accept="image/*" onChange={onAvatarChange} />
+                     <Button variant="outline" className="w-full rounded-xl h-11 font-bold text-xs uppercase" onClick={() => avatarInputRef.current?.click()} disabled={isProcessingAvatar}>
+                       <Camera size={16} className="mr-2 text-blue-500" /> Capturar Imagen
+                     </Button>
+                  </div>
+                  <div className="md:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+                     <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Dominio / Patente</Label><Input className="h-12 bg-slate-50 border-none rounded-xl font-mono font-black text-2xl uppercase tracking-tighter" value={formData.plate} onChange={e => setFormData({...formData, plate: e.target.value.toUpperCase()})} /></div>
+                     <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Año de Fabricación</Label><Input type="number" className="h-12 bg-slate-50 border-none rounded-xl font-bold" value={formData.year} onChange={e => setFormData({...formData, year: parseInt(e.target.value) || 0})} /></div>
+                     <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Marca del Tractor</Label><Input className="h-12 bg-slate-50 border-none rounded-xl font-bold" value={formData.brand} onChange={e => setFormData({...formData, brand: e.target.value})} /></div>
+                     <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Modelo / Versión</Label><Input className="h-12 bg-slate-50 border-none rounded-xl font-bold" value={formData.model} onChange={e => setFormData({...formData, model: e.target.value})} /></div>
+                     <div className="space-y-1.5">
+                        <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Titularidad</Label>
+                        <Select value={formData.ownershipType} onValueChange={(v: any) => setFormData({...formData, ownershipType: v})}>
+                           <SelectTrigger className="h-12 bg-slate-50 border-none rounded-xl"><SelectValue /></SelectTrigger>
+                           <SelectContent><SelectItem value="company">Propiedad Empresa (Directa)</SelectItem><SelectItem value="third_party">Unidad Tercerizada / Contratada</SelectItem></SelectContent>
+                        </Select>
+                     </div>
+                  </div>
+               </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden">
+               <CardHeader className="bg-blue-600 text-white p-6"><CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2"><Users size={18}/> Asignación Permanente de Personal</CardTitle></CardHeader>
+               <CardContent className="p-8 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                     <div className="space-y-3">
+                        <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Chofer Principal Asignado</Label>
+                        <Select value={formData.assignedDriverId} onValueChange={v => setFormData({...formData, assignedDriverId: v})}>
+                           <SelectTrigger className="h-12 bg-slate-50 border-none rounded-xl font-bold">
+                              <SelectValue placeholder="Elegir Chofer..." />
+                           </SelectTrigger>
+                           <SelectContent>
+                              <SelectItem value="none">Sin Chofer Fijo</SelectItem>
+                              {driversOnly.map(d => (
+                                <SelectItem key={d.id} value={d.id}>{d.lastName}, {d.firstName}</SelectItem>
+                              ))}
+                           </SelectContent>
+                        </Select>
+                        <p className="text-[9px] text-slate-400 font-bold uppercase italic">Este chofer será sugerido automáticamente al despachar la unidad.</p>
+                     </div>
+
+                     <div className="space-y-3">
+                        <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Acompañantes / Ayudantes Fijos</Label>
+                        <Select onValueChange={handleAddCompanion}>
+                           <SelectTrigger className="h-12 bg-slate-50 border-none rounded-xl font-bold">
+                              <SelectValue placeholder="Agregar Ayudante..." />
+                           </SelectTrigger>
+                           <SelectContent>
+                              <SelectItem value="none">Agregar nuevo...</SelectItem>
+                              {companionsOnly.map(d => (
+                                <SelectItem key={d.id} value={d.id}>{d.lastName}, {d.firstName}</SelectItem>
+                              ))}
+                           </SelectContent>
+                        </Select>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                           {(formData.assignedCompanionIds || []).map(cid => {
+                             const p = companionsOnly.find(x => x.id === cid);
+                             return (
+                               <Badge key={cid} variant="secondary" className="pl-2 pr-1 py-1 gap-2 bg-blue-50 text-blue-700 border-blue-100">
+                                 {p ? `${p.lastName}, ${p.firstName[0]}.` : cid}
+                                 <button onClick={() => removeCompanion(cid)} className="hover:text-red-500"><X size={12}/></button>
+                               </Badge>
+                             );
+                           })}
+                        </div>
+                     </div>
+                  </div>
+               </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* PASO 2: TÉCNICA */}
