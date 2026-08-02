@@ -237,7 +237,7 @@ export default function MonitorOperativoPage() {
 
   const clientMarkerIcon = () => L ? L.divIcon({
     className: 'custom-client-marker-icon',
-    html: `<div class="bg-indigo-600 text-white p-2 rounded-full shadow-lg border-2 border-white flex items-center justify-center">
+    html: `<div class="bg-green-600 text-white p-2 rounded-full shadow-lg border-2 border-white flex items-center justify-center">
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M3 7v1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7"/><path d="M4 21V4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v17"/></svg>
     </div>`,
     iconSize: [30, 30],

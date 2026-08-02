@@ -99,7 +99,7 @@ export default function DespachoInteligentePage() {
 
   const clientIcon = (number: number) => L ? L.divIcon({
     className: 'custom-client-icon',
-    html: `<div class="bg-indigo-600 text-white w-6 h-6 rounded-full shadow-lg border-2 border-white flex items-center justify-center font-bold text-[10px]">${number}</div>`,
+    html: `<div class="bg-green-600 text-white w-6 h-6 rounded-full shadow-lg border-2 border-white flex items-center justify-center font-bold text-[10px]">${number}</div>`,
     iconSize: [24, 24],
     iconAnchor: [12, 12]
   }) : null;
@@ -439,7 +439,7 @@ export default function DespachoInteligentePage() {
                               <div className="space-y-2 relative pl-4 border-l-2 border-dashed border-indigo-100 ml-1">
                                   {prop.stops.map((s, sIdx) => (
                                     <div key={s.id} className="relative">
-                                      <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-indigo-600 border-2 border-white shadow-sm flex items-center justify-center text-[6px] font-black text-white">{sIdx + 1}</div>
+                                      <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-green-600 border-2 border-white shadow-sm flex items-center justify-center text-[6px] font-black text-white">{sIdx + 1}</div>
                                       <div className="text-xs font-bold text-slate-700 uppercase leading-none truncate">{s.clientName}</div>
                                       <p className="text-[9px] text-slate-400 mt-0.5">REM {s.number} • {s.weightKg} KG</p>
                                     </div>
