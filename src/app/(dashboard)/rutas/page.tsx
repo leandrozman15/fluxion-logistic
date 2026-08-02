@@ -60,32 +60,32 @@ export default function DriverRoutesPage() {
     return dates;
   }, []);
 
-  // Simplificamos la consulta eliminando el orderBy para evitar el error de índice compuesto
-  // Ordenaremos los resultados en el useMemo de JS.
+  // Simplificamos la consulta para evitar errores de índices compuestos
+  // Obtenemos todos los viajes y filtramos por conductor y fecha en memoria
   const routesQuery = useMemo(() => {
     if (!db || !tenantId) return null;
-    
-    if (role === 'driver' && user?.uid) {
-      return query(
-        collection(db, "tenants", tenantId, "loads"), 
-        where("assignedDriverId", "==", user.uid)
-      );
-    }
-
     return query(collection(db, "tenants", tenantId, "loads"));
-  }, [db, tenantId, role, user?.uid]);
+  }, [db, tenantId]);
 
   const { data: rawRoutes, loading } = useCollection<Load>(routesQuery);
 
-  // Ordenamos y procesamos los datos en memoria
   const routes = useMemo(() => {
     if (!rawRoutes) return [];
-    return [...rawRoutes].sort((a, b) => {
-      const dateTimeA = `${a.pickupDate} ${a.pickupTime}`;
-      const dateTimeB = `${b.pickupDate} ${b.pickupTime}`;
-      return dateTimeA.localeCompare(dateTimeB);
-    });
-  }, [rawRoutes]);
+    
+    return rawRoutes
+      .filter(r => {
+        // Filtrar por conductor logueado (si el rol es chofer)
+        const matchesDriver = role === 'driver' ? r.assignedDriverId === user?.uid : true;
+        // Excluir archivados del panel del chofer
+        const notArchived = r.status !== 'archived';
+        return matchesDriver && notArchived;
+      })
+      .sort((a, b) => {
+        const dateTimeA = `${a.pickupDate} ${a.pickupTime}`;
+        const dateTimeB = `${b.pickupDate} ${b.pickupTime}`;
+        return dateTimeA.localeCompare(dateTimeB);
+      });
+  }, [rawRoutes, role, user?.uid]);
 
   const dateStatusMap = useMemo(() => {
     if (!routes) return {};

@@ -1,24 +1,22 @@
-
 'use client';
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, where, updateDoc, doc, serverTimestamp } from "firebase/firestore";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { collection, query, orderBy, updateDoc, doc, serverTimestamp } from "firebase/firestore";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { 
   Archive, Search, Loader2, ArrowLeft, 
-  History, MapPin, Eye, Package, RotateCcw
+  History, MapPin, Eye, RotateCcw
 } from "lucide-react";
 import { Load } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
-import { formatSafeDate } from "@/lib/utils/date-utils";
 
 export default function CargasArchivePage() {
   const db = useFirestore();
@@ -28,24 +26,30 @@ export default function CargasArchivePage() {
   
   const [searchTerm, setSearchTerm] = useState("");
 
+  // Simplificamos la consulta para no requerir índices compuestos (status + updatedAt)
   const loadsQuery = useMemo(() => {
     if (!db || !tenantId) return null;
     return query(
       collection(db, "tenants", tenantId, "loads"), 
-      where("status", "==", "archived"),
       orderBy("updatedAt", "desc")
     );
   }, [db, tenantId]);
 
-  const { data: archivedLoads, loading } = useCollection<Load>(loadsQuery);
+  const { data: allLoads, loading } = useCollection<Load>(loadsQuery);
 
   const filteredLoads = useMemo(() => {
-    if (!archivedLoads) return [];
-    return archivedLoads.filter(l => 
-      (l.orderNumber || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (l.clientName || "").toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [archivedLoads, searchTerm]);
+    if (!allLoads) return [];
+    return allLoads.filter(l => {
+      // Filtrado por estado 'archived' en memoria
+      if (l.status !== 'archived') return false;
+
+      const search = searchTerm.toLowerCase();
+      return (
+        (l.orderNumber || "").toLowerCase().includes(search) ||
+        (l.clientName || "").toLowerCase().includes(search)
+      );
+    });
+  }, [allLoads, searchTerm]);
 
   const handleRestoreLoad = async (id: string) => {
     if (!db || !tenantId) return;
@@ -121,7 +125,7 @@ export default function CargasArchivePage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase">
-                          <MapPin size={10} className="text-blue-500" /> {load.origin.city} → {load.outboundStops?.length} Destinos
+                          <MapPin size={10} className="text-blue-500" /> {load.origin.city || 'S/D'} → {load.outboundStops?.length} Destinos
                         </div>
                       </TableCell>
                       <TableCell className="text-center font-black text-slate-700 italic">
@@ -129,7 +133,7 @@ export default function CargasArchivePage() {
                       </TableCell>
                       <TableCell className="text-center">
                          <Badge variant="secondary" className="bg-slate-100 text-slate-500 border-none text-[8px] font-black uppercase">
-                            FINALIZADO
+                            ARCHIVADO
                          </Badge>
                       </TableCell>
                       <TableCell className="pr-8 text-right">
