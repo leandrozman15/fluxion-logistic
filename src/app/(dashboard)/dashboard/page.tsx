@@ -507,7 +507,7 @@ export default function MonitorOperativoPage() {
                 </Marker>
               );
             })}
-            {L && trucks?.filter(t => t.status === 'in_trip' && t.location?.lat).map((truck) => (
+            {L && trucks?.filter(t => t.location?.lat).map((truck) => (
               <Marker key={truck.id} position={[truck.location!.lat!, truck.location!.lng!]} icon={getTruckIcon(!!truck.hasActiveAlert)}>
                 <Popup>
                   <div className="p-2 space-y-2">

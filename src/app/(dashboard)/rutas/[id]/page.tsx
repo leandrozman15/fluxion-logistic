@@ -5,7 +5,7 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc, updateDoc, serverTimestamp, arrayUnion, increment } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp, arrayUnion, writeBatch } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +27,8 @@ import {
   Headset,
   Zap,
   Radio,
-  Compass
+  Compass,
+  Play
 } from "lucide-react";
 import { Load, ProofOfDelivery, Truck, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -160,14 +161,28 @@ export default function RouteDetailPage() {
   }, [load?.outboundStops]);
 
   const handleStartTrip = async () => {
-    if (!loadRef) return;
+    if (!load || !loadRef || !tenantId || !db) return;
     setIsUpdating(true);
     try {
-      await updateDoc(loadRef, {
+      const batch = writeBatch(db);
+      
+      // Update Load status
+      batch.update(loadRef, {
         status: 'on_route',
         "tracking.tripStartedAt": serverTimestamp(),
         updatedAt: serverTimestamp()
       });
+
+      // Set Truck as In Trip
+      if (load.assignedTruckId) {
+        const truckRef = doc(db, "tenants", tenantId, "trucks", load.assignedTruckId);
+        batch.update(truckRef, { 
+          status: 'in_trip',
+          updatedAt: serverTimestamp()
+        });
+      }
+
+      await batch.commit();
       toast({ title: "Viaje Iniciado", description: "GPS activo y telemetría sincronizada." });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al iniciar" });
@@ -202,7 +217,7 @@ export default function RouteDetailPage() {
   };
 
   const handleConfirmDelivery = async () => {
-    if (!load || !loadRef || !currentStop || !db) return;
+    if (!load || !loadRef || !currentStop || !db || !tenantId) return;
     setIsUpdating(true);
     try {
       const updatedStops = load.outboundStops.map(s => 
@@ -213,10 +228,26 @@ export default function RouteDetailPage() {
         } : s
       );
 
-      await updateDoc(loadRef, {
+      const allFinished = updatedStops.every(s => !!s.deliveredAt || !!s.failedAt);
+      
+      const batch = writeBatch(db);
+      
+      batch.update(loadRef, {
         outboundStops: updatedStops,
+        status: allFinished ? 'delivered' : load.status,
         updatedAt: serverTimestamp()
       });
+
+      // If last stop, set truck as available
+      if (allFinished && load.assignedTruckId) {
+        const truckRef = doc(db, "tenants", tenantId, "trucks", load.assignedTruckId);
+        batch.update(truckRef, { 
+          status: 'available',
+          updatedAt: serverTimestamp()
+        });
+      }
+
+      await batch.commit();
 
       toast({ title: "Entrega Exitosa" });
       setIsPodOpen(false);
@@ -229,7 +260,7 @@ export default function RouteDetailPage() {
   };
 
   const handleReportFailure = async (reason: any) => {
-    if (!load || !loadRef || !currentStop) return;
+    if (!load || !loadRef || !currentStop || !db || !tenantId) return;
     setIsUpdating(true);
     try {
       const updatedStops = load.outboundStops.map(s => 
@@ -240,10 +271,21 @@ export default function RouteDetailPage() {
         } : s
       );
 
-      await updateDoc(loadRef, {
+      const allFinished = updatedStops.every(s => !!s.deliveredAt || !!s.failedAt);
+      const batch = writeBatch(db);
+
+      batch.update(loadRef, {
         outboundStops: updatedStops,
+        status: allFinished ? 'delivered' : load.status,
         updatedAt: serverTimestamp()
       });
+
+      if (allFinished && load.assignedTruckId) {
+        const truckRef = doc(db, "tenants", tenantId, "trucks", load.assignedTruckId);
+        batch.update(truckRef, { status: 'available', updatedAt: serverTimestamp() });
+      }
+
+      await batch.commit();
 
       toast({ title: "Incidente Registrado" });
       setIsFailedOpen(false);
@@ -291,8 +333,6 @@ export default function RouteDetailPage() {
   if (loadLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!load) return <div className="p-10 text-center">Viaje no encontrado.</div>;
 
-  const isMeli = load.serviceType === 'meli';
-
   return (
     <div className="max-w-md mx-auto space-y-6 pb-32 px-2">
       <div className="flex items-center justify-between pt-6 px-2">
@@ -319,7 +359,7 @@ export default function RouteDetailPage() {
            <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-white">
               <CardHeader className="bg-slate-900 text-white p-8 text-center">
                  <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl">
-                    <Truck size={32} />
+                    <TruckIcon size={32} />
                  </div>
                  <CardTitle className="text-xl font-black uppercase italic tracking-tighter">Preparado para Salida</CardTitle>
                  <CardDescription className="text-white/40 text-[10px] font-bold uppercase">Confirme su salida para activar el monitoreo GPS</CardDescription>
