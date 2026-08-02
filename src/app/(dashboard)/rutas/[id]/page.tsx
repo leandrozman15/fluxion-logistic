@@ -98,7 +98,7 @@ export default function RouteDetailPage() {
       
       const options = {
         enableHighAccuracy: true,
-        timeout: 10000,
+        timeout: 15000,
         maximumAge: 0
       };
 
@@ -128,12 +128,12 @@ export default function RouteDetailPage() {
             updateDoc(truckRef, {
               "location.lat": latitude,
               "location.lng": longitude,
-              "location.city": load.tracking?.currentLat === latitude ? "" : "En Tránsito",
+              "location.city": "En Tránsito",
               updatedAt: serverTimestamp()
             });
           }
         } catch (e) {
-          console.error("GPS Update Error:", e);
+          console.error("GPS Sync Error:", e);
         }
       };
 
@@ -141,7 +141,11 @@ export default function RouteDetailPage() {
         console.error("Geolocation Error:", err);
         setGpsStatus('error');
         if (err.code === err.PERMISSION_DENIED) {
-          toast({ variant: "destructive", title: "GPS Requerido", description: "Por favor, habilite los permisos de ubicación para continuar el viaje." });
+          toast({ 
+            variant: "destructive", 
+            title: "GPS Bloqueado", 
+            description: "Por favor, active los permisos de ubicación en los ajustes de su navegador/celular." 
+          });
         }
       };
 
@@ -162,33 +166,59 @@ export default function RouteDetailPage() {
 
   const handleStartTrip = async () => {
     if (!load || !loadRef || !tenantId || !db) return;
-    setIsUpdating(true);
-    try {
-      const batch = writeBatch(db);
-      
-      // Update Load status
-      batch.update(loadRef, {
-        status: 'on_route',
-        "tracking.tripStartedAt": serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
 
-      // Set Truck as In Trip
-      if (load.assignedTruckId) {
-        const truckRef = doc(db, "tenants", tenantId, "trucks", load.assignedTruckId);
-        batch.update(truckRef, { 
-          status: 'in_trip',
-          updatedAt: serverTimestamp()
-        });
-      }
-
-      await batch.commit();
-      toast({ title: "Viaje Iniciado", description: "GPS activo y telemetría sincronizada." });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Error al iniciar" });
-    } finally {
-      setIsUpdating(false);
+    if (!("geolocation" in navigator)) {
+      toast({ variant: "destructive", title: "Error de Hardware", description: "Su dispositivo no posee sensor GPS compatible." });
+      return;
     }
+
+    setIsUpdating(true);
+    setGpsStatus('requesting');
+
+    // SOLICITUD NATIVA DE PERMISOS (Pre-flight)
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const batch = writeBatch(db);
+          
+          // Actualizar estado del viaje
+          batch.update(loadRef, {
+            status: 'on_route',
+            "tracking.tripStartedAt": serverTimestamp(),
+            "tracking.currentLat": pos.coords.latitude,
+            "tracking.currentLng": pos.coords.longitude,
+            updatedAt: serverTimestamp()
+          });
+
+          // Actualizar estado del camión
+          if (load.assignedTruckId) {
+            const truckRef = doc(db, "tenants", tenantId, "trucks", load.assignedTruckId);
+            batch.update(truckRef, { 
+              status: 'in_trip',
+              "location.lat": pos.coords.latitude,
+              "location.lng": pos.coords.longitude,
+              updatedAt: serverTimestamp()
+            });
+          }
+
+          await batch.commit();
+          setGpsStatus('active');
+          toast({ title: "Jornada Iniciada", description: "Permisos concedidos. GPS transmitiendo en vivo." });
+        } catch (e) {
+          toast({ variant: "destructive", title: "Error de Sincronización" });
+        } finally {
+          setIsUpdating(false);
+        }
+      },
+      (err) => {
+        setIsUpdating(false);
+        setGpsStatus('error');
+        let msg = "Debe permitir el acceso al GPS para poder iniciar el viaje.";
+        if (err.code === err.TIMEOUT) msg = "El GPS tardó demasiado en responder. Verifique estar en un lugar a cielo abierto.";
+        toast({ variant: "destructive", title: "GPS Requerido", description: msg });
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
   };
 
   const handleAction = (type: 'nav' | 'call') => {
@@ -238,7 +268,6 @@ export default function RouteDetailPage() {
         updatedAt: serverTimestamp()
       });
 
-      // If last stop, set truck as available
       if (allFinished && load.assignedTruckId) {
         const truckRef = doc(db, "tenants", tenantId, "trucks", load.assignedTruckId);
         batch.update(truckRef, { 
@@ -346,8 +375,10 @@ export default function RouteDetailPage() {
              <Badge className="bg-green-600 text-white border-none text-[8px] h-5 animate-pulse">
                 <Radio size={10} className="mr-1" /> GPS VIVO
              </Badge>
+           ) : gpsStatus === 'requesting' ? (
+             <Badge variant="outline" className="text-[8px] h-5 border-blue-400 text-blue-600 animate-pulse">BUSCANDO...</Badge>
            ) : gpsStatus === 'error' ? (
-             <Badge variant="destructive" className="text-[8px] h-5">GPS ERROR</Badge>
+             <Badge variant="destructive" className="text-[8px] h-5">SIN SEÑAL</Badge>
            ) : (
              <Badge variant="outline" className="text-[8px] h-5">GPS OFF</Badge>
            )}
@@ -362,11 +393,11 @@ export default function RouteDetailPage() {
                     <TruckIcon size={32} />
                  </div>
                  <CardTitle className="text-xl font-black uppercase italic tracking-tighter">Preparado para Salida</CardTitle>
-                 <CardDescription className="text-white/40 text-[10px] font-bold uppercase">Confirme su salida para activar el monitoreo GPS</CardDescription>
+                 <CardDescription className="text-white/40 text-[10px] font-bold uppercase">Debe permitir el uso del GPS para activar el monitoreo central</CardDescription>
               </CardHeader>
               <CardContent className="p-8 space-y-4">
                  <div className="flex justify-between items-center text-sm border-b pb-3">
-                    <span className="font-bold text-slate-400 uppercase">Origen</span>
+                    <span className="font-bold text-slate-400 uppercase">Punto de Carga</span>
                     <span className="font-black text-slate-800 uppercase">{load.origin.name}</span>
                  </div>
                  <div className="flex justify-between items-center text-sm border-b pb-3">
