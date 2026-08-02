@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from "react";
@@ -60,7 +59,6 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
   const truckRef = useMemo(() => (truckId && db && tenantId) ? doc(db, "tenants", tenantId, "trucks", truckId) : null, [db, tenantId, truckId]);
   const { data: existingTruck, loading: loadingExisting } = useDoc<TruckType>(truckRef);
 
-  // Fetching drivers and companions
   const driversQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "drivers"), orderBy("lastName")) : null, [db, tenantId]);
   const { data: allPersonnel } = useCollection<Driver>(driversQuery);
 
@@ -129,18 +127,24 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     setIsSubmitting(true);
     try {
       const finalCapacity = (formData.grossCombinedWeightKg || 0) - (formData.unladenWeightKg || 0);
-      const dataToSave = { 
-        ...formData, 
-        capacityKg: finalCapacity,
-        updatedAt: serverTimestamp() 
-      };
+      
+      // Sanitización para evitar undefined en Firestore
+      const cleanData: any = {};
+      Object.entries(formData).forEach(([key, value]) => {
+        if (value !== undefined) cleanData[key] = value;
+      });
+
+      cleanData.capacityKg = finalCapacity;
+      cleanData.updatedAt = serverTimestamp();
 
       if (truckId) {
-        await updateDoc(doc(db, "tenants", tenantId, "trucks", truckId), dataToSave);
+        await updateDoc(doc(db, "tenants", tenantId, "trucks", truckId), cleanData);
         if (user) await logSystemEvent(db, tenantId, user, 'update', 'truck', truckId, { plate: formData.plate });
       } else {
         const newRef = doc(collection(db, "tenants", tenantId, "trucks"));
-        await setDoc(newRef, { ...dataToSave, id: newRef.id, createdAt: serverTimestamp() });
+        cleanData.id = newRef.id;
+        cleanData.createdAt = serverTimestamp();
+        await setDoc(newRef, cleanData);
         if (user) await logSystemEvent(db, tenantId, user, 'create', 'truck', newRef.id, { plate: formData.plate });
       }
       toast({ title: "Ficha Técnica Guardada", description: `La unidad ${formData.plate} ha sido actualizada.` });
@@ -187,7 +191,6 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
       </div>
 
       <div className="animate-in fade-in zoom-in-95 duration-300">
-        {/* PASO 1: IDENTIDAD Y PERSONAL */}
         {step === 1 && (
           <div className="space-y-6">
             <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden">
@@ -247,7 +250,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                               <SelectValue placeholder="Agregar Ayudante..." />
                            </SelectTrigger>
                            <SelectContent>
-                              <SelectItem value="none">Agregar nuevo...</SelectItem>
+                              <SelectItem value="none">Seleccionar...</SelectItem>
                               {companionsOnly.map(d => (
                                 <SelectItem key={d.id} value={d.id}>{d.lastName}, {d.firstName}</SelectItem>
                               ))}
@@ -271,7 +274,6 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
           </div>
         )}
 
-        {/* PASO 2: TÉCNICA */}
         {step === 2 && (
           <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden">
              <CardHeader className="bg-blue-600 text-white p-8"><CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2"><Scale size={18}/> 2. Parámetros Técnicos y de Carga</CardTitle></CardHeader>
@@ -292,21 +294,10 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                    </div>
                    <Badge className="bg-green-600 text-white font-black uppercase italic px-6 py-2 rounded-xl text-xs">Cumple Normativa Vial</Badge>
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                   <div className="space-y-3">
-                      <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Configuración de Remolque</Label>
-                      <Select value={formData.haulingType} onValueChange={(v: any) => setFormData({...formData, haulingType: v})}>
-                         <SelectTrigger className="h-12 bg-slate-50 border-none rounded-xl"><SelectValue /></SelectTrigger>
-                         <SelectContent><SelectItem value="standard">Semirremolque Estandard (1 batea)</SelectItem><SelectItem value="bitren">Bitrén (Doble Semirremolque)</SelectItem><SelectItem value="chassis">Chasis Rígido (Fijo)</SelectItem></SelectContent>
-                      </Select>
-                   </div>
-                </div>
              </CardContent>
           </Card>
         )}
 
-        {/* PASO 3: OPERACIÓN */}
         {step === 3 && (
           <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden">
              <CardHeader className="bg-slate-900 text-white p-8"><CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2"><Zap size={18} className="text-blue-400"/> 3. Parámetros de Operación Directa</CardTitle></CardHeader>
@@ -323,36 +314,23 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                          <div className="relative"><Fuel size={16} className="absolute left-3 top-3 text-slate-300"/><Input type="number" className="h-12 pl-10 font-bold" value={formData.avgConsumption} onChange={e => setFormData({...formData, avgConsumption: parseFloat(e.target.value) || 32})} /></div>
                       </div>
                    </div>
-
-                   <div className="p-6 bg-blue-50 border-2 border-blue-100 rounded-3xl space-y-6">
-                      <div className="flex items-center gap-2"><Smartphone className="text-blue-600"/><p className="text-[10px] font-black uppercase text-blue-700 tracking-widest">Meta de Rendimiento Mensual</p></div>
-                      <div className="space-y-1.5">
-                         <Label className="text-[9px] font-bold text-blue-400 uppercase">Kilometraje Estimado Mensual</Label>
-                         <Input type="number" className="h-11 bg-white border-blue-100 font-black" value={formData.costs?.operational.estimatedMonthlyKm} onChange={e => setFormData({...formData, costs: {...formData.costs!, operational: {estimatedMonthlyKm: parseInt(e.target.value) || 10000}}})} />
-                         <p className="text-[9px] text-blue-400 italic">Este valor se utiliza para diluir los gastos fijos por KM.</p>
-                      </div>
-                   </div>
                 </div>
              </CardContent>
           </Card>
         )}
 
-        {/* PASO 4: COSTOS FIJOS */}
         {step === 4 && (
           <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden">
              <CardHeader className="bg-slate-900 text-white p-8"><CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2"><DollarSign size={18}/> 4. Auditoría de Gastos Fijos Mensuales</CardTitle></CardHeader>
              <CardContent className="p-8 space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                    <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Sueldo + Cargas Sociales Chofer (ARS)</Label><Input type="number" className="h-11 bg-slate-50 border-none rounded-xl" value={formData.costs?.fixed.salaryWithSocial} onChange={e => setFormData({...formData, costs: {...formData.costs!, fixed: {...formData.costs!.fixed, salaryWithSocial: parseFloat(e.target.value) || 0}}})} /></div>
-                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Seguro Total (Casco + RC) Mensual</Label><Input type="number" className="h-11 bg-slate-50 border-none rounded-xl" value={formData.costs?.fixed.insuranceTotal} onChange={e => setFormData({...formData, costs: {...formData.costs!, fixed: {...formData.costs!.fixed, insuranceTotal: parseFloat(e.target.value) || 0}}})} /></div>
-                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Patente (Cuota Mensualizada)</Label><Input type="number" className="h-11 bg-slate-50 border-none rounded-xl" value={formData.costs?.fixed.patenteMonthly} onChange={e => setFormData({...formData, costs: {...formData.costs!, fixed: {...formData.costs!.fixed, patenteMonthly: parseFloat(e.target.value) || 0}}})} /></div>
-                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Gasto Garage / Playa / Admin</Label><Input type="number" className="h-11 bg-slate-50 border-none rounded-xl" value={formData.costs?.fixed.garageAdmin} onChange={e => setFormData({...formData, costs: {...formData.costs!, fixed: {...formData.costs!.fixed, garageAdmin: parseFloat(e.target.value) || 0}}})} /></div>
+                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-slate-400">Seguro Total Mensual</Label><Input type="number" className="h-11 bg-slate-50 border-none rounded-xl" value={formData.costs?.fixed.insuranceTotal} onChange={e => setFormData({...formData, costs: {...formData.costs!, fixed: {...formData.costs!.fixed, insuranceTotal: parseFloat(e.target.value) || 0}}})} /></div>
                 </div>
              </CardContent>
           </Card>
         )}
 
-        {/* PASO 5: VARIABLES Y FINALIZACIÓN */}
         {step === 5 && (
           <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden">
              <CardHeader className="bg-green-600 text-white p-8"><CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2"><TrendingUp size={18}/> 5. Costos Variables y Amortización</CardTitle></CardHeader>
@@ -362,25 +340,12 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                       <p className="text-[10px] font-black uppercase text-blue-600 tracking-widest">Mantenimiento y Lubricación</p>
                       <div className="grid grid-cols-2 gap-4">
                          <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase">Costo Service</Label><Input type="number" className="bg-white" value={formData.costs?.variable.preventiveMaintenance.cost} onChange={e => setFormData({...formData, costs: {...formData.costs!, variable: {...formData.costs!.variable, preventiveMaintenance: {...formData.costs!.variable.preventiveMaintenance, cost: parseFloat(e.target.value) || 0}}}})} /></div>
-                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase">Frecuencia (KM)</Label><Input type="number" className="bg-white" value={formData.costs?.variable.preventiveMaintenance.frequencyKm} onChange={e => setFormData({...formData, costs: {...formData.costs!, variable: {...formData.costs!.variable, preventiveMaintenance: {...formData.costs!.variable.preventiveMaintenance, frequencyKm: parseInt(e.target.value) || 20000}}}})} /></div>
-                      </div>
-                   </div>
-
-                   <div className="p-6 bg-slate-50 rounded-3xl border space-y-4">
-                      <p className="text-[10px] font-black uppercase text-orange-600 tracking-widest">Amortización Neumáticos</p>
-                      <div className="grid grid-cols-2 gap-4">
-                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase">Costo Set Completo</Label><Input type="number" className="bg-white" value={formData.costs?.variable.tires.costFullSet} onChange={e => setFormData({...formData, costs: {...formData.costs!, variable: {...formData.costs!.variable, tires: {...formData.costs!.variable.tires, costFullSet: parseFloat(e.target.value) || 0}}}})} /></div>
-                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase">Vida Útil (KM)</Label><Input type="number" className="bg-white" value={formData.costs?.variable.tires.lifeSpanKm} onChange={e => setFormData({...formData, costs: {...formData.costs!, variable: {...formData.costs!.variable, tires: {...formData.costs!.variable.tires, lifeSpanKm: parseInt(e.target.value) || 100000}}}})} /></div>
                       </div>
                    </div>
                 </div>
 
                 <div className="pt-8 border-t flex flex-col md:flex-row justify-between items-center gap-6">
-                   <div className="bg-slate-50 p-6 rounded-3xl border-2 border-dashed flex items-center gap-4">
-                      <Info size={24} className="text-slate-400" />
-                      <p className="text-[10px] text-slate-500 font-medium max-w-sm">Al guardar, el sistema recalculará la tarifa mínima sugerida por KM para mantener la rentabilidad de esta unidad.</p>
-                   </div>
-                   <Button onClick={handleSubmit} disabled={isSubmitting} className="bg-green-600 hover:bg-green-700 h-16 px-16 rounded-2xl font-black text-lg shadow-2xl shadow-green-100 transition-all active:scale-95">
+                   <Button onClick={handleSubmit} disabled={isSubmitting} className="bg-green-600 hover:bg-green-700 h-16 px-16 rounded-2xl font-black text-lg shadow-2xl transition-all active:scale-95">
                       {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} FINALIZAR AUDITORÍA
                    </Button>
                 </div>
@@ -391,13 +356,9 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
 
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t flex justify-center z-50">
         <div className="max-w-5xl w-full flex justify-between items-center px-4">
-          <Button variant="ghost" className="font-black text-slate-400 text-xs uppercase" onClick={handleBack} disabled={step === 1 || isSubmitting}>
-            <ChevronLeft className="mr-1" size={16} /> VOLVER
-          </Button>
+          <Button variant="ghost" onClick={handleBack} disabled={step === 1 || isSubmitting}>VOLVER</Button>
           {step < 5 ? (
-            <Button onClick={handleNext} className="bg-blue-600 hover:bg-blue-700 h-11 px-8 rounded-xl font-black text-xs uppercase shadow-lg shadow-blue-100">
-               SIGUIENTE PASO <ChevronRight className="ml-1" size={16} />
-            </Button>
+            <Button onClick={handleNext} className="bg-blue-600">SIGUIENTE PASO <ChevronRight className="ml-1" size={16} /></Button>
           ) : null}
         </div>
       </div>

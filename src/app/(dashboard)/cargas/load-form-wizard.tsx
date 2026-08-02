@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from "react";
@@ -77,18 +76,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
   });
 
   const handleBack = () => setStep(prev => Math.max(1, prev - 1));
-  
-  const handleNext = () => {
-    if (step === 1) {
-      if (!formData.assignedTruckId) return toast({ variant: "destructive", title: "Asignación Requerida", description: "Debe seleccionar un Camión para el flete." });
-      if (!formData.assignedDriverId || formData.assignedDriverId === 'none') return toast({ variant: "destructive", title: "Asignación Requerida", description: "Debe asignar un Chofer Profesional." });
-    }
-    if (step === 2) {
-      if (!formData.origin?.id) return toast({ variant: "destructive", title: "Datos de Salida", description: "Debe elegir un Punto de Origen." });
-      if (!formData.pickupDate) return toast({ variant: "destructive", title: "Datos de Salida", description: "La fecha de carga es obligatoria." });
-    }
-    setStep(prev => Math.min(5, prev + 1));
-  };
+  const handleNext = () => setStep(prev => Math.min(5, prev + 1));
 
   const loadRef = useMemo(() => loadId && db && tenantId ? doc(db, "tenants", tenantId, "loads", loadId) : null, [db, tenantId, loadId]);
   const { data: existingLoad, loading: loadingExisting } = useDoc<Load>(loadRef);
@@ -155,7 +143,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     const truck = trucks?.find(t => t.id === id);
     if (!truck) return;
     
-    // AUTO-COMPLETAR CHOFER Y ACOMPAÑANTES BASADO EN ASIGNACIÓN DE CAMIÓN
     setFormData(prev => ({
       ...prev,
       assignedTruckId: id,
@@ -288,17 +275,21 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
         finalOrderNumber = `${prefix}-${new Date().getFullYear()}-${String(nextSeq).padStart(4, '0')}`;
       }
       
-      const cleanFormData = {
-        ...formData,
-        orderNumber: finalOrderNumber,
-        clientName: formData.clientName || (formData.serviceType === 'meli' ? "Mercado Libre" : (formData.outboundStops?.[0]?.name || "Reparto Multi-Remito")),
-        updatedAt: serverTimestamp()
-      };
+      const cleanFormData: any = {};
+      Object.entries(formData).forEach(([key, value]) => {
+        if (value !== undefined) cleanFormData[key] = value;
+      });
+
+      cleanFormData.orderNumber = finalOrderNumber;
+      cleanFormData.clientName = formData.clientName || (formData.serviceType === 'meli' ? "Mercado Libre" : (formData.outboundStops?.[0]?.name || "Reparto Multi-Remito"));
+      cleanFormData.updatedAt = serverTimestamp();
 
       if (!loadId) {
         const newRef = doc(collection(db, "tenants", tenantId, "loads"));
         finalLoadId = newRef.id;
-        batch.set(newRef, { ...cleanFormData, id: finalLoadId, createdAt: serverTimestamp() });
+        cleanFormData.id = finalLoadId;
+        cleanFormData.createdAt = serverTimestamp();
+        batch.set(newRef, cleanFormData);
         if (user) await logSystemEvent(db, tenantId, user, 'create', 'load', finalLoadId, { orderNumber: finalOrderNumber });
       } else {
         batch.update(doc(db, "tenants", tenantId, "loads", loadId), cleanFormData);
@@ -360,7 +351,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
             <div key={s.id} className="flex flex-col items-center gap-1.5 flex-1 relative">
               <div className={cn(
                 "w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold z-10 transition-all",
-                step > s.id ? "bg-green-50 text-white" : step === s.id ? "bg-blue-600 text-white shadow-md shadow-blue-100" : "bg-slate-50 text-slate-300 border"
+                step > s.id ? "bg-green-500 text-white border-green-500" : step === s.id ? "bg-blue-600 text-white shadow-md shadow-blue-100" : "bg-slate-50 text-slate-300 border"
               )}>
                 {step > s.id ? <CheckCircle2 size={18} /> : <s.icon size={16} />}
               </div>
@@ -473,11 +464,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                             <div>
                                <p className="font-black text-sm text-slate-800 uppercase leading-none">{stop.name}</p>
                                <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 flex items-center gap-1"><MapPin size={10}/> {stop.address}</p>
-                               <div className="flex gap-1.5 mt-1">
-                                  {stop.documents.map(doc => (
-                                    <Badge key={doc.id} variant="outline" className="bg-blue-50 text-blue-700 text-[7px] h-3 px-1 border-blue-200">REM {doc.number}</Badge>
-                                  ))}
-                               </div>
                             </div>
                           </div>
                           <div className="flex items-center gap-4">
@@ -520,8 +506,8 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                             <p className="text-xs font-black text-slate-900 uppercase leading-none">REM {remito.number}</p>
                             <p className="text-[10px] font-black text-indigo-700 truncate mt-1 uppercase">{remito.clientName}</p>
                             <div className="flex items-center justify-between mt-2">
-                               <p className="text-[8px] font-bold text-slate-400 uppercase truncate max-w-[100px] flex items-center gap-1"><MapPin size={8}/> {remito.city}</p>
-                               <Badge className="bg-slate-900 text-white border-none text-[8px] h-3 px-1">{remito.weightKg} KG</Badge>
+                               <p className="text-[8px] font-bold text-slate-400 uppercase truncate max-w-[100px] flex items-center gap-1"><MapPin size={10}/> {remito.city}</p>
+                               <Badge className="bg-slate-900 text-white border-none text-[8px] h-4 px-1">{remito.weightKg} KG</Badge>
                             </div>
                           </div>
                         </div>
@@ -529,18 +515,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                     )}
                   </div>
                 </CardContent>
-                <CardFooter className="bg-slate-50 border-t py-3 flex justify-between">
-                   <p className="text-[9px] font-black uppercase text-slate-400 italic">Vincular remitos para automatizar destinos</p>
-                </CardFooter>
               </Card>
-
-              <div className="p-5 bg-blue-50 border-2 border-blue-100 rounded-3xl flex items-start gap-4">
-                 <Zap size={24} className="text-blue-600 shrink-0 mt-1" />
-                 <div className="space-y-1">
-                    <p className="text-xs font-black text-blue-800 uppercase italic">Planificación Inteligente</p>
-                    <p className="text-[10px] text-blue-600 leading-relaxed font-medium">Al seleccionar remitos del buzón, el sistema calcula automáticamente el peso bruto y vincula la documentación para el chofer.</p>
-                 </div>
-              </div>
             </div>
           </div>
         )}
@@ -617,13 +592,6 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                                   }
                                 })}
                              />
-                          </div>
-                          <p className="text-[9px] text-blue-400 italic">Este monto se descontará automáticamente en la rendición final del viaje.</p>
-                       </div>
-                       
-                       <div className="pt-2 border-t border-blue-100">
-                          <div className="flex items-center gap-2 text-blue-600 font-bold text-[10px] uppercase">
-                             <Landmark size={12} /> Proyección Contable
                           </div>
                        </div>
                     </div>
