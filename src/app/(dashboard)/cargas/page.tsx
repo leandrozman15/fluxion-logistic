@@ -1,10 +1,11 @@
+
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, deleteDoc, doc, where, writeBatch, getDocs, serverTimestamp, getDoc } from "firebase/firestore";
+import { collection, query, orderBy, deleteDoc, doc, where, writeBatch, getDocs, serverTimestamp, getDoc, updateDoc } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,7 @@ import {
   Package, Plus, Search, Scale, 
   Loader2, MoreVertical, Trash2, CheckCircle2, 
   Clock, AlertTriangle, FileText, Printer, Wallet, Navigation, Edit, Calendar, Truck, User, History,
-  BarChart3, Ship, ScanBarcode, Receipt, Files, Download
+  BarChart3, Ship, ScanBarcode, Receipt, Files, Download, Archive
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -41,6 +42,7 @@ import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { generateLoadOrderPDF, generateLoadWalletPDF } from "@/lib/pdf-service";
+import Link from "next/link";
 
 export default function CargasPage() {
   const db = useFirestore();
@@ -85,6 +87,9 @@ export default function CargasPage() {
   const filteredLoads = useMemo(() => {
     if (!loads) return [];
     return loads.filter(l => {
+      // Excluir archivados por defecto
+      if (l.status === 'archived') return false;
+
       const search = searchTerm.toLowerCase();
       const matchesSearch = 
         (l.orderNumber || "").toLowerCase().includes(search) ||
@@ -116,6 +121,19 @@ export default function CargasPage() {
       toast({ variant: "destructive", title: "Error al generar documento" });
     } finally {
       setIsDownloadingId(null);
+    }
+  };
+
+  const handleArchiveLoad = async (id: string) => {
+    if (!db || !tenantId) return;
+    try {
+      await updateDoc(doc(db, "tenants", tenantId, "loads", id), {
+        status: 'archived',
+        updatedAt: serverTimestamp()
+      });
+      toast({ title: "Flete Archivado", description: "La operación se movió al archivo histórico." });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al archivar" });
     }
   };
 
@@ -168,9 +186,14 @@ export default function CargasPage() {
           <h1 className="text-3xl font-black text-slate-900 italic tracking-tighter uppercase leading-none">Cargas y Fletes</h1>
           <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Gestión de pedidos multi-destino y auditoría COMEX.</p>
         </div>
-        <Button className="bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-100 font-black italic uppercase text-[11px] h-12 px-6 rounded-2xl" onClick={() => router.push('/cargas/nuevo')}>
-          <Plus className="w-5 h-5 mr-2" /> Nueva Operación / Flete
-        </Button>
+        <div className="flex gap-3">
+          <Button variant="outline" className="h-12 px-6 rounded-2xl font-black uppercase text-[11px] italic gap-2" asChild>
+            <Link href="/cargas/archivo"><Archive size={16} /> Ver Archivo</Link>
+          </Button>
+          <Button className="bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-100 font-black italic uppercase text-[11px] h-12 px-6 rounded-2xl" onClick={() => router.push('/cargas/nuevo')}>
+            <Plus className="w-5 h-5 mr-2" /> Nueva Operación / Flete
+          </Button>
+        </div>
       </div>
 
       <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-white">
@@ -202,7 +225,7 @@ export default function CargasPage() {
             <Table>
               <TableHeader className="bg-slate-50/30">
                 <TableRow>
-                  <TableHead className="text-[10px] font-black uppercase tracking-widest">N° Orden / Cliente</TableHead>
+                  <TableHead className="px-8 text-[10px] font-black uppercase tracking-widest">N° Orden / Cliente</TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest">Itinerario y Recursos</TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest text-center">Remitos / Docs</TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest">Estado</TableHead>
@@ -295,6 +318,11 @@ export default function CargasPage() {
 
                               <DropdownMenuSeparator className="my-1" />
                               <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 tracking-widest p-2">Acciones</DropdownMenuLabel>
+                              
+                              <DropdownMenuItem onClick={() => handleArchiveLoad(load.id)} className="font-bold h-10 rounded-xl cursor-pointer bg-slate-50 text-slate-600">
+                                <Archive className="w-4 h-4 mr-2" /> Enviar al Archivo
+                              </DropdownMenuItem>
+
                               <DropdownMenuItem onClick={() => router.push(`/cargas/${load.id}/reporte`)} className="font-bold h-10 rounded-xl cursor-pointer">
                                 <BarChart3 className="w-4 h-4 mr-2" /> Auditoría Telemetría
                               </DropdownMenuItem>
