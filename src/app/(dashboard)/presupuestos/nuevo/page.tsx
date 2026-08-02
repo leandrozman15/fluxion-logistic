@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
@@ -16,7 +15,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { 
   FileText, ArrowLeft, Save, Plus, Trash2, 
   Search, Package, Calculator, ShoppingCart,
-  Loader2, CheckCircle2, ChevronRight, User, Receipt
+  Loader2, CheckCircle2, ChevronRight, User, Receipt,
+  DollarSign
 } from "lucide-react";
 import { Client, Product, Quotation, QuotationItem } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -74,7 +74,8 @@ export default function NewQuotationPage() {
       let next = 1;
       if (!snap.empty) {
         const lastNum = snap.docs[0].data().number;
-        const lastSeq = parseInt(lastNum.split("-").pop());
+        const lastSeqString = lastNum.split("-").pop();
+        const lastSeq = parseInt(lastSeqString);
         if (!isNaN(lastSeq)) next = lastSeq + 1;
       }
       const num = `PRE-${new Date().getFullYear()}-${String(next).padStart(4, '0')}`;
@@ -269,7 +270,7 @@ export default function NewQuotationPage() {
         </div>
 
         <div className="lg:col-span-4 space-y-6">
-           <Card className="border-none shadow-2xl rounded-[2.5rem] bg-slate-900 text-white overflow-hidden sticky top-24">
+           <Card className="border-none shadow-xl rounded-[2.5rem] bg-slate-900 text-white overflow-hidden sticky top-24">
               <CardHeader className="p-8 pb-6 border-b border-white/5">
                  <CardTitle className="text-sm font-black uppercase tracking-widest text-emerald-400 flex items-center gap-2">
                     <Calculator size={18} /> Liquidación Final
