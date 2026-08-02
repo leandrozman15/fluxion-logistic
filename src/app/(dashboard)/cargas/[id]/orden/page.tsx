@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useEffect, useState, Suspense } from "react";
@@ -78,6 +77,9 @@ function LoadOrderContent() {
   const confirmationUrl = typeof window !== 'undefined' ? `${window.location.origin}/rutas/${load.id}` : '';
   const orgName = tenant?.name || "LOGÍSTICA AR";
 
+  // Encontrar la última firma para mostrar en el cierre si el viaje terminó
+  const lastPod = [...(load.outboundStops || [])].reverse().find(s => !!s.proofOfDelivery?.receiverSignatureUrl)?.proofOfDelivery;
+
   return (
     <div className="min-h-screen bg-slate-800 py-8 print:bg-white print:py-0 overflow-y-auto">
       <div className="max-w-[210mm] mx-auto space-y-6">
@@ -120,10 +122,6 @@ function LoadOrderContent() {
                   <div>
                       <p className="text-[9px] font-bold text-slate-400 uppercase">Razón Social:</p>
                       <p className="text-lg font-black uppercase leading-tight">{load.clientName}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase">Modalidad:</p>
-                    <p className="text-xs font-black uppercase italic text-slate-700">{load.isRoundTrip ? 'LOGÍSTICA INTEGRAL (RETORNO)' : 'TRANSPORTE DIRECTO'}</p>
                   </div>
               </div>
               <div className="col-span-5 p-6 border-b-[3px] border-black space-y-4">
@@ -179,14 +177,14 @@ function LoadOrderContent() {
                         <td className="py-5 px-4 border-r-2 border-slate-200">
                             <p className="font-black uppercase text-slate-900 text-sm leading-tight truncate">{stop.name}</p>
                             <div className="mt-2 space-y-1">
-                              {stop.documents?.map(doc => (
-                                <div key={doc.id} className="text-blue-800 font-mono font-black text-[9px] bg-blue-50 px-2 py-0.5 rounded border border-blue-200 w-fit">REM: {doc.number}</div>
-                              ))}
+                              {stop.deliveredAt && (
+                                <div className="text-green-700 font-black text-[8px] bg-green-50 px-2 py-0.5 rounded border border-green-200 w-fit uppercase">ENTREGADO OK</div>
+                              )}
                             </div>
                         </td>
                         <td className="py-5 px-4 border-r-2 border-slate-200">
                             <p className="font-black text-slate-800 uppercase text-xs">{stop.address}</p>
-                            <p className="text-[10px] text-slate-500 font-bold italic mt-1 uppercase">{stop.city}, {stop.province}</p>
+                            <p className="text-[10px] text-slate-500 font-bold italic mt-1 uppercase">{stop.city}</p>
                         </td>
                         <td className="py-5 px-4 text-right font-mono font-black text-sm">
                             {stop.weightKg.toLocaleString()} <span className="text-[10px] text-slate-400">KG</span>
@@ -203,13 +201,19 @@ function LoadOrderContent() {
                     <div className="border-[3px] border-black px-5 py-2 rotate-[-5deg] text-[10px] font-black shadow-lg bg-white uppercase">VALIDADO CENTRAL</div>
                     <p className="text-[9px] font-black uppercase tracking-widest mt-4">RESPONSABLE EMISIÓN</p>
                   </div>
-                  <div className="col-span-4 p-6 border-r-[3px] border-black flex flex-col justify-between items-center text-center">
-                    <div className="h-20 w-full border-b-2 border-dashed border-slate-300"></div>
-                    <p className="text-[9px] font-black uppercase tracking-widest">FIRMA CHOFER</p>
+                  <div className="col-span-4 p-6 border-r-[3px] border-black flex flex-col justify-center items-center text-center">
+                    {lastPod?.driverSignatureUrl && (
+                      <img src={lastPod.driverSignatureUrl} className="h-24 w-auto object-contain mb-2" alt="Firma Chofer" />
+                    )}
+                    <div className="h-[1px] w-full border-b-2 border-dashed border-slate-300"></div>
+                    <p className="text-[9px] font-black uppercase tracking-widest mt-2">FIRMA DIGITAL CHOFER</p>
                   </div>
-                  <div className="col-span-4 p-6 flex flex-col justify-between items-center text-center">
-                    <div className="h-20 w-full border-b-2 border-dashed border-slate-300"></div>
-                    <p className="text-[9px] font-black uppercase tracking-widest">RECEPCIÓN EN DESTINO</p>
+                  <div className="col-span-4 p-6 flex flex-col justify-center items-center text-center">
+                    {lastPod?.receiverSignatureUrl && (
+                      <img src={lastPod.receiverSignatureUrl} className="h-24 w-auto object-contain mb-2" alt="Firma Receptor" />
+                    )}
+                    <div className="h-[1px] w-full border-b-2 border-dashed border-slate-300"></div>
+                    <p className="text-[9px] font-black uppercase tracking-widest mt-2">RECEPCIÓN DIGITAL EN DESTINO</p>
                   </div>
               </div>
               <div className="mt-10 flex justify-between items-end">

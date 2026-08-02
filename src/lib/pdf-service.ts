@@ -1,4 +1,3 @@
-
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
@@ -148,6 +147,7 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
 
 /**
  * HOJA DE RUTA / ORDEN DE TRANSPORTE (A4)
+ * Ahora incluye las firmas digitales capturadas en ruta.
  */
 export const generateLoadOrderPDF = async (load: Load, driver?: Driver | null, truck?: Truck | null, tenant?: Tenant) => {
   const doc = new jsPDF("p", "mm", "a4");
@@ -184,24 +184,41 @@ export const generateLoadOrderPDF = async (load: Load, driver?: Driver | null, t
     (i + 1).toString(),
     s.name.toUpperCase(),
     s.address,
-    `${s.weightKg} KG`
+    `${s.weightKg} KG`,
+    s.deliveredAt ? "ENTREGADO" : "PENDIENTE"
   ]);
 
   autoTable(doc, {
     startY: 85,
-    head: [["POS", "DESTINATARIO", "DIRECCIÓN", "PESO"]],
+    head: [["POS", "DESTINATARIO", "DIRECCIÓN", "PESO", "ESTADO"]],
     body: stopsBody,
     theme: "grid",
     headStyles: { fillColor: BLUE_LOGISTIC as any },
     styles: { fontSize: 8 }
   });
 
+  // SECCIÓN DE FIRMAS DIGITALES (Si existen)
   const finalY = Math.max((doc as any).lastAutoTable.finalY + 30, 240);
-  doc.line(margin, finalY, 70, finalY);
-  doc.text("FIRMA CHOFER", margin + 15, finalY + 5);
+  
+  // Buscar la última parada con firma para representarla como certificación del viaje
+  const lastPod = load.outboundStops.reverse().find(s => s.proofOfDelivery?.receiverSignatureUrl)?.proofOfDelivery;
 
+  if (lastPod?.driverSignatureUrl) {
+    try {
+        doc.addImage(lastPod.driverSignatureUrl, 'PNG', margin, finalY - 20, 50, 20);
+    } catch (e) {}
+  }
+  doc.line(margin, finalY, 70, finalY);
+  doc.setFontSize(8);
+  doc.text("FIRMA DIGITAL CHOFER", margin + 10, finalY + 5);
+
+  if (lastPod?.receiverSignatureUrl) {
+    try {
+        doc.addImage(lastPod.receiverSignatureUrl, 'PNG', pageWidth - 70, finalY - 20, 50, 20);
+    } catch (e) {}
+  }
   doc.line(pageWidth - 70, finalY, pageWidth - margin, finalY);
-  doc.text("RECEPCIÓN CLIENTE", pageWidth - 55, finalY + 5);
+  doc.text("FIRMA DIGITAL RECEPTOR", pageWidth - 60, finalY + 5);
 
   doc.save(`HojaRuta_${load.orderNumber}.pdf`);
 };
