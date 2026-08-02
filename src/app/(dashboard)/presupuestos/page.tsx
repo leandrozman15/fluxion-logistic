@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
@@ -97,12 +96,13 @@ export default function PresupuestosPage() {
 
   const getStatusBadge = (status: QuotationStatus) => {
     switch (status) {
-      case 'draft': return <Badge variant="outline" className="bg-slate-100 text-slate-600 border-slate-200">Borrador</Badge>;
-      case 'sent': return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Enviado</Badge>;
-      case 'accepted': return <Badge className="bg-green-600 text-white border-none">Aceptado</Badge>;
-      case 'rejected': return <Badge variant="destructive">Rechazado</Badge>;
-      case 'expired': return <Badge variant="secondary">Vencido</Badge>;
-      default: return <Badge>{status}</Badge>;
+      case 'draft': return <Badge variant="outline" className="bg-slate-100 text-slate-600 border-slate-200 uppercase text-[9px] font-black">Borrador</Badge>;
+      case 'sent': return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 uppercase text-[9px] font-black">Enviado</Badge>;
+      case 'accepted': return <Badge className="bg-green-600 text-white border-none uppercase text-[9px] font-black italic">Aceptado</Badge>;
+      case 'rejected': return <Badge variant="destructive" className="uppercase text-[9px] font-black">Rechazado</Badge>;
+      case 'expired': return <Badge variant="secondary" className="uppercase text-[9px] font-black">Vencido</Badge>;
+      case 'ordered': return <Badge className="bg-emerald-900 text-white border-none uppercase text-[9px] font-black">Convertido</Badge>;
+      default: return <Badge className="uppercase text-[9px] font-black">{status}</Badge>;
     }
   };
 
@@ -110,26 +110,24 @@ export default function PresupuestosPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <FileText className="text-emerald-600" /> Presupuestos de Venta
-          </h1>
-          <p className="text-slate-500 text-sm">Gestión de cotizaciones comerciales y propuestas de flete.</p>
+          <h1 className="text-3xl font-black text-slate-900 italic tracking-tighter uppercase leading-none">Presupuestos de Venta</h1>
+          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Gestión de cotizaciones comerciales y propuestas de flete.</p>
         </div>
         
-        <Button className="bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-100" asChild>
+        <Button className="bg-emerald-600 hover:bg-emerald-700 shadow-xl shadow-emerald-100 font-black italic uppercase text-[11px] h-12 px-6 rounded-2xl" asChild>
           <Link href="/presupuestos/nuevo">
-            <Plus className="w-4 h-4 mr-2" /> Nuevo Presupuesto
+            <Plus className="w-5 h-5 mr-2" /> Nueva Cotización
           </Link>
         </Button>
       </div>
 
-      <Card className="border-none shadow-sm overflow-hidden">
+      <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-white">
         <div className="p-4 bg-slate-50 border-b flex items-center justify-between">
           <div className="relative max-w-md w-full">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+            <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
             <Input 
               placeholder="Buscar por número o cliente..." 
-              className="pl-8 bg-white"
+              className="pl-10 h-10 bg-white border-none shadow-inner rounded-xl text-xs font-bold"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
@@ -137,63 +135,64 @@ export default function PresupuestosPage() {
         </div>
         <CardContent className="p-0">
           {loading ? (
-            <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-emerald-600" /></div>
+            <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-emerald-600 w-10 h-10" /></div>
           ) : (
             <Table>
-              <TableHeader>
-                <TableRow className="bg-slate-50/50">
-                  <TableHead>N° Presupuesto</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Emisión / Vence</TableHead>
-                  <TableHead>Total (ARS)</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
+              <TableHeader className="bg-slate-50/50">
+                <TableRow>
+                  <TableHead className="px-8 text-[10px] font-black uppercase tracking-widest">N° Presupuesto</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest">Cliente</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest">Emisión / Vence</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest">Total</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest">Estado</TableHead>
+                  <TableHead className="pr-8 text-right text-[10px] font-black uppercase tracking-widest">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredQuotes.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-20 text-slate-400 italic">
+                    <TableCell colSpan={6} className="text-center py-32 text-slate-400 italic font-bold uppercase text-xs">
                       No hay presupuestos registrados.
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredQuotes.map((quote) => (
-                    <TableRow key={quote.id} className="hover:bg-slate-50/50 transition-colors">
-                      <TableCell className="font-mono font-bold text-blue-600">{quote.number}</TableCell>
+                    <TableRow key={quote.id} className="hover:bg-slate-50/50 transition-colors group cursor-pointer" onClick={() => router.push(`/presupuestos/${quote.id}`)}>
+                      <TableCell className="px-8 font-mono font-black text-blue-600 text-sm">{quote.number}</TableCell>
                       <TableCell>
-                        <div className="font-bold text-slate-900 uppercase text-xs">{quote.clientName}</div>
-                        <div className="text-[10px] text-slate-400">{quote.clientCuit}</div>
+                        <div className="font-black text-slate-900 uppercase italic text-xs leading-none">{quote.clientName}</div>
+                        <div className="text-[10px] text-slate-400 font-bold mt-1">{quote.clientCuit}</div>
                       </TableCell>
                       <TableCell>
                          <div className="flex flex-col gap-0.5">
-                            <span className="text-xs font-medium flex items-center gap-1"><Calendar size={10} className="text-slate-400" /> {quote.date}</span>
-                            <span className="text-[10px] text-red-500 font-bold flex items-center gap-1"><Clock size={10} /> Exp: {quote.expiryDate}</span>
+                            <span className="text-xs font-bold text-slate-700 flex items-center gap-1"><Calendar size={10} className="text-slate-400" /> {quote.date}</span>
+                            <span className="text-[10px] text-red-500 font-black flex items-center gap-1 uppercase">Vence: {quote.expiryDate}</span>
                          </div>
                       </TableCell>
-                      <TableCell className="font-black text-slate-800">${(quote.totalAmount || 0).toLocaleString()}</TableCell>
+                      <TableCell className="font-black text-slate-900 italic">${(quote.totalAmount || 0).toLocaleString()}</TableCell>
                       <TableCell>{getStatusBadge(quote.status)}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right pr-8" onClick={e => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full"><MoreVertical size={18} /></Button>
+                            <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full hover:bg-slate-100"><MoreVertical size={20} /></Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-56 p-2 rounded-xl border-none shadow-2xl">
+                          <DropdownMenuContent align="end" className="w-56 p-2 rounded-2xl border-none shadow-2xl">
+                            <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 p-2">Gestión Comercial</DropdownMenuLabel>
                             <DropdownMenuItem asChild className="cursor-pointer font-bold h-10 rounded-lg">
                               <Link href={`/presupuestos/${quote.id}`}><Eye className="w-4 h-4 mr-2" /> Ver Detalle</Link>
                             </DropdownMenuItem>
                             <DropdownMenuItem 
-                              className="font-bold h-10 rounded-lg cursor-pointer"
+                              className="font-bold h-10 rounded-lg cursor-pointer text-blue-600 bg-blue-50"
                               onClick={() => handleDownloadPDF(quote)}
                               disabled={isDownloadingId === quote.id}
                             >
                               {isDownloadingId === quote.id ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Download className="w-4 h-4 mr-2" />} 
-                              Bajar PDF
+                              Descargar PDF
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator />
+                            <DropdownMenuSeparator className="my-1" />
                             <DropdownMenuItem 
                               className="text-red-600 focus:bg-red-50 focus:text-red-600 font-bold h-10 rounded-lg cursor-pointer" 
-                              onSelect={() => setDeleteId(quote.id)}
+                              onSelect={(e) => { e.preventDefault(); setDeleteId(quote.id); }}
                             >
                               <Trash2 className="w-4 h-4 mr-2" /> Eliminar
                             </DropdownMenuItem>
@@ -210,7 +209,7 @@ export default function PresupuestosPage() {
       </Card>
 
       <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
-        <AlertDialogContent className="rounded-[2rem]">
+        <AlertDialogContent className="rounded-[2.5rem]">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-xl font-black uppercase italic tracking-tighter">¿Eliminar Presupuesto?</AlertDialogTitle>
             <AlertDialogDescription className="text-sm font-medium text-slate-500">
@@ -225,7 +224,7 @@ export default function PresupuestosPage() {
               disabled={isDeleting}
             >
               {isDeleting ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
-              CONFIRMAR ELIMINACIÓN
+              ELIMINAR DEFINITIVAMENTE
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

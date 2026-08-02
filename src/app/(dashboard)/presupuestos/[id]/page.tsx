@@ -1,25 +1,34 @@
-
 'use client';
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { 
   FileText, ArrowLeft, Loader2, Download, 
-  CheckCircle2, XCircle, Send, Printer,
-  User, Calendar, Clock, DollarSign, Calculator, Info, Package,
-  Truck, Briefcase, Landmark, Globe, ShieldCheck, MapPin, Receipt, Boxes
+  CheckCircle2, XCircle, Send,
+  User, Calendar, DollarSign, Calculator, Package,
+  Truck, Briefcase, Landmark, MapPin, Receipt
 } from "lucide-react";
 import { Quotation, QuotationStatus, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { generateQuotationPDF } from "@/lib/pdf-service";
+
+const statusConfig: Record<QuotationStatus, { label: string, color: string }> = {
+  draft: { label: 'Borrador', color: 'bg-slate-500' },
+  sent: { label: 'Enviado', color: 'bg-blue-600' },
+  viewed: { label: 'Visto por Cliente', color: 'bg-indigo-600' },
+  accepted: { label: 'Aceptado OK', color: 'bg-green-600' },
+  rejected: { label: 'Rechazado', color: 'bg-red-600' },
+  expired: { label: 'Vencido', color: 'bg-orange-600' },
+  ordered: { label: 'Convertido en Pedido', color: 'bg-emerald-900' }
+};
 
 export default function QuotationDetailPage() {
   const { id } = useParams();
@@ -63,16 +72,6 @@ export default function QuotationDetailPage() {
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-emerald-600" /></div>;
   if (!quote) return <div className="p-20 text-center">Presupuesto no encontrado.</div>;
-
-  const statusConfig: Record<QuotationStatus, { label: string, color: string }> = {
-    draft: { label: 'Borrador', color: 'bg-slate-500' },
-    sent: { label: 'Enviado', color: 'bg-blue-600' },
-    viewed: { label: 'Visto por Cliente', color: 'bg-indigo-600' },
-    accepted: { label: 'Aceptado OK', color: 'bg-green-600' },
-    rejected: { label: 'Rechazado', color: 'bg-red-600' },
-    expired: { label: 'Vencido', color: 'bg-orange-600' },
-    ordered: { label: 'Convertido en Pedido', color: 'bg-emerald-900' }
-  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-24">
@@ -206,15 +205,6 @@ export default function QuotationDetailPage() {
                 </CardContent>
             </Card>
           </div>
-
-          <Card className="border-none shadow-md rounded-[2rem] overflow-hidden bg-white">
-             <CardHeader className="bg-slate-50 py-3 border-b"><CardTitle className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Observaciones y Legales</CardTitle></CardHeader>
-             <CardContent className="p-6">
-                <p className="text-xs italic text-slate-600 leading-relaxed font-medium">
-                   {quote.notes || 'No se han especificado cláusulas particulares para este presupuesto.'}
-                </p>
-             </CardContent>
-          </Card>
         </div>
 
         <div className="lg:col-span-4 space-y-6">
@@ -265,17 +255,6 @@ export default function QuotationDetailPage() {
                  <p className="text-[8px] text-center text-slate-300 font-bold uppercase mt-4">ID Transacción: {quote.id}</p>
               </CardContent>
            </Card>
-
-           <div className="p-6 bg-red-50 border-2 border-red-100 rounded-[2.5rem] flex items-start gap-4">
-              <ShieldCheck size={24} className="text-red-600 shrink-0 mt-1" />
-              <div className="space-y-1">
-                 <p className="text-xs font-black text-red-800 uppercase italic">Auditoría Interna</p>
-                 <div className="p-3 bg-white/50 rounded-xl space-y-2 mt-2">
-                    <p className="text-[9px] text-slate-500 font-medium">NOTAS DE NEGOCIACIÓN:</p>
-                    <p className="text-[10px] font-bold text-slate-700 italic">"{quote.internalNotes || 'Sin notas de auditoría.'}"</p>
-                 </div>
-              </div>
-           </div>
         </div>
       </div>
     </div>

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
@@ -85,7 +84,7 @@ export default function NewQuotationPage() {
   const clientsQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "clients"), orderBy("name")) : null, [db, tenantId]);
   const productsQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "products"), orderBy("name")) : null, [db, tenantId]);
   const hubsQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "hubs"), orderBy("name")) : null, [db, tenantId]);
-  const sellersQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "users"), orderBy("role")) : null, [db, tenantId]);
+  const sellersQuery = useMemo(() => (db && tenantId) ? collection(db, "tenants", tenantId, "users") : null, [db, tenantId]);
 
   const { data: clients } = useCollection<Client>(clientsQuery);
   const { data: products } = useCollection<Product>(productsQuery);
