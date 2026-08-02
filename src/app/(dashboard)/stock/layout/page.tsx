@@ -1,10 +1,11 @@
+
 'use client';
 
 import { useState, useMemo, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useFirestore, useCollection, useDoc } from "@/firebase";
+import { useFirestore, useCollection, useDoc, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, orderBy, doc, updateDoc, serverTimestamp, setDoc, deleteDoc } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +13,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { 
   Dialog, 
   DialogContent, 
@@ -38,16 +38,9 @@ import {
   Camera,
   XCircle,
   ScanBarcode,
-  ArrowRightLeft,
   Package,
   Settings2,
-  ChevronRight,
-  Maximize2,
-  Zap,
-  Calendar,
-  Trash2,
-  FileText,
-  Download
+  Trash2
 } from "lucide-react";
 import { Hub, Product, WarehouseSlot } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -70,16 +63,12 @@ function RackSlot({ coordinate, status, product, onClick }: { coordinate: string
       )}
       onClick={onClick}
     >
-      {/* Viga de carga (Beam) */}
       <div className="absolute bottom-0 left-[-4px] right-[-4px] h-2 bg-blue-600 shadow-sm z-10"></div>
       
-      {/* Contenido de la ubicación */}
-      <div className="flex-1 flex flex-col items-center justify-center relative overflow-hidden">
+      <div className="flex-1 flex flex-col items-center justify-center relative overflow-hidden text-center">
         {isOccupied ? (
           <div className="animate-in fade-in zoom-in-95 duration-300 w-full h-full flex flex-col items-center justify-end pb-2">
-            {/* Representación del Pallet */}
             <div className="w-[85%] h-16 bg-[#C19A6B] rounded-sm shadow-md border-b-4 border-[#8B4513] flex flex-col items-center justify-center p-1 relative">
-               {/* Mercadería sobre el pallet */}
                <div className="absolute -top-10 w-full h-12 bg-white border border-slate-200 rounded-sm shadow-sm flex items-center justify-center overflow-hidden">
                   {product?.photoUrl ? (
                     <img src={product.photoUrl} className="w-full h-full object-cover" alt="Item" />
@@ -87,15 +76,15 @@ function RackSlot({ coordinate, status, product, onClick }: { coordinate: string
                     <Package size={24} className="text-slate-300" />
                   )}
                </div>
-               <p className="text-[7px] font-black text-[#5C4033] uppercase leading-none mt-2 truncate w-full text-center">
-                 {product?.sku || 'SKU-UNKNOWN'}
+               <p className="text-[7px] font-black text-[#5C4033] uppercase leading-none mt-2 truncate w-full">
+                 {product?.sku || 'CARGADO'}
                </p>
             </div>
           </div>
         ) : isBlocked ? (
           <div className="flex flex-col items-center gap-1 opacity-40">
              <XCircle size={20} className="text-red-500" />
-             <span className="text-[8px] font-black text-red-700 uppercase">BLOQUEADO</span>
+             <span className="text-[8px] font-black text-red-700 uppercase text-center">BLOQUEADO</span>
           </div>
         ) : isReserved ? (
           <div className="w-[85%] h-8 border-2 border-dashed border-amber-400 rounded-lg flex items-center justify-center bg-amber-50">
@@ -108,7 +97,6 @@ function RackSlot({ coordinate, status, product, onClick }: { coordinate: string
         )}
       </div>
 
-      {/* Tooltip rápido al hover */}
       <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
          <Badge className="bg-slate-900 text-white text-[7px] font-black uppercase border-none px-2 h-4">
            {coordinate}
@@ -121,21 +109,16 @@ function RackSlot({ coordinate, status, product, onClick }: { coordinate: string
 function LayoutContent() {
   const db = useFirestore();
   const { tenantId } = useTenant();
+  const { user } = useUser();
   const router = useRouter();
   const { toast } = useToast();
   const searchParams = useSearchParams();
   
   const hubIdFromUrl = searchParams.get('hubId');
   const [selectedHubId, setSelectedHubId] = useState<string>(hubIdFromUrl || "");
-  const [searchTerm, setSearchTerm] = useState("");
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Local storage for assigned slots (for the prototype)
-  // In a real app, this would be a subcollection 'slots'
-  const [assignedSlots, setAssignedSlots] = useState<Record<string, Partial<WarehouseSlot>>>({});
-
-  // Slot Management State
   const [selectedSlotCoord, setSelectedSlotCoord] = useState<string | null>(null);
   const [slotForm, setSlotForm] = useState<Partial<WarehouseSlot>>({
     status: 'empty',
@@ -146,7 +129,6 @@ function LayoutContent() {
     currentWeightKg: 0
   });
 
-  // Configuración de Estructura
   const [configForm, setConfigForm] = useState({
     corridors: "A,B,C",
     positions: 4,
@@ -164,16 +146,30 @@ function LayoutContent() {
     return collection(db, "tenants", tenantId, "products");
   }, [db, tenantId]);
 
+  const slotsQuery = useMemo(() => {
+    if (!db || !tenantId || !selectedHubId) return null;
+    return collection(db, "tenants", tenantId, "hubs", selectedHubId, "slots");
+  }, [db, tenantId, selectedHubId]);
+
   const { data: hubs, loading: hubsLoading } = useCollection<Hub>(hubsQuery);
   const { data: products } = useCollection<Product>(productsQuery);
+  const { data: slotsData } = useCollection<WarehouseSlot>(slotsQuery);
 
   const activeHub = useMemo(() => hubs?.find(h => h.id === selectedHubId), [hubs, selectedHubId]);
+
+  const assignedSlots = useMemo(() => {
+    const map: Record<string, WarehouseSlot> = {};
+    slotsData?.forEach(s => {
+      map[s.coordinate] = s;
+    });
+    return map;
+  }, [slotsData]);
 
   useEffect(() => {
     if (activeHub?.settings?.layoutConfig) {
       const cfg = activeHub.settings.layoutConfig;
       setConfigForm({
-        corridors: Array.isArray(cfg.corridors) ? cfg.corridors.join(',') : cfg.corridors,
+        corridors: Array.isArray(cfg.corridors) ? cfg.corridors.join(',') : (cfg.corridors || "A,B,C"),
         positions: cfg.positions || 4,
         levels: cfg.levels || 2,
         prefix: cfg.prefix || activeHub.name.substring(0, 5).toUpperCase()
@@ -185,7 +181,6 @@ function LayoutContent() {
 
   const displayRacks = useMemo(() => {
     const corridorsArray = configForm.corridors.split(',').map(s => s.trim().toUpperCase()).filter(s => s !== "");
-    
     return corridorsArray.map(c => ({
       corridor: c,
       positions: Array.from({ length: configForm.positions }, (_, i) => String(i + 1).padStart(2, '0')),
@@ -218,22 +213,19 @@ function LayoutContent() {
     setIsSaving(true);
     try {
       const corridorsArray = configForm.corridors.split(',').map(s => s.trim().toUpperCase()).filter(s => s !== "");
-      const layoutConfig = {
-        corridors: corridorsArray,
-        positions: configForm.positions,
-        levels: configForm.levels,
-        prefix: configForm.prefix
-      };
-      
       await updateDoc(doc(db, "tenants", tenantId, "hubs", selectedHubId), {
-        "settings.layoutConfig": layoutConfig,
+        "settings.layoutConfig": {
+          corridors: corridorsArray,
+          positions: configForm.positions,
+          levels: configForm.levels,
+          prefix: configForm.prefix
+        },
         updatedAt: serverTimestamp()
       });
-      
-      toast({ title: "Estructura Actualizada", description: "El mapa se ha regenerado según los nuevos parámetros." });
+      toast({ title: "Configuración Guardada" });
       setIsConfigOpen(false);
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al guardar configuración" });
+      toast({ variant: "destructive", title: "Error al guardar" });
     } finally {
       setIsSaving(false);
     }
@@ -242,7 +234,6 @@ function LayoutContent() {
   const handleOpenSlot = (coord: string) => {
     setSelectedSlotCoord(coord);
     const existingData = assignedSlots[coord] || { status: 'empty' };
-    
     setSlotForm({
       coordinate: coord,
       ...existingData,
@@ -252,57 +243,39 @@ function LayoutContent() {
   };
 
   const handleSaveSlot = async () => {
+    if (!db || !tenantId || !selectedHubId || !selectedSlotCoord) return;
     setIsSaving(true);
     try {
-      if (selectedSlotCoord) {
-        setAssignedSlots(prev => ({
-          ...prev,
-          [selectedSlotCoord]: { ...slotForm }
-        }));
-      }
-      toast({ title: "Ubicación Actualizada", description: `Se han guardado los cambios en ${selectedSlotCoord}` });
+      const slotRef = doc(db, "tenants", tenantId, "hubs", selectedHubId, "slots", selectedSlotCoord);
+      await setDoc(slotRef, {
+        ...slotForm,
+        id: selectedSlotCoord,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      toast({ title: "Ubicación Actualizada" });
       setSelectedSlotCoord(null);
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al guardar ubicación" });
+      toast({ variant: "destructive", title: "Error al guardar" });
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleClearSlot = () => {
-    setSlotForm({
-      ...slotForm,
-      status: 'empty',
-      productId: "",
-      productSku: "",
-      productName: "",
-      currentWeightKg: 0
-    });
-    if (selectedSlotCoord) {
-      const newAssigned = { ...assignedSlots };
-      delete newAssigned[selectedSlotCoord];
-      setAssignedSlots(newAssigned);
+  const handleClearSlot = async () => {
+    if (!db || !tenantId || !selectedHubId || !selectedSlotCoord) return;
+    setIsSaving(true);
+    try {
+      await deleteDoc(doc(db, "tenants", tenantId, "hubs", selectedHubId, "slots", selectedSlotCoord));
+      toast({ title: "Ubicación Liberada" });
+      setSelectedSlotCoord(null);
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al borrar" });
+    } finally {
+      setIsSaving(false);
     }
-    toast({ title: "Ubicación liberada", description: "El espacio se marcará como disponible." });
-    setSelectedSlotCoord(null);
-  };
-
-  const getProductAt = (coord: string) => {
-    const slot = assignedSlots[coord];
-    if (slot && slot.status === 'occupied' && slot.productId) {
-      return products?.find(p => p.id === slot.productId) || null;
-    }
-    return null;
   };
 
   const prefix = configForm.prefix || activeHub?.name.substring(0, 5).toUpperCase() || "DEPO";
-
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) return null;
 
   return (
     <div className="space-y-6 pb-20">
@@ -313,15 +286,12 @@ function LayoutContent() {
           </Button>
           <div>
             <h1 className="text-2xl font-black text-slate-900 italic tracking-tighter uppercase leading-none">Mapa de Racks Virtual</h1>
-            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Control Visual de Estanterías • {activeHub?.name || 'Sede no seleccionada'}</p>
+            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Control Visual de Estanterías • {activeHub?.name || 'Cargando...'}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
            <Button variant="outline" className="h-10 rounded-xl font-bold text-[10px] uppercase border-slate-200" onClick={() => setIsConfigOpen(true)}>
              <Settings2 size={14} className="mr-2 text-blue-600" /> Configurar Estructura
-           </Button>
-           <Button className="bg-blue-600 h-10 rounded-xl font-black text-[10px] uppercase shadow-lg px-6">
-             <Camera size={14} className="mr-2" /> Scanner Picking
            </Button>
         </div>
       </div>
@@ -331,7 +301,7 @@ function LayoutContent() {
             <CardContent className="p-4 flex items-center justify-between">
                <div>
                  <p className="text-[10px] font-bold text-slate-400 uppercase">Capacidad Técnica</p>
-                 <p className="text-2xl font-black italic text-slate-900">{stats.total} <span className="text-xs font-normal opacity-30">SLOTS</span></p>
+                 <p className="text-2xl font-black italic text-slate-900">{stats.total}</p>
                </div>
                <LayoutGrid size={24} className="text-slate-100" />
             </CardContent>
@@ -365,226 +335,120 @@ function LayoutContent() {
          </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-         <div className="lg:col-span-12">
-            <Card className="border-none shadow-md overflow-hidden bg-white">
-               <CardContent className="p-4 flex flex-col md:flex-row gap-6 items-center">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                    <Input 
-                      placeholder="Localizar SKU, Lote o Coordenada..." 
-                      className="pl-9 h-10 rounded-xl bg-slate-50 border-none text-xs font-bold"
-                      value={searchTerm}
-                      onChange={e => setSearchTerm(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex items-center gap-6">
-                    <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-orange-500"></div><span className="text-[9px] font-black text-slate-400 uppercase">Puntal Metal</span></div>
-                    <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-blue-600"></div><span className="text-[9px] font-black text-slate-400 uppercase">Viga de Carga</span></div>
-                    <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-[#C19A6B]"></div><span className="text-[9px] font-black text-slate-400 uppercase">Pallet</span></div>
-                  </div>
-               </CardContent>
-            </Card>
-         </div>
+      <div className="space-y-12">
+        {displayRacks.map(rackGroup => (
+          <div key={rackGroup.corridor} className="space-y-6">
+             <div className="flex items-center gap-4 px-2">
+                <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black text-xl shadow-xl italic tracking-tighter">
+                   {rackGroup.corridor}
+                </div>
+                <div>
+                   <h3 className="text-lg font-black text-slate-800 uppercase italic leading-none tracking-tight">Corredor {rackGroup.corridor}</h3>
+                   <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Cuerpos de estantería pesada</p>
+                </div>
+             </div>
 
-         <div className="lg:col-span-12 space-y-12">
-            {displayRacks.map(rackGroup => (
-              <div key={rackGroup.corridor} className="space-y-6">
-                 <div className="flex items-center gap-4 px-2">
-                    <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black text-xl shadow-xl italic tracking-tighter">
-                       {rackGroup.corridor}
-                    </div>
-                    <div>
-                       <h3 className="text-lg font-black text-slate-800 uppercase italic leading-none tracking-tight">Corredor {rackGroup.corridor}</h3>
-                       <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Bloque de estantería pesado • {rackGroup.positions.length} Cuerpos</p>
-                    </div>
-                 </div>
-
-                 <div className="overflow-x-auto pb-6">
-                    <div className="inline-flex flex-col min-w-full bg-slate-200/20 p-8 rounded-[3rem] border border-slate-100">
-                       {rackGroup.levels.map(level => (
-                         <div key={level} className="flex items-end">
-                            <div className="w-16 h-32 flex items-center justify-center border-r-4 border-slate-300 pr-4">
-                               <p className="text-[10px] font-black text-slate-400 uppercase -rotate-90 whitespace-nowrap">NIVEL {level}</p>
-                            </div>
-                            
-                            {rackGroup.positions.map(pos => {
-                               const coord = `${prefix}-${rackGroup.corridor}-${pos}-${level}`;
-                               const product = getProductAt(coord);
-                               const slotData = assignedSlots[coord] || { status: 'empty' };
-                               
-                               return (
-                                 <div key={pos} className="w-48">
-                                    <RackSlot 
-                                      coordinate={coord}
-                                      status={slotData.status || 'empty'}
-                                      product={product}
-                                      onClick={() => handleOpenSlot(coord)}
-                                    />
-                                 </div>
-                               );
-                            })}
-                            
-                            <div className="w-1 h-32 bg-orange-500"></div>
-                         </div>
-                       ))}
-                       
-                       <div className="flex">
-                          <div className="w-16"></div>
-                          {rackGroup.positions.map(pos => (
-                            <div key={pos} className="w-48 text-center pt-4">
-                               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Cuerpo {pos}</p>
-                            </div>
-                          ))}
-                       </div>
-                    </div>
-                 </div>
-              </div>
-            ))}
-         </div>
+             <div className="overflow-x-auto pb-6">
+                <div className="inline-flex flex-col min-w-full bg-slate-200/20 p-8 rounded-[3rem] border border-slate-100">
+                   {rackGroup.levels.map(level => (
+                     <div key={level} className="flex items-end">
+                        <div className="w-16 h-32 flex items-center justify-center border-r-4 border-slate-300 pr-4">
+                           <p className="text-[10px] font-black text-slate-400 uppercase -rotate-90 whitespace-nowrap">NIVEL {level}</p>
+                        </div>
+                        {rackGroup.positions.map(pos => {
+                           const coord = `${prefix}-${rackGroup.corridor}-${pos}-${level}`;
+                           const slot = assignedSlots[coord];
+                           const product = slot?.productId ? products?.find(p => p.id === slot.productId) : null;
+                           return (
+                             <div key={pos} className="w-48">
+                                <RackSlot 
+                                  coordinate={coord}
+                                  status={slot?.status || 'empty'}
+                                  product={product}
+                                  onClick={() => handleOpenSlot(coord)}
+                                />
+                             </div>
+                           );
+                        })}
+                        <div className="w-1 h-32 bg-orange-500"></div>
+                     </div>
+                   ))}
+                </div>
+             </div>
+          </div>
+        ))}
       </div>
 
-      {/* DIALOG DE GESTIÓN DE UBICACIÓN (SLOT) */}
       <Dialog open={!!selectedSlotCoord} onOpenChange={(o) => !o && setSelectedSlotCoord(null)}>
         <DialogContent className="rounded-[2.5rem] max-w-2xl p-0 overflow-hidden border-none shadow-2xl">
            <div className="bg-slate-900 text-white p-8 pb-6">
               <DialogHeader>
-                <div className="flex justify-between items-start">
+                 <div className="flex justify-between items-start">
                    <div>
                       <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Ubicación {selectedSlotCoord}</DialogTitle>
-                      <DialogDescription className="text-white/40 text-[10px] font-bold uppercase mt-1">Gestión de status, lote, fechas y trazabilidad del slot.</DialogDescription>
+                      <DialogDescription className="text-white/40 text-[10px] font-bold uppercase mt-1">Gestión de status y trazabilidad del slot.</DialogDescription>
                    </div>
-                   <Badge className={cn(
-                     "border-none px-4 py-1 h-6 font-black text-[10px] uppercase italic tracking-widest",
-                     slotForm.status === 'occupied' ? "bg-blue-600" : slotForm.status === 'empty' ? "bg-green-600" : "bg-red-600"
-                   )}>
-                     {slotForm.status === 'empty' ? 'Disponible' : slotForm.status === 'occupied' ? 'Ocupado' : slotForm.status?.toUpperCase()}
-                   </Badge>
-                </div>
+                 </div>
               </DialogHeader>
            </div>
            
-           <div className="p-8 space-y-6 bg-slate-50 overflow-y-auto max-h-[70vh]">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+           <div className="p-8 space-y-6 bg-slate-50">
+              <div className="grid grid-cols-2 gap-6">
                  <div className="space-y-1.5">
-                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Estado de la Ubicación</Label>
+                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Estado</Label>
                     <Select value={slotForm.status} onValueChange={(v: any) => setSlotForm({...slotForm, status: v})}>
-                       <SelectTrigger className="bg-white h-11 rounded-xl border-slate-200"><SelectValue /></SelectTrigger>
+                       <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                        <SelectContent>
-                          <SelectItem value="empty">🟢 Disponible / Vacío</SelectItem>
-                          <SelectItem value="occupied">🔵 Ocupado (Mercadería)</SelectItem>
-                          <SelectItem value="reserved">🟡 Reservado (Ingreso)</SelectItem>
-                          <SelectItem value="blocked">🔴 Bloqueado (Mantenimiento)</SelectItem>
+                          <SelectItem value="empty">🟢 Disponible</SelectItem>
+                          <SelectItem value="occupied">🔵 Ocupado</SelectItem>
+                          <SelectItem value="reserved">🟡 Reservado</SelectItem>
+                          <SelectItem value="blocked">🔴 Bloqueado</SelectItem>
                        </SelectContent>
                     </Select>
                  </div>
                  <div className="space-y-1.5">
-                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Tipo de Ítem</Label>
-                    <Select defaultValue="product">
-                       <SelectTrigger className="bg-white h-11 rounded-xl border-slate-200"><SelectValue /></SelectTrigger>
-                       <SelectContent>
-                          <SelectItem value="product">📦 Producto Terminado</SelectItem>
-                          <SelectItem value="raw">🪵 Materia Prima</SelectItem>
-                          <SelectItem value="return">🔄 Devolución</SelectItem>
-                       </SelectContent>
+                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Producto</Label>
+                    <Select value={slotForm.productId} onValueChange={v => {
+                       const p = products?.find(x => x.id === v);
+                       setSlotForm({...slotForm, productId: v, productSku: p?.sku || "", productName: p?.name || "", status: 'occupied'});
+                    }}>
+                       <SelectTrigger className="bg-white"><SelectValue placeholder="Elegir..." /></SelectTrigger>
+                       <SelectContent>{products?.map(p => <SelectItem key={p.id} value={p.id}>{p.sku} - {p.name}</SelectItem>)}</SelectContent>
                     </Select>
                  </div>
-              </div>
-
-              <div className="space-y-1.5">
-                 <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Producto / Artículo Asignado</Label>
-                 <Select value={slotForm.productId} onValueChange={v => {
-                   const p = products?.find(x => x.id === v);
-                   setSlotForm({...slotForm, productId: v, productSku: p?.sku || "", productName: p?.name || "", status: 'occupied'});
-                 }}>
-                    <SelectTrigger className="bg-white h-12 rounded-xl border-slate-200 font-bold">
-                       <SelectValue placeholder="Seleccione un ítem para este slot..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                       {products?.map(p => (
-                         <SelectItem key={p.id} value={p.id} className="text-xs">{p.sku} - {p.name}</SelectItem>
-                       ))}
-                    </SelectContent>
-                 </Select>
-              </div>
-
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                 <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400 ml-1">SKU</Label><Input readOnly className="bg-slate-100 font-mono text-[10px] h-10" value={slotForm.productSku} /></div>
-                 <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400 ml-1">N° Lote</Label><Input placeholder="A-001" className="h-10 bg-white" /></div>
-                 <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400 ml-1">Cantidad</Label><Input type="number" className="h-10 bg-white" defaultValue={1} /></div>
-                 <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400 ml-1">Unidad</Label><Input readOnly className="bg-slate-100 text-[10px] h-10" value="Bulto/Pallet" /></div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400 ml-1">Fecha Entrada</Label><Input type="date" className="h-10 bg-white" defaultValue={format(new Date(), "yyyy-MM-dd")} /></div>
-                 <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400 ml-1">Salida Prevista</Label><Input type="date" className="h-10 bg-white" /></div>
-              </div>
-
-              <div className="space-y-1.5">
-                 <Label className="text-[9px] font-black uppercase text-slate-400 ml-1">Observaciones / Notas Técnicas</Label>
-                 <Textarea placeholder="Ej: No estibar más de 2 alturas, Pallet dañado, etc." className="min-h-[80px] bg-white text-xs" />
               </div>
            </div>
 
-           <div className="p-6 bg-white border-t flex flex-col sm:flex-row justify-between gap-4">
+           <div className="p-6 bg-white border-t flex justify-between">
+              <Button variant="outline" className="text-red-600" onClick={handleClearSlot}><Trash2 size={16} className="mr-2" /> LIBERAR</Button>
               <div className="flex gap-2">
-                 <Button variant="outline" className="h-12 px-6 rounded-xl text-red-600 border-red-100 bg-red-50 hover:bg-red-100 font-bold text-xs uppercase" onClick={handleClearSlot}>
-                    <Trash2 size={16} className="mr-2" /> LIBERAR POSICIÓN
-                 </Button>
-              </div>
-              <div className="flex gap-2">
-                 <Button variant="ghost" onClick={() => setSelectedSlotCoord(null)} className="h-12 px-6 rounded-xl font-bold text-slate-400 text-xs uppercase">CANCELAR</Button>
-                 <Button onClick={handleSaveSlot} disabled={isSaving} className="h-12 px-10 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl shadow-lg shadow-blue-100 uppercase text-xs">
-                    {isSaving ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} SALVAR CAMBIOS
+                 <Button variant="ghost" onClick={() => setSelectedSlotCoord(null)}>CANCELAR</Button>
+                 <Button onClick={handleSaveSlot} disabled={isSaving} className="bg-blue-600">
+                    {isSaving ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} GUARDAR
                  </Button>
               </div>
            </div>
         </DialogContent>
       </Dialog>
 
-      {/* DIALOG DE CONFIGURACIÓN DE ESTRUCTURA */}
       <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
-        <DialogContent className="rounded-[2.5rem] max-w-lg">
+        <DialogContent className="rounded-[2.5rem]">
            <DialogHeader>
-              <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Parametrización de Racks</DialogTitle>
-              <DialogDescription className="text-[10px] uppercase font-bold text-slate-400">Defina la distribución física para la sede {activeHub?.name}</DialogDescription>
+              <DialogTitle className="text-xl font-black uppercase italic">Configuración de Racks</DialogTitle>
            </DialogHeader>
            <div className="space-y-6 py-6">
               <div className="space-y-2">
-                 <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Corredores / Pasillos (Separe por coma)</Label>
-                 <Input className="bg-slate-50 border-none rounded-xl h-11 font-black" value={configForm.corridors} onChange={e => setConfigForm({...configForm, corridors: e.target.value})} placeholder="Ej: A,B,C,D" />
+                 <Label className="text-[10px] font-black uppercase">Pasillos (Ej: A,B,C)</Label>
+                 <Input value={configForm.corridors} onChange={e => setConfigForm({...configForm, corridors: e.target.value})} />
               </div>
-
               <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Cuerpos por Pasillo</Label>
-                    <Input type="number" className="bg-slate-50 border-none rounded-xl h-11 font-black" value={configForm.positions} onChange={e => setConfigForm({...configForm, positions: parseInt(e.target.value) || 0})} />
-                 </div>
-                 <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Niveles (Altura)</Label>
-                    <Input type="number" className="bg-slate-50 border-none rounded-xl h-11 font-black" value={configForm.levels} onChange={e => setConfigForm({...configForm, levels: parseInt(e.target.value) || 0})} />
-                 </div>
-              </div>
-
-              <div className="space-y-2">
-                 <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Prefijo de Coordenada</Label>
-                 <Input className="bg-slate-50 border-none rounded-xl h-11 font-bold" value={configForm.prefix} onChange={e => setConfigForm({...configForm, prefix: e.target.value.toUpperCase()})} placeholder="Ej: TIGRE" />
-              </div>
-
-              <div className="p-5 bg-blue-50 border border-blue-100 rounded-3xl flex items-start gap-4">
-                 <Zap className="text-blue-600 shrink-0 mt-1" />
-                 <div className="space-y-1">
-                    <p className="text-xs font-black text-blue-800 uppercase italic">Aprovisionamiento Automático</p>
-                    <p className="text-[10px] text-blue-600 leading-relaxed font-medium">Al guardar, se habilitarán {totalPositions} ubicaciones únicas para asignar mercadería. Los operarios verán esta estructura en su terminal de picking.</p>
-                 </div>
+                 <div className="space-y-2"><Label className="text-[10px] font-black uppercase">Cuerpos</Label><Input type="number" value={configForm.positions} onChange={e => setConfigForm({...configForm, positions: parseInt(e.target.value) || 0})} /></div>
+                 <div className="space-y-2"><Label className="text-[10px] font-black uppercase">Niveles</Label><Input type="number" value={configForm.levels} onChange={e => setConfigForm({...configForm, levels: parseInt(e.target.value) || 0})} /></div>
               </div>
            </div>
            <DialogFooter>
-              <Button variant="ghost" onClick={() => setIsConfigOpen(false)} className="font-bold text-slate-400 uppercase text-xs">Cancelar</Button>
-              <Button onClick={handleSaveConfig} disabled={isSaving} className="bg-blue-600 h-12 px-8 rounded-xl font-black uppercase shadow-lg shadow-blue-100">
-                 {isSaving ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" size={16} />}
-                 GUARDAR ESTRUCTURA
-              </Button>
+              <Button variant="ghost" onClick={() => setIsConfigOpen(false)}>Cancelar</Button>
+              <Button onClick={handleSaveConfig} className="bg-blue-600">GUARDAR ESTRUCTURA</Button>
            </DialogFooter>
         </DialogContent>
       </Dialog>
