@@ -42,7 +42,7 @@ export interface Truck {
   odometerKm: number;
   avgConsumption: number;
   status: TruckStatus;
-  hasActiveAlert?: boolean; // NUEVO: Flag para alertas visuales en mapa
+  hasActiveAlert?: boolean; 
   alertType?: 'security' | 'mechanical' | 'accident';
   ownershipType: OwnershipType;
   haulingType: 'standard' | 'bitren' | 'chassis';
@@ -108,7 +108,7 @@ export interface VehicleDocument {
 export interface ProductWarehouse {
   hubId: string;
   hubName: string;
-  location?: string; // Ej: Pasillo A, Estante 4
+  location?: string; 
   stockQuantity: number;
   minStock: number;
   maxStock: number;
@@ -118,8 +118,8 @@ export interface ProductWarehouse {
 
 export interface ProductVariant {
   id: string;
-  sku: string; // Mother SKU + suffix (e.g., 1111-1)
-  value: string; // e.g., Color, Size, Model, #40
+  sku: string; 
+  value: string; 
   photoUrl?: string;
   cost?: number;
   markup?: number;
@@ -130,7 +130,7 @@ export interface ProductVariant {
 export interface Product {
   id: string;
   sku: string;
-  gtin?: string; // EAN-13
+  gtin?: string; 
   name: string;
   shortName?: string;
   brand?: string;
@@ -143,21 +143,18 @@ export interface Product {
   family?: string;
   afipRubro?: string;
   
-  // Logistics
   unitWeightKg: number;
   dimensions?: { l: number; w: number; h: number };
   unitVolumeM3: number;
   unitType: 'unit' | 'kg' | 'liter' | 'meter' | 'box' | 'bag';
-  conversionFactor?: number; // Ej: 1 caja = 12 unidades
+  conversionFactor?: number; 
   
-  // Packaging
   packagingType: 'box' | 'bag' | 'drum' | 'pallet' | 'loose' | 'container';
   unitsPerBox?: number;
   cajasPerPallet?: number;
   unitsPerPallet?: number;
   
-  // Inventory Policy
-  stockQuantity: number; // Total consolidado
+  stockQuantity: number; 
   minStockAlert?: number;
   maxStockAlert?: number;
   managesStock: boolean;
@@ -166,20 +163,16 @@ export interface Product {
   isSerialTracked: boolean;
   expiryControl: boolean;
   
-  // Variants
   hasVariants: boolean;
   variants: ProductVariant[];
 
-  // Stock Levels
   reorderPoint?: number;
   safetyStock?: number;
   leadTimeDays?: number;
   economicOrderQty?: number;
   
-  // Multi-Warehouse
   warehouses: ProductWarehouse[];
   
-  // Purchasing
   mainSupplierId?: string;
   altSupplierId?: string;
   supplierCode?: string;
@@ -187,20 +180,17 @@ export interface Product {
   avgCost?: number;
   currency?: string;
   
-  // Sales & Finance
-  markup?: number; // Porcentaje de recargo sobre costo
+  markup?: number; 
   listPrice?: number;
   wholesalePrice?: number;
-  wholesaleDiscount?: number; // Porcentaje de descuento sobre minorista
+  wholesaleDiscount?: number; 
   distributorPrice?: number;
   retailPrice?: number;
   ivaRate: 0 | 10.5 | 21 | 27;
 
-  // Compliance / Argentina
-  ncmCode?: string; // Nomenclatura Común Mercosur
+  ncmCode?: string; 
   origin: 'nacional' | 'importado';
   
-  // Regulatory
   dangerLevel: 'none' | 'low' | 'medium' | 'high';
   onuNumber?: string;
   requiresReefer: boolean;
@@ -212,9 +202,8 @@ export interface Product {
   updatedAt: any;
 }
 
-// NUEVO: MODELO DE LAYOUT FÍSICO DE DEPÓSITO
 export interface WarehouseSlot {
-  id: string; // Ej: P01-R02-N03-C01
+  id: string; 
   coordinate: string;
   productId?: string;
   productSku?: string;
@@ -227,21 +216,21 @@ export interface WarehouseSlot {
 
 export interface WarehouseRack {
   id: string;
-  name: string; // Ej: Rack 02
-  levels: number; // Alturas
-  columns: number; // Columnas
+  name: string; 
+  levels: number; 
+  columns: number; 
   slots: WarehouseSlot[];
 }
 
 export interface WarehouseAisle {
   id: string;
-  name: string; // Ej: Pasillo 01 (A)
+  name: string; 
   racks: WarehouseRack[];
 }
 
 export interface WarehouseSection {
   id: string;
-  name: string; // Ej: Sector Refrigerados, Sector A, etc.
+  name: string; 
   aisles: WarehouseAisle[];
 }
 
@@ -265,7 +254,7 @@ export interface StockMovement {
   previousStock: number;
   newStock: number;
   reason: string;
-  referenceId?: string; // e.g., Load ID or Remito ID
+  referenceId?: string; 
   actorEmail: string;
   createdAt: any;
 }
@@ -320,7 +309,7 @@ export interface Driver {
   experienceYears: number;
   phone: string;
   email: string;
-  password?: string; // Contraseña provisoria
+  password?: string; 
   emergencyContact: string;
   emergencyPhone: string;
   address: string;
@@ -412,7 +401,6 @@ export interface Load {
   
   isRoundTrip: boolean;
 
-  // Planificación Temporal
   pickupDate: string;
   pickupTime: string;
   estimatedArrivalDate: string;
@@ -509,12 +497,11 @@ export interface Load {
   createdAt: any;
   updatedAt: any;
 
-  // NUEVO: Control de Despacho en Sede
   dockEntryAuthorized?: boolean;
   dockEntryMessage?: string;
 
   tracking?: {
-    tripStartedAt?: any; // Marca de tiempo de inicio real
+    tripStartedAt?: any; 
     currentLat: number;
     currentLng: number;
     currentSpeed: number;
@@ -673,10 +660,42 @@ export interface Expense {
   receiptNumber?: string;
   docsPresented?: boolean;
   status: 'registered' | 'approved' | 'rejected';
-  liters?: number; // Solo para combustible
+  liters?: number; 
   pricePerLiter?: number;
   createdAt: any;
   updatedAt: any;
 }
 
 export type ExpenseCategory = 'fuel' | 'toll' | 'meal' | 'lodging' | 'maintenance' | 'other';
+
+export type QuotationStatus = 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired';
+
+export interface QuotationItem {
+  productId: string;
+  sku: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  ivaRate: number;
+  subtotal: number;
+  total: number;
+}
+
+export interface Quotation {
+  id: string;
+  number: string;
+  date: string;
+  expiryDate: string;
+  clientId: string;
+  clientName: string;
+  clientCuit: string;
+  items: QuotationItem[];
+  subtotal: number;
+  taxTotal: number;
+  totalAmount: number;
+  status: QuotationStatus;
+  notes?: string;
+  tenantId: string;
+  createdAt: any;
+  updatedAt: any;
+}

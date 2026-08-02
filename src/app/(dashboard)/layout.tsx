@@ -1,3 +1,4 @@
+
 'use client';
 
 import { 
@@ -37,7 +38,8 @@ import {
   Layers,
   Map as MapIcon,
   User as UserIcon,
-  Loader2
+  Loader2,
+  FileText
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth, useFirestore, useDoc, useUser } from "@/firebase";
@@ -57,6 +59,7 @@ const SUPER_ADMIN_EMAIL = "leozman15@gmail.com";
 
 const ADMIN_MENU_ITEMS = [
   { id: 'dashboard', title: "Monitor Operativo", icon: LayoutDashboard, href: "/dashboard" },
+  { id: 'presupuestos', title: "Presupuestos Venta", icon: FileText, href: "/presupuestos" },
   { id: 'mercadolibre', title: "Mercado Libre", icon: ShoppingBag, href: "/mercadolibre" },
   { id: 'despacho', title: "Despacho Inteligente", icon: Zap, href: "/despacho" },
   { id: 'flota', title: "Flota de Camiones", icon: Truck, href: "/flota" },
@@ -101,8 +104,11 @@ function DashboardSidebar() {
     if (isDriver) return [];
     if (!tenant) return ADMIN_MENU_ITEMS;
     const enabled = tenant.settings?.enabledModules;
-    if (!enabled || enabled.length === 0) return ADMIN_MENU_ITEMS;
-    return ADMIN_MENU_ITEMS.filter(item => enabled.includes(item.id));
+    
+    return ADMIN_MENU_ITEMS.filter(item => {
+        if (!enabled || enabled.length === 0) return true;
+        return enabled.includes(item.id);
+    });
   }, [tenant, isDriver]);
 
   const handleLinkClick = () => {
@@ -163,7 +169,8 @@ function DashboardSidebar() {
                       <Link href={item.href}>
                         <item.icon className={cn(
                           item.title.includes("Remitos") && "text-indigo-600",
-                          item.title === "Mercado Libre" && "text-yellow-500"
+                          item.title === "Mercado Libre" && "text-yellow-500",
+                          item.id === 'presupuestos' && "text-emerald-600"
                         )} />
                         <span>{item.title}</span>
                       </Link>
@@ -236,7 +243,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setMounted(true);
   }, []);
 
-  // Protección de rutas: El chofer solo ve /rutas
   useEffect(() => {
     if (!loading && role === 'driver') {
       const isAdminPath = pathname !== '/' && !pathname.startsWith('/rutas') && !pathname.startsWith('/cargas');
@@ -247,7 +253,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [role, loading, pathname, router]);
   
   if (loading || !mounted) {
-    return <div className="h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-blue-600" /></div>;
+    return (
+      <div className="h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="animate-spin text-blue-600" />
+      </div>
+    );
   }
 
   return (

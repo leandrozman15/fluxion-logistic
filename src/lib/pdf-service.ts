@@ -2,7 +2,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
-import { Product, Load, Driver, Truck, Tenant, Expense } from "@/app/lib/types";
+import { Product, Load, Driver, Truck, Tenant, Expense, Quotation } from "@/app/lib/types";
 
 /**
  * SERVICIO CENTRAL DE GENERACIÓN DE DOCUMENTOS PDF (LOGÍSTICA AR)
@@ -12,6 +12,7 @@ import { Product, Load, Driver, Truck, Tenant, Expense } from "@/app/lib/types";
 
 const BLUE_LOGISTIC = [37, 99, 235]; // #2563eb
 const SLATE_DARK = [15, 23, 42]; // #0f172a
+const EMERALD_SALE = [5, 150, 105]; // #059669
 
 /**
  * FICHA TÉCNICA DE PRODUCTO (A4)
@@ -52,12 +53,9 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
   doc.setFontSize(14);
   doc.text(product.brand || "MARCA NO ESPECIFICADA", margin, brandY);
 
-  // --- SECCIONES INVERTIDAS: DESCRIPCIÓN ARRIBA, CUADROS ABAJO ---
-
   // 3. DESCRIPCIÓN E IMAGEN (SECCIÓN SUPERIOR)
   const contentY = brandY + 12;
   
-  // Foto del Producto (Lado derecho)
   let photoHeight = 0;
   if (product.photoUrl) {
     try {
@@ -238,7 +236,6 @@ export const generateLoadWalletPDF = async (load: Load, expenses: Expense[], dri
   doc.setFontSize(14);
   doc.text("AUDIT REPORT", pageWidth - margin, 25, { align: "right" });
 
-  // NUEVO: RESUMEN OPERATIVO DEL VIAJE
   doc.setTextColor(0);
   doc.setFontSize(10);
   doc.setFont("helvetica", "bold");
@@ -250,22 +247,18 @@ export const generateLoadWalletPDF = async (load: Load, expenses: Expense[], dri
   const infoY = 62;
   const col2 = pageWidth / 2;
 
-  // Columna 1: Recursos
   doc.text(`CHOFER: ${driver ? `${driver.lastName}, ${driver.firstName}` : "---"}`, margin, infoY);
   doc.text(`DNI: ${driver?.dni || "---"}`, margin, infoY + 5);
   doc.text(`CAMIÓN: ${truck?.plate || "---"} (${truck?.brand || ""} ${truck?.model || ""})`, margin, infoY + 10);
 
-  // Columna 2: Métricas
   const totalDeliveredWeight = load.outboundStops.reduce((acc, s) => acc + (s.deliveredAt ? s.weightKg : 0), 0);
   doc.text(`DISTANCIA RECORRIDA: ${Math.round(load.tracking?.distanceTraveledKm || 0)} KM`, col2, infoY);
   doc.text(`TIEMPO EN RUTA: ${load.tracking?.timeOnRouteMinutes || 0} MIN`, col2, infoY + 5);
   doc.text(`CARGA ENTREGADA: ${totalDeliveredWeight.toLocaleString()} KG`, col2, infoY + 10);
 
-  // Resumen de ruta
   doc.setFont("helvetica", "bold");
   doc.text(`ITINERARIO: ${load.origin.name} -> ${load.outboundStops.length} Paradas -> ${load.isRoundTrip ? 'Retorno' : 'Directo'}`, margin, infoY + 18);
 
-  // II. DETALLE DE COMPROBANTES
   doc.setFontSize(10);
   doc.text("II. DETALLE DE COMPROBANTES REGISTRADOS", margin, infoY + 30);
   
@@ -285,7 +278,6 @@ export const generateLoadWalletPDF = async (load: Load, expenses: Expense[], dri
     margin: { left: margin, right: margin }
   });
 
-  // BALANCE FINAL
   const finalY = (doc as any).lastAutoTable.finalY + 12;
   const totalExpenses = expenses.reduce((acc, e) => acc + (e.amount || 0), 0);
   const advance = load.budget?.initialAdvance || 0;
@@ -307,3 +299,100 @@ export const generateLoadWalletPDF = async (load: Load, expenses: Expense[], dri
 
   doc.save(`Rendicion_${load.orderNumber}.pdf`);
 };
+
+/**
+ * PRESUPUESTO DE VENTA (A4)
+ */
+export const generateQuotationPDF = async (quote: Quotation, tenant?: Tenant) => {
+    const doc = new jsPDF("p", "mm", "a4");
+    const margin = 15;
+    const pageWidth = 210;
+  
+    // HEADER
+    doc.setFillColor(EMERALD_SALE[0], EMERALD_SALE[1], EMERALD_SALE[2]);
+    doc.rect(0, 0, pageWidth, 40, "F");
+    
+    doc.setTextColor(255);
+    doc.setFontSize(22);
+    doc.setFont("helvetica", "bold");
+    doc.text(tenant?.name || "LOGÍSTICA AR", margin, 18);
+    
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.text(`CUIT: ${tenant?.settings?.cuit || "30-XXXXXXXX-X"}`, margin, 24);
+    doc.text(tenant?.settings?.legalAddress || "", margin, 28);
+  
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text("PRESUPUESTO", pageWidth - margin, 20, { align: "right" });
+    doc.setFontSize(24);
+    doc.text(quote.number, pageWidth - margin, 32, { align: "right" });
+  
+    // CLIENTE
+    doc.setTextColor(0);
+    doc.setFontSize(10);
+    doc.text("DATOS DEL CLIENTE", margin, 55);
+    doc.line(margin, 57, pageWidth - margin, 57);
+  
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text(quote.clientName.toUpperCase(), margin, 65);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`CUIT: ${quote.clientCuit}`, margin, 70);
+  
+    doc.setFontSize(9);
+    doc.text(`Fecha de Emisión: ${quote.date}`, pageWidth - margin, 65, { align: "right" });
+    doc.setTextColor(200, 0, 0);
+    doc.text(`Válido hasta: ${quote.expiryDate}`, pageWidth - margin, 70, { align: "right" });
+  
+    // TABLA DE ITEMS
+    const itemRows = quote.items.map(item => [
+      item.sku,
+      item.name.toUpperCase(),
+      item.quantity.toString(),
+      `$${item.unitPrice.toLocaleString()}`,
+      `${item.ivaRate}%`,
+      `$${(item.quantity * item.unitPrice).toLocaleString()}`
+    ]);
+  
+    autoTable(doc, {
+      startY: 80,
+      head: [["SKU", "DESCRIPCIÓN", "CANT", "P. UNIT", "IVA", "SUBTOTAL"]],
+      body: itemRows,
+      headStyles: { fillColor: EMERALD_SALE },
+      styles: { fontSize: 8 },
+      margin: { left: margin, right: margin }
+    });
+  
+    // TOTALES
+    const finalY = (doc as any).lastAutoTable.finalY + 10;
+    doc.setFillColor(248, 250, 252);
+    doc.rect(pageWidth - 95, finalY, 80, 35, "F");
+  
+    doc.setTextColor(100);
+    doc.setFontSize(10);
+    doc.text(`Subtotal Neto:`, pageWidth - 90, finalY + 8);
+    doc.text(`$${quote.subtotal.toLocaleString()}`, pageWidth - margin - 5, finalY + 8, { align: "right" });
+    
+    doc.text(`IVA Total:`, pageWidth - 90, finalY + 15);
+    doc.text(`$${quote.taxTotal.toLocaleString()}`, pageWidth - margin - 5, finalY + 15, { align: "right" });
+  
+    doc.setTextColor(0);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text(`TOTAL ARS:`, pageWidth - 90, finalY + 28);
+    doc.text(`$${quote.totalAmount.toLocaleString()}`, pageWidth - margin - 5, finalY + 28, { align: "right" });
+  
+    // NOTAS
+    if (quote.notes) {
+      doc.setTextColor(150);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "italic");
+      doc.text("Notas y condiciones:", margin, 250);
+      const noteLines = doc.splitTextToSize(quote.notes, pageWidth - (margin * 2));
+      doc.text(noteLines, margin, 254);
+    }
+  
+    doc.save(`Presupuesto_${quote.number}.pdf`);
+  };
