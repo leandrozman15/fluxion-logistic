@@ -29,6 +29,82 @@ export interface AppUser {
   createdAt: any;
 }
 
+export interface Truck {
+  id: string;
+  plate: string;
+  brand: string;
+  model: string;
+  year: number;
+  axles: number;
+  grossCombinedWeightKg: number;
+  unladenWeightKg: number;
+  capacityKg: number;
+  odometerKm: number;
+  avgConsumption: number;
+  status: TruckStatus;
+  hasActiveAlert?: boolean; // NUEVO: Flag para alertas visuales en mapa
+  alertType?: 'security' | 'mechanical' | 'accident';
+  ownershipType: OwnershipType;
+  haulingType: 'standard' | 'bitren' | 'chassis';
+  location?: {
+    city: string;
+    province: string;
+    country: string;
+    lat: number;
+    lng: number;
+  };
+  assignedDriverId?: string;
+  assignedCompanionIds?: string[];
+  avatarUrl?: string;
+  documentation: VehicleDocument[];
+  semiTrailer?: {
+    plate: string;
+    brand: string;
+    model: string;
+    type: string;
+  };
+  bitren?: {
+    type: 'type_a' | 'type_b';
+    firstSemiPlate: string;
+    secondSemiPlate: string;
+    totalAxles: number;
+  };
+  costs?: TruckCosts;
+  updatedAt: any;
+  createdAt: any;
+}
+
+export interface TruckCosts {
+  fixed: {
+    salaryWithSocial: number;
+    insuranceTotal: number;
+    patenteMonthly: number;
+    satelliteGps: number;
+    garageAdmin: number;
+    taxesHabilitations: number;
+    amortization: number;
+  };
+  variable: {
+    preventiveMaintenance: { cost: number; frequencyKm: number };
+    tires: { costFullSet: number; lifeSpanKm: number };
+    unforeseenReservePerKm: number;
+  };
+  operational: {
+    estimatedMonthlyKm: number;
+  };
+}
+
+export interface VehicleDocument {
+  id: string;
+  name: string;
+  category: 'unit' | 'semi' | 'authorization';
+  description: string;
+  expiryDate?: string;
+  status: DocStatus;
+  fileUrl?: string;
+  isRequired: boolean;
+}
+
 export interface ProductWarehouse {
   hubId: string;
   hubName: string;
@@ -459,6 +535,52 @@ export interface Load {
   proofOfDelivery?: ProofOfDelivery;
 }
 
+export interface LoadLegStop {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  province: string;
+  country: Country;
+  zip?: string;
+  phone?: string;
+  contact?: string;
+  lat: number;
+  lng: number;
+  description?: string;
+  weightKg: number;
+  volumeM3: number;
+  units: number;
+  unitType: string;
+  dockName?: string;
+  documents: LoadDocument[];
+  deliveredAt?: string;
+  failedAt?: string;
+  proofOfDelivery?: ProofOfDelivery;
+}
+
+export interface LoadDocument {
+  id: string;
+  type: LoadDocType;
+  number: string;
+  pendingRemitoId?: string;
+  cotNumber?: string;
+  fileUrl: string;
+  uploadedAt: string;
+  leg: 'outbound' | 'return';
+}
+
+export interface ProofOfDelivery {
+  receiverName: string;
+  receiverSignatureUrl: string;
+  driverSignatureUrl?: string;
+  photoUrl?: string;
+  confirmedAt: string;
+  notes?: string;
+  status: 'delivered' | 'failed';
+  failedReason?: 'absent' | 'refused' | 'address_error' | 'other';
+}
+
 export interface OptimizedRouteProposal {
   truckId: string;
   truckPlate: string;
@@ -467,3 +589,94 @@ export interface OptimizedRouteProposal {
   totalDistanceKm: number;
   estimatedDurationMinutes: number;
 }
+
+export interface PendingRemito {
+  id: string;
+  number: string;
+  cotNumber?: string;
+  clientId: string;
+  clientName: string;
+  address: string;
+  city: string;
+  province: string;
+  lat: number;
+  lng: number;
+  weightKg: number;
+  volumeM3: number;
+  items: PendingRemitoItem[];
+  fileUrl?: string;
+  status: 'pending' | 'dispatched' | 'delivered' | 'archived';
+  loadId?: string;
+  dispatchedDate?: string;
+  deliveredAt?: string;
+  createdAt: any;
+  updatedAt: any;
+}
+
+export interface PendingRemitoItem {
+  productId: string;
+  productName: string;
+  sku: string;
+  quantity: number;
+  weightKg: number;
+  volumeM3: number;
+  photoUrl?: string;
+}
+
+export interface Tenant {
+  id: string;
+  name: string;
+  plan: 'free' | 'pro';
+  monthlyFee: number;
+  subscriptionStatus: 'active' | 'suspended';
+  activationDate?: string;
+  expirationDate?: string;
+  settings: TenantSettings;
+  createdAt: any;
+  updatedAt: any;
+}
+
+export interface TenantSettings {
+  logoUrl?: string;
+  cuit: string;
+  country?: string;
+  adminEmail?: string;
+  legalAddress?: string;
+  legalCityState?: string;
+  centralPhone?: string;
+  responsibleName?: string;
+  enabledModules: string[];
+  mapProvider: MapProvider;
+  mapApiKey?: string;
+  fleetEngineEnabled?: boolean;
+  gpsIntervalSeconds: number;
+  onboardingCompleted?: boolean;
+  smtpConfig?: SmtpConfig;
+}
+
+export interface SmtpConfig {
+  user: string;
+  pass: string;
+  fromName?: string;
+}
+
+export interface Expense {
+  id: string;
+  loadId: string;
+  truckId: string;
+  driverId: string;
+  category: ExpenseCategory;
+  amount: number;
+  currency: string;
+  description: string;
+  location: string;
+  receiptNumber?: string;
+  docsPresented?: boolean;
+  status: 'registered' | 'approved' | 'rejected';
+  liters?: number; // Solo para combustible
+  pricePerLiter?: number;
+  createdAt: any;
+  updatedAt: any;
+}
+
+export type ExpenseCategory = 'fuel' | 'toll' | 'meal' | 'lodging' | 'maintenance' | 'other';

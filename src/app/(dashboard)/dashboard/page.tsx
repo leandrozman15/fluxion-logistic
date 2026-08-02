@@ -14,7 +14,6 @@ import {
   CheckCircle2, 
   Calendar, 
   MapPin, 
-  DollarSign, 
   Plus, 
   Activity, 
   Building2, 
@@ -24,50 +23,35 @@ import {
   ArrowRight, 
   Navigation, 
   User, 
-  Scale, 
-  Timer, 
-  Route as RouteIcon,
-  ChevronDown,
-  ChevronUp,
-  FileText,
-  ShieldCheck,
-  Repeat,
-  AlertTriangle,
-  Zap,
-  Gauge,
-  History,
-  Phone,
-  Radio,
-  TrendingUp,
-  ArrowRightLeft,
-  CalendarDays,
-  Anchor,
-  CirclePlay,
-  XCircle,
-  CircleCheck,
-  ListOrdered,
-  Ship,
-  ScanBarcode,
-  MoveRight,
-  Coffee,
-  Home
+  ShieldCheck, 
+  Repeat, 
+  AlertTriangle, 
+  Zap, 
+  TrendingUp, 
+  CalendarDays, 
+  Anchor, 
+  CirclePlay, 
+  CircleCheck, 
+  ListOrdered, 
+  Ship, 
+  ScanBarcode, 
+  Coffee, 
+  Home,
+  Siren
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { calculateDistance, estimateFuelLiters } from "@/lib/utils/tracking-math";
-import { toSafeDate, formatSafeDate } from "@/lib/utils/date-utils";
+import { calculateDistance } from "@/lib/utils/tracking-math";
 import { Truck, Driver, Load, Hub, Client } from "@/app/lib/types";
-import { isToday, startOfMonth, format, formatDistanceToNow, addMinutes, addDays, isAfter, isBefore, startOfDay, endOfDay, parseISO } from "date-fns";
-import { es } from "date-fns/locale";
+import { isToday, format, addDays } from "date-fns";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
@@ -247,17 +231,29 @@ export default function MonitorOperativoPage() {
     iconSize: [36, 36], iconAnchor: [18, 18]
   }) : null;
 
-  const truckIcon = L ? L.divIcon({
-    className: 'custom-truck-icon',
-    html: `<div class="bg-blue-600 text-white p-2 rounded-full shadow-lg border-2 border-white"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9V4"/><path d="M19 18h2a1 1 0 0 0 1-1v-4.24a2 2 0 0 0-.81-1.6l-3.19-2.39A2 2 0 0 0 17 8.17V18Z"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg></div>`,
-    iconSize: [32, 32], iconAnchor: [16, 16]
-  }) : null;
-
-  const clientIcon = L ? L.divIcon({
-    className: 'custom-client-icon',
-    html: `<div class="bg-green-600 text-white p-2 rounded-lg shadow-xl border-2 border-white flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"/><path d="M3 7v1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7H3"/><path d="M19 21V11"/><path d="M5 21V11"/><path d="M12 21V11"/></svg></div>`,
-    iconSize: [32, 32], iconAnchor: [16, 16]
-  }) : null;
+  // NUEVO: truckIcon Dinámico para Alertas
+  const getTruckIcon = (hasAlert: boolean = false) => {
+    if (!L) return null;
+    return L.divIcon({
+      className: 'custom-truck-icon',
+      html: `
+        <div class="relative">
+          ${hasAlert ? '<div class="absolute -inset-2 bg-red-500 rounded-full animate-ping opacity-20"></div>' : ''}
+          <div class="${hasAlert ? 'bg-red-600 animate-pulse' : 'bg-blue-600'} text-white p-2 rounded-full shadow-lg border-2 border-white transition-colors duration-500">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/>
+              <path d="M15 18H9V4"/>
+              <path d="M19 18h2a1 1 0 0 0 1-1v-4.24a2 2 0 0 0-.81-1.6l-3.19-2.39A2 2 0 0 0 17 8.17V18Z"/>
+              <circle cx="7" cy="18" r="2"/>
+              <circle cx="17" cy="18" r="2"/>
+            </svg>
+          </div>
+        </div>
+      `,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16]
+    });
+  };
 
   if (!mounted || !tenantId) return <div className="h-[80vh] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
@@ -309,16 +305,18 @@ export default function MonitorOperativoPage() {
                    <div className={cn("px-6 py-4 flex flex-col lg:flex-row items-start lg:items-center justify-between transition-colors cursor-pointer group hover:bg-slate-50", isExpanded && "bg-blue-50/50 border-l-4 border-l-blue-600")}>
                       <div className="flex items-center gap-5 flex-1 min-w-0" onClick={() => setExpandedLoadId(isExpanded ? null : load.id)}>
                          <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border shadow-sm", 
+                           truck?.hasActiveAlert ? "bg-red-600 text-white animate-pulse border-red-400" :
                            load.status === 'on_route' ? "bg-blue-600 text-white border-blue-400" : 
                            load.status === 'on_pause' ? "bg-amber-500 text-white border-amber-400" :
                            load.status === 'delivered' ? "bg-green-600 text-white border-green-400" :
                            "bg-white text-slate-400 border-slate-200")}>
-                           {load.serviceType === 'customs' ? <Ship size={24}/> : (load.status === 'on_route' ? <Navigation size={24} className="animate-pulse" /> : load.status === 'on_pause' ? <Coffee size={24} /> : <Clock size={24} />)}
+                           {truck?.hasActiveAlert ? <Siren size={24} className="animate-bounce" /> : load.serviceType === 'customs' ? <Ship size={24}/> : (load.status === 'on_route' ? <Navigation size={24} className="animate-pulse" /> : load.status === 'on_pause' ? <Coffee size={24} /> : <Clock size={24} />)}
                          </div>
                          <div className="space-y-1 min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                                <p className="text-base font-black text-slate-900 tracking-tighter">{load.orderNumber}</p>
                                {load.international?.containerNumber && <Badge variant="secondary" className="bg-blue-900 text-white border-none text-[8px] h-4 font-mono px-2"><ScanBarcode size={10} className="mr-1" /> {load.international.containerNumber}</Badge>}
+                               {truck?.hasActiveAlert && <Badge className="bg-red-600 text-white animate-pulse border-none text-[8px] h-4">S.O.S ACTIVO</Badge>}
                             </div>
                             <div className="space-y-1.5 min-w-0">
                                 <div className="flex items-center gap-1.5 overflow-hidden">
@@ -370,7 +368,7 @@ export default function MonitorOperativoPage() {
                                   </div>
                                </div>
                             ) : <div className="p-8 text-center border-2 border-dashed rounded-2xl"><ScanBarcode size={24} className="mx-auto text-slate-200 mb-2" /><p className="text-[10px] text-slate-400 uppercase font-black">Carga General</p></div>}
-                            <div className="pt-4"><Card className="bg-white shadow-none border-slate-200"><CardContent className="p-3 flex justify-between items-center"><div><p className="text-[8px] font-black text-slate-400 uppercase">Recorrido Total Previsto</p><p className="text-xl font-black text-slate-900 italic">{totalPlannedKm} <span className="text-[10px] font-normal opacity-50 uppercase">km</span></p></div><div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600"><RouteIcon size={20} /></div></CardContent></Card></div>
+                            <div className="pt-4"><Card className="bg-white shadow-none border-slate-200"><CardContent className="p-3 flex justify-between items-center"><div><p className="text-[8px] font-black text-slate-400 uppercase">Recorrido Total Previsto</p><p className="text-xl font-black text-slate-900 italic">{totalPlannedKm} <span className="text-[10px] font-normal opacity-50 uppercase">km</span></p></div><div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600"><Navigation size={20} /></div></CardContent></Card></div>
                          </div>
                          <div className="lg:col-span-2 space-y-8">
                             <div className="space-y-4">
@@ -454,7 +452,7 @@ export default function MonitorOperativoPage() {
               return (<Marker key={hub.id} position={[hub.lat || -34.6, hub.lng || -58.3]} icon={icon}><Popup><div className="p-1"><div className="font-bold text-sm">{hub.name}</div><div className="text-xs text-slate-500">{hub.city}</div></div></Popup></Marker>);
             })}
             {L && trucks?.filter(t => t.status === 'in_trip' && t.location?.lat).map((truck) => (
-              <Marker key={truck.id} position={[truck.location!.lat!, truck.location!.lng!]} icon={truckIcon}><Popup><div className="p-1 font-bold text-sm">Patente: {truck.plate}</div></Popup></Marker>
+              <Marker key={truck.id} position={[truck.location!.lat!, truck.location!.lng!]} icon={getTruckIcon(!!truck.hasActiveAlert)}><Popup><div className="p-1 font-bold text-sm">Patente: {truck.plate}</div></Popup></Marker>
             ))}
           </MapContainer>
         )}
@@ -473,3 +471,6 @@ export default function MonitorOperativoPage() {
     </div>
   );
 }
+
+import { addMinutes } from "date-fns";
+import { Radio } from "lucide-react";

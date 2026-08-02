@@ -4,50 +4,31 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
-import { useFirestore, useDoc, useCollection, useUser } from "@/firebase";
-import { doc, updateDoc, serverTimestamp, collection, query, addDoc, arrayUnion, increment, orderBy, getDoc } from "firebase/firestore";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useFirestore, useDoc, useUser } from "@/firebase";
+import { useTenant } from "@/hooks/use-tenant";
+import { doc, updateDoc, serverTimestamp, arrayUnion } from "firebase/firestore";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { 
   Dialog, 
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
   DialogFooter, 
-  DialogDescription, 
-  DialogTrigger 
+  DialogDescription 
 } from "@/components/ui/dialog";
 import { 
   ArrowLeft, MapPin, CheckCircle2, 
-  Truck, Package, FileText, ShieldAlert, Clock, 
-  Navigation, Info, ChevronRight,
-  Plus, DollarSign, Camera, Fuel, Utensils, Bed, Wrench, Receipt,
-  Zap, Satellite, Loader2, Gauge, 
-  Coffee, Moon, Car, Battery, CloudRain, Construction, HelpCircle,
-  Siren, CircleCheck, ListOrdered, XCircle,
-  Timer, Play, Home, ShoppingBag, QrCode, Phone, CheckCircle
+  Loader2, Navigation, Phone, CheckCircle, 
+  XCircle, Camera, Siren, AlertTriangle, ShieldAlert
 } from "lucide-react";
-import { Load, Expense, ExpenseCategory, ProofOfDelivery, Tenant, LoadLegStop } from "@/app/lib/types";
+import { Load, ProofOfDelivery, Truck } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { compressImage } from "@/lib/utils/image-compression";
-import React from 'react';
-import { formatSafeDate, toSafeDate } from "@/lib/utils/date-utils";
 import { SignaturePad } from "@/components/SignaturePad";
-import { calculateDistance } from "@/lib/utils/tracking-math";
-import { calculateRouteDetails } from "@/services/google-maps";
-
-const MapContainer = dynamic(
-  () => import("react-leaflet").then((mod) => mod.MapContainer),
-  { ssr: false, loading: () => <div className="h-48 w-full bg-slate-100 animate-pulse rounded-xl flex items-center justify-center text-xs text-slate-400">Cargando Mapa...</div> }
-);
-const TileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false });
-const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), { ssr: false });
 
 const INCIDENT_REASONS = [
   { id: 'absent', label: 'Cliente Ausente' },
@@ -57,17 +38,24 @@ const INCIDENT_REASONS = [
   { id: 'other', label: 'Otro Motivo' }
 ];
 
+const EMERGENCY_TYPES = [
+  { id: 'security', label: 'PROBLEMA DE SEGURIDAD', icon: ShieldAlert, color: 'bg-red-600' },
+  { id: 'mechanical', label: 'FALLA MECÁNICA / AUXILIO', icon: Siren, color: 'bg-orange-600' },
+  { id: 'accident', label: 'SINIESTRO / ACCIDENTE', icon: AlertTriangle, color: 'bg-red-800' }
+];
+
 export default function RouteDetailPage() {
   const { id } = useParams();
   const router = useRouter();
   const db = useFirestore();
+  const { tenantId } = useTenant();
   const { user } = useUser();
   const { toast } = useToast();
   
-  const [activeTab, setActiveTab] = useState("mission");
   const [isUpdating, setIsUpdating] = useState(false);
   const [isPodOpen, setIsPodOpen] = useState(false);
   const [isFailedOpen, setIsFailedOpen] = useState(false);
+  const [isEmergencyOpen, setIsEmergencyOpen] = useState(false);
   
   const photoInputRef = useRef<HTMLInputElement>(null);
 
@@ -80,7 +68,7 @@ export default function RouteDetailPage() {
     status: 'delivered'
   });
 
-  const loadRef = useMemo(() => (db && id) ? doc(db, "loads", id as string) : null, [db, id]);
+  const loadRef = useMemo(() => (db && tenantId && id) ? doc(db, "tenants", tenantId, "loads", id as string) : null, [db, tenantId, id]);
   const { data: load, loading: loadLoading } = useDoc<Load>(loadRef);
 
   const currentStop = useMemo(() => {
@@ -151,6 +139,42 @@ export default function RouteDetailPage() {
     }
   };
 
+  const handleTriggerEmergency = async (type: string, label: string) => {
+    if (!db || !tenantId || !load?.assignedTruckId || !loadRef) return;
+    setIsUpdating(true);
+    try {
+      // 1. Marcar el camión en alerta para el panel central
+      const truckRef = doc(db, "tenants", tenantId, "trucks", load.assignedTruckId);
+      await updateDoc(truckRef, {
+        hasActiveAlert: true,
+        alertType: type,
+        updatedAt: serverTimestamp()
+      });
+
+      // 2. Registrar la alerta en el viaje
+      await updateDoc(loadRef, {
+        status: 'incident',
+        "tracking.alerts": arrayUnion({
+          type: 'critical',
+          message: `S.O.S CONDUCTOR: ${label}`,
+          timestamp: new Date().toISOString()
+        }),
+        updatedAt: serverTimestamp()
+      });
+
+      toast({ 
+        variant: "destructive", 
+        title: "ALERTA ENVIADA", 
+        description: "La central ha sido notificada de su emergencia." 
+      });
+      setIsEmergencyOpen(false);
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al enviar alerta" });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   if (loadLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!load) return <div className="p-10 text-center">Viaje no encontrado.</div>;
 
@@ -209,6 +233,14 @@ export default function RouteDetailPage() {
                 <span className="text-[10px] uppercase">No Entregado</span>
              </Button>
           </div>
+
+          <Button 
+            variant="destructive" 
+            className="w-full h-16 rounded-2xl font-black text-lg shadow-2xl animate-pulse flex items-center gap-3"
+            onClick={() => setIsEmergencyOpen(true)}
+          >
+            <Siren size={32} /> S.O.S / EMERGENCIA
+          </Button>
         </div>
       ) : (
         <div className="h-[60vh] flex flex-col items-center justify-center text-center space-y-6">
@@ -224,6 +256,32 @@ export default function RouteDetailPage() {
            </Button>
         </div>
       )}
+
+      {/* DIALOG EMERGENCIA (NUEVO) */}
+      <Dialog open={isEmergencyOpen} onOpenChange={setIsEmergencyOpen}>
+        <DialogContent className="max-w-[95vw] rounded-[2.5rem] p-8 border-none shadow-2xl bg-red-50">
+           <DialogHeader>
+              <DialogTitle className="text-2xl font-black uppercase italic tracking-tighter text-red-700">Protocolo de Auxilio</DialogTitle>
+              <DialogDescription className="text-[10px] font-bold uppercase text-red-400">Su ubicación será enviada a la central de monitoreo inmediatamente</DialogDescription>
+           </DialogHeader>
+           <div className="flex flex-col gap-4 py-6">
+              {EMERGENCY_TYPES.map(e => (
+                <Button 
+                  key={e.id} 
+                  className={cn("h-20 justify-start gap-4 px-6 rounded-3xl font-black text-sm uppercase text-white shadow-xl", e.color)}
+                  onClick={() => handleTriggerEmergency(e.id, e.label)}
+                  disabled={isUpdating}
+                >
+                   <e.icon size={32} />
+                   <span>{e.label}</span>
+                </Button>
+              ))}
+           </div>
+           <DialogFooter>
+              <Button variant="ghost" className="w-full text-slate-400 font-bold" onClick={() => setIsEmergencyOpen(false)}>CANCELAR ALERTA</Button>
+           </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* DIALOG ENTREGADO */}
       <Dialog open={isPodOpen} onOpenChange={setIsPodOpen}>

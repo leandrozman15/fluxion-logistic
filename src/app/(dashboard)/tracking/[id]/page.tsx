@@ -4,23 +4,23 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
-import { useFirestore, useDoc } from "@/firebase";
+import { useFirestore, useDoc, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc, updateDoc, serverTimestamp, increment, arrayUnion } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp, increment, arrayUnion, collection } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
-  Truck, MapPin, Navigation, Clock, Gauge, 
+  Truck as TruckIcon, MapPin, Navigation, Clock, Gauge, 
   Fuel, ArrowLeft, RefreshCw, 
   Activity, Phone, MessageSquare, ShieldAlert,
-  Compass, Zap, Loader2
+  Compass, Zap, Loader2, Siren
 } from "lucide-react";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, 
   Tooltip, ResponsiveContainer, ReferenceLine 
 } from "recharts";
-import { Load } from "@/app/lib/types";
+import { Load, Truck } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { estimateFuelFactor } from "@/lib/utils/tracking-math";
@@ -60,6 +60,14 @@ export default function LiveTrackingPage() {
 
   const { data: load, loading } = useDoc<Load>(loadRef);
 
+  const trucksQuery = useMemo(() => {
+    if (!db || !tenantId) return null;
+    return collection(db, "tenants", tenantId, "trucks");
+  }, [db, tenantId]);
+
+  const { data: allTrucks } = useCollection<Truck>(trucksQuery);
+  const truck = useMemo(() => allTrucks?.find(t => t.id === load?.assignedTruckId), [allTrucks, load?.assignedTruckId]);
+
   useEffect(() => {
     if (load) loadRefData.current = load;
   }, [load]);
@@ -67,7 +75,6 @@ export default function LiveTrackingPage() {
   useEffect(() => {
     if (!isSimulating || !loadRef) return;
 
-    // Simulación ajustada a 1 minuto (60000ms) para ahorro de costos y ancho de banda
     const interval = setInterval(async () => {
       const currentLoad = loadRefData.current;
       if (!currentLoad) return;
@@ -90,15 +97,14 @@ export default function LiveTrackingPage() {
         timestamp: new Date().toISOString()
       };
 
-      const fuelDelta = (estimateFuelFactor(newSpeed) * 0.016); // Estimación consumo en 1 min
+      const fuelDelta = (estimateFuelFactor(newSpeed) * 0.016); 
 
-      // Usamos increment() y arrayUnion() para eficiencia extrema
       await updateDoc(loadRef, {
         "tracking.currentLat": newLat,
         "tracking.currentLng": newLng,
         "tracking.currentSpeed": newSpeed,
         "tracking.maxSpeed": newSpeed > (currentLoad.tracking?.maxSpeed || 0) ? newSpeed : (currentLoad.tracking?.maxSpeed || 0),
-        "tracking.distanceTraveledKm": increment(1.2), // ~70km/h son ~1.2km por minuto
+        "tracking.distanceTraveledKm": increment(1.2), 
         "tracking.distanceRemainingKm": increment(-1.2),
         "tracking.estimatedFuelLiters": increment(fuelDelta),
         "tracking.history": arrayUnion(newPoint),
@@ -109,12 +115,28 @@ export default function LiveTrackingPage() {
     return () => clearInterval(interval);
   }, [isSimulating, loadRef]);
 
-  const truckIcon = L ? L.divIcon({
-    className: 'custom-truck-icon',
-    html: `<div class="bg-blue-600 text-white p-2 rounded-full shadow-2xl border-4 border-white animate-bounce"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9V4"/><path d="M19 18h2a1 1 0 0 0 1-1v-4.24a2 2 0 0 0-.81-1.6l-3.19-2.39A2 2 0 0 0 17 8.17V18Z"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg></div>`,
-    iconSize: [40, 40],
-    iconAnchor: [20, 20]
-  }) : null;
+  const getTruckIcon = (hasAlert: boolean = false) => {
+    if (!L) return null;
+    return L.divIcon({
+      className: 'custom-truck-icon',
+      html: `
+        <div class="relative">
+          ${hasAlert ? '<div class="absolute -inset-4 bg-red-500 rounded-full animate-ping opacity-30"></div>' : ''}
+          <div class="${hasAlert ? 'bg-red-600 animate-pulse' : 'bg-blue-600'} text-white p-2 rounded-full shadow-2xl border-4 border-white transition-colors duration-500">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/>
+              <path d="M15 18H9V4"/>
+              <path d="M19 18h2a1 1 0 0 0 1-1v-4.24a2 2 0 0 0-.81-1.6l-3.19-2.39A2 2 0 0 0 17 8.17V18Z"/>
+              <circle cx="7" cy="18" r="2"/>
+              <circle cx="17" cy="18" r="2"/>
+            </svg>
+          </div>
+        </div>
+      `,
+      iconSize: [40, 40],
+      iconAnchor: [20, 20]
+    });
+  };
 
   const breadcrumbs = useMemo(() => {
     if (!load?.tracking?.history) return [];
@@ -143,10 +165,10 @@ export default function LiveTrackingPage() {
               <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-100 font-mono">
                 #{load.orderNumber}
               </Badge>
-              {isSimulating && <Badge className="bg-red-500 animate-pulse border-none">Live Transmission</Badge>}
+              {truck?.hasActiveAlert && <Badge className="bg-red-600 text-white animate-pulse border-none flex items-center gap-1"><Siren size={10}/> EMERGENCIA ACTIVA</Badge>}
             </div>
             <p className="text-sm text-slate-500 flex items-center gap-1">
-              <Truck size={14} className="text-blue-600" /> {load.clientName} | Ruta: {load.origin.province} → {load.outboundStops?.[load.outboundStops.length-1]?.province || 'Destino'}
+              <TruckIcon size={14} className="text-blue-600" /> {load.clientName} | Ruta: {load.origin.province} → {load.outboundStops?.[load.outboundStops.length-1]?.province || 'Destino'}
             </p>
           </div>
         </div>
@@ -230,7 +252,7 @@ export default function LiveTrackingPage() {
 
                  <Marker 
                    position={[tracking?.currentLat || -34.6037, tracking?.currentLng || -58.3816]} 
-                   icon={truckIcon}
+                   icon={getTruckIcon(!!truck?.hasActiveAlert)}
                  >
                    <Popup>
                      <div className="font-bold">Orden: {load.orderNumber}</div>
@@ -291,7 +313,7 @@ export default function LiveTrackingPage() {
                     {tracking?.alerts?.map((alert, i) => (
                       <div key={i} className="flex gap-3 text-xs border-l border-white/10 pl-3">
                          <span className="opacity-40 font-mono">{(alert.timestamp as any)?.toDate ? format((alert.timestamp as any).toDate(), "HH:mm") : '14:35'}</span>
-                         <span className={alert.type === 'warning' ? "text-yellow-400" : alert.type === 'critical' ? "text-red-500" : "text-green-400"}>{alert.message}</span>
+                         <span className={alert.type === 'warning' ? "text-yellow-400" : alert.type === 'critical' ? "text-red-500 font-bold" : "text-green-400"}>{alert.message}</span>
                       </div>
                     )) || (
                       <div className="text-[10px] text-white/30 italic">Sin alertas en la jornada actual.</div>
