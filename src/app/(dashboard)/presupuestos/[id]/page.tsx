@@ -121,7 +121,7 @@ export default function QuotationDetailPage() {
                </div>
                <div className="space-y-1">
                   <p className="text-[9px] font-black uppercase text-slate-400">Moneda / Camb.</p>
-                  <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><Landmark size={12} className="text-blue-500" /> {quote.currency} (1 = ${quote.exchangeRate})</p>
+                  <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><Landmark size={12} className="text-blue-500" /> {quote.currency} (1 = ${(quote.exchangeRate || 1).toLocaleString()})</p>
                </div>
             </CardContent>
 
@@ -152,9 +152,9 @@ export default function QuotationDetailPage() {
                                 </div>
                             </TableCell>
                             <TableCell className="text-center font-black text-slate-700">{item.quantity} <span className="text-[8px] font-normal opacity-50 uppercase">{item.unit}</span></TableCell>
-                            <TableCell className="text-right text-xs font-medium text-slate-500">${item.unitPrice.toLocaleString()}</TableCell>
+                            <TableCell className="text-right text-xs font-medium text-slate-500">${(item.unitPrice || 0).toLocaleString()}</TableCell>
                             <TableCell className="text-right text-[10px] font-bold text-red-500">-{item.discountPercent}%</TableCell>
-                            <TableCell className="text-right pr-8 font-black text-slate-900">${item.subtotal.toLocaleString()}</TableCell>
+                            <TableCell className="text-right pr-8 font-black text-slate-900">${(item.subtotal || 0).toLocaleString()}</TableCell>
                           </TableRow>
                         ))}
                     </TableBody>
@@ -223,17 +223,17 @@ export default function QuotationDetailPage() {
                  <CardTitle className="text-sm font-black uppercase flex items-center gap-2 text-emerald-400"><Calculator size={18}/> Liquidación Comercial</CardTitle>
               </CardHeader>
               <CardContent className="p-8 space-y-4">
-                 <div className="flex justify-between text-xs opacity-60 uppercase font-bold"><span>Suma Netos</span><span>${quote.subtotal.toLocaleString()}</span></div>
-                 <div className="flex justify-between text-xs text-red-400 uppercase font-black"><span>(-) Descuento Gral.</span><span>-${quote.commercialDiscount.toLocaleString()}</span></div>
-                 <div className="flex justify-between text-xs text-blue-400 uppercase font-black"><span>(+) Recargo Logístico</span><span>+${quote.logisticSurcharge.toLocaleString()}</span></div>
-                 <div className="flex justify-between text-xs opacity-60 uppercase font-bold"><span>IVA Gravado</span><span>${quote.taxTotal.toLocaleString()}</span></div>
+                 <div className="flex justify-between text-xs opacity-60 uppercase font-bold"><span>Suma Netos</span><span>${(quote.subtotal || 0).toLocaleString()}</span></div>
+                 <div className="flex justify-between text-xs text-red-400 uppercase font-black"><span>(-) Descuento Gral.</span><span>-${(quote.commercialDiscount || 0).toLocaleString()}</span></div>
+                 <div className="flex justify-between text-xs text-blue-400 uppercase font-black"><span>(+) Recargo Logístico</span><span>+${(quote.logisticSurcharge || 0).toLocaleString()}</span></div>
+                 <div className="flex justify-between text-xs opacity-60 uppercase font-bold"><span>IVA Gravado</span><span>${(quote.taxTotal || 0).toLocaleString()}</span></div>
                  <div className="pt-6 border-t border-white/10 flex flex-col items-center gap-1">
                     <p className="text-[10px] font-black uppercase text-emerald-400 tracking-[0.3em]">VALOR FINAL DE OPERACIÓN</p>
                     <p className="text-5xl font-black italic tracking-tighter text-emerald-400 leading-none">
-                       {quote.currency === 'ARS' ? '$' : quote.currency + ' '} {quote.totalAmount.toLocaleString()}
+                       {quote.currency === 'ARS' ? '$' : quote.currency + ' '} {(quote.totalAmount || 0).toLocaleString()}
                     </p>
                     {quote.currency !== 'ARS' && (
-                        <p className="text-[9px] font-bold text-white/30 uppercase mt-2">Ref: ARS ${(quote.totalAmount * quote.exchangeRate).toLocaleString()}</p>
+                        <p className="text-[9px] font-bold text-white/30 uppercase mt-2">Ref: ARS ${((quote.totalAmount || 0) * (quote.exchangeRate || 1)).toLocaleString()}</p>
                     )}
                  </div>
               </CardContent>

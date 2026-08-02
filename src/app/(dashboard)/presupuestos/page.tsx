@@ -1,9 +1,9 @@
 
 'use client';
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useCollection } from "@/firebase";
+import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { collection, query, orderBy, deleteDoc, doc } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -33,10 +33,11 @@ import {
     AlertDialogHeader, 
     AlertDialogTitle 
 } from "@/components/ui/alert-dialog";
-import { Quotation, QuotationStatus } from "@/app/lib/types";
+import { Quotation, QuotationStatus, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { generateQuotationPDF } from "@/lib/pdf-service";
 
 export default function PresupuestosPage() {
   const db = useFirestore();
@@ -44,6 +45,7 @@ export default function PresupuestosPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
+  const [isDownloadingId, setIsDownloadingId] = useState<string | null>(null);
   
   // AlertDialog state
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -56,6 +58,9 @@ export default function PresupuestosPage() {
 
   const { data: quotes, loading } = useCollection<Quotation>(quotesQuery);
 
+  const tenantRef = useMemo(() => (db && tenantId) ? doc(db, "tenants", tenantId) : null, [db, tenantId]);
+  const { data: tenant } = useDoc<Tenant>(tenantRef);
+
   const filteredQuotes = useMemo(() => {
     if (!quotes) return [];
     return quotes.filter(q => 
@@ -63,6 +68,18 @@ export default function PresupuestosPage() {
       (q.clientName || "").toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [quotes, searchTerm]);
+
+  const handleDownloadPDF = async (quote: Quotation) => {
+    setIsDownloadingId(quote.id);
+    try {
+      await generateQuotationPDF(quote, tenant || undefined);
+      toast({ title: "PDF Generado", description: `Se ha descargado la cotización ${quote.number}.` });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al generar PDF" });
+    } finally {
+      setIsDownloadingId(null);
+    }
+  };
 
   const confirmDelete = async () => {
     if (!db || !tenantId || !deleteId) return;
@@ -154,7 +171,7 @@ export default function PresupuestosPage() {
                             <span className="text-[10px] text-red-500 font-bold flex items-center gap-1"><Clock size={10} /> Exp: {quote.expiryDate}</span>
                          </div>
                       </TableCell>
-                      <TableCell className="font-black text-slate-800">${quote.totalAmount.toLocaleString()}</TableCell>
+                      <TableCell className="font-black text-slate-800">${(quote.totalAmount || 0).toLocaleString()}</TableCell>
                       <TableCell>{getStatusBadge(quote.status)}</TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
@@ -165,8 +182,13 @@ export default function PresupuestosPage() {
                             <DropdownMenuItem asChild className="cursor-pointer font-bold h-10 rounded-lg">
                               <Link href={`/presupuestos/${quote.id}`}><Eye className="w-4 h-4 mr-2" /> Ver Detalle</Link>
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="font-bold h-10 rounded-lg cursor-pointer">
-                              <Download className="w-4 h-4 mr-2" /> Bajar PDF
+                            <DropdownMenuItem 
+                              className="font-bold h-10 rounded-lg cursor-pointer"
+                              onClick={() => handleDownloadPDF(quote)}
+                              disabled={isDownloadingId === quote.id}
+                            >
+                              {isDownloadingId === quote.id ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Download className="w-4 h-4 mr-2" />} 
+                              Bajar PDF
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem 

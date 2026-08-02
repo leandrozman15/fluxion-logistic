@@ -130,7 +130,6 @@ export default function NewQuotationPage() {
     const commercialDiscount = gDiscount;
     const taxableBase = subtotal + logisticSurcharge - commercialDiscount;
     
-    // Simplificación de IVA para el MVP (promediado o por ítem)
     const taxTotal = items.reduce((acc, item) => {
         const itemNet = (item.quantity * item.unitPrice * (1 - item.discountPercent/100));
         return acc + (itemNet * (item.ivaRate / 100));
@@ -187,7 +186,7 @@ export default function NewQuotationPage() {
         clientId: id, 
         clientName: client.name, 
         clientCuit: client.cuit,
-        deliveryAddress: `${client.address.street} ${client.address.number}, ${client.address.city}`
+        deliveryAddress: `${client.address?.street || ''} ${client.address?.number || ''}, ${client.address?.city || ''}`
       }));
     }
   };
@@ -305,7 +304,7 @@ export default function NewQuotationPage() {
               <CardHeader className="border-b p-8 flex flex-row items-center justify-between">
                  <div className="flex items-center gap-3">
                     <CardTitle className="text-sm font-black uppercase italic">Catálogo de Artículos</CardTitle>
-                    <Badge className="bg-blue-600 text-white border-none font-black text-[10px]">{formData.items?.length || 0} LÍNEAS</Badge>
+                    <Badge className="bg-blue-600 text-white border-none font-black text-[10px]">{(formData.items?.length || 0)} LÍNEAS</Badge>
                  </div>
                  <div className="relative w-64">
                     <ScanBarcode className="absolute left-3 top-2.5 h-4 w-4 text-blue-500" />
@@ -354,7 +353,7 @@ export default function NewQuotationPage() {
                     {selectedProduct && (
                        <div className="flex items-center gap-4 px-1 py-1 animate-in fade-in">
                           <div className="flex items-center gap-1.5 text-[9px] font-black uppercase text-slate-400">
-                             <Boxes size={12}/> Stock Disponible: <span className={cn(selectedProduct.stockQuantity <= 0 ? "text-red-500" : "text-green-600")}>{selectedProduct.stockQuantity} {selectedProduct.unitType}s</span>
+                             <Boxes size={12}/> Stock Disponible: <span className={cn((selectedProduct.stockQuantity || 0) <= 0 ? "text-red-500" : "text-green-600")}>{(selectedProduct.stockQuantity || 0)} {selectedProduct.unitType}s</span>
                           </div>
                           <div className="h-3 w-[1px] bg-slate-200"></div>
                           <div className="text-[9px] font-black uppercase text-slate-400">Depósito: <span className="text-slate-600">{selectedProduct.warehouses?.[0]?.hubName || 'Base Central'}</span></div>
@@ -377,10 +376,10 @@ export default function NewQuotationPage() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {formData.items?.length === 0 ? (
+                          {(!formData.items || formData.items.length === 0) ? (
                             <TableRow><TableCell colSpan={8} className="text-center py-16 text-slate-300 italic uppercase text-[10px] font-black tracking-widest">Inicie la carga de ítems mediante búsqueda o escaneo</TableCell></TableRow>
                           ) : (
-                            formData.items?.map((item, i) => (
+                            formData.items.map((item, i) => (
                               <TableRow key={i} className="hover:bg-slate-50/50">
                                   <TableCell className="pl-8">
                                     <div className="w-10 h-10 rounded-lg bg-slate-50 border overflow-hidden flex items-center justify-center">
@@ -394,10 +393,10 @@ export default function NewQuotationPage() {
                                     </div>
                                   </TableCell>
                                   <TableCell className="text-center font-black text-slate-900">{item.quantity} <span className="text-[8px] text-slate-400 font-normal">{item.unit}</span></TableCell>
-                                  <TableCell className="text-right font-medium text-slate-600">${item.unitPrice.toLocaleString()}</TableCell>
+                                  <TableCell className="text-right font-medium text-slate-600">${(item.unitPrice || 0).toLocaleString()}</TableCell>
                                   <TableCell className="text-right text-red-500 font-bold">-{item.discountPercent}%</TableCell>
                                   <TableCell className="text-right text-[10px] font-bold text-slate-400">{item.ivaRate}%</TableCell>
-                                  <TableCell className="text-right pr-8 font-black text-slate-900 text-sm italic">${item.total.toLocaleString()}</TableCell>
+                                  <TableCell className="text-right pr-8 font-black text-slate-900 text-sm italic">${(item.total || 0).toLocaleString()}</TableCell>
                                   <TableCell className="pr-4"><Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50" onClick={() => handleRemoveItem(i)}><Trash2 size={14}/></Button></TableCell>
                               </TableRow>
                             ))
@@ -509,7 +508,7 @@ export default function NewQuotationPage() {
                        <span className="text-[10px] font-black text-emerald-400 uppercase italic tracking-[0.2em]">VALOR FINAL FACTURABLE</span>
                        <span className="text-5xl font-black italic tracking-tighter text-emerald-400">${(formData.totalAmount || 0).toLocaleString()}</span>
                        {formData.currency !== 'ARS' && (
-                         <p className="text-[9px] font-bold text-white/30 uppercase mt-1">Cotización Ref: ARS ${(formData.totalAmount! * (formData.exchangeRate || 1)).toLocaleString()}</p>
+                         <p className="text-[9px] font-bold text-white/30 uppercase mt-1">Cotización Ref: ARS ${((formData.totalAmount || 0) * (formData.exchangeRate || 1)).toLocaleString()}</p>
                        )}
                     </div>
                  </div>
