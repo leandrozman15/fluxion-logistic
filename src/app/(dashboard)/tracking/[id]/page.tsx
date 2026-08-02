@@ -23,6 +23,7 @@ import {
 import { Load, Truck } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { format, addMinutes } from "date-fns";
+import { cn } from "@/lib/utils";
 import { estimateFuelFactor, calculateAdjustedETA, calculateLiveDelay } from "@/lib/utils/tracking-math";
 
 const MapContainer = dynamic(
