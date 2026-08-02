@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -23,12 +22,15 @@ import {
 import { 
   ArrowLeft, MapPin, CheckCircle2, 
   Loader2, Navigation, Phone, CheckCircle, 
-  XCircle, Camera, Siren, AlertTriangle, ShieldAlert
+  XCircle, Camera, Siren, AlertTriangle, ShieldAlert,
+  MessageCircle,
+  Headset
 } from "lucide-react";
-import { Load, ProofOfDelivery, Truck } from "@/app/lib/types";
+import { Load, ProofOfDelivery, Truck, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { SignaturePad } from "@/components/SignaturePad";
+import { normalizePhone, buildWaMeUrl } from "@/lib/utils/whatsapp";
 
 const INCIDENT_REASONS = [
   { id: 'absent', label: 'Cliente Ausente' },
@@ -71,6 +73,9 @@ export default function RouteDetailPage() {
   const loadRef = useMemo(() => (db && tenantId && id) ? doc(db, "tenants", tenantId, "loads", id as string) : null, [db, tenantId, id]);
   const { data: load, loading: loadLoading } = useDoc<Load>(loadRef);
 
+  const tenantRef = useMemo(() => (db && tenantId) ? doc(db, "tenants", tenantId) : null, [db, tenantId]);
+  const { data: tenant } = useDoc<Tenant>(tenantRef);
+
   const currentStop = useMemo(() => {
     if (!load?.outboundStops) return null;
     return load.outboundStops.find(s => !s.deliveredAt && !s.failedAt);
@@ -83,6 +88,21 @@ export default function RouteDetailPage() {
       window.open(url, '_blank');
     } else {
       window.open(`tel:${currentStop.phone}`, '_self');
+    }
+  };
+
+  const handleContactCentral = (type: 'call' | 'whatsapp') => {
+    const centralPhone = tenant?.settings?.centralPhone;
+    if (!centralPhone) {
+      toast({ variant: "destructive", title: "Número no configurado", description: "La central no ha definido un número de contacto." });
+      return;
+    }
+
+    const normalized = normalizePhone(centralPhone);
+    if (type === 'call') {
+      window.open(`tel:${normalized}`, '_self');
+    } else {
+      window.open(buildWaMeUrl(normalized!, `Hola Central, soy el chofer del viaje ${load?.orderNumber}.`), '_blank');
     }
   };
 
@@ -143,7 +163,6 @@ export default function RouteDetailPage() {
     if (!db || !tenantId || !load?.assignedTruckId || !loadRef) return;
     setIsUpdating(true);
     try {
-      // 1. Marcar el camión en alerta para el panel central
       const truckRef = doc(db, "tenants", tenantId, "trucks", load.assignedTruckId);
       await updateDoc(truckRef, {
         hasActiveAlert: true,
@@ -151,7 +170,6 @@ export default function RouteDetailPage() {
         updatedAt: serverTimestamp()
       });
 
-      // 2. Registrar la alerta en el viaje
       await updateDoc(loadRef, {
         status: 'incident',
         "tracking.alerts": arrayUnion({
@@ -234,6 +252,22 @@ export default function RouteDetailPage() {
              </Button>
           </div>
 
+          <Card className="border-none shadow-md rounded-[2.5rem] bg-white overflow-hidden">
+             <CardHeader className="bg-slate-50 py-4 border-b">
+                <CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                   <Headset size={14} className="text-blue-600" /> Comunicación con Central
+                </CardTitle>
+             </CardHeader>
+             <CardContent className="p-4 grid grid-cols-2 gap-3">
+                <Button variant="outline" className="h-12 rounded-2xl font-bold text-[10px] uppercase border-slate-200" onClick={() => handleContactCentral('call')}>
+                   <Phone size={14} className="mr-2 text-blue-600" /> Llamada Voz
+                </Button>
+                <Button variant="outline" className="h-12 rounded-2xl font-bold text-[10px] uppercase border-green-200 text-green-700 bg-green-50" onClick={() => handleContactCentral('whatsapp')}>
+                   <MessageCircle size={14} className="mr-2" /> WhatsApp
+                </Button>
+             </CardContent>
+          </Card>
+
           <Button 
             variant="destructive" 
             className="w-full h-16 rounded-2xl font-black text-lg shadow-2xl animate-pulse flex items-center gap-3"
@@ -257,7 +291,7 @@ export default function RouteDetailPage() {
         </div>
       )}
 
-      {/* DIALOG EMERGENCIA (NUEVO) */}
+      {/* DIALOG EMERGENCIA */}
       <Dialog open={isEmergencyOpen} onOpenChange={setIsEmergencyOpen}>
         <DialogContent className="max-w-[95vw] rounded-[2.5rem] p-8 border-none shadow-2xl bg-red-50">
            <DialogHeader>
@@ -330,7 +364,7 @@ export default function RouteDetailPage() {
            </DialogHeader>
            <div className="grid grid-cols-1 gap-3 py-6">
               {INCIDENT_REASONS.map(r => (
-                <Button key={r.id} variant="outline" className="h-14 justify-start px-6 rounded-2xl font-black text-xs uppercase border-2 hover:bg-red-50 hover:border-red-200" onClick={() => handleReportFailure(r.id)}>
+                <Button key={r.id} variant="outline" className="h-14 justify-start px-6 rounded-2xl font-black text-xs uppercase border-2 hover:bg-red-50 hover:border-red-200" onClick={() => handleReportFailure(r.id as any)}>
                    {r.label}
                 </Button>
               ))}

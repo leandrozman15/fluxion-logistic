@@ -1,11 +1,10 @@
-
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useCollection, useUser } from "@/firebase";
+import { useFirestore, useCollection, useUser, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, where, orderBy, updateDoc, doc, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, orderBy, doc } from "firebase/firestore";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,14 +27,17 @@ import {
   User,
   ShoppingBag,
   Truck,
-  Zap
+  Zap,
+  MessageCircle,
+  Headset
 } from "lucide-react";
-import { Load, LoadStatus } from "@/app/lib/types";
+import { Load, LoadStatus, Tenant } from "@/app/lib/types";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import { format, addDays, isSameDay, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
+import { normalizePhone, buildWaMeUrl } from "@/lib/utils/whatsapp";
 
 export default function DriverRoutesPage() {
   const db = useFirestore();
@@ -45,6 +47,11 @@ export default function DriverRoutesPage() {
   const router = useRouter();
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
+
+  const tenantRef = useMemo(() => (db && tenantId) ? doc(db, "tenants", tenantId) : null, [db, tenantId]);
+  const { data: tenant } = useDoc<Tenant>(tenantRef);
+
   const dateRange = useMemo(() => {
     const dates = [];
     for (let i = -4; i <= 4; i++) {
@@ -53,12 +60,9 @@ export default function DriverRoutesPage() {
     return dates;
   }, []);
 
-  const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
-
   const routesQuery = useMemo(() => {
     if (!db || !tenantId) return null;
     
-    // Si es chofer, solo ver sus rutas asignadas
     if (role === 'driver' && user?.uid) {
       return query(
         collection(db, "tenants", tenantId, "loads"), 
@@ -105,6 +109,21 @@ export default function DriverRoutesPage() {
     }
   };
 
+  const handleContactCentral = (type: 'call' | 'whatsapp') => {
+    const centralPhone = tenant?.settings?.centralPhone;
+    if (!centralPhone) {
+      toast({ variant: "destructive", title: "Número no configurado", description: "La central no ha definido un número de contacto." });
+      return;
+    }
+
+    const normalized = normalizePhone(centralPhone);
+    if (type === 'call') {
+      window.open(`tel:${normalized}`, '_self');
+    } else {
+      window.open(buildWaMeUrl(normalized!, "Hola, soy el chofer del viaje activo. Necesito comunicarme."), '_blank');
+    }
+  };
+
   const filteredRoutes = useMemo(() => {
     if (!routes) return [];
     return routes.filter(r => r.pickupDate === selectedDate);
@@ -135,9 +154,14 @@ export default function DriverRoutesPage() {
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Asistente Digital para Conducción</p>
           </div>
         </div>
-        <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-white shadow-sm border border-slate-100 text-blue-600" asChild>
-          <Link href="/rutas/perfil"><User size={20} /></Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 border border-blue-100" onClick={() => handleContactCentral('call')}>
+            <Headset size={20} />
+          </Button>
+          <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-white shadow-sm border border-slate-100 text-blue-600" asChild>
+            <Link href="/rutas/perfil"><User size={20} /></Link>
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 px-2">

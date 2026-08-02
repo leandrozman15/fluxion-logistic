@@ -1,37 +1,38 @@
-
 /**
- * Normalizes Brazilian phone numbers to E.164 format (55 + DDD + number).
+ * Normalizes phone numbers to E.164 format.
+ * Defaults to Argentina (54) for LogisticaAr, but keeps flexibility.
  */
-export function normalizePhoneBR(phone: string): string | null {
+export function normalizePhone(phone: string, defaultCountryCode = "54"): string | null {
   if (!phone) return null;
   
   // Remove all non-digit characters
-  const digits = phone.replace(/\D/g, "");
+  let digits = phone.replace(/\D/g, "");
   
-  // Basic validation for Brazilian numbers
-  // Format: 55 (country) + 11 (DDD) + 9 (mobile prefix) + 8 digits = 13 total
-  // Or: 55 (country) + 11 (DDD) + 8 digits = 12 total
-  // Or: 11 (DDD) + 9 (mobile prefix) + 8 digits = 11 total
-  // Or: 11 (DDD) + 8 digits = 10 total
-  
-  let normalized = digits;
-  
-  // If it doesn't have the country code, add it
-  if (normalized.length === 10 || normalized.length === 11) {
-    normalized = "55" + normalized;
+  // If it already has a long international format (e.g. 54911...), return as is
+  if (digits.length >= 12 && (digits.startsWith("54") || digits.startsWith("55"))) {
+    return digits;
+  }
+
+  // Argentinian specific logic: if it starts with 0, remove it
+  if (digits.startsWith("0")) {
+    digits = digits.substring(1);
+  }
+
+  // If it's a mobile number without country code (e.g. 11 1234 5678 or 9 11 1234 5678)
+  if (digits.length === 10 || digits.length === 11) {
+    return defaultCountryCode + digits;
   }
   
-  // Final check: should be 12 or 13 digits starting with 55
-  if (normalized.startsWith("55") && (normalized.length === 12 || normalized.length === 13)) {
-    return normalized;
+  // Fallback for usable lengths
+  if (digits.length >= 10 && digits.length <= 15) {
+    // If no country code detected, add default
+    if (!digits.startsWith(defaultCountryCode)) {
+      return defaultCountryCode + digits;
+    }
+    return digits;
   }
   
-  // Fallback for numbers that might be longer/shorter but look usable
-  if (normalized.length >= 10 && normalized.length <= 15) {
-    return normalized;
-  }
-  
-  return null;
+  return digits || null;
 }
 
 /**
@@ -52,13 +53,15 @@ export function buildWhatsAppMessage(prospect: any): string {
   const city = prospect.address?.city || "";
   const state = prospect.address?.state || "";
   
-  const greeting = contactName ? `Olá ${contactName}, tudo bem?` : "Olá, tudo bem?";
+  const greeting = contactName ? `Hola ${contactName}, ¿cómo estás?` : "Hola, ¿cómo estás?";
   const context = (city && state) 
-    ? `Estou entrando em contato sobre a ${companyName} (${city}/${state}).`
-    : `Estou entrando em contato sobre a ${companyName}.`;
+    ? `Te escribo por la empresa ${companyName} (${city}/${state}).`
+    : `Te escribo por la empresa ${companyName}.`;
     
   return `${greeting}
 ${context}
-Posso te explicar rapidamente uma solução para organizar e priorizar oportunidades comerciais/operacionais na indústria?
-Se fizer sentido, posso te mostrar em 10-15 min.`;
+¿Podríamos conversar 10 minutos sobre nuestra solución de logística?`;
 }
+
+// Legacy alias to avoid breaking existing imports
+export const normalizePhoneBR = (p: string) => normalizePhone(p, "55");
