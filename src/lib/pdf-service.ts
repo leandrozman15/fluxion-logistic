@@ -7,12 +7,11 @@ import { Product, Load, Driver, Truck, Tenant, Expense, Quotation } from "@/app/
 /**
  * SERVICIO CENTRAL DE GENERACIÓN DE DOCUMENTOS PDF (LOGÍSTICA AR)
  * Implementa el Padrón A: Maquetación programática vectorial con jsPDF.
- * Garantiza descarga automática y calidad de imprenta.
  */
 
-const BLUE_LOGISTIC = [37, 99, 235]; // #2563eb
-const SLATE_DARK = [15, 23, 42]; // #0f172a
-const EMERALD_SALE = [5, 150, 105]; // #059669
+const BLUE_LOGISTIC = [37, 99, 235]; 
+const SLATE_DARK = [15, 23, 42]; 
+const EMERALD_SALE = [5, 150, 105];
 
 /**
  * FICHA TÉCNICA DE PRODUCTO (A4)
@@ -22,7 +21,6 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
   const margin = 15;
   const pageWidth = 210;
 
-  // 1. CABECERA CORPORATIVA
   doc.setFillColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
   doc.rect(0, 0, pageWidth, 40, "F");
   
@@ -42,7 +40,6 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
   doc.setFontSize(28);
   doc.text(product.sku, pageWidth - margin, 34, { align: "right" });
 
-  // 2. TÍTULO Y MARCA
   doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
   doc.setFontSize(24);
   const nameLines = doc.splitTextToSize(product.name.toUpperCase(), pageWidth - (margin * 2));
@@ -53,7 +50,6 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
   doc.setFontSize(14);
   doc.text(product.brand || "MARCA NO ESPECIFICADA", margin, brandY);
 
-  // 3. DESCRIPCIÓN E IMAGEN (SECCIÓN SUPERIOR)
   const contentY = brandY + 12;
   
   let photoHeight = 0;
@@ -84,7 +80,6 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
   const descTotalHeight = descLines.length * 6;
   const sectionSplitY = contentY + Math.max(descTotalHeight + 15, photoHeight);
 
-  // 4. GRILLA TÉCNICA (SECCIÓN INFERIOR)
   const gridY = sectionSplitY;
   const colW = (pageWidth - (margin * 2)) / 5;
   
@@ -113,7 +108,6 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
     doc.text(values[i], margin + (colW * i) + 2, gridY + 18);
   });
 
-  // 5. SECCIÓN COMEX Y SEGURIDAD
   const tableY = gridY + 40;
   doc.setFontSize(10);
   doc.setFont("helvetica", "bold");
@@ -132,11 +126,10 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
       ["N° ONU", product.onuNumber || "N/A"]
     ],
     theme: "striped",
-    headStyles: { fillColor: SLATE_DARK },
+    headStyles: { fillColor: SLATE_DARK as any },
     styles: { fontSize: 9 }
   });
 
-  // 6. SELLO DE VALIDACIÓN
   const footerY = 250;
   doc.setDrawColor(0);
   doc.setLineWidth(1);
@@ -161,7 +154,6 @@ export const generateLoadOrderPDF = async (load: Load, driver?: Driver | null, t
   const margin = 15;
   const pageWidth = 210;
 
-  // HEADER
   doc.setFillColor(BLUE_LOGISTIC[0], BLUE_LOGISTIC[1], BLUE_LOGISTIC[2]);
   doc.rect(0, 0, pageWidth, 35, "F");
   doc.setTextColor(255, 255, 255);
@@ -174,7 +166,6 @@ export const generateLoadOrderPDF = async (load: Load, driver?: Driver | null, t
   doc.setFontSize(24);
   doc.text(load.orderNumber, pageWidth - margin, 22, { align: "right" });
 
-  // RECURSOS
   doc.setTextColor(0);
   doc.setFontSize(10);
   doc.text("1. ASIGNACIÓN DE RECURSOS", margin, 50);
@@ -186,7 +177,6 @@ export const generateLoadOrderPDF = async (load: Load, driver?: Driver | null, t
   doc.text(`DOMINIO: ${truck?.plate || "---"}`, pageWidth / 2, 60);
   doc.text(`UNIDAD: ${truck?.brand || ""} ${truck?.model || ""}`, pageWidth / 2, 65);
 
-  // ITINERARIO
   doc.setFontSize(10);
   doc.text("2. SECUENCIA DE ENTREGAS", margin, 80);
   
@@ -202,7 +192,7 @@ export const generateLoadOrderPDF = async (load: Load, driver?: Driver | null, t
     head: [["POS", "DESTINATARIO", "DIRECCIÓN", "PESO"]],
     body: stopsBody,
     theme: "grid",
-    headStyles: { fillColor: BLUE_LOGISTIC },
+    headStyles: { fillColor: BLUE_LOGISTIC as any },
     styles: { fontSize: 8 }
   });
 
@@ -224,8 +214,7 @@ export const generateLoadWalletPDF = async (load: Load, expenses: Expense[], dri
   const margin = 15;
   const pageWidth = 210;
 
-  // HEADER
-  doc.setFillColor(30, 41, 59); // Slate 800
+  doc.setFillColor(30, 41, 59); 
   doc.rect(0, 0, pageWidth, 40, "F");
   doc.setTextColor(255);
   doc.setFontSize(18);
@@ -301,7 +290,7 @@ export const generateLoadWalletPDF = async (load: Load, expenses: Expense[], dri
 };
 
 /**
- * PRESUPUESTO DE VENTA (A4)
+ * PRESUPUESTO DE VENTA PROFESIONAL ERP (A4)
  */
 export const generateQuotationPDF = async (quote: Quotation, tenant?: Tenant) => {
     const doc = new jsPDF("p", "mm", "a4");
@@ -310,7 +299,7 @@ export const generateQuotationPDF = async (quote: Quotation, tenant?: Tenant) =>
   
     // HEADER
     doc.setFillColor(EMERALD_SALE[0], EMERALD_SALE[1], EMERALD_SALE[2]);
-    doc.rect(0, 0, pageWidth, 40, "F");
+    doc.rect(0, 0, pageWidth, 45, "F");
     
     doc.setTextColor(255);
     doc.setFontSize(22);
@@ -321,104 +310,122 @@ export const generateQuotationPDF = async (quote: Quotation, tenant?: Tenant) =>
     doc.setFont("helvetica", "normal");
     doc.text(`CUIT: ${tenant?.settings?.cuit || "30-XXXXXXXX-X"}`, margin, 24);
     doc.text(tenant?.settings?.legalAddress || "", margin, 28);
+    doc.text(`${tenant?.settings?.legalCityState || ""} | ${tenant?.settings?.country || ""}`, margin, 32);
   
     doc.setFontSize(16);
     doc.setFont("helvetica", "bold");
-    doc.text("PRESUPUESTO", pageWidth - margin, 20, { align: "right" });
-    doc.setFontSize(24);
-    doc.text(quote.number, pageWidth - margin, 32, { align: "right" });
-  
-    // CLIENTE
-    doc.setTextColor(0);
-    doc.setFontSize(10);
-    doc.text("DATOS DEL CLIENTE", margin, 55);
-    doc.line(margin, 57, pageWidth - margin, 57);
-  
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.text(quote.clientName.toUpperCase(), margin, 65);
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.text(`CUIT: ${quote.clientCuit}`, margin, 70);
-  
+    doc.text("PRESUPUESTO COMERCIAL", pageWidth - margin, 18, { align: "right" });
+    doc.setFontSize(22);
+    doc.text(quote.number, pageWidth - margin, 28, { align: "right" });
     doc.setFontSize(9);
-    doc.text(`Fecha de Emisión: ${quote.date}`, pageWidth - margin, 65, { align: "right" });
-    doc.setTextColor(200, 0, 0);
-    doc.text(`Válido hasta: ${quote.expiryDate}`, pageWidth - margin, 70, { align: "right" });
+    doc.text(`MONEDA: ${quote.currency}`, pageWidth - margin, 34, { align: "right" });
   
-    // TABLA DE ITEMS CON IMÁGENES
+    // CLIENTE Y DATOS OPERATIVOS
+    doc.setTextColor(0);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.text("INFORMACIÓN DEL CLIENTE", margin, 58);
+    doc.line(margin, 60, 100, 60);
+  
+    doc.setFontSize(11);
+    doc.text(quote.clientName.toUpperCase(), margin, 68);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text(`CUIT: ${quote.clientCuit}`, margin, 73);
+    doc.text(`IVA: ${quote.ivaCondition}`, margin, 78);
+    doc.text(`DIRECCIÓN: ${quote.deliveryAddress}`, margin, 83);
+
+    // DATOS VENDEDOR Y SUCURSAL
+    doc.setFont("helvetica", "bold");
+    doc.text("EMISIÓN Y CONTROL", 115, 58);
+    doc.line(115, 60, pageWidth - margin, 60);
+    doc.setFont("helvetica", "normal");
+    doc.text(`FECHA: ${quote.date}`, 115, 68);
+    doc.text(`VENCE: ${quote.expiryDate}`, 115, 73);
+    doc.text(`VENDEDOR: ${quote.sellerName || "ADMIN"}`, 115, 78);
+    doc.text(`T. CAMBIO: $${quote.exchangeRate}`, 115, 83);
+  
+    // TABLA DE ITEMS
     const itemRows = quote.items.map(item => [
-      "", // Espacio para la imagen
+      "", 
       item.sku,
       item.name.toUpperCase(),
-      item.quantity.toString(),
+      `${item.quantity} ${item.unit}`,
       `$${item.unitPrice.toLocaleString()}`,
-      `$${(item.quantity * item.unitPrice).toLocaleString()}`
+      `${item.discountPercent}%`,
+      `$${item.subtotal.toLocaleString()}`
     ]);
   
     autoTable(doc, {
-      startY: 80,
-      head: [["IMG", "SKU", "DESCRIPCIÓN", "CANT", "P. UNIT", "SUBTOTAL"]],
+      startY: 95,
+      head: [["IMG", "SKU", "DETALLE", "CANT", "P. UNIT", "DESC", "SUBTOTAL"]],
       body: itemRows,
-      headStyles: { fillColor: EMERALD_SALE },
-      styles: { fontSize: 8, valign: 'middle' },
+      headStyles: { fillColor: EMERALD_SALE as any },
+      styles: { fontSize: 7, valign: 'middle' },
       columnStyles: {
-        0: { cellWidth: 15 }, // Columna imagen
-        1: { cellWidth: 25 },
+        0: { cellWidth: 12 },
+        1: { cellWidth: 20 },
         2: { cellWidth: 'auto' },
         3: { cellWidth: 15, halign: 'center' },
-        4: { cellWidth: 25, halign: 'right' },
-        5: { cellWidth: 25, halign: 'right' }
+        4: { cellWidth: 20, halign: 'right' },
+        5: { cellWidth: 12, halign: 'right' },
+        6: { cellWidth: 25, halign: 'right' }
       },
       didDrawCell: (data) => {
         if (data.section === 'body' && data.column.index === 0) {
           const item = quote.items[data.row.index];
           if (item.photoUrl) {
-            try {
-              doc.addImage(
-                item.photoUrl, 
-                'JPEG', 
-                data.cell.x + 2, 
-                data.cell.y + 2, 
-                11, 
-                11
-              );
-            } catch (e) {
-              // Falla silenciosa si la imagen no es válida
-            }
+            try { doc.addImage(item.photoUrl, 'JPEG', data.cell.x + 1, data.cell.y + 1, 10, 10); } catch (e) {}
           }
         }
       }
     });
   
+    // CONDICIONES COMERCIALES Y TRANSPORTE
+    let finalY = (doc as any).lastAutoTable.finalY + 10;
+    
+    doc.setFont("helvetica", "bold");
+    doc.text("CONDICIONES Y LOGÍSTICA", margin, finalY);
+    doc.line(margin, finalY + 2, 100, finalY + 2);
+    doc.setFont("helvetica", "normal");
+    doc.text(`PAGO: ${quote.paymentMethod} / ${quote.paymentTerm}`, margin, finalY + 8);
+    doc.text(`ENTREGA: ${quote.deliveryTimeDays} DÍAS / ${quote.deliveryType}`, margin, finalY + 13);
+    doc.text(`TRANSPORTE: ${quote.includeTransport ? "INCLUIDO" : "A CARGO DEL CLIENTE"}`, margin, finalY + 18);
+    doc.text(`GARANTÍA: ${quote.warrantyInfo}`, margin, finalY + 23);
+
     // TOTALES
-    const finalY = (doc as any).lastAutoTable.finalY + 10;
     doc.setFillColor(248, 250, 252);
-    doc.rect(pageWidth - 95, finalY, 80, 35, "F");
+    doc.rect(120, finalY - 5, pageWidth - 120 - margin, 45, "F");
   
     doc.setTextColor(100);
-    doc.setFontSize(10);
-    doc.text(`Subtotal Neto:`, pageWidth - 90, finalY + 8);
-    doc.text(`$${quote.subtotal.toLocaleString()}`, pageWidth - margin - 5, finalY + 8, { align: "right" });
+    doc.setFontSize(9);
+    doc.text(`Subtotal Neto:`, 125, finalY + 2);
+    doc.text(`$${quote.subtotal.toLocaleString()}`, pageWidth - margin - 5, finalY + 2, { align: "right" });
     
-    doc.text(`IVA Total:`, pageWidth - 90, finalY + 15);
-    doc.text(`$${quote.taxTotal.toLocaleString()}`, pageWidth - margin - 5, finalY + 15, { align: "right" });
+    doc.text(`Desc. Comercial:`, 125, finalY + 8);
+    doc.text(`-$${quote.commercialDiscount.toLocaleString()}`, pageWidth - margin - 5, finalY + 8, { align: "right" });
+
+    doc.text(`Recargo Logístico:`, 125, finalY + 14);
+    doc.text(`+$${quote.logisticSurcharge.toLocaleString()}`, pageWidth - margin - 5, finalY + 14, { align: "right" });
+
+    doc.text(`IVA Liquidado:`, 125, finalY + 20);
+    doc.text(`$${quote.taxTotal.toLocaleString()}`, pageWidth - margin - 5, finalY + 20, { align: "right" });
   
-    doc.setTextColor(0);
+    doc.setTextColor(EMERALD_SALE[0], EMERALD_SALE[1], EMERALD_SALE[2]);
     doc.setFontSize(14);
     doc.setFont("helvetica", "bold");
-    doc.text(`TOTAL ARS:`, pageWidth - 90, finalY + 28);
-    doc.text(`$${quote.totalAmount.toLocaleString()}`, pageWidth - margin - 5, finalY + 28, { align: "right" });
+    doc.text(`TOTAL FINAL:`, 125, finalY + 32);
+    doc.text(`${quote.currency} $${quote.totalAmount.toLocaleString()}`, pageWidth - margin - 5, finalY + 32, { align: "right" });
   
-    // NOTAS
+    // NOTAS AL CLIENTE
     if (quote.notes) {
       doc.setTextColor(150);
       doc.setFontSize(8);
       doc.setFont("helvetica", "italic");
-      doc.text("Notas y condiciones:", margin, 250);
-      const noteLines = doc.splitTextToSize(quote.notes, pageWidth - (margin * 2));
-      doc.text(noteLines, margin, 254);
+      const noteLines = doc.splitTextToSize(`Notas: ${quote.notes}`, pageWidth - (margin * 2));
+      doc.text(noteLines, margin, 270);
     }
   
     doc.save(`Presupuesto_${quote.number}.pdf`);
   };
+

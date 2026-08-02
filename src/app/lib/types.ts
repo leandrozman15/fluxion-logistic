@@ -668,18 +668,21 @@ export interface Expense {
 
 export type ExpenseCategory = 'fuel' | 'toll' | 'meal' | 'lodging' | 'maintenance' | 'other';
 
-export type QuotationStatus = 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired';
+export type QuotationStatus = 'draft' | 'sent' | 'viewed' | 'accepted' | 'rejected' | 'expired' | 'ordered';
 
 export interface QuotationItem {
   productId: string;
   sku: string;
   name: string;
   quantity: number;
+  unit: string;
   unitPrice: number;
+  discountPercent: number;
   ivaRate: number;
   subtotal: number;
   total: number;
   photoUrl?: string;
+  warehouseId?: string;
 }
 
 export interface Quotation {
@@ -687,15 +690,43 @@ export interface Quotation {
   number: string;
   date: string;
   expiryDate: string;
+  
   clientId: string;
   clientName: string;
   clientCuit: string;
+  ivaCondition: string;
+  
+  branchId?: string;
+  sellerId?: string;
+  sellerName?: string;
+  priceListId?: string;
+  
+  currency: 'ARS' | 'USD' | 'BRL';
+  exchangeRate: number;
+
   items: QuotationItem[];
+  
   subtotal: number;
+  commercialDiscount: number;
+  logisticSurcharge: number;
   taxTotal: number;
   totalAmount: number;
+
+  includeTransport: boolean;
+  transportPaidBy: 'company' | 'client';
+  freightValue: number;
+  deliveryType: string;
+  deliveryAddress: string;
+
+  paymentMethod: string;
+  paymentTerm: string;
+  deliveryTimeDays: number;
+  warrantyInfo: string;
+
   status: QuotationStatus;
-  notes?: string;
+  notes: string; // Visible al cliente
+  internalNotes: string; // Solo empresa
+  
   tenantId: string;
   createdAt: any;
   updatedAt: any;

@@ -13,7 +13,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { 
   FileText, ArrowLeft, Loader2, Download, 
   CheckCircle2, XCircle, Send, Printer,
-  User, Calendar, Clock, DollarSign, Calculator, Info, Package
+  User, Calendar, Clock, DollarSign, Calculator, Info, Package,
+  Truck, Briefcase, Landmark, Globe, ShieldCheck, MapPin, Receipt, Boxes
 } from "lucide-react";
 import { Quotation, QuotationStatus, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -63,8 +64,18 @@ export default function QuotationDetailPage() {
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-emerald-600" /></div>;
   if (!quote) return <div className="p-20 text-center">Presupuesto no encontrado.</div>;
 
+  const statusConfig: Record<QuotationStatus, { label: string, color: string }> = {
+    draft: { label: 'Borrador', color: 'bg-slate-500' },
+    sent: { label: 'Enviado', color: 'bg-blue-600' },
+    viewed: { label: 'Visto por Cliente', color: 'bg-indigo-600' },
+    accepted: { label: 'Aceptado OK', color: 'bg-green-600' },
+    rejected: { label: 'Rechazado', color: 'bg-red-600' },
+    expired: { label: 'Vencido', color: 'bg-orange-600' },
+    ordered: { label: 'Convertido en Pedido', color: 'bg-emerald-900' }
+  };
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-20">
+    <div className="max-w-6xl mx-auto space-y-6 pb-24">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full bg-white shadow-sm border"><ArrowLeft /></Button>
@@ -75,7 +86,7 @@ export default function QuotationDetailPage() {
         </div>
         <div className="flex gap-2">
            <Button variant="outline" className="font-bold text-[10px] uppercase rounded-xl border-slate-200" onClick={handleDownload} disabled={isDownloading}>
-             {isDownloading ? <Loader2 className="animate-spin mr-2" /> : <Download size={14} className="mr-2" />} BAJAR PDF
+             {isDownloading ? <Loader2 className="animate-spin mr-2" /> : <Download size={14} className="mr-2" />} DESCARGAR PDF A4
            </Button>
            <Button className="bg-blue-600 h-10 px-6 rounded-xl font-black text-[10px] uppercase shadow-lg shadow-blue-100">
              <Send size={14} className="mr-2" /> ENVIAR POR EMAIL
@@ -91,63 +102,113 @@ export default function QuotationDetailPage() {
                   <div className="space-y-1">
                      <p className="text-[10px] font-black uppercase text-blue-400 tracking-widest">Información del Cliente</p>
                      <CardTitle className="text-2xl font-black uppercase italic tracking-tighter leading-none">{quote.clientName}</CardTitle>
+                     <p className="text-[10px] font-bold text-white/40 uppercase">CUIT: {quote.clientCuit} • {quote.ivaCondition}</p>
                   </div>
-                  <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center text-blue-400 border border-white/5 shadow-2xl">
-                     <User size={32} />
-                  </div>
+                  <Badge className={cn("text-white border-none px-4 h-6 font-black text-[9px] uppercase", statusConfig[quote.status].color)}>
+                     {statusConfig[quote.status].label}
+                  </Badge>
                </div>
             </CardHeader>
-            <CardContent className="p-8 grid grid-cols-2 gap-8 border-b">
+            
+            <CardContent className="p-8 grid grid-cols-1 md:grid-cols-3 gap-6 border-b bg-slate-50/50">
                <div className="space-y-1">
-                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">CUIT / ID Tributario</p>
-                  <p className="text-lg font-mono font-black text-slate-800 tracking-tighter">{quote.clientCuit}</p>
+                  <p className="text-[9px] font-black uppercase text-slate-400">Ejecutivo Cta.</p>
+                  <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><Briefcase size={12} className="text-blue-500" /> {quote.sellerName || 'Administración'}</p>
                </div>
-               <div className="space-y-1 text-right">
-                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Estado Propuesta</p>
-                  <div className="flex justify-end gap-2 mt-1">
-                    {quote.status === 'draft' && <Badge className="bg-slate-500">BORRADOR</Badge>}
-                    {quote.status === 'sent' && <Badge className="bg-blue-600 animate-pulse">ENVIADO</Badge>}
-                    {quote.status === 'accepted' && <Badge className="bg-green-600">ACEPTADO OK</Badge>}
-                    {quote.status === 'rejected' && <Badge variant="destructive">RECHAZADO</Badge>}
-                  </div>
+               <div className="space-y-1">
+                  <p className="text-[9px] font-black uppercase text-slate-400">Validez Propuesta</p>
+                  <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><Calendar size={12} className="text-blue-500" /> Hasta {quote.expiryDate}</p>
+               </div>
+               <div className="space-y-1">
+                  <p className="text-[9px] font-black uppercase text-slate-400">Moneda / Camb.</p>
+                  <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><Landmark size={12} className="text-blue-500" /> {quote.currency} (1 = ${quote.exchangeRate})</p>
                </div>
             </CardContent>
+
             <CardContent className="p-0">
-               <Table>
-                  <TableHeader className="bg-slate-50">
-                     <TableRow>
-                        <TableHead className="px-8 text-[10px] font-black uppercase">Ítem / SKU</TableHead>
-                        <TableHead className="text-center text-[10px] font-black uppercase">Cant.</TableHead>
-                        <TableHead className="text-right text-[10px] font-black uppercase">P. Unit</TableHead>
-                        <TableHead className="text-right pr-8 text-[10px] font-black uppercase">Total</TableHead>
-                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                     {quote.items.map((item, i) => (
-                       <TableRow key={i}>
-                          <TableCell className="px-8 py-4">
-                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-slate-50 border rounded-lg flex items-center justify-center overflow-hidden shrink-0">
-                                   {item.photoUrl ? <img src={item.photoUrl} className="w-full h-full object-cover" /> : <Package size={16} className="text-slate-300" />}
+               <div className="overflow-x-auto">
+                <Table>
+                    <TableHeader className="bg-white border-b">
+                        <TableRow>
+                          <TableHead className="px-8 text-[10px] font-black uppercase">Ítem / SKU</TableHead>
+                          <TableHead className="text-center text-[10px] font-black uppercase">Cant.</TableHead>
+                          <TableHead className="text-right text-[10px] font-black uppercase">Unitario</TableHead>
+                          <TableHead className="text-right text-[10px] font-black uppercase">Desc.</TableHead>
+                          <TableHead className="text-right pr-8 text-[10px] font-black uppercase">Subtotal</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {quote.items.map((item, i) => (
+                          <TableRow key={i}>
+                            <TableCell className="px-8 py-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 bg-slate-50 border rounded-lg flex items-center justify-center overflow-hidden shrink-0">
+                                      {item.photoUrl ? <img src={item.photoUrl} className="w-full h-full object-cover" /> : <Package size={16} className="text-slate-300" />}
+                                  </div>
+                                  <div>
+                                      <div className="font-bold text-xs uppercase text-slate-700">{item.name}</div>
+                                      <div className="text-[9px] text-slate-400 font-mono font-bold uppercase">{item.sku}</div>
+                                  </div>
                                 </div>
-                                <div>
-                                   <div className="font-bold text-xs uppercase">{item.name}</div>
-                                   <div className="text-[9px] text-slate-400 font-mono">{item.sku}</div>
-                                </div>
-                             </div>
-                          </TableCell>
-                          <TableCell className="text-center font-black text-slate-700">{item.quantity}</TableCell>
-                          <TableCell className="text-right text-xs font-medium text-slate-500">${item.unitPrice.toLocaleString()}</TableCell>
-                          <TableCell className="text-right pr-8 font-black text-slate-900">${(item.quantity * item.unitPrice).toLocaleString()}</TableCell>
-                       </TableRow>
-                     ))}
-                  </TableBody>
-               </Table>
+                            </TableCell>
+                            <TableCell className="text-center font-black text-slate-700">{item.quantity} <span className="text-[8px] font-normal opacity-50 uppercase">{item.unit}</span></TableCell>
+                            <TableCell className="text-right text-xs font-medium text-slate-500">${item.unitPrice.toLocaleString()}</TableCell>
+                            <TableCell className="text-right text-[10px] font-bold text-red-500">-{item.discountPercent}%</TableCell>
+                            <TableCell className="text-right pr-8 font-black text-slate-900">${item.subtotal.toLocaleString()}</TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+               </div>
             </CardContent>
           </Card>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card className="border-none shadow-md rounded-[2.5rem] overflow-hidden bg-white">
+                <CardHeader className="bg-slate-50 py-4 border-b flex flex-row items-center gap-2">
+                    <Truck size={16} className="text-blue-600" />
+                    <CardTitle className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Información Logística</CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 space-y-3">
+                    <div className="flex justify-between text-xs">
+                        <span className="text-slate-400 font-bold uppercase">Tipo Entrega:</span>
+                        <span className="font-black text-slate-700 uppercase italic">{quote.deliveryType}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                        <span className="text-slate-400 font-bold uppercase">Transporte:</span>
+                        <span className="font-black text-slate-700 uppercase italic">{quote.includeTransport ? 'INCLUIDO EN PRECIO' : 'NO INCLUIDO'}</span>
+                    </div>
+                    <div className="pt-2 border-t mt-2">
+                        <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Dirección de Destino:</p>
+                        <p className="text-xs font-bold text-blue-600 flex items-center gap-1.5"><MapPin size={12}/> {quote.deliveryAddress}</p>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card className="border-none shadow-md rounded-[2.5rem] overflow-hidden bg-white">
+                <CardHeader className="bg-slate-50 py-4 border-b flex flex-row items-center gap-2">
+                    <CheckCircle2 size={16} className="text-emerald-600" />
+                    <CardTitle className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Condiciones de Venta</CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 space-y-3">
+                    <div className="flex justify-between text-xs">
+                        <span className="text-slate-400 font-bold uppercase">Forma de Pago:</span>
+                        <span className="font-black text-slate-700 uppercase">{quote.paymentMethod}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                        <span className="text-slate-400 font-bold uppercase">Tiempo Entrega:</span>
+                        <span className="font-black text-slate-700 uppercase">{quote.deliveryTimeDays} Días</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                        <span className="text-slate-400 font-bold uppercase">Garantía:</span>
+                        <span className="font-black text-slate-700 uppercase">{quote.warrantyInfo}</span>
+                    </div>
+                </CardContent>
+            </Card>
+          </div>
+
           <Card className="border-none shadow-md rounded-[2rem] overflow-hidden bg-white">
-             <CardHeader className="bg-slate-50 py-3 border-b"><CardTitle className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Condiciones Comerciales</CardTitle></CardHeader>
+             <CardHeader className="bg-slate-50 py-3 border-b"><CardTitle className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Observaciones y Legales</CardTitle></CardHeader>
              <CardContent className="p-6">
                 <p className="text-xs italic text-slate-600 leading-relaxed font-medium">
                    {quote.notes || 'No se han especificado cláusulas particulares para este presupuesto.'}
@@ -158,39 +219,61 @@ export default function QuotationDetailPage() {
 
         <div className="lg:col-span-4 space-y-6">
            <Card className="border-none shadow-xl rounded-[2.5rem] bg-slate-900 text-white overflow-hidden">
-              <CardHeader className="border-b border-white/5 p-8"><CardTitle className="text-sm font-black uppercase flex items-center gap-2 text-emerald-400"><Calculator size={18}/> Resumen Financiero</CardTitle></CardHeader>
-              <CardContent className="p-8 space-y-5">
-                 <div className="flex justify-between text-xs opacity-60"><span>Subtotal Neto</span><span>${quote.subtotal.toLocaleString()}</span></div>
-                 <div className="flex justify-between text-xs opacity-60"><span>Impuestos (IVA)</span><span>${quote.taxTotal.toLocaleString()}</span></div>
-                 <div className="pt-4 border-t border-white/10 flex flex-col items-center gap-1">
-                    <p className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">VALOR FINAL COTIZADO</p>
-                    <p className="text-4xl font-black italic tracking-tighter text-emerald-400">${quote.totalAmount.toLocaleString()}</p>
+              <CardHeader className="border-b border-white/5 p-8">
+                 <CardTitle className="text-sm font-black uppercase flex items-center gap-2 text-emerald-400"><Calculator size={18}/> Liquidación Comercial</CardTitle>
+              </CardHeader>
+              <CardContent className="p-8 space-y-4">
+                 <div className="flex justify-between text-xs opacity-60 uppercase font-bold"><span>Suma Netos</span><span>${quote.subtotal.toLocaleString()}</span></div>
+                 <div className="flex justify-between text-xs text-red-400 uppercase font-black"><span>(-) Descuento Gral.</span><span>-${quote.commercialDiscount.toLocaleString()}</span></div>
+                 <div className="flex justify-between text-xs text-blue-400 uppercase font-black"><span>(+) Recargo Logístico</span><span>+${quote.logisticSurcharge.toLocaleString()}</span></div>
+                 <div className="flex justify-between text-xs opacity-60 uppercase font-bold"><span>IVA Gravado</span><span>${quote.taxTotal.toLocaleString()}</span></div>
+                 <div className="pt-6 border-t border-white/10 flex flex-col items-center gap-1">
+                    <p className="text-[10px] font-black uppercase text-emerald-400 tracking-[0.3em]">VALOR FINAL DE OPERACIÓN</p>
+                    <p className="text-5xl font-black italic tracking-tighter text-emerald-400 leading-none">
+                       {quote.currency === 'ARS' ? '$' : quote.currency + ' '} {quote.totalAmount.toLocaleString()}
+                    </p>
+                    {quote.currency !== 'ARS' && (
+                        <p className="text-[9px] font-bold text-white/30 uppercase mt-2">Ref: ARS ${(quote.totalAmount * quote.exchangeRate).toLocaleString()}</p>
+                    )}
                  </div>
               </CardContent>
            </Card>
 
            <Card className="border-none shadow-md rounded-[2.5rem] bg-white overflow-hidden">
-              <CardHeader className="bg-slate-50 border-b py-4"><CardTitle className="text-xs uppercase font-black text-slate-400">Control de Ciclo</CardTitle></CardHeader>
+              <CardHeader className="bg-slate-50 border-b py-4"><CardTitle className="text-xs font-black uppercase text-slate-400">Control de Ciclo Administrativo</CardTitle></CardHeader>
               <CardContent className="p-6 space-y-3">
-                 {quote.status !== 'accepted' && (
+                 {quote.status === 'draft' && (
+                    <Button className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-black text-[10px] uppercase rounded-xl" onClick={() => handleUpdateStatus('sent')} disabled={isUpdating}>
+                        <Send size={16} className="mr-2" /> ENVIAR PRESUPUESTO
+                    </Button>
+                 )}
+                 {quote.status !== 'accepted' && quote.status !== 'ordered' && (
                    <Button className="w-full h-12 bg-green-600 hover:bg-green-700 text-white font-black text-[10px] uppercase rounded-xl" onClick={() => handleUpdateStatus('accepted')} disabled={isUpdating}>
                       <CheckCircle2 size={16} className="mr-2" /> MARCAR COMO ACEPTADO
                    </Button>
                  )}
-                 {quote.status !== 'rejected' && (
+                 {quote.status === 'accepted' && (
+                    <Button className="w-full h-12 bg-emerald-900 hover:bg-black text-white font-black text-[10px] uppercase rounded-xl" onClick={() => handleUpdateStatus('ordered')} disabled={isUpdating}>
+                        <Receipt size={16} className="mr-2" /> CONVERTIR EN PEDIDO
+                    </Button>
+                 )}
+                 {quote.status !== 'rejected' && quote.status !== 'ordered' && (
                    <Button variant="outline" className="w-full h-12 border-red-100 text-red-600 bg-red-50 hover:bg-red-100 font-black text-[10px] uppercase rounded-xl" onClick={() => handleUpdateStatus('rejected')} disabled={isUpdating}>
-                      <XCircle size={16} className="mr-2" /> RECHAZAR PROPUESTA
+                      <XCircle size={16} className="mr-2" /> ANULAR PROPUESTA
                    </Button>
                  )}
-                 <p className="text-[9px] text-center text-slate-400 font-bold uppercase mt-4">Actualizado: {quote.updatedAt?.seconds ? new Date(quote.updatedAt.seconds * 1000).toLocaleString() : '---'}</p>
+                 <p className="text-[8px] text-center text-slate-300 font-bold uppercase mt-4">ID Transacción: {quote.id}</p>
               </CardContent>
            </Card>
 
-           <div className="p-6 bg-blue-50 border-2 border-blue-100 rounded-[2.5rem] flex items-start gap-4">
-              <Info size={24} className="text-blue-600 shrink-0 mt-1" />
+           <div className="p-6 bg-red-50 border-2 border-red-100 rounded-[2.5rem] flex items-start gap-4">
+              <ShieldCheck size={24} className="text-red-600 shrink-0 mt-1" />
               <div className="space-y-1">
-                 <p className="text-xs font-black text-blue-800 uppercase italic">Trazabilidad Técnica</p>
-                 <p className="text-[10px] text-blue-600 leading-relaxed font-medium">Al aceptar el presupuesto, el sistema podrá vincular estos ítems a una nueva Hoja de Ruta automáticamente.</p>
+                 <p className="text-xs font-black text-red-800 uppercase italic">Auditoría Interna</p>
+                 <div className="p-3 bg-white/50 rounded-xl space-y-2 mt-2">
+                    <p className="text-[9px] text-slate-500 font-medium">NOTAS DE NEGOCIACIÓN:</p>
+                    <p className="text-[10px] font-bold text-slate-700 italic">"{quote.internalNotes || 'Sin notas de auditoría.'}"</p>
+                 </div>
               </div>
            </div>
         </div>
