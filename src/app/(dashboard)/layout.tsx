@@ -36,7 +36,8 @@ import {
   ShoppingBag,
   ShieldCheck,
   Layers,
-  Map as MapIcon
+  Map as MapIcon,
+  User as UserIcon
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth, useFirestore, useDoc, useUser } from "@/firebase";
@@ -50,6 +51,7 @@ import { useMemo, useState, useEffect } from "react";
 import { doc } from "firebase/firestore";
 import { Tenant } from "@/app/lib/types";
 import { cn } from '@/lib/utils';
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const SUPER_ADMIN_EMAIL = "leozman15@gmail.com";
 
@@ -247,7 +249,8 @@ function DashboardSidebar() {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { theme, setTheme } = useTheme();
   const db = useFirestore();
-  const { tenantId } = useTenant();
+  const { user } = useUser();
+  const { tenantId, role } = useTenant();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -260,7 +263,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [db, tenantId]);
 
   const { data: tenant } = useDoc<Tenant>(tenantRef);
-  const logoUrl = tenant?.settings?.logoUrl || "/icono.png";
 
   return (
     <SidebarProvider defaultOpen={false}>
@@ -285,10 +287,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                    <div className="w-5 h-5" />
                  )}
                </Button>
-               <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shrink-0 border shadow-sm relative">
-                 <img src={logoUrl} alt="Logo" className="w-full h-full object-contain" />
+               
+               <div className="flex items-center gap-3 pl-2 border-l">
+                 <Avatar className="h-8 w-8 border shadow-sm">
+                   <AvatarImage src={user?.photoURL || undefined} />
+                   <AvatarFallback className="bg-blue-50 text-blue-600 text-[10px] font-bold uppercase">
+                     {user?.email?.[0] || <UserIcon size={14} />}
+                   </AvatarFallback>
+                 </Avatar>
+                 <div className="hidden lg:flex flex-col items-start leading-none">
+                   <span className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase truncate max-w-[150px]">
+                     {user?.email?.split('@')[0] || 'Usuario'}
+                   </span>
+                   <span className="text-[8px] font-bold text-slate-400 uppercase mt-0.5">
+                     {role === 'admin' ? 'Super Administrador' : (role?.replace('_', ' ') || 'Colaborador')}
+                   </span>
+                 </div>
                </div>
-               <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 hidden lg:block">Operador Central</span>
             </div>
           </header>
           <main className="p-4 sm:p-6">
