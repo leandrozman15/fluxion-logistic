@@ -8,7 +8,6 @@ import { UserRole } from '@/app/lib/types';
 /**
  * Hook Dinámico de Organización (Tenant).
  * Identifica a qué empresa pertenece el usuario logueado y qué rol tiene.
- * Normaliza el email a minúsculas para asegurar el reconocimiento de permisos.
  */
 export function useTenant() {
   const { user } = useUser();
@@ -18,15 +17,18 @@ export function useTenant() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Si no hay usuario, no podemos determinar el tenant
     if (!user || !db) {
-      if (!user) setLoading(false);
+      if (!user) {
+        setTenantId(null);
+        setRole(null);
+        setLoading(false);
+      }
       return;
     }
 
     const userEmail = user.email?.toLowerCase().trim();
 
-    // El Super Administrador siempre opera sobre la base maestra o default
+    // Super Admin Global
     if (userEmail === "leozman15@gmail.com") {
       setTenantId("default_tenant");
       setRole("admin");
@@ -34,8 +36,7 @@ export function useTenant() {
       return;
     }
 
-    // Para el resto, buscamos su mapeo en la colección global /users/{email}
-    // El ID del documento debe estar siempre en minúsculas
+    // Buscamos el mapeo en /users/{email}
     const userRef = doc(db, "users", userEmail!);
     
     setLoading(true);
@@ -45,13 +46,12 @@ export function useTenant() {
         setTenantId(data.tenantId || "default_tenant");
         setRole(data.role as UserRole || null);
       } else {
-        console.warn("Tenant Hook: User profile NOT found for email:", userEmail);
         setTenantId(null);
         setRole(null);
       }
       setLoading(false);
     }, (error) => {
-      console.error("Error al obtener tenant del usuario:", error);
+      console.error("Error useTenant:", error);
       setLoading(false);
     });
 
@@ -62,6 +62,7 @@ export function useTenant() {
     tenantId: tenantId || "default_tenant", 
     role, 
     loading,
+    uid: user?.uid || null,
     isAuthenticated: !!user 
   };
 }

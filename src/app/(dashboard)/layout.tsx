@@ -32,7 +32,6 @@ import {
   Zap,
   Box,
   Files,
-  Archive,
   ShoppingBag,
   ShieldCheck,
   Layers,
@@ -99,9 +98,7 @@ function DashboardSidebar() {
   const { data: tenant } = useDoc<Tenant>(tenantRef);
 
   const filteredMenu = useMemo(() => {
-    // Si es chofer, no mostramos ningún ítem administrativo
     if (isDriver) return [];
-    
     if (!tenant) return ADMIN_MENU_ITEMS;
     const enabled = tenant.settings?.enabledModules;
     if (!enabled || enabled.length === 0) return ADMIN_MENU_ITEMS;
@@ -118,7 +115,7 @@ function DashboardSidebar() {
     try {
       await signOut(auth);
       router.push("/login");
-      toast({ title: "Sesión cerrada correctamente" });
+      toast({ title: "Sesión cerrada" });
     } catch (error) {
       toast({ variant: "destructive", title: "Error al salir" });
     }
@@ -130,7 +127,7 @@ function DashboardSidebar() {
   if (!mounted) return null;
 
   return (
-    <Sidebar variant="sidebar" collapsible="icon" className="transition-all duration-200">
+    <Sidebar variant="sidebar" collapsible="icon">
       <SidebarHeader className="h-16 flex items-center px-4 border-b overflow-hidden">
         <Link href="/" className="flex items-center gap-2 font-bold text-blue-600" onClick={handleLinkClick}>
           <div className="w-8 h-8 rounded flex items-center justify-center shrink-0 overflow-hidden relative">
@@ -142,20 +139,12 @@ function DashboardSidebar() {
       <SidebarContent>
         {isSuperAdmin && (
           <SidebarGroup>
-            <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden text-red-600 dark:text-red-400 font-black tracking-widest uppercase text-[10px]">SuperAdmin</SidebarGroupLabel>
+            <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden text-red-600 font-black uppercase text-[10px]">SuperAdmin</SidebarGroupLabel>
             <SidebarGroupContent>
                <SidebarMenu>
                  <SidebarMenuItem>
-                    <SidebarMenuButton 
-                      asChild 
-                      isActive={pathname === "/admin/tenants"}
-                      onClick={handleLinkClick}
-                      className="bg-slate-900 text-blue-400 hover:bg-slate-800 hover:text-blue-300"
-                    >
-                      <Link href="/admin/tenants">
-                        <ShieldCheck className="animate-pulse" />
-                        <span className="font-black italic">Control de Empresas</span>
-                      </Link>
+                    <SidebarMenuButton asChild isActive={pathname === "/admin/tenants"} onClick={handleLinkClick} className="bg-slate-900 text-blue-400">
+                      <Link href="/admin/tenants"><ShieldCheck className="animate-pulse" /><span className="font-black italic">Empresas</span></Link>
                     </SidebarMenuButton>
                  </SidebarMenuItem>
                </SidebarMenu>
@@ -170,23 +159,13 @@ function DashboardSidebar() {
               <SidebarMenu>
                 {filteredMenu.map((item) => (
                   <SidebarMenuItem key={item.id}>
-                    <SidebarMenuButton 
-                      asChild 
-                      tooltip={item.title} 
-                      isActive={pathname === item.href}
-                      onClick={handleLinkClick}
-                    >
+                    <SidebarMenuButton asChild tooltip={item.title} isActive={pathname === item.href} onClick={handleLinkClick}>
                       <Link href={item.href}>
                         <item.icon className={cn(
                           item.title.includes("Remitos") && "text-indigo-600",
-                          item.title === "Mercado Libre" && "text-yellow-500",
-                          item.id === 'stock' && "text-orange-500",
-                          item.id === 'stock-layout' && "text-blue-600"
+                          item.title === "Mercado Libre" && "text-yellow-500"
                         )} />
-                        <span className={cn(
-                          item.title.includes("Remitos") && "font-bold text-indigo-700",
-                          item.title === "Mercado Libre" && "font-black text-slate-900"
-                        )}>{item.title}</span>
+                        <span>{item.title}</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -197,58 +176,37 @@ function DashboardSidebar() {
         )}
 
         <SidebarGroup>
-          <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden text-blue-600 dark:text-blue-400 font-black">Área Conductores</SidebarGroupLabel>
+          <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden text-blue-600 font-black">Área Conductores</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton 
-                  asChild 
-                  tooltip="App Chofer (Mis Viajes)" 
-                  isActive={pathname.startsWith("/rutas")}
-                  onClick={handleLinkClick}
-                  className="hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                >
+                <SidebarMenuButton asChild tooltip="App Chofer" isActive={pathname.startsWith("/rutas")} onClick={handleLinkClick} className="hover:bg-blue-50">
                   <Link href="/rutas">
                     <Smartphone className="text-blue-600" />
-                    <span className="font-bold">App Chofer</span>
+                    <span className="font-bold">Mis Viajes</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              {isDriver && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton 
-                    asChild 
-                    tooltip="Mi Perfil" 
-                    isActive={pathname === "/rutas/perfil"}
-                    onClick={handleLinkClick}
-                  >
-                    <Link href="/rutas/perfil">
-                      <UserIcon className="text-slate-400" />
-                      <span>Mi Perfil Técnico</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="Mi Perfil" isActive={pathname === "/rutas/perfil"} onClick={handleLinkClick}>
+                  <Link href="/rutas/perfil">
+                    <UserIcon className="text-slate-400" />
+                    <span>Mi Perfil</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         {!isDriver && (
           <SidebarGroup>
-            <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Configuración</SidebarGroupLabel>
+            <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">Ajustes</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton 
-                    asChild 
-                    isActive={pathname === "/settings/tenant"}
-                    tooltip="Ajustes del Sistema"
-                    onClick={handleLinkClick}
-                  >
-                    <Link href="/settings/tenant">
-                      <Settings />
-                      <span>Ajustes del Sistema</span>
-                    </Link>
+                  <SidebarMenuButton asChild isActive={pathname === "/settings/tenant"} onClick={handleLinkClick}>
+                    <Link href="/settings/tenant"><Settings /><span>Sistema</span></Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
@@ -257,11 +215,7 @@ function DashboardSidebar() {
         )}
       </SidebarContent>
       <div className="mt-auto p-2 border-t">
-        <SidebarMenuButton 
-          className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
-          onClick={handleLogout}
-          tooltip="Salir del Sistema"
-        >
+        <SidebarMenuButton className="w-full text-destructive" onClick={handleLogout}>
           <LogOut />
           <span className="group-data-[collapsible=icon]:hidden">Salir</span>
         </SidebarMenuButton>
@@ -272,9 +226,8 @@ function DashboardSidebar() {
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { theme, setTheme } = useTheme();
-  const db = useFirestore();
   const { user } = useUser();
-  const { tenantId, role, loading } = useTenant();
+  const { role, loading } = useTenant();
   const router = useRouter();
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
@@ -283,29 +236,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setMounted(true);
   }, []);
 
-  // Proteger rutas administrativas si el usuario es Chofer
+  // Protección de rutas: El chofer solo ve /rutas
   useEffect(() => {
     if (!loading && role === 'driver') {
-      const isTryingAdminPath = !pathname.startsWith('/rutas') && pathname !== '/';
-      if (isTryingAdminPath) {
+      const isAdminPath = pathname !== '/' && !pathname.startsWith('/rutas') && !pathname.startsWith('/cargas');
+      if (isAdminPath) {
         router.replace('/rutas');
       }
     }
   }, [role, loading, pathname, router]);
   
-  const tenantRef = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return doc(db, "tenants", tenantId);
-  }, [db, tenantId]);
-
-  const { data: tenant } = useDoc<Tenant>(tenantRef);
-
   if (loading || !mounted) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-slate-50">
-        <Loader2 className="animate-spin text-blue-600" />
-      </div>
-    );
+    return <div className="h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-blue-600" /></div>;
   }
 
   return (
@@ -316,45 +258,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <header className="h-16 flex items-center justify-between px-4 border-b bg-white dark:bg-slate-900 sticky top-0 z-10 shadow-sm">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="text-blue-600" />
-              <h2 className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest truncate">
-                {role === 'driver' ? 'Terminal Móvil del Conductor' : 'Panel de Control Nacional'}
+              <h2 className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-widest truncate">
+                {role === 'driver' ? 'Terminal Móvil Conductor' : 'Panel de Control Central'}
               </h2>
             </div>
             <div className="flex items-center gap-4">
-               <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                className="text-slate-500 hover:text-blue-600"
-               >
-                 {mounted ? (
-                   theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />
-                 ) : (
-                   <div className="w-5 h-5" />
-                 )}
+               <Button variant="ghost" size="icon" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+                 {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
                </Button>
-               
                <div className="flex items-center gap-3 pl-2 border-l">
                  <Avatar className="h-8 w-8 border shadow-sm">
                    <AvatarImage src={user?.photoURL || undefined} />
-                   <AvatarFallback className="bg-blue-50 text-blue-600 text-[10px] font-bold uppercase">
-                     {user?.email?.[0] || <UserIcon size={14} />}
+                   <AvatarFallback className="bg-blue-50 text-blue-600 text-[10px] font-bold">
+                     {user?.email?.[0]?.toUpperCase()}
                    </AvatarFallback>
                  </Avatar>
                  <div className="hidden lg:flex flex-col items-start leading-none">
-                   <span className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase truncate max-w-[150px]">
-                     {user?.email?.split('@')[0] || 'Usuario'}
-                   </span>
-                   <span className="text-[8px] font-bold text-slate-400 uppercase mt-0.5">
-                     {role === 'admin' ? 'Super Administrador' : (role === 'driver' ? 'Conductor Profesional' : (role?.replace('_', ' ') || 'Colaborador'))}
-                   </span>
+                   <span className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase">{user?.email?.split('@')[0]}</span>
+                   <span className="text-[8px] font-bold text-slate-400 uppercase mt-0.5">{role?.replace('_', ' ') || 'Usuario'}</span>
                  </div>
                </div>
             </div>
           </header>
-          <main className="p-4 sm:p-6">
-            {children}
-          </main>
+          <main className="p-4 sm:p-6">{children}</main>
         </SidebarInset>
       </div>
     </SidebarProvider>
