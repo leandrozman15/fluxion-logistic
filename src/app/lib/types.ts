@@ -374,7 +374,10 @@ export interface Client {
   industry: string;
   facadePhotoUrl?: string;
   status: 'active' | 'inactive';
+  creditLimit: number;
+  defaultPaymentMethod?: string;
   createdAt: any;
+  updatedAt?: any;
 }
 
 export interface TrackingPoint {

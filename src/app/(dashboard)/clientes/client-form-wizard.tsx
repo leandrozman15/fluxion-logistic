@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from "react";
@@ -19,7 +20,7 @@ import {
   User, CreditCard, Briefcase, Plus, Trash2, 
   CheckCircle2, ChevronRight, ChevronLeft, Star, 
   Info, MessageSquare, Crosshair, Anchor, Image as ImageIcon, Camera, Home, Locate,
-  DollarSign
+  DollarSign, Receipt
 } from "lucide-react";
 import { Client, Country } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -38,6 +39,17 @@ const INDUSTRIES = [
   "Agropecuario", "Automotriz", "Construcción", "Electrónica", "Energía", 
   "Farmacéutico", "Alimenticio", "Metalúrgico", "Minero", "Petróleo y Gas", 
   "Retail / Comercio", "Tecnología", "Textil", "Otro"
+];
+
+const PAYMENT_METHODS = [
+  "Transferencia Bancaria",
+  "Contado Efectivo",
+  "Cheque a 30 días",
+  "Cheque a 60 días",
+  "Echeq",
+  "Mercado Pago",
+  "Cuenta Corriente",
+  "Tarjeta de Crédito Corporativa"
 ];
 
 export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
@@ -63,6 +75,7 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
       zip: "", lat: -34.6037, lng: -58.3816 
     },
     creditLimit: 0,
+    defaultPaymentMethod: "Transferencia Bancaria"
   });
 
   const clientRef = useMemo(() => 
@@ -246,7 +259,7 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
                </div>
                <div className="space-y-1.5">
                  <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">CUIT / ID Tributario</Label>
-                 <Input className="h-12 bg-slate-50 border-none rounded-xl font-mono font-bold" placeholder="30-XXXXXXXX-X" value={formData.cuit ?? ''} onChange={e => setFormData({...formData, cuit: e.target.value})} />
+                 <Input className="h-12 bg-slate-50 border-none rounded-xl font-mono font-black" placeholder="30-XXXXXXXX-X" value={formData.cuit ?? ''} onChange={e => setFormData({...formData, cuit: e.target.value})} />
                </div>
                <div className="space-y-1.5">
                   <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Rubro / Industria Principal</Label>
@@ -380,7 +393,7 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
                <div className="space-y-1.5">
                   <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Nombre del Responsable de Logística / Compras</Label>
                   <div className="relative">
-                     <User className="absolute left-3 top-3 h-5 w-5 text-slate-300" />
+                     <User size={18} className="absolute left-3 top-3 text-slate-300" />
                      <Input className="h-12 bg-slate-50 border-none rounded-xl font-bold pl-12" placeholder="Ej: Ing. Jorge Martínez" value={formData.mainContact?.name ?? ''} onChange={e => setFormData({...formData, mainContact: {...formData.mainContact!, name: e.target.value}})} />
                   </div>
                </div>
@@ -416,10 +429,25 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
                   <div className="space-y-1.5">
                      <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Límite de Crédito Operativo (ARS)</Label>
                      <div className="relative">
-                        <DollarSign className="absolute left-3 top-3 h-5 w-5 text-slate-300" />
+                        <DollarSign className="absolute left-3 top-3.5 h-5 w-5 text-slate-300" />
                         <Input type="number" className="h-12 bg-slate-50 border-none rounded-xl font-black text-xl pl-12" value={formData.creditLimit} onChange={e => setFormData({...formData, creditLimit: parseFloat(e.target.value) || 0})} />
                      </div>
                      <p className="text-[9px] text-slate-400 font-bold uppercase mt-1 italic">Monto máximo de fletes pendientes de pago habilitados.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                     <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Método de Pago Preferido</Label>
+                     <div className="relative">
+                        <Receipt size={18} className="absolute left-3 top-3.5 h-5 w-5 text-slate-300" />
+                        <Select value={formData.defaultPaymentMethod} onValueChange={v => setFormData({...formData, defaultPaymentMethod: v})}>
+                          <SelectTrigger className="h-12 bg-slate-50 border-none rounded-xl font-bold pl-12">
+                             <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                             {PAYMENT_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                     </div>
+                     <p className="text-[9px] text-slate-400 font-bold uppercase mt-1 italic">Este método se cargará automáticamente en nuevos presupuestos.</p>
                   </div>
                </div>
                

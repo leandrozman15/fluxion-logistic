@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
@@ -185,7 +186,8 @@ export default function NewQuotationPage() {
         clientId: id, 
         clientName: client.name, 
         clientCuit: client.cuit,
-        deliveryAddress: `${client.address?.street || ''} ${client.address?.number || ''}, ${client.address?.city || ''}`
+        deliveryAddress: `${client.address?.street || ''} ${client.address?.number || ''}, ${client.address?.city || ''}`,
+        paymentMethod: client.defaultPaymentMethod || prev.paymentMethod
       }));
     }
   };
@@ -455,7 +457,7 @@ export default function NewQuotationPage() {
 
            {/* 4. OBSERVACIONES */}
            <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-white">
-              <CardHeader className="bg-slate-50 p-6 border-b"><CardTitle className="text-xs font-black uppercase text-slate-400">Notas y Clausulado</CardTitle></CardHeader>
+              <CardHeader className="bg-slate-50 p-6 border-b"><CardTitle className="text-xs font-black uppercase text-slate-500">Notas y Clausulado</CardTitle></CardHeader>
               <CardContent className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
                  <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-blue-600 flex items-center gap-2"><Globe size={12}/> Observaciones Visibles (Cliente)</Label>
