@@ -45,6 +45,8 @@ import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toSafeDate } from "@/lib/utils/date-utils";
 import { calculateDistance } from "@/lib/utils/tracking-math";
 
@@ -304,11 +306,11 @@ export default function AnalyticsPage() {
               <div className="grid grid-cols-2 gap-8">
                  <div className="space-y-1">
                     <p className="text-[10px] font-black uppercase text-white/30 tracking-widest">KM Totales Reales</p>
-                    <p className="text-4xl font-black italic tracking-tighter text-blue-400">{Math.round(operationalStats.totalRealKm).toLocaleString()} <span className="text-xs font-normal opacity-50">km</span></p>
+                    <p className="text-4xl font-black italic tracking-tighter text-blue-400">{Math.round(operationalStats.totalRealKm).toLocaleString()} <span className="text-xs font-normal opacity-50 uppercase">km</span></p>
                  </div>
                  <div className="space-y-1">
                     <p className="text-[10px] font-black uppercase text-white/30 tracking-widest">KM Planificados</p>
-                    <p className="text-4xl font-black italic tracking-tighter">{Math.round(operationalStats.totalPlannedKm).toLocaleString()} <span className="text-xs font-normal opacity-50">km</span></p>
+                    <p className="text-4xl font-black italic tracking-tighter">{Math.round(operationalStats.totalPlannedKm).toLocaleString()} <span className="text-xs font-normal opacity-50 uppercase">km</span></p>
                  </div>
               </div>
 
