@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from "react";
@@ -19,7 +18,8 @@ import {
   MapPin, Phone, Mail, Globe, ShieldCheck, 
   User, CreditCard, Briefcase, Plus, Trash2, 
   CheckCircle2, ChevronRight, ChevronLeft, Star, 
-  Info, MessageSquare, Crosshair, Anchor, Image as ImageIcon, Camera, Home, Locate
+  Info, MessageSquare, Crosshair, Anchor, Image as ImageIcon, Camera, Home, Locate,
+  DollarSign
 } from "lucide-react";
 import { Client, Country } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -221,7 +221,7 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
               <div className={cn(
                 "w-10 h-10 rounded-full flex items-center justify-center border-2 z-10 transition-all", 
                 step === s.id ? "bg-blue-600 text-white border-blue-600 shadow-lg scale-110" : 
-                step > s.id ? "bg-green-500 text-white border-green-500" : "bg-white text-slate-300 border-slate-100"
+                step > s.id ? "bg-green-50 text-white border-green-500" : "bg-white text-slate-300 border-slate-100"
               )}>
                 {step > s.id ? <CheckCircle2 size={20} /> : <s.icon size={18} />}
               </div>
