@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
@@ -22,7 +21,8 @@ import {
   ArrowRight,
   ChevronRight,
   Trophy,
-  Activity
+  Activity,
+  ShieldCheck
 } from "lucide-react";
 import { Load, Expense, Truck, Driver } from "@/app/lib/types";
 import { 
