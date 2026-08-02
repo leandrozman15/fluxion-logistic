@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
@@ -234,6 +235,15 @@ export default function MonitorOperativoPage() {
     iconSize: [36, 36], iconAnchor: [18, 18]
   }) : null;
 
+  const clientMarkerIcon = () => L ? L.divIcon({
+    className: 'custom-client-marker-icon',
+    html: `<div class="bg-indigo-600 text-white p-2 rounded-full shadow-lg border-2 border-white flex items-center justify-center">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M3 7v1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7m0 1a3 3 0 0 0 6 0V7"/><path d="M4 21V4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v17"/></svg>
+    </div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15]
+  }) : null;
+
   const getTruckIcon = (hasAlert: boolean = false) => {
     if (!L) return null;
     return L.divIcon({
@@ -452,6 +462,20 @@ export default function MonitorOperativoPage() {
               const icon = hubIcon(!!hub.isMainBase);
               if (!icon) return null;
               return (<Marker key={hub.id} position={[hub.lat || -34.6, hub.lng || -58.3]} icon={icon}><Popup><div className="p-1"><div className="font-bold text-sm">{hub.name}</div><div className="text-xs text-slate-500">{hub.city}</div></div></Popup></Marker>);
+            })}
+            {L && clients?.filter(c => c.address?.lat && c.address?.lng).map((client) => {
+              const icon = clientMarkerIcon();
+              if (!icon) return null;
+              return (
+                <Marker key={client.id} position={[client.address.lat!, client.address.lng!]} icon={icon}>
+                  <Popup>
+                    <div className="p-1">
+                      <div className="font-bold text-sm uppercase">{client.name}</div>
+                      <div className="text-[10px] text-slate-500 font-bold uppercase">{client.address.city}</div>
+                    </div>
+                  </Popup>
+                </Marker>
+              );
             })}
             {L && trucks?.filter(t => t.status === 'in_trip' && t.location?.lat).map((truck) => (
               <Marker key={truck.id} position={[truck.location!.lat!, truck.location!.lng!]} icon={getTruckIcon(!!truck.hasActiveAlert)}><Popup><div className="p-1 font-bold text-sm">Patente: {truck.plate}</div></Popup></Marker>
