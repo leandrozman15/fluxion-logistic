@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { doc, updateDoc, serverTimestamp, arrayUnion } from "firebase/firestore";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";

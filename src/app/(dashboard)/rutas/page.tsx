@@ -60,21 +60,32 @@ export default function DriverRoutesPage() {
     return dates;
   }, []);
 
+  // Simplificamos la consulta eliminando el orderBy para evitar el error de índice compuesto
+  // Ordenaremos los resultados en el useMemo de JS.
   const routesQuery = useMemo(() => {
     if (!db || !tenantId) return null;
     
     if (role === 'driver' && user?.uid) {
       return query(
         collection(db, "tenants", tenantId, "loads"), 
-        where("assignedDriverId", "==", user.uid),
-        orderBy("pickupDate", "asc")
+        where("assignedDriverId", "==", user.uid)
       );
     }
 
-    return query(collection(db, "tenants", tenantId, "loads"), orderBy("pickupDate", "asc"));
+    return query(collection(db, "tenants", tenantId, "loads"));
   }, [db, tenantId, role, user?.uid]);
 
-  const { data: routes, loading } = useCollection<Load>(routesQuery);
+  const { data: rawRoutes, loading } = useCollection<Load>(routesQuery);
+
+  // Ordenamos y procesamos los datos en memoria
+  const routes = useMemo(() => {
+    if (!rawRoutes) return [];
+    return [...rawRoutes].sort((a, b) => {
+      const dateTimeA = `${a.pickupDate} ${a.pickupTime}`;
+      const dateTimeB = `${b.pickupDate} ${b.pickupTime}`;
+      return dateTimeA.localeCompare(dateTimeB);
+    });
+  }, [rawRoutes]);
 
   const dateStatusMap = useMemo(() => {
     if (!routes) return {};
