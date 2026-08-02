@@ -2,11 +2,15 @@ services:
   - type: web
     name: fluxion-logistic-backend
     env: node
+    region: oregon
     plan: free
-    buildCommand: npm ci && npm run build
-    startCommand: npm start
+    rootDir: backend
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npm run start
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 10000
+      - key: DATABASE_URL
+        sync: false

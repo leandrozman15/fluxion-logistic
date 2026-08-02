@@ -39,8 +39,9 @@ npm run build
 ## Despliegue en Render
 
 1. Crea un servicio Web en Render.
-2. Usa el comando de build: `npm ci && npm run build`
-3. Usa el comando de inicio: `npm start`
+2. Usa el siguiente comando de build: `npm install && npx prisma generate && npm run build`
+3. Usa el comando de inicio: `npm run start`
 4. Define la variable de entorno `DATABASE_URL` con la conexión de Neon.
+5. Opcionalmente, configura `NODE_ENV=production` y `PORT=10000`.
 
 También puedes usar el archivo render.yaml como punto de partida.
