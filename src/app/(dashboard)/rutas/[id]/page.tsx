@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -28,7 +27,10 @@ import {
   Zap,
   Radio,
   Compass,
-  Play
+  Play,
+  User,
+  Truck as TruckIcon,
+  Signature
 } from "lucide-react";
 import { Load, ProofOfDelivery, Truck, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -362,6 +364,8 @@ export default function RouteDetailPage() {
   if (loadLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!load) return <div className="p-10 text-center">Viaje no encontrado.</div>;
 
+  const isPodFormValid = podForm.receiverName && podForm.receiverSignatureUrl && podForm.driverSignatureUrl;
+
   return (
     <div className="max-w-md mx-auto space-y-6 pb-32 px-2">
       <div className="flex items-center justify-between pt-6 px-2">
@@ -519,39 +523,90 @@ export default function RouteDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* DIALOG ENTREGADO */}
+      {/* DIALOG ENTREGADO (POD) */}
       <Dialog open={isPodOpen} onOpenChange={setIsPodOpen}>
-        <DialogContent className="max-w-[95vw] rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl">
-           <div className="bg-green-600 text-white p-6">
+        <DialogContent className="max-w-[100vw] sm:max-w-lg h-[100dvh] sm:h-auto rounded-none sm:rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl flex flex-col">
+           <div className="bg-green-600 text-white p-6 shrink-0">
               <DialogHeader>
-                <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Confirmar Entrega</DialogTitle>
+                <div className="flex justify-between items-center">
+                   <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Certificar Entrega</DialogTitle>
+                   <Button variant="ghost" size="icon" onClick={() => setIsPodOpen(false)} className="text-white/60 hover:text-white"><XCircle /></Button>
+                </div>
                 <DialogDescription className="text-white/60 text-[10px] font-bold uppercase">{currentStop?.name}</DialogDescription>
               </DialogHeader>
            </div>
-           <div className="p-6 space-y-6 bg-slate-50 overflow-y-auto max-h-[70vh]">
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-400">Receptor</Label>
-                <Input className="h-12 bg-white rounded-xl" placeholder="Nombre completo" value={podForm.receiverName} onChange={e => setPodForm({...podForm, receiverName: e.target.value})} />
-              </div>
-              <SignaturePad title="Firma de Recepción" onSave={(url) => setPodForm({...podForm, receiverSignatureUrl: url})} />
-              <div className="space-y-3">
-                 <Label className="text-[10px] font-black uppercase text-slate-400">Foto de Evidencia</Label>
-                 <input type="file" ref={photoInputRef} className="hidden" accept="image/*" capture="environment" onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      const reader = new FileReader();
-                      reader.onload = async (ev) => setPodForm({...podForm, photoUrl: ev.target?.result as string});
-                      reader.readAsDataURL(file);
-                    }
-                 }} />
-                 <div className="aspect-video bg-white rounded-3xl border-2 border-dashed flex items-center justify-center cursor-pointer overflow-hidden" onClick={() => photoInputRef.current?.click()}>
-                    {podForm.photoUrl ? <img src={podForm.photoUrl} className="w-full h-full object-cover" /> : <Camera size={32} className="text-slate-200" />}
+           
+           <div className="flex-1 p-6 space-y-6 bg-slate-50 overflow-y-auto">
+              <div className="space-y-4">
+                 <div className="space-y-1.5">
+                   <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Nombre de quien recibe</Label>
+                   <Input 
+                    className="h-12 bg-white rounded-xl font-bold" 
+                    placeholder="Ej: Juan Perez" 
+                    value={podForm.receiverName} 
+                    onChange={e => setPodForm({...podForm, receiverName: e.target.value})} 
+                   />
+                 </div>
+
+                 <div className="grid grid-cols-1 gap-4">
+                    <SignaturePad 
+                      title="Firma del Receptor" 
+                      onSave={(url) => setPodForm({...podForm, receiverSignatureUrl: url})} 
+                      defaultValue={podForm.receiverSignatureUrl}
+                    />
+                    
+                    <SignaturePad 
+                      title="Firma del Chofer (Certifica)" 
+                      onSave={(url) => setPodForm({...podForm, driverSignatureUrl: url})} 
+                      defaultValue={podForm.driverSignatureUrl}
+                    />
+                 </div>
+
+                 <div className="space-y-3">
+                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Evidencia Fotográfica (Bulto/Puerta)</Label>
+                    <input type="file" ref={photoInputRef} className="hidden" accept="image/*" capture="environment" onChange={(e) => {
+                       const file = e.target.files?.[0];
+                       if (file) {
+                         const reader = new FileReader();
+                         reader.onload = async (ev) => setPodForm({...podForm, photoUrl: ev.target?.result as string});
+                         reader.readAsDataURL(file);
+                       }
+                    }} />
+                    <div className={cn(
+                      "aspect-video bg-white rounded-3xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer overflow-hidden transition-all",
+                      podForm.photoUrl ? "border-blue-400" : "border-slate-200"
+                    )} onClick={() => photoInputRef.current?.click()}>
+                       {podForm.photoUrl ? (
+                         <img src={podForm.photoUrl} className="w-full h-full object-cover" alt="POD" />
+                       ) : (
+                         <>
+                           <Camera size={32} className="text-slate-200" />
+                           <p className="text-[9px] font-black text-slate-300 uppercase mt-2">Tomar Fotografía</p>
+                         </>
+                       )}
+                    </div>
+                 </div>
+
+                 <div className="space-y-1.5">
+                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Observaciones</Label>
+                    <Input 
+                      className="h-10 bg-white rounded-xl text-xs" 
+                      placeholder="Ej: Portón azul, entrega en guardia..." 
+                      value={podForm.notes}
+                      onChange={e => setPodForm({...podForm, notes: e.target.value})}
+                    />
                  </div>
               </div>
            </div>
-           <div className="p-6 bg-white border-t">
-              <Button className="w-full h-16 bg-green-600 hover:bg-green-700 text-white font-black text-lg rounded-2xl" onClick={handleConfirmDelivery} disabled={isUpdating || !podForm.receiverName}>
-                 FINALIZAR ENTREGA
+
+           <div className="p-6 bg-white border-t shrink-0">
+              <Button 
+                className="w-full h-16 bg-green-600 hover:bg-green-700 text-white font-black text-lg rounded-2xl shadow-xl disabled:opacity-30" 
+                onClick={handleConfirmDelivery} 
+                disabled={isUpdating || !isPodFormValid}
+              >
+                 {isUpdating ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2" />}
+                 CONFIRMAR ENTREGA
               </Button>
            </div>
         </DialogContent>
