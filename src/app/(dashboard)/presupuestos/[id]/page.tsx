@@ -2,9 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useFirestore, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +13,7 @@ import {
   User, Calendar, DollarSign, Calculator, Package,
   Truck, Briefcase, Landmark, MapPin, Receipt
 } from "lucide-react";
-import { Quotation, QuotationStatus, Tenant } from "@/app/lib/types";
+import { Quotation, QuotationStatus } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { generateQuotationPDF } from "@/lib/pdf-service";
@@ -35,7 +33,6 @@ export default function QuotationDetailPage() {
   const { id } = useParams();
   const quoteId = Array.isArray(id) ? id[0] : id;
   const router = useRouter();
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -75,9 +72,6 @@ export default function QuotationDetailPage() {
     };
   }, [quoteId, tenantId, toast]);
 
-  const tenantRef = useMemo(() => (db && tenantId) ? doc(db, "tenants", tenantId) : null, [db, tenantId]);
-  const { data: tenant } = useDoc<Tenant>(tenantRef);
-
   const handleUpdateStatus = async (newStatus: QuotationStatus) => {
     if (!quoteId) return;
     setIsUpdating(true);
@@ -96,7 +90,7 @@ export default function QuotationDetailPage() {
     if (!quote) return;
     setIsDownloading(true);
     try {
-      await generateQuotationPDF(quote, tenant || undefined);
+      await generateQuotationPDF(quote, undefined);
     } catch (e) {
       toast({ variant: "destructive", title: "Error al generar PDF" });
     } finally {

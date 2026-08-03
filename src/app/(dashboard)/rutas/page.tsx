@@ -2,25 +2,18 @@
 
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useCollection, useUser, useDoc } from "@/firebase";
+import { useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, where, orderBy, doc } from "firebase/firestore";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Image from "next/image";
 import { 
-  Package, 
   Loader2,
   Calendar,
-  MapPin,
-  Clock,
   Compass,
   FileText,
-  Phone,
-  Play,
   CheckCircle2,
-  AlertTriangle,
   History,
   ChevronLeft,
   ChevronRight,
@@ -31,16 +24,17 @@ import {
   MessageCircle,
   Headset
 } from "lucide-react";
-import { Load, LoadStatus, Tenant } from "@/app/lib/types";
+import { Load, LoadStatus } from "@/app/lib/types";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
-import { format, addDays, isSameDay, parseISO } from "date-fns";
+import { format, addDays, isSameDay } from "date-fns";
 import { es } from "date-fns/locale";
 import { normalizePhone, buildWaMeUrl } from "@/lib/utils/whatsapp";
+import { listLoads } from "@/lib/loads-api";
+import { getTenantProfile } from "@/lib/settings-api";
 
 export default function DriverRoutesPage() {
-  const db = useFirestore();
   const { tenantId, role } = useTenant();
   const { user } = useUser();
   const { toast } = useToast();
@@ -48,9 +42,9 @@ export default function DriverRoutesPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
-
-  const tenantRef = useMemo(() => (db && tenantId) ? doc(db, "tenants", tenantId) : null, [db, tenantId]);
-  const { data: tenant } = useDoc<Tenant>(tenantRef);
+  const [tenant, setTenant] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [rawRoutes, setRawRoutes] = useState<Load[]>([]);
 
   const dateRange = useMemo(() => {
     const dates = [];
@@ -60,14 +54,39 @@ export default function DriverRoutesPage() {
     return dates;
   }, []);
 
-  // Simplificamos la consulta para evitar errores de índices compuestos
-  // Obtenemos todos los viajes y filtramos por conductor y fecha en memoria
-  const routesQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "loads"));
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: rawRoutes, loading } = useCollection<Load>(routesQuery);
+    async function loadData() {
+      if (!tenantId) {
+        if (active) {
+          setRawRoutes([]);
+          setTenant(null);
+          setLoading(false);
+        }
+        return;
+      }
+
+      try {
+        if (active) setLoading(true);
+        const [routesData, tenantData] = await Promise.all([listLoads(), getTenantProfile()]);
+        if (!active) return;
+        setRawRoutes(routesData);
+        setTenant(tenantData);
+      } catch {
+        if (!active) return;
+        setRawRoutes([]);
+        setTenant(null);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId]);
 
   const routes = useMemo(() => {
     if (!rawRoutes) return [];

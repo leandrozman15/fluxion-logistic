@@ -1,11 +1,9 @@
 
 'use client';
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, doc, updateDoc, serverTimestamp, deleteDoc } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -28,21 +26,48 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import { formatSafeDate } from "@/lib/utils/date-utils";
+import { deleteRemito, listRemitos, updateRemito } from "@/lib/remitos-api";
 
 export default function RemitosDashboardPage() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const router = useRouter();
   const { toast } = useToast();
   
   const [searchTerm, setSearchTerm] = useState("");
+  const [allRemitos, setAllRemitos] = useState<PendingRemito[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const remitosQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "pending_remitos"), orderBy("createdAt", "desc"));
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: allRemitos, loading } = useCollection<PendingRemito>(remitosQuery);
+    async function loadData() {
+      if (!tenantId) {
+        if (active) {
+          setAllRemitos([]);
+          setLoading(false);
+        }
+        return;
+      }
+
+      try {
+        if (active) setLoading(true);
+        const rows = await listRemitos();
+        if (active) setAllRemitos(rows);
+      } catch (error) {
+        if (active) {
+          setAllRemitos([]);
+          toast({ variant: "destructive", title: "Error al cargar remitos", description: (error as Error).message });
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, toast]);
 
   const filteredRemitos = useMemo(() => {
     if (!allRemitos) return [];
@@ -55,25 +80,24 @@ export default function RemitosDashboardPage() {
   }, [allRemitos, searchTerm]);
 
   const handleArchive = async (id: string) => {
-    if (!db || !tenantId) return;
+    if (!tenantId) return;
     try {
-      await updateDoc(doc(db, "tenants", tenantId, "pending_remitos", id), {
-        status: 'archived',
-        updatedAt: serverTimestamp()
-      });
+      await updateRemito(id, { status: 'archived' });
+      setAllRemitos((prev) => prev.map((remito) => (remito.id === id ? { ...remito, status: 'archived' } : remito)));
       toast({ title: "Remito Archivado" });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error" });
+      toast({ variant: "destructive", title: "Error", description: (e as Error).message });
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!db || !tenantId || !confirm("¿Eliminar definitivamente?")) return;
+    if (!tenantId || !confirm("¿Eliminar definitivamente?")) return;
     try {
-      await deleteDoc(doc(db, "tenants", tenantId, "pending_remitos", id));
+      await deleteRemito(id);
+      setAllRemitos((prev) => prev.filter((remito) => remito.id !== id));
       toast({ title: "Remito eliminado" });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error" });
+      toast({ variant: "destructive", title: "Error", description: (e as Error).message });
     }
   };
 

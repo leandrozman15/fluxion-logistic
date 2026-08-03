@@ -2,9 +2,8 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useDoc, useCollection, useUser } from "@/firebase";
+import { useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, serverTimestamp, doc, updateDoc, setDoc, query, orderBy, writeBatch } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +24,8 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { compressImage } from "@/lib/utils/image-compression";
 import { uploadBase64 } from "@/lib/storage-service";
-import { logSystemEvent } from "@/lib/audit-service";
+import { createProduct, getProduct, updateProduct } from "@/lib/products-api";
+import { listHubs } from "@/lib/hubs-api";
 
 interface ProductFormWizardProps {
   productId?: string;
@@ -42,14 +42,15 @@ const UNIT_TYPES = [
 ];
 
 export default function ProductFormWizard({ productId }: ProductFormWizardProps) {
-  const db = useFirestore();
   const { tenantId, role } = useTenant();
-  const { user } = useUser();
+  useUser();
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState<string | null>(null);
+  const [loadingExisting, setLoadingExisting] = useState(Boolean(productId));
+  const [hubs, setHubs] = useState<Hub[]>([]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -66,15 +67,41 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
     listPrice: 0, avgCost: 0, markup: 0
   });
 
-  const productRef = useMemo(() => (productId && db && tenantId) ? doc(db, "tenants", tenantId, "products", productId) : null, [db, tenantId, productId]);
-  const { data: existingProduct, loading: loadingExisting } = useDoc<Product>(productRef);
-
-  const hubsQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "hubs"), orderBy("name")) : null, [db, tenantId]);
-  const { data: hubs } = useCollection<Hub>(hubsQuery);
-
   useEffect(() => {
-    if (existingProduct) setFormData(existingProduct);
-  }, [existingProduct]);
+    let active = true;
+
+    async function loadData() {
+      if (!tenantId) {
+        if (active) {
+          setLoadingExisting(false);
+          setHubs([]);
+        }
+        return;
+      }
+
+      try {
+        const [hubsRows, productRow] = await Promise.all([
+          listHubs(),
+          productId ? getProduct(productId) : Promise.resolve(null),
+        ]);
+
+        if (!active) return;
+        setHubs(hubsRows);
+        if (productRow) setFormData(productRow);
+      } catch (error) {
+        if (active) {
+          toast({ variant: "destructive", title: "Error al cargar datos", description: (error as Error).message });
+        }
+      } finally {
+        if (active) setLoadingExisting(false);
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, productId, toast]);
 
   useEffect(() => {
     if (hubs && (formData.warehouses?.length === 0 || !formData.warehouses)) {
@@ -121,7 +148,6 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
         const url = await uploadBase64(storagePath, compressed);
 
         setFormData(prev => ({ ...prev, photoUrl: url }));
-        await logSystemEvent(db, tenantId, user, 'document_upload', 'product', formData.sku || 'unknown', { type: 'photo' });
         toast({ title: "Imagen actualizada" });
       } catch (err) {
         toast({ variant: "destructive", title: "Error al subir" });
@@ -142,19 +168,16 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
   };
 
   const handleSubmit = async () => {
-    if (!db || !tenantId || !formData.name || !formData.sku) return;
+    if (!tenantId || !formData.name || !formData.sku) return;
     setIsSubmitting(true);
     try {
       const totalStock = (formData.warehouses || []).reduce((acc, w) => acc + (w.stockQuantity || 0), 0);
-      const finalData = { ...formData, stockQuantity: totalStock, updatedAt: serverTimestamp() };
+      const finalData = { ...formData, stockQuantity: totalStock };
       
       if (productId) {
-        await updateDoc(doc(db, "tenants", tenantId, "products", productId), finalData);
-        await logSystemEvent(db, tenantId, user, 'update', 'product', productId, { sku: formData.sku });
+        await updateProduct(productId, finalData);
       } else {
-        const newRef = doc(collection(db, "tenants", tenantId, "products"));
-        await setDoc(newRef, { ...finalData, id: newRef.id, createdAt: serverTimestamp() });
-        await logSystemEvent(db, tenantId, user, 'create', 'product', newRef.id, { sku: formData.sku });
+        await createProduct(finalData);
       }
 
       toast({ title: "Producto Guardado", description: "Los cambios ya están en el catálogo central." });

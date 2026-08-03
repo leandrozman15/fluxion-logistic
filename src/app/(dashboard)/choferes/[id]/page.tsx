@@ -2,10 +2,9 @@
 'use client';
 
 import { useMemo, useState } from "react";
+import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useFirestore, useDoc, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc, collection, query, where } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +25,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import Link from "next/link";
 import { toSafeDate } from "@/lib/utils/date-utils";
+import { getDriver } from "@/lib/drivers-api";
+import { listLoads } from "@/lib/loads-api";
+import { listTrucks } from "@/lib/trucks-api";
 
 interface ActiveDoc {
   front?: string;
@@ -36,27 +38,66 @@ interface ActiveDoc {
 export default function DriverProfilePage() {
   const { id } = useParams();
   const router = useRouter();
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const [activeDoc, setActiveDoc] = useState<ActiveDoc | null>(null);
   const [viewingBack, setViewingBack] = useState(false);
+  const [driver, setDriver] = useState<Driver | null>(null);
+  const [trips, setTrips] = useState<Load[]>([]);
+  const [assignedTrucks, setAssignedTrucks] = useState<Truck[]>([]);
+  const [driverLoading, setDriverLoading] = useState(true);
+  const [tripsLoading, setTripsLoading] = useState(true);
 
-  const driverRef = useMemo(() => {
-    if (!db || !id || !tenantId) return null;
-    return doc(db, "tenants", tenantId, "drivers", id as string);
-  }, [db, id, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: driver, loading: driverLoading } = useDoc<Driver>(driverRef);
+    async function loadData() {
+      if (!tenantId || !id) {
+        if (active) {
+          setDriver(null);
+          setTrips([]);
+          setAssignedTrucks([]);
+          setDriverLoading(false);
+          setTripsLoading(false);
+        }
+        return;
+      }
 
-  const tripsQuery = useMemo(() => {
-    if (!db || !id || !tenantId) return null;
-    return query(
-      collection(db, "tenants", tenantId, "loads"),
-      where("assignedDriverId", "==", id as string)
-    );
-  }, [db, id, tenantId]);
+      try {
+        if (active) {
+          setDriverLoading(true);
+          setTripsLoading(true);
+        }
 
-  const { data: trips, loading: tripsLoading } = useCollection<Load>(tripsQuery);
+        const [driverRow, loadRows, truckRows] = await Promise.all([
+          getDriver(id as string),
+          listLoads(),
+          listTrucks(),
+        ]);
+
+        if (!active) return;
+
+        setDriver(driverRow);
+        setTrips(loadRows.filter((load) => load.assignedDriverId === (id as string)));
+        setAssignedTrucks(truckRows.filter((truck) => truck.assignedDriverId === (id as string)));
+      } catch {
+        if (active) {
+          setDriver(null);
+          setTrips([]);
+          setAssignedTrucks([]);
+        }
+      } finally {
+        if (active) {
+          setDriverLoading(false);
+          setTripsLoading(false);
+        }
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, id]);
 
   const totalKm = useMemo(() => {
     if (!trips) return 0;
@@ -71,13 +112,6 @@ export default function DriverProfilePage() {
       return dateB - dateA;
     });
   }, [trips]);
-
-  const trucksQuery = useMemo(() => {
-    if (!db || !id || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "trucks"), where("assignedDriverId", "==", id as string));
-  }, [db, id, tenantId]);
-
-  const { data: assignedTrucks } = useCollection<Truck>(trucksQuery);
 
   const getStatusBadge = (status: DriverStatus) => {
     switch (status) {

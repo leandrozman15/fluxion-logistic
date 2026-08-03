@@ -37,6 +37,39 @@ export async function listTrucks() {
   return getListData(response).map(normalizeTruck);
 }
 
+export async function getTruck(id: string) {
+  const response = await backendRequest<any>(`/api/trucks/${id}`);
+  const raw = response.data || response.payload;
+  if (!raw) {
+    throw new Error('Truck not found');
+  }
+  return normalizeTruck(raw);
+}
+
+export async function createTruck(data: Partial<Truck>) {
+  const response = await backendRequest<any>('/api/trucks', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  const raw = response.data || response.payload;
+  if (!raw) {
+    throw new Error('Failed to create truck');
+  }
+  return normalizeTruck(raw);
+}
+
+export async function updateTruck(id: string, data: Partial<Truck>) {
+  const response = await backendRequest<any>(`/api/trucks/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+  const raw = response.data || response.payload;
+  if (!raw) {
+    throw new Error('Failed to update truck');
+  }
+  return normalizeTruck(raw);
+}
+
 export async function deleteTruck(id: string) {
   await backendRequest(`/api/trucks/${id}`, { method: 'DELETE' });
 }

@@ -1,10 +1,9 @@
 
 'use client';
 
-import { useState, useMemo } from "react";
-import { useFirestore, useCollection, useUser } from "@/firebase";
+import React, { useState, useMemo, useEffect } from "react";
+import { useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, doc, updateDoc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -41,9 +40,9 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Product, StockMovementType } from "@/app/lib/types";
 import { cn } from "@/lib/utils";
+import { listProducts, updateProduct } from "@/lib/products-api";
 
 export default function StockPage() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const { user } = useUser();
   const { toast } = useToast();
@@ -52,6 +51,8 @@ export default function StockPage() {
   const [isAdjusting, setIsAdjusting] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [expandedRows, setExpandedRows] = useState<string[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
 
   const [adjustmentForm, setAdjustmentForm] = useState({
     productId: "",
@@ -60,12 +61,37 @@ export default function StockPage() {
     reason: ""
   });
 
-  const productsQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "products"), orderBy("name"));
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: products, loading: loadingProducts } = useCollection<Product>(productsQuery);
+    async function loadData() {
+      if (!tenantId) {
+        if (active) {
+          setProducts([]);
+          setLoadingProducts(false);
+        }
+        return;
+      }
+
+      try {
+        if (active) setLoadingProducts(true);
+        const rows = await listProducts();
+        if (!active) return;
+        setProducts(rows);
+      } catch (error) {
+        if (!active) return;
+        setProducts([]);
+        toast({ variant: "destructive", title: "Error al cargar inventario", description: (error as Error).message });
+      } finally {
+        if (active) setLoadingProducts(false);
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, toast]);
 
   const filteredProducts = useMemo(() => {
     if (!products) return [];
@@ -86,7 +112,7 @@ export default function StockPage() {
   };
 
   const handleStockAdjustment = async () => {
-    if (!db || !tenantId || !adjustmentForm.productId || !user) return;
+    if (!tenantId || !adjustmentForm.productId || !user) return;
     setIsSubmitting(true);
 
     try {
@@ -98,34 +124,15 @@ export default function StockPage() {
 
       if (newStock < 0) throw new Error("El stock no puede ser negativo.");
 
-      const batch = writeBatch(db);
-
-      // 1. Actualizar Stock en Producto
-      const productRef = doc(db, "tenants", tenantId, "products", product.id);
-      batch.update(productRef, {
+      const updated = await updateProduct(product.id, {
         stockQuantity: newStock,
-        updatedAt: serverTimestamp()
       });
-
-      // 2. Registrar Movimiento en la BD
-      const movementRef = doc(collection(db, "tenants", tenantId, "stock_movements"));
-      batch.set(movementRef, {
-        id: movementRef.id,
-        productId: product.id,
-        productName: product.name,
-        sku: product.sku,
-        type: adjustmentForm.type,
-        quantity: adjustmentForm.quantity,
-        previousStock: product.stockQuantity || 0,
-        newStock: newStock,
-        reason: adjustmentForm.reason || "Ajuste manual",
-        actorEmail: user.email,
-        createdAt: serverTimestamp()
-      });
-
-      await batch.commit();
+      setProducts((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
       
       toast({ title: "Stock Actualizado", description: `${product.sku}: ${newStock} unidades en total.` });
+      if (adjustmentForm.reason) {
+        toast({ title: "Nota registrada localmente", description: adjustmentForm.reason });
+      }
       setIsAdjusting(false);
       setAdjustmentForm({ productId: "", type: 'in', quantity: 1, reason: "" });
     } catch (e: any) {
@@ -379,5 +386,3 @@ export default function StockPage() {
     </div>
   );
 }
-
-import React from 'react';

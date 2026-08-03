@@ -3,18 +3,21 @@
 
 import { useMemo, useState, useEffect, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useFirestore, useDoc, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc, collection, query, orderBy, getDoc } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
   ArrowLeft, Loader2, Receipt, Download
 } from "lucide-react";
-import { Load, Expense, Driver, Truck as TruckType, Tenant } from "@/app/lib/types";
+import { Load, Expense, Driver, Truck as TruckType } from "@/app/lib/types";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { getDriver } from "@/lib/drivers-api";
+import { listExpenses } from "@/lib/expenses-api";
+import { getLoad } from "@/lib/loads-api";
+import { toSafeDate } from "@/lib/utils/date-utils";
+import { getTruck } from "@/lib/trucks-api";
 
 const CATEGORY_LABELS: Record<string, string> = {
   fuel: 'COMBUSTIBLE',
@@ -29,57 +32,76 @@ function LoadWalletContent() {
   const { id } = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const db = useFirestore();
   const { tenantId } = useTenant();
   
+  const [load, setLoad] = useState<Load | null>(null);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [loading, setLoading] = useState(true);
   const [driver, setDriver] = useState<Driver | null>(null);
   const [truck, setTruck] = useState<TruckType | null>(null);
   const [loadingExtras, setLoadingExtras] = useState(false);
 
   const autoPrint = searchParams.get('print') === 'true';
 
-  const loadRef = useMemo(() => {
-    if (!db || !id || !tenantId) return null;
-    return doc(db, "tenants", tenantId, "loads", id as string);
-  }, [db, id, tenantId]);
-
-  const { data: load, loading } = useDoc<Load>(loadRef);
-
-  const tenantRef = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return doc(db, "tenants", tenantId);
-  }, [db, tenantId]);
-
-  const { data: tenant } = useDoc<Tenant>(tenantRef);
-
-  const expensesQuery = useMemo(() => {
-    if (!db || !id || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "loads", id as string, "expenses"), orderBy("createdAt", "desc"));
-  }, [db, id, tenantId]);
-
-  const { data: expenses } = useCollection<Expense>(expensesQuery);
-
   useEffect(() => {
-    async function fetchExtras() {
-      if (!db || !load || !tenantId) return;
-      setLoadingExtras(true);
+    let active = true;
+
+    async function loadData() {
+      if (!tenantId || !id) {
+        if (active) {
+          setLoad(null);
+          setExpenses([]);
+          setLoading(false);
+          setLoadingExtras(false);
+        }
+        return;
+      }
+
       try {
-        if (load.assignedDriverId && load.assignedDriverId !== 'none') {
-          const dSnap = await getDoc(doc(db, "tenants", tenantId, "drivers", load.assignedDriverId));
-          if (dSnap.exists()) setDriver(dSnap.data() as Driver);
+        if (active) {
+          setLoading(true);
+          setLoadingExtras(true);
         }
-        if (load.assignedTruckId) {
-          const tSnap = await getDoc(doc(db, "tenants", tenantId, "trucks", load.assignedTruckId));
-          if (tSnap.exists()) setTruck(tSnap.data() as TruckType);
+
+        const [loadRow, expenseRows] = await Promise.all([
+          getLoad(id as string),
+          listExpenses(),
+        ]);
+        if (!active) return;
+
+        setLoad(loadRow);
+        setExpenses(expenseRows.filter((expense) => expense.loadId === (id as string)).sort((a, b) => {
+          const aTime = toSafeDate(a.createdAt)?.getTime() || 0;
+          const bTime = toSafeDate(b.createdAt)?.getTime() || 0;
+          return bTime - aTime;
+        }));
+
+        if (loadRow.assignedDriverId && loadRow.assignedDriverId !== 'none') {
+          setDriver(await getDriver(loadRow.assignedDriverId));
         }
-      } catch (e) {
-        console.error(e);
+        if (loadRow.assignedTruckId) {
+          setTruck(await getTruck(loadRow.assignedTruckId));
+        }
+      } catch {
+        if (active) {
+          setLoad(null);
+          setExpenses([]);
+          setDriver(null);
+          setTruck(null);
+        }
       } finally {
-        setLoadingExtras(false);
+        if (active) {
+          setLoading(false);
+          setLoadingExtras(false);
+        }
       }
     }
-    fetchExtras();
-  }, [db, load, tenantId]);
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, id]);
 
   useEffect(() => {
     if (autoPrint && !loading && !loadingExtras && expenses) {
@@ -111,9 +133,8 @@ function LoadWalletContent() {
       <div className="bg-white shadow-2xl print:shadow-none w-[210mm] min-h-[297mm] mx-auto text-black border-[12px] border-double border-slate-900 print:border-none p-12 print:p-10 font-sans flex flex-col overflow-hidden box-border">
          <div className="flex justify-between items-start border-b-[5px] border-black pb-8 mb-8">
             <div className="flex items-center gap-6">
-               {tenant?.settings?.logoUrl && <img src={tenant.settings.logoUrl} className="h-20 w-auto" alt="Logo" />}
                <div>
-                 <h1 className="text-4xl font-black uppercase italic text-blue-800 leading-none">{tenant?.name || 'LOGÍSTICA AR'}</h1>
+                 <h1 className="text-4xl font-black uppercase italic text-blue-800 leading-none">LOGÍSTICA AR</h1>
                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mt-2">Planilla de Rendición Contable de Gastos</p>
                  <p className="text-[8px] font-bold text-slate-400 uppercase italic mt-1">Audit Report v3.0 - Texto Vectorial A4</p>
                </div>
@@ -148,7 +169,7 @@ function LoadWalletContent() {
             <tbody className="divide-y-2 divide-black/10">
                {expenses?.filter(e => e.status === 'approved').map(exp => (
                  <tr key={exp.id}>
-                    <td className="p-4 text-xs font-mono font-bold">{exp.createdAt?.toDate ? format(exp.createdAt.toDate(), "dd/MM/yy") : '---'}</td>
+                    <td className="p-4 text-xs font-mono font-bold">{toSafeDate(exp.createdAt) ? format(toSafeDate(exp.createdAt) as Date, "dd/MM/yy") : '---'}</td>
                     <td className="p-4">
                        <p className="text-sm font-black uppercase italic leading-none">{CATEGORY_LABELS[exp.category] || exp.category}</p>
                        <p className="text-[9px] text-slate-500 font-bold uppercase mt-1">LUGAR: {exp.location}</p>

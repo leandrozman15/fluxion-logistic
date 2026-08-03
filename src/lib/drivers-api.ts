@@ -50,6 +50,39 @@ export async function listDrivers() {
   return getListData(response).map(normalizeDriver);
 }
 
+export async function getDriver(id: string) {
+  const response = await backendRequest<any>(`/api/drivers/${id}`);
+  const raw = response.data || response.payload;
+  if (!raw) {
+    throw new Error('Driver not found');
+  }
+  return normalizeDriver(raw);
+}
+
+export async function createDriver(data: Partial<Driver>) {
+  const response = await backendRequest<any>('/api/drivers', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  const raw = response.data || response.payload;
+  if (!raw) {
+    throw new Error('Failed to create driver');
+  }
+  return normalizeDriver(raw);
+}
+
+export async function updateDriver(id: string, data: Partial<Driver>) {
+  const response = await backendRequest<any>(`/api/drivers/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+  const raw = response.data || response.payload;
+  if (!raw) {
+    throw new Error('Failed to update driver');
+  }
+  return normalizeDriver(raw);
+}
+
 export async function deleteDriver(id: string) {
   await backendRequest(`/api/drivers/${id}`, { method: 'DELETE' });
 }

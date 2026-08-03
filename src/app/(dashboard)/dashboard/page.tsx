@@ -3,9 +3,7 @@
 
 import { useMemo, useState, useEffect } from "react";
 import dynamic from "next/dynamic";
-import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { KPICard } from "@/components/dashboard/kpi-card";
 import { 
@@ -56,6 +54,11 @@ import { isToday, format, addDays, addMinutes } from "date-fns";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { listTrucks, updateTruck } from "@/lib/trucks-api";
+import { listLoads, updateLoad } from "@/lib/loads-api";
+import { listHubs } from "@/lib/hubs-api";
+import { listClients } from "@/lib/clients-api";
+import { listDrivers } from "@/lib/drivers-api";
 
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
@@ -73,7 +76,6 @@ const ALERT_LABELS: Record<string, string> = {
 };
 
 export default function MonitorOperativoPage() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const { toast } = useToast();
   
@@ -86,6 +88,13 @@ export default function MonitorOperativoPage() {
   const [selectedLoadForDock, setSelectedLoadForDock] = useState<Load | null>(null);
   const [selectedDock, setSelectedDock] = useState<string>("");
   const [isUpdatingDock, setIsUpdatingDock] = useState(false);
+  const [isDataLoading, setIsDataLoading] = useState(true);
+
+  const [trucks, setTrucks] = useState<Truck[]>([]);
+  const [loads, setLoads] = useState<Load[]>([]);
+  const [hubs, setHubs] = useState<Hub[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
 
   useEffect(() => {
     setMounted(true);
@@ -94,36 +103,66 @@ export default function MonitorOperativoPage() {
     });
   }, []);
 
-  const trucksQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return collection(db, "tenants", tenantId, "trucks");
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const loadsQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "loads"), orderBy("createdAt", "desc"));
-  }, [db, tenantId]);
+    async function loadData() {
+      if (!tenantId) {
+        if (active) {
+          setTrucks([]);
+          setLoads([]);
+          setHubs([]);
+          setClients([]);
+          setDrivers([]);
+          setIsDataLoading(false);
+        }
+        return;
+      }
 
-  const hubsQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return collection(db, "tenants", tenantId, "hubs");
-  }, [db, tenantId]);
+      try {
+        if (active) setIsDataLoading(true);
+        const [truckRows, loadRows, hubRows, clientRows, driverRows] = await Promise.all([
+          listTrucks(),
+          listLoads(),
+          listHubs(),
+          listClients(),
+          listDrivers(),
+        ]);
 
-  const clientsQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return collection(db, "tenants", tenantId, "clients");
-  }, [db, tenantId]);
+        if (!active) return;
+        setTrucks(truckRows);
+        setLoads(
+          [...loadRows].sort((a, b) => {
+            const aTime = typeof a.createdAt === 'object' && a.createdAt?.seconds
+              ? Number(a.createdAt.seconds)
+              : new Date(a.createdAt || 0).getTime() / 1000;
+            const bTime = typeof b.createdAt === 'object' && b.createdAt?.seconds
+              ? Number(b.createdAt.seconds)
+              : new Date(b.createdAt || 0).getTime() / 1000;
+            return bTime - aTime;
+          })
+        );
+        setHubs(hubRows);
+        setClients(clientRows);
+        setDrivers(driverRows);
+      } catch (error) {
+        if (!active) return;
+        setTrucks([]);
+        setLoads([]);
+        setHubs([]);
+        setClients([]);
+        setDrivers([]);
+        toast({ variant: 'destructive', title: 'Error al cargar monitor', description: (error as Error).message });
+      } finally {
+        if (active) setIsDataLoading(false);
+      }
+    }
 
-  const driversQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return collection(db, "tenants", tenantId, "drivers");
-  }, [db, tenantId]);
-
-  const { data: trucks } = useCollection<Truck>(trucksQuery);
-  const { data: loads } = useCollection<Load>(loadsQuery);
-  const { data: hubs } = useCollection<Hub>(hubsQuery);
-  const { data: clients } = useCollection<Client>(clientsQuery);
-  const { data: drivers } = useCollection<Driver>(driversQuery);
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, toast]);
 
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const tomorrowStr = format(addDays(new Date(), 1), "yyyy-MM-dd");
@@ -180,15 +219,18 @@ export default function MonitorOperativoPage() {
   }, [loads, agendaTab, todayStr, tomorrowStr, nextWeekStr]);
 
   const handleDockAssignment = async () => {
-    if (!db || !selectedLoadForDock || !selectedDock || !tenantId) return;
+    if (!selectedLoadForDock || !selectedDock || !tenantId) return;
     setIsUpdatingDock(true);
     try {
-      await updateDoc(doc(db, "tenants", tenantId, "loads", selectedLoadForDock.id), {
-        "origin.dockName": selectedDock,
-        "dockEntryAuthorized": true,
-        "dockEntryMessage": `AUTORIZADO: Diríjase a ${selectedDock}`,
-        updatedAt: serverTimestamp()
+      const updated = await updateLoad(selectedLoadForDock.id, {
+        origin: {
+          ...selectedLoadForDock.origin,
+          dockName: selectedDock,
+        },
+        dockEntryAuthorized: true,
+        dockEntryMessage: `AUTORIZADO: Diríjase a ${selectedDock}`,
       });
+      setLoads((prev) => prev.map((row) => (row.id === selectedLoadForDock.id ? updated : row)));
       toast({ title: "Vía Libre Enviada", description: `El chofer ha sido notificado para ingresar a ${selectedDock}.` });
       setIsDockDialogOpen(false);
       setSelectedDock("");
@@ -200,13 +242,13 @@ export default function MonitorOperativoPage() {
   };
 
   const handleDeactivateAlert = async (truckId: string) => {
-    if (!db || !tenantId) return;
+    if (!tenantId) return;
     try {
-      await updateDoc(doc(db, "tenants", tenantId, "trucks", truckId), {
+      const updated = await updateTruck(truckId, {
         hasActiveAlert: false,
         alertType: null,
-        updatedAt: serverTimestamp()
       });
+      setTrucks((prev) => prev.map((truck) => (truck.id === truckId ? updated : truck)));
       toast({ title: "Alerta Desactivada", description: "La unidad ha vuelto a estado normal." });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al desactivar alerta" });
@@ -287,7 +329,7 @@ export default function MonitorOperativoPage() {
     });
   };
 
-  if (!mounted || !tenantId) return <div className="h-[80vh] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
+  if (!mounted || !tenantId || isDataLoading) return <div className="h-[80vh] flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
   return (
     <div className="space-y-6">

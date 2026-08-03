@@ -3,9 +3,8 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useCollection, useUser } from "@/firebase";
+import { useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,9 +24,11 @@ import {
 import { Client, Product, Quotation, QuotationItem, Hub, AppUser } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { format, addDays } from "date-fns";
-import { logSystemEvent } from "@/lib/audit-service";
 import { cn } from "@/lib/utils";
 import { createQuotation, listQuotations } from "@/lib/quotations-api";
+import { listClients } from "@/lib/clients-api";
+import { listProducts } from "@/lib/products-api";
+import { listHubs } from "@/lib/hubs-api";
 
 const CURRENCIES = [
   { id: 'ARS', label: 'Pesos Argentinos ($)', symbol: '$' },
@@ -36,11 +37,14 @@ const CURRENCIES = [
 ];
 
 export default function NewQuotationPage() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const { user } = useUser();
   const router = useRouter();
   const { toast } = useToast();
+
+   const [clients, setClients] = useState<Client[]>([]);
+   const [products, setProducts] = useState<Product[]>([]);
+   const [hubs, setHubs] = useState<Hub[]>([]);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [quoteNumber, setQuoteNumber] = useState("");
@@ -83,15 +87,14 @@ export default function NewQuotationPage() {
   const [currentDiscount, setCurrentDiscount] = useState(0);
   const [barcodeSearch, setBarcodeSearch] = useState("");
 
-  const clientsQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "clients"), orderBy("name")) : null, [db, tenantId]);
-  const productsQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "products"), orderBy("name")) : null, [db, tenantId]);
-  const hubsQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "hubs"), orderBy("name")) : null, [db, tenantId]);
-  const sellersQuery = useMemo(() => (db && tenantId) ? collection(db, "tenants", tenantId, "users") : null, [db, tenantId]);
-
-  const { data: clients } = useCollection<Client>(clientsQuery);
-  const { data: products } = useCollection<Product>(productsQuery);
-  const { data: hubs } = useCollection<Hub>(hubsQuery);
-  const { data: sellers } = useCollection<AppUser>(sellersQuery);
+   const sellers = useMemo<AppUser[]>(() => {
+      if (!user) return [];
+      return [{
+         uid: user.uid,
+         displayName: user.displayName || user.email || "Usuario",
+         email: user.email || "",
+      } as AppUser];
+   }, [user]);
 
   const selectedProduct = useMemo(() => {
     if (barcodeSearch) {
@@ -107,6 +110,44 @@ export default function NewQuotationPage() {
   }, [selectedProduct]);
 
   useEffect(() => {
+      let active = true;
+
+      async function loadReferences() {
+         if (!tenantId) {
+            if (active) {
+               setClients([]);
+               setProducts([]);
+               setHubs([]);
+            }
+            return;
+         }
+
+         try {
+            const [clientRows, productRows, hubRows] = await Promise.all([
+               listClients(),
+               listProducts(),
+               listHubs(),
+            ]);
+            if (!active) return;
+            setClients(clientRows);
+            setProducts(productRows);
+            setHubs(hubRows);
+         } catch (error) {
+            if (!active) return;
+            setClients([]);
+            setProducts([]);
+            setHubs([]);
+            toast({ variant: "destructive", title: "Error al cargar datos", description: (error as Error).message });
+         }
+      }
+
+      loadReferences();
+      return () => {
+         active = false;
+      };
+   }, [tenantId, toast]);
+
+   useEffect(() => {
     async function fetchNextNumber() {
          if (!tenantId) return;
       let next = 1;
@@ -126,7 +167,7 @@ export default function NewQuotationPage() {
       setFormData(prev => ({ ...prev, number: num }));
     }
     fetchNextNumber();
-  }, [db, tenantId]);
+   }, [tenantId]);
 
   const calculateTotals = (items: QuotationItem[], freight: number = 0, gDiscount: number = 0) => {
     const subtotal = items.reduce((acc, item) => acc + (item.quantity * item.unitPrice * (1 - item.discountPercent/100)), 0);
@@ -208,10 +249,6 @@ export default function NewQuotationPage() {
             ...formData,
             items: formData.items,
          });
-
-         if (db && user) {
-            await logSystemEvent(db, tenantId, user, 'create', 'quotation', payload.id, { number: formData.number });
-         }
       
       toast({ title: "Presupuesto Generado", description: `La cotización ${formData.number} ha sido guardada.` });
       router.push('/presupuestos');

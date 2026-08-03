@@ -1,24 +1,6 @@
-
 'use client';
 
-import { useMemo, useState } from "react";
-import { useFirestore, useCollection } from "@/firebase";
-import { useTenant } from "@/hooks/use-tenant";
-import { 
-  collection, 
-  query, 
-  orderBy, 
-  addDoc, 
-  serverTimestamp, 
-  doc, 
-  setDoc,
-  updateDoc, 
-  getDocs, 
-  where, 
-  limit,
-  getDoc,
-  deleteDoc
-} from "firebase/firestore";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,32 +9,44 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { 
-  Target, Plus, Play, Pause, Clock, CheckCircle2, 
-  Loader2, MoreVertical, Trash2, Rocket, Zap, 
-  AlertCircle, MessageCircle, Mail, ExternalLink,
-  BarChart3
+import {
+  Target, Plus, Clock,
+  Loader2, MoreVertical, Trash2, Rocket,
+  MessageCircle, Mail, ExternalLink,
+  BarChart3,
 } from "lucide-react";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
-import { Campaign, EmailTemplate, CampaignStatus, Prospect } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { generateEmailDraft } from "@/ai/flows/generate-email-draft-flow";
 import { generateWhatsAppMessage } from "@/ai/flows/generate-whatsapp-message-flow";
 import Link from "next/link";
+import { CampaignPayload, createCampaign, deleteCampaign, listCampaigns, updateCampaign } from "@/lib/campaigns-api";
+import { EmailTemplatePayload, getTemplate, listTemplates } from "@/lib/templates-api";
+import { createOutboxMessage } from "@/lib/outbox-api";
+import { listProspects, updateProspect } from "@/lib/prospects-api";
+
+function formatCreatedAt(value: any) {
+  if (value?.toDate) return format(value.toDate(), "dd 'de' MMM", { locale: ptBR });
+  if (!value) return "Recem criada";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Recem criada";
+  return format(date, "dd 'de' MMM", { locale: ptBR });
+}
 
 export default function CampaignsPage() {
-  const db = useFirestore();
-  const { tenantId } = useTenant();
   const { toast } = useToast();
-  
+
+  const [campaigns, setCampaigns] = useState<CampaignPayload[]>([]);
+  const [templates, setTemplates] = useState<EmailTemplatePayload[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExecutingId, setIsExecutingId] = useState<string | null>(null);
@@ -60,174 +54,170 @@ export default function CampaignsPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [selectedChannel, setSelectedChannel] = useState<'email' | 'whatsapp'>('email');
 
-  const campaignsQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "campaigns"), orderBy("createdAt", "desc"));
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: campaigns, loading } = useCollection<Campaign>(campaignsQuery);
+    async function loadData() {
+      try {
+        if (active) setLoading(true);
+        const [campaignRows, templateRows] = await Promise.all([listCampaigns(), listTemplates()]);
+        if (!active) return;
+        setCampaigns(campaignRows);
+        setTemplates(templateRows);
+      } catch (error) {
+        if (!active) return;
+        setCampaigns([]);
+        setTemplates([]);
+        toast({ variant: "destructive", title: "Erro ao carregar campanhas", description: (error as Error).message });
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
 
-  const templatesQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "templates"), orderBy("name"));
-  }, [db, tenantId]);
-
-  const { data: templates } = useCollection<EmailTemplate>(templatesQuery);
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [toast]);
 
   const handleCreateCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!db || !tenantId || !newName) return;
+    if (!newName) return;
 
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, "tenants", tenantId, "campaigns"), {
+      const created = await createCampaign({
         name: newName,
         templateId: selectedTemplateId || "",
         channel: selectedChannel,
         status: "draft",
         sentCount: 0,
         failedCount: 0,
-        targetCount: 20, // Limite inicial de teste
-        createdAt: serverTimestamp(),
-        tenantId
+        targetCount: 20,
       });
+      setCampaigns((prev) => [created, ...prev]);
       toast({ title: "Fluxo criado!", description: `Campanha de ${selectedChannel} pronta para rodar.` });
       setIsCreateOpen(false);
       setNewName("");
       setSelectedTemplateId("");
     } catch (error) {
-      toast({ variant: "destructive", title: "Erro ao criar campanha" });
+      toast({ variant: "destructive", title: "Erro ao criar campanha", description: (error as Error).message });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleRunCampaign = async (campaign: any) => {
-    if (!db || !tenantId) return;
+  const handleRunCampaign = async (campaign: CampaignPayload) => {
     setIsExecutingId(campaign.id);
-    
+
     try {
       const channel = campaign.channel || 'email';
-      
-      let template: EmailTemplate | null = null;
+      let template: EmailTemplatePayload | null = null;
+
       if (channel === 'email' && campaign.templateId) {
-        const templateSnap = await getDoc(doc(db, "tenants", tenantId, "templates", campaign.templateId));
-        if (templateSnap.exists()) template = templateSnap.data() as EmailTemplate;
+        template = await getTemplate(campaign.templateId);
       }
 
-      // Buscar prospects alvo
-      const prospectsQuery = query(
-        collection(db, "tenants", tenantId, "prospects"),
-        where("status", "==", "new"),
-        limit(campaign.targetCount || 20)
-      );
-      
-      const pSnapshot = await getDocs(prospectsQuery);
-      const candidates = pSnapshot.docs
-        .map(d => ({ ...d.data(), id: d.id } as Prospect))
-        .filter(p => {
-          if (channel === 'email') return p.contacts?.some(c => !!c.email);
-          return p.contacts?.some(c => !!c.phone || !!c.whatsapp);
-        });
+      const allProspects = await listProspects(2000);
+      const candidates = allProspects
+        .filter((p) => p.status === 'new')
+        .filter((p) => {
+          if (channel === 'email') return p.contacts?.some((c: any) => !!c.email);
+          return p.contacts?.some((c: any) => !!c.phone || !!c.whatsapp);
+        })
+        .slice(0, campaign.targetCount || 20);
 
       if (candidates.length === 0) {
-        toast({ title: "Sem novos alvos", description: `Não há prospects 'Novos' com ${channel === 'email' ? 'e-mail' : 'telefone'} cadastrado.` });
+        toast({ title: "Sem novos alvos", description: `Nao ha prospects 'Novos' com ${channel === 'email' ? 'e-mail' : 'telefone'} cadastrado.` });
         setIsExecutingId(null);
         return;
       }
 
-      toast({ title: "IA em Ação", description: `Personalizando ${candidates.length} mensagens...` });
+      toast({ title: "IA em Acao", description: `Personalizando ${candidates.length} mensagens...` });
 
       for (const prospect of candidates) {
         try {
           let subject = "";
           let body = "";
 
-          // GARANTIA DE DADOS PARA A IA (Prevenção de TypeError)
           const prospectDataForAi = {
             companyName: prospect.companyName || "Empresa",
             city: prospect.address?.city || "N/A",
             state: prospect.address?.state || "N/A",
             industryTags: prospect.industryTags || [],
-            websiteUrl: prospect.websiteUrl || "",
+            websiteUrl: (prospect as any).websiteUrl || "",
             effectiveScore: prospect.effectiveScore || 0,
-            contactName: prospect.contacts?.[0]?.name || "Responsável",
-            contactRole: prospect.contacts?.[0]?.role || "N/A"
+            contactName: (prospect.contacts as any)?.[0]?.name || "Responsavel",
+            contactRole: (prospect.contacts as any)?.[0]?.role || "N/A",
           };
 
           if (channel === 'email' && template) {
             const aiResponse = await generateEmailDraft({
               templateSubject: template.subject,
               templateBody: template.body,
-              prospect: prospectDataForAi
+              prospect: prospectDataForAi,
             });
             subject = aiResponse.subject;
             body = aiResponse.body;
           } else {
             const aiResponse = await generateWhatsAppMessage({
-              templateBaseText: "Olá, gostaria de apresentar nossa solução industrial.",
-              prospect: prospectDataForAi
+              templateBaseText: "Ola, gostaria de apresentar nossa solucao industrial.",
+              prospect: prospectDataForAi,
             });
             body = aiResponse.message;
           }
 
-          const outboxRef = doc(collection(db, "tenants", tenantId, "outbox"));
-          
-          await setDoc(outboxRef, {
-            id: outboxRef.id,
-            tenantId,
+          await createOutboxMessage({
             prospectId: prospect.id,
             companyName: prospect.companyName,
             campaignId: campaign.id,
-            to: channel === 'email' 
-              ? prospect.contacts?.find(c => !!c.email)?.email 
-              : prospect.contacts?.find(c => !!c.phone || !!c.whatsapp)?.phone,
-            subject: subject,
-            body: body,
+            to: channel === 'email'
+              ? (prospect.contacts as any)?.find((c: any) => !!c.email)?.email
+              : (prospect.contacts as any)?.find((c: any) => !!c.phone || !!c.whatsapp)?.phone,
+            subject,
+            body,
             state: 'queued',
             type: channel,
             attempts: 0,
             aiUsed: true,
             effectiveScore: prospect.effectiveScore || 0,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-          });
+          } as any);
 
-          await updateDoc(doc(db, "tenants", tenantId, "prospects", prospect.id), {
-            status: 'contacted',
-            updatedAt: new Date().toISOString()
-          });
-
-        } catch (err) {
-          console.error(`Failed for ${prospect.companyName}`, err);
+          await updateProspect(prospect.id, {
+            status: 'contacted' as any,
+            updatedAt: new Date().toISOString(),
+          } as any);
+        } catch {
+          // Continue processing remaining candidates.
         }
       }
 
-      await updateDoc(doc(db, "tenants", tenantId, "campaigns", campaign.id), { 
+      const updated = await updateCampaign(campaign.id, {
         status: 'running',
-        targetCount: candidates.length
+        targetCount: candidates.length,
       });
+      setCampaigns((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
 
-      toast({ title: "Fila Pronta!", description: "As mensagens estão no Outbox aguardando disparo." });
-    } catch (e: any) {
-      console.error(e);
-      toast({ variant: "destructive", title: "Erro na execução", description: e.message });
+      toast({ title: "Fila pronta!", description: "As mensagens estao no Outbox aguardando disparo." });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Erro na execucao", description: error.message });
     } finally {
       setIsExecutingId(null);
     }
   };
 
   const handleDeleteCampaign = async (id: string) => {
-    if (!db || !tenantId || !confirm("Deseja remover esta campanha?")) return;
+    if (!confirm("Deseja remover esta campanha?")) return;
     try {
-      await deleteDoc(doc(db, "tenants", tenantId, "campaigns", id));
+      await deleteCampaign(id);
+      setCampaigns((prev) => prev.filter((campaign) => campaign.id !== id));
       toast({ title: "Campanha removida" });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Erro ao excluir" });
+    } catch (error) {
+      toast({ variant: "destructive", title: "Erro ao excluir", description: (error as Error).message });
     }
   };
 
-  const getStatusBadge = (status: CampaignStatus) => {
+  const getStatusBadge = (status: string | undefined) => {
     switch (status) {
       case 'running': return <Badge className="bg-blue-500 animate-pulse">Ativa</Badge>;
       case 'finished': return <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">Finalizada</Badge>;
@@ -240,10 +230,10 @@ export default function CampaignsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-primary">Automação de Campanhas</h1>
-          <p className="text-muted-foreground">Dispare comunicações inteligentes em massa via E-mail ou WhatsApp.</p>
+          <h1 className="text-2xl font-bold text-primary">Automacao de Campanhas</h1>
+          <p className="text-muted-foreground">Dispare comunicacoes inteligentes em massa via E-mail ou WhatsApp.</p>
         </div>
-        
+
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
             <Button className="bg-accent hover:bg-accent/90">
@@ -254,7 +244,7 @@ export default function CampaignsPage() {
             <form onSubmit={handleCreateCampaign}>
               <DialogHeader>
                 <DialogTitle>Nova Campanha Multicanal</DialogTitle>
-                <DialogDescription>A IA cuidará da personalização baseada no seu template.</DialogDescription>
+                <DialogDescription>A IA cuidara da personalizacao baseada no seu template.</DialogDescription>
               </DialogHeader>
               <div className="space-y-6 py-4">
                 <div className="space-y-2">
@@ -279,7 +269,7 @@ export default function CampaignsPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="name">Nome da Campanha</Label>
-                  <Input id="name" value={newName} onChange={e => setNewName(e.target.value)} placeholder="Ex: Prospecção Metalúrgicas Sul" required />
+                  <Input id="name" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Ex: Prospeccao Metalurgicas Sul" required />
                 </div>
 
                 {selectedChannel === 'email' && (
@@ -288,7 +278,7 @@ export default function CampaignsPage() {
                     <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
                       <SelectTrigger><SelectValue placeholder="Selecione um modelo" /></SelectTrigger>
                       <SelectContent>
-                        {templates?.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                        {templates.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
@@ -308,27 +298,27 @@ export default function CampaignsPage() {
 
       {loading ? (
         <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>
-      ) : campaigns?.length === 0 ? (
+      ) : campaigns.length === 0 ? (
         <div className="text-center py-32 border-2 border-dashed rounded-2xl space-y-4">
           <Target className="w-12 h-12 mx-auto text-muted-foreground opacity-20" />
           <div className="space-y-1">
             <p className="font-bold text-primary">Nenhuma campanha ativa</p>
-            <p className="text-xs text-muted-foreground">Crie uma campanha para automatizar sua prospecção com IA.</p>
+            <p className="text-xs text-muted-foreground">Crie uma campanha para automatizar sua prospeccao com IA.</p>
           </div>
           <Button variant="outline" onClick={() => setIsCreateOpen(true)}>Criar Minha Primeira Campanha</Button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {campaigns?.map((campaign: any) => {
-            const progress = campaign.targetCount ? (campaign.sentCount / campaign.targetCount) * 100 : 0;
-            
+          {campaigns.map((campaign) => {
+            const progress = campaign.targetCount ? ((campaign.sentCount || 0) / campaign.targetCount) * 100 : 0;
+
             return (
               <Card key={campaign.id} className="relative overflow-hidden group border-accent/10 shadow-sm hover:shadow-md transition-all">
                 <div className={`absolute top-0 left-0 w-1.5 h-full ${
-                  campaign.status === 'running' ? 'bg-blue-500' : 
+                  campaign.status === 'running' ? 'bg-blue-500' :
                   campaign.status === 'finished' ? 'bg-green-500' : 'bg-muted'
                 }`}></div>
-                
+
                 <CardHeader className="pb-3">
                   <div className="flex justify-between items-start">
                     <div className="flex gap-2">
@@ -338,7 +328,7 @@ export default function CampaignsPage() {
                         {campaign.channel || 'email'}
                       </Badge>
                     </div>
-                    
+
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="w-4 h-4" /></Button>
@@ -352,8 +342,8 @@ export default function CampaignsPage() {
                   </div>
                   <CardTitle className="text-lg mt-2 truncate">{campaign.name}</CardTitle>
                   <CardDescription className="flex items-center gap-1 text-[10px] uppercase font-bold text-muted-foreground">
-                    <Clock className="w-3 h-3" /> 
-                    {campaign.createdAt?.toDate ? format(campaign.createdAt.toDate(), "dd 'de' MMM", { locale: ptBR }) : "Recém criada"}
+                    <Clock className="w-3 h-3" />
+                    {formatCreatedAt(campaign.createdAt)}
                   </CardDescription>
                 </CardHeader>
 
@@ -382,7 +372,7 @@ export default function CampaignsPage() {
 
                 <CardFooter className="pt-2 border-t flex gap-2">
                   {campaign.status === 'draft' ? (
-                    <Button 
+                    <Button
                       className="w-full bg-primary font-bold text-xs"
                       onClick={() => handleRunCampaign(campaign)}
                       disabled={isExecutingId === campaign.id}
@@ -399,7 +389,7 @@ export default function CampaignsPage() {
                       </Button>
                       <Button className="flex-1 bg-accent hover:bg-accent/90 text-xs font-bold" asChild>
                         <Link href="/analytics">
-                          <BarChart3 className="w-3 h-3 mr-2" /> Relatório
+                          <BarChart3 className="w-3 h-3 mr-2" /> Relatorio
                         </Link>
                       </Button>
                     </>

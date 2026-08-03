@@ -2,9 +2,8 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useDoc, useCollection, useUser } from "@/firebase";
+import { useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, serverTimestamp, doc, updateDoc, setDoc, query, orderBy } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +22,8 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { compressImage } from "@/lib/utils/image-compression";
 import { uploadBase64 } from "@/lib/storage-service";
-import { logSystemEvent } from "@/lib/audit-service";
+import { createTruck, getTruck, updateTruck } from "@/lib/trucks-api";
+import { listDrivers } from "@/lib/drivers-api";
 
 interface TruckFormWizardProps {
   truckId?: string;
@@ -36,14 +36,15 @@ const INITIAL_COSTS: TruckCosts = {
 };
 
 export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
-  const db = useFirestore();
   const { tenantId } = useTenant();
-  const { user } = useUser();
+  useUser();
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isProcessingAvatar, setIsProcessingAvatar] = useState(false);
+  const [loadingExisting, setLoadingExisting] = useState(Boolean(truckId));
+  const [allPersonnel, setAllPersonnel] = useState<Driver[]>([]);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<Partial<TruckType>>({
@@ -56,25 +57,52 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     costs: INITIAL_COSTS
   });
 
-  const truckRef = useMemo(() => (truckId && db && tenantId) ? doc(db, "tenants", tenantId, "trucks", truckId) : null, [db, tenantId, truckId]);
-  const { data: existingTruck, loading: loadingExisting } = useDoc<TruckType>(truckRef);
+  useEffect(() => {
+    let active = true;
 
-  const driversQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "drivers"), orderBy("lastName")) : null, [db, tenantId]);
-  const { data: allPersonnel } = useCollection<Driver>(driversQuery);
+    async function loadData() {
+      if (!tenantId) {
+        if (active) {
+          setAllPersonnel([]);
+          setLoadingExisting(false);
+        }
+        return;
+      }
+
+      try {
+        const [personnelRows, truckRow] = await Promise.all([
+          listDrivers(),
+          truckId ? getTruck(truckId) : Promise.resolve(null),
+        ]);
+
+        if (!active) return;
+        setAllPersonnel(personnelRows);
+
+        if (truckRow) {
+          setFormData({
+            ...truckRow,
+            costs: truckRow.costs || INITIAL_COSTS,
+            assignedDriverId: truckRow.assignedDriverId || "none",
+            assignedCompanionIds: truckRow.assignedCompanionIds || [],
+          });
+        }
+      } catch (error) {
+        if (active) {
+          toast({ variant: "destructive", title: "Error al cargar datos", description: (error as Error).message });
+        }
+      } finally {
+        if (active) setLoadingExisting(false);
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, truckId, toast]);
 
   const driversOnly = useMemo(() => allPersonnel?.filter(p => p.role === 'driver' || !p.role) || [], [allPersonnel]);
   const companionsOnly = useMemo(() => allPersonnel?.filter(p => p.role === 'companion') || [], [allPersonnel]);
-
-  useEffect(() => {
-    if (existingTruck) {
-      setFormData({ 
-        ...existingTruck, 
-        costs: existingTruck.costs || INITIAL_COSTS,
-        assignedDriverId: existingTruck.assignedDriverId || "none",
-        assignedCompanionIds: existingTruck.assignedCompanionIds || []
-      });
-    }
-  }, [existingTruck]);
 
   const onAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -90,9 +118,6 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
           const url = await uploadBase64(storagePath, compressed);
           setFormData(prev => ({ ...prev, avatarUrl: url }));
           
-          if (user) {
-            await logSystemEvent(db, tenantId, user, 'document_upload', 'truck', formData.plate || 'unknown', { fileType: 'avatar' });
-          }
           toast({ title: "Foto guardada" });
         } catch (err) {
           toast({ variant: "destructive", title: "Error al subir foto" });
@@ -120,7 +145,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
   };
 
   const handleSubmit = async () => {
-    if (!db || !tenantId || !formData.plate) {
+    if (!tenantId || !formData.plate) {
       toast({ variant: "destructive", title: "Datos incompletos", description: "El dominio de la unidad es obligatorio." });
       return;
     }
@@ -135,17 +160,10 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
       });
 
       cleanData.capacityKg = finalCapacity;
-      cleanData.updatedAt = serverTimestamp();
-
       if (truckId) {
-        await updateDoc(doc(db, "tenants", tenantId, "trucks", truckId), cleanData);
-        if (user) await logSystemEvent(db, tenantId, user, 'update', 'truck', truckId, { plate: formData.plate });
+        await updateTruck(truckId, cleanData);
       } else {
-        const newRef = doc(collection(db, "tenants", tenantId, "trucks"));
-        cleanData.id = newRef.id;
-        cleanData.createdAt = serverTimestamp();
-        await setDoc(newRef, cleanData);
-        if (user) await logSystemEvent(db, tenantId, user, 'create', 'truck', newRef.id, { plate: formData.plate });
+        await createTruck(cleanData);
       }
       toast({ title: "Ficha Técnica Guardada", description: `La unidad ${formData.plate} ha sido actualizada.` });
       router.push('/flota');

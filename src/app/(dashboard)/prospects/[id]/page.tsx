@@ -2,9 +2,8 @@
 'use client';
 
 import { useMemo, useState, useEffect, Suspense } from "react";
-import { useFirestore, useDoc, useCollection, useUser } from "@/firebase";
+import { useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc, updateDoc, serverTimestamp, collection, query, where, addDoc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,10 +26,11 @@ import { calculateEffectiveScore } from "@/lib/utils/scoring";
 import Link from "next/link";
 import { fetchCnpjData } from "@/services/receita-ws";
 import { formatSafeDate, toSafeDate } from "@/lib/utils/date-utils";
+import { createEvent, listEventsByProspect } from "@/lib/events-api";
+import { getProspectById, updateProspect } from "@/lib/prospects-api";
 
 function ProspectDetailContent() {
   const { id } = useParams();
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const { user } = useUser();
   const { toast } = useToast();
@@ -41,27 +41,52 @@ function ProspectDetailContent() {
   const [isAnalyzingWeb, setIsAnalyzingWeb] = useState(false);
   const [isSyncingReceita, setIsSyncingReceita] = useState(false);
   const [whatsAppDraft, setWhatsAppDraft] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [prospect, setProspect] = useState<Prospect | null>(null);
+  const [rawEvents, setRawEvents] = useState<any[]>([]);
 
   // Contact Form State
   const [editingContactIndex, setEditingContactIndex] = useState<number | null>(null);
   const [contactForm, setContactForm] = useState<Contact>({ name: "", role: "", email: "", phone: "" });
 
-  const prospectRef = useMemo(() => {
-    if (!db || !tenantId || !id) return null;
-    return doc(db, "tenants", tenantId, "prospects", id as string);
-  }, [db, tenantId, id]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: prospect, loading } = useDoc<Prospect>(prospectRef);
+    async function loadData() {
+      if (!tenantId || !id) {
+        if (active) {
+          setProspect(null);
+          setRawEvents([]);
+          setLoading(false);
+        }
+        return;
+      }
 
-  const historyQuery = useMemo(() => {
-    if (!db || !tenantId || !id) return null;
-    return query(
-      collection(db, "tenants", tenantId, "events"),
-      where("prospectId", "==", id as string)
-    );
-  }, [db, tenantId, id]);
+      try {
+        if (active) setLoading(true);
+        const [prospectData, events] = await Promise.all([
+          getProspectById(id as string),
+          listEventsByProspect(id as string),
+        ]);
 
-  const { data: rawEvents } = useCollection<any>(historyQuery);
+        if (!active) return;
+        setProspect(prospectData);
+        setRawEvents(events);
+      } catch (error) {
+        if (!active) return;
+        setProspect(null);
+        setRawEvents([]);
+        toast({ variant: "destructive", title: "Erro ao carregar prospect", description: (error as Error).message });
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, id, toast]);
 
   const sortedEvents = useMemo(() => {
     if (!rawEvents) return [];
@@ -73,7 +98,7 @@ function ProspectDetailContent() {
   }, [rawEvents]);
 
   const handleSyncReceitaWS = async () => {
-    if (!prospect?.cnpj || !prospectRef) return;
+    if (!prospect?.cnpj) return;
     setIsSyncingReceita(true);
     try {
       const data = await fetchCnpjData(prospect.cnpj);
@@ -88,7 +113,8 @@ function ProspectDetailContent() {
         updates.contacts = [{ name: "Contato via ReceitaWS", role: "N/A", email: data.email || "", phone: data.telefone || "" }];
       }
 
-      await updateDoc(prospectRef, updates);
+      const updated = await updateProspect(prospect.id, updates as any);
+      setProspect(updated);
       toast({ title: "Dados Sincronizados!" });
     } catch (e: any) {
       toast({ variant: "destructive", title: "Erro na sincronización", description: e.message });
@@ -98,7 +124,7 @@ function ProspectDetailContent() {
   };
 
   const handleAnalyzeWeb = async () => {
-    if (!prospect?.websiteUrl || !prospectRef) return;
+    if (!prospect?.websiteUrl) return;
     setIsAnalyzingWeb(true);
     try {
       const analysis = await analyzeWebsiteContent({
@@ -106,13 +132,14 @@ function ProspectDetailContent() {
         companyName: prospect.companyName
       });
 
-      await updateDoc(prospectRef, {
+      const updated = await updateProspect(prospect.id, {
         aiWebSummary: analysis.summary,
         aiDetectedKeywords: analysis.detectedKeywords,
         aiIndustrySuggestions: analysis.industryTags,
         aiWebAnalysisAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
-      });
+      } as any);
+      setProspect(updated);
 
       toast({ title: "Site Analisado!", description: "Inteligencia extraída com éxito." });
     } catch (e: any) {
@@ -123,7 +150,7 @@ function ProspectDetailContent() {
   };
 
   const handleSaveContact = async () => {
-    if (!prospect || !prospectRef) return;
+    if (!prospect) return;
     setIsUpdating(true);
     try {
       const newContacts = [...(prospect.contacts || [])];
@@ -133,10 +160,11 @@ function ProspectDetailContent() {
         newContacts.push(contactForm);
       }
 
-      await updateDoc(prospectRef, { 
+      const updated = await updateProspect(prospect.id, {
         contacts: newContacts,
         updatedAt: new Date().toISOString()
-      });
+      } as any);
+      setProspect(updated);
 
       toast({ title: editingContactIndex !== null ? "Contato atualizado" : "Contato adicionado" });
       setIsContactDialogOpen(false);
@@ -150,10 +178,11 @@ function ProspectDetailContent() {
   };
 
   const handleDeleteContact = async (index: number) => {
-    if (!prospect || !prospectRef || !confirm("Remover este contato?")) return;
+    if (!prospect || !confirm("Remover este contato?")) return;
     try {
-      const newContacts = prospect.contacts.filter((_, i) => i !== index);
-      await updateDoc(prospectRef, { contacts: newContacts });
+      const newContacts = (prospect.contacts || []).filter((_, i) => i !== index);
+      const updated = await updateProspect(prospect.id, { contacts: newContacts } as any);
+      setProspect(updated);
       toast({ title: "Contato removido" });
     } catch (e) {
       toast({ variant: "destructive", title: "Erro ao remover" });
@@ -168,7 +197,7 @@ function ProspectDetailContent() {
   };
 
   const handleFinalizeWhatsApp = async () => {
-    if (!prospect || !db || !tenantId || !user) return;
+    if (!prospect || !tenantId || !user) return;
     const primaryPhone = prospect.contacts?.find(c => !!c.phone || !!c.whatsapp)?.phone;
     const normalized = normalizePhoneBR(primaryPhone || "");
     if (!normalized) {
@@ -176,14 +205,16 @@ function ProspectDetailContent() {
       return;
     }
 
-    await addDoc(collection(db, "tenants", tenantId, "events"), {
+    const createdEvent = await createEvent({
       type: "whatsapp_opened",
       prospectId: prospect.id,
       companyName: prospect.companyName,
       actorUid: user.uid,
-      createdAt: serverTimestamp(),
       metadata: { phoneE164: normalized }
     });
+    if (createdEvent) {
+      setRawEvents((prev) => [createdEvent, ...prev]);
+    }
 
     window.open(buildWaMeUrl(normalized, whatsAppDraft), "_blank");
     setIsWhatsAppDialogOpen(false);
@@ -346,7 +377,16 @@ function ProspectDetailContent() {
             <CardHeader><CardTitle className="text-sm">Status Atual</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-2 gap-2">
               {['new', 'contacted', 'interested', 'demo', 'client', 'discarded'].map((s) => (
-                <Button key={s} variant={prospect.status === s ? 'default' : 'outline'} size="sm" className="capitalize text-[10px]" onClick={() => updateDoc(prospectRef!, { status: s })}>
+                <Button
+                  key={s}
+                  variant={prospect.status === s ? 'default' : 'outline'}
+                  size="sm"
+                  className="capitalize text-[10px]"
+                  onClick={async () => {
+                    const updated = await updateProspect(prospect.id, { status: s as any } as any);
+                    setProspect(updated);
+                  }}
+                >
                   {s}
                 </Button>
               ))}

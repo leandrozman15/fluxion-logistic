@@ -1,78 +1,88 @@
 
 'use client';
 
-import { useMemo, useState } from "react";
-import { useFirestore, useCollection } from "@/firebase";
+import { useEffect, useState } from "react";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, doc, setDoc, serverTimestamp, writeBatch } from "firebase/firestore";
-import { initializeApp, deleteApp } from "firebase/app";
-import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
-import { firebaseConfig } from "@/firebase/config";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { UserPlus, MoreHorizontal, ShieldCheck, Loader2, BadgeCheck, Briefcase, Key } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { UserPlus, MoreHorizontal, Loader2, Key } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 import { AppUser, UserRole } from "@/app/lib/types";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
+import { createUser, listUsers } from "@/lib/users-api";
 
 export default function UsersSettingsPage() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const { toast } = useToast();
 
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState<AppUser[]>([]);
   const [newEmail, setNewEmail] = useState("");
   const [newPass, setNewPass] = useState("LogisticaAr2026");
   const [newRole, setNewRole] = useState<UserRole>("sales_admin");
 
-  const usersQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "users"), orderBy("role"));
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: users, loading } = useCollection<AppUser>(usersQuery);
+    async function loadUsers() {
+      if (!tenantId) {
+        if (active) {
+          setUsers([]);
+          setLoading(false);
+        }
+        return;
+      }
+
+      try {
+        if (active) setLoading(true);
+        const rows = await listUsers();
+        if (!active) return;
+        setUsers(rows);
+      } catch (error) {
+        if (!active) return;
+        setUsers([]);
+        toast({ variant: "destructive", title: "Error al cargar usuarios", description: (error as Error).message });
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadUsers();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, toast]);
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!db || !tenantId || !newEmail || !newPass) return;
+    if (!tenantId || !newEmail || !newPass) return;
 
     setIsSubmitting(true);
-    const appName = `invite-auth-${Date.now()}`;
-    const secondaryApp = initializeApp(firebaseConfig, appName);
-    const secondaryAuth = getAuth(secondaryApp);
-
     try {
-      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, newEmail.toLowerCase().trim(), newPass);
-      const uid = userCredential.user.uid;
-
-      const batch = writeBatch(db);
-      
-      // 1. Mapeo Global
-      batch.set(doc(db, "users", newEmail.toLowerCase().trim()), {
-        uid, email: newEmail.toLowerCase().trim(), tenantId, role: newRole, status: "active", createdAt: serverTimestamp()
+      const created = await createUser({
+        email: newEmail,
+        password: newPass,
+        role: newRole,
+        tenantId,
       });
 
-      // 2. Registro de Empresa
-      batch.set(doc(db, "tenants", tenantId, "users", uid), {
-        uid, tenantId, email: newEmail.toLowerCase().trim(), displayName: newEmail.split('@')[0],
-        role: newRole, createdAt: serverTimestamp(), status: "active"
+      setUsers((prev) => {
+        const next = [created, ...prev.filter((u) => u.uid !== created.uid)];
+        return next.sort((a, b) => a.role.localeCompare(b.role));
       });
-
-      await batch.commit();
       toast({ title: "Usuario Creado", description: `Acceso habilitado para ${newEmail}.` });
       setIsInviteOpen(false);
       setNewEmail("");
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Error Auth", description: error.message });
+      toast({ variant: "destructive", title: "Error al crear usuario", description: error.message });
     } finally {
-      await deleteApp(secondaryApp);
       setIsSubmitting(false);
     }
   };

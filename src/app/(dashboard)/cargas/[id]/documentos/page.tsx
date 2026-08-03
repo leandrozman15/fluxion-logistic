@@ -3,9 +3,7 @@
 
 import { useMemo, useState, useRef, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useFirestore, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,25 +18,52 @@ import { Load, LoadDocument, LoadDocType, LoadLegStop } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { compressImage } from "@/lib/utils/image-compression";
+import { getLoad, updateLoad } from "@/lib/loads-api";
 
 export default function LoadDocumentsPage() {
   const { id } = useParams();
   const router = useRouter();
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
+  const [load, setLoad] = useState<Load | null>(null);
+  const [loading, setLoading] = useState(true);
   const [activeStopId, setActiveStopId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
 
-  const loadRef = useMemo(() => {
-    if (!db || !id || !tenantId) return null;
-    return doc(db, "tenants", tenantId, "loads", id as string);
-  }, [db, id, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: load, loading } = useDoc<Load>(loadRef);
+    async function loadData() {
+      if (!tenantId || !id) {
+        if (active) {
+          setLoad(null);
+          setLoading(false);
+        }
+        return;
+      }
+
+      try {
+        if (active) setLoading(true);
+        const row = await getLoad(id as string);
+        if (active) setLoad(row);
+      } catch (error) {
+        if (active) {
+          setLoad(null);
+          toast({ variant: "destructive", title: "Error al cargar flete", description: (error as Error).message });
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, id, toast]);
 
   const [newDoc, setNewDoc] = useState<Partial<LoadDocument>>({
     type: 'remito',
@@ -48,7 +73,7 @@ export default function LoadDocumentsPage() {
   });
 
   const handleAddDocument = async (stopId: string) => {
-    if (!load || !loadRef || !newDoc.number) {
+    if (!load || !newDoc.number) {
       toast({ variant: "destructive", title: "Falta el número de documento" });
       return;
     }
@@ -68,10 +93,8 @@ export default function LoadDocumentsPage() {
         s.id === stopId ? { ...s, documents: [...(s.documents || []), docToAdd] } : s
       );
 
-      await updateDoc(loadRef, {
-        outboundStops: updatedStops,
-        updatedAt: serverTimestamp()
-      });
+      await updateLoad(load.id, { outboundStops: updatedStops });
+      setLoad((prev) => (prev ? { ...prev, outboundStops: updatedStops } : prev));
 
       toast({ title: "Documento vinculado", description: "El remito ha sido guardado exitosamente." });
       setNewDoc({ type: 'remito', number: "", cotNumber: "", leg: 'outbound' });
@@ -84,13 +107,14 @@ export default function LoadDocumentsPage() {
   };
 
   const handleRemoveDocument = async (stopId: string, docId: string) => {
-    if (!load || !loadRef || !confirm("¿Eliminar este documento?")) return;
+    if (!load || !confirm("¿Eliminar este documento?")) return;
     
     try {
       const updatedStops = load.outboundStops.map(s => 
         s.id === stopId ? { ...s, documents: s.documents.filter(d => d.id !== docId) } : s
       );
-      await updateDoc(loadRef, { outboundStops: updatedStops });
+      await updateLoad(load.id, { outboundStops: updatedStops });
+      setLoad((prev) => (prev ? { ...prev, outboundStops: updatedStops } : prev));
       toast({ title: "Documento eliminado" });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al eliminar" });

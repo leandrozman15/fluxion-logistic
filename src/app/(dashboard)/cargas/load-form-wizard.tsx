@@ -2,9 +2,8 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useCollection, useDoc, useUser } from "@/firebase";
+import { useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, serverTimestamp, doc, setDoc, query, orderBy, updateDoc, limit, getDocs, where, writeBatch } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +23,12 @@ import { Load, Client, Hub, LoadLegStop, LoadDocument, LoadDocType, Truck as Tru
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { logSystemEvent } from "@/lib/audit-service";
+import { listClients } from "@/lib/clients-api";
+import { listDrivers } from "@/lib/drivers-api";
+import { listHubs } from "@/lib/hubs-api";
+import { createLoad, getLoad, listLoads, updateLoad } from "@/lib/loads-api";
+import { listRemitos, updateRemito } from "@/lib/remitos-api";
+import { listTrucks } from "@/lib/trucks-api";
 
 const SERVICE_TYPES = [
   { id: 'standard', label: 'Carga General', icon: Package },
@@ -40,13 +44,18 @@ interface LoadFormWizardProps {
 }
 
 export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
-  const db = useFirestore();
   const { tenantId } = useTenant();
-  const { user } = useUser();
+  useUser();
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadingExisting, setLoadingExisting] = useState(Boolean(loadId));
+  const [trucks, setTrucks] = useState<TruckType[]>([]);
+  const [personnel, setPersonnel] = useState<Driver[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [hubs, setHubs] = useState<Hub[]>([]);
+  const [allRemitos, setAllRemitos] = useState<PendingRemito[]>([]);
 
   const [selectedRemitoIds, setSelectedRemitoIds] = useState<string[]>([]);
   const [isStopModalOpen, setIsStopModalOpen] = useState(false);
@@ -78,39 +87,74 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
   const handleBack = () => setStep(prev => Math.max(1, prev - 1));
   const handleNext = () => setStep(prev => Math.min(5, prev + 1));
 
-  const loadRef = useMemo(() => loadId && db && tenantId ? doc(db, "tenants", tenantId, "loads", loadId) : null, [db, tenantId, loadId]);
-  const { data: existingLoad, loading: loadingExisting } = useDoc<Load>(loadRef);
-
   useEffect(() => {
-    if (existingLoad) {
-      setFormData({
-        ...existingLoad,
-        outboundStops: existingLoad.outboundStops || [],
-        returnStops: existingLoad.returnStops || [],
-        assignedCompanionIds: existingLoad.assignedCompanionIds || [],
-        budget: existingLoad.budget || { initialAdvance: 0, totalBudget: 0, categories: {} }
-      });
-      const remitoIds: string[] = [];
-      existingLoad.outboundStops?.forEach(s => {
-        s.documents?.forEach(d => {
-          if (d.pendingRemitoId) remitoIds.push(d.pendingRemitoId);
-        });
-      });
-      setSelectedRemitoIds(remitoIds);
+    let active = true;
+
+    async function loadData() {
+      if (!tenantId) {
+        if (active) {
+          setTrucks([]);
+          setPersonnel([]);
+          setClients([]);
+          setHubs([]);
+          setAllRemitos([]);
+          setLoadingExisting(false);
+        }
+        return;
+      }
+
+      try {
+        const [truckRows, personnelRows, clientRows, hubRows, remitoRows, existingLoad] = await Promise.all([
+          listTrucks(),
+          listDrivers(),
+          listClients(),
+          listHubs(),
+          listRemitos(),
+          loadId ? getLoad(loadId) : Promise.resolve(null),
+        ]);
+
+        if (!active) return;
+        setTrucks(truckRows);
+        setPersonnel(personnelRows);
+        setClients(clientRows);
+        setHubs(hubRows);
+        setAllRemitos(remitoRows);
+
+        if (existingLoad) {
+          setFormData({
+            ...existingLoad,
+            outboundStops: existingLoad.outboundStops || [],
+            returnStops: existingLoad.returnStops || [],
+            assignedCompanionIds: existingLoad.assignedCompanionIds || [],
+            budget: existingLoad.budget || { initialAdvance: 0, totalBudget: 0, categories: {} },
+          });
+          const remitoIds: string[] = [];
+          existingLoad.outboundStops?.forEach((s) => {
+            s.documents?.forEach((d) => {
+              if (d.pendingRemitoId) remitoIds.push(d.pendingRemitoId);
+            });
+          });
+          setSelectedRemitoIds(remitoIds);
+        }
+      } catch (error) {
+        if (active) {
+          toast({ variant: "destructive", title: "Error al cargar datos", description: (error as Error).message });
+          setTrucks([]);
+          setPersonnel([]);
+          setClients([]);
+          setHubs([]);
+          setAllRemitos([]);
+        }
+      } finally {
+        if (active) setLoadingExisting(false);
+      }
     }
-  }, [existingLoad]);
 
-  const trucksQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "trucks"), orderBy("plate")) : null, [db, tenantId]);
-  const driversQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "drivers"), orderBy("lastName")) : null, [db, tenantId]);
-  const clientsQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "clients"), orderBy("name")) : null, [db, tenantId]);
-  const hubsQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "hubs"), orderBy("name")) : null, [db, tenantId]);
-  const remitosQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "pending_remitos"), where("status", "in", ["pending", "dispatched"])) : null, [db, tenantId]);
-
-  const { data: trucks } = useCollection<TruckType>(trucksQuery);
-  const { data: personnel } = useCollection<Driver>(driversQuery);
-  const { data: clients } = useCollection<Client>(clientsQuery);
-  const { data: hubs } = useCollection<Hub>(hubsQuery);
-  const { data: allRemitos } = useCollection<PendingRemito>(remitosQuery);
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, loadId, toast]);
 
   const remitos = useMemo(() => {
     return allRemitos?.filter(r => r.status === 'pending' || r.loadId === loadId) || [];
@@ -254,19 +298,19 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
   };
 
   const handleSubmit = async () => {
-    if (!db || !tenantId) return;
+    if (!tenantId) return;
     
     setIsSubmitting(true);
     try {
-      const batch = writeBatch(db);
       let finalLoadId = loadId;
       let finalOrderNumber = formData.orderNumber;
 
       if (!finalOrderNumber) {
-        const loadsSnap = await getDocs(query(collection(db, "tenants", tenantId, "loads"), orderBy("orderNumber", "desc"), limit(1)));
+        const loads = await listLoads();
         let nextSeq = 1;
-        if (!loadsSnap.empty) {
-          const lastOrderStr = (loadsSnap.docs[0].data() as Load).orderNumber;
+        if (loads.length > 0) {
+          const sorted = [...loads].sort((a, b) => String(b.orderNumber || '').localeCompare(String(a.orderNumber || '')));
+          const lastOrderStr = sorted[0].orderNumber;
           const parts = lastOrderStr.split("-");
           const lastNum = parseInt(parts[parts.length - 1]);
           if (!isNaN(lastNum)) nextSeq = lastNum + 1;
@@ -282,30 +326,23 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
 
       cleanFormData.orderNumber = finalOrderNumber;
       cleanFormData.clientName = formData.clientName || (formData.serviceType === 'meli' ? "Mercado Libre" : (formData.outboundStops?.[0]?.name || "Reparto Multi-Remito"));
-      cleanFormData.updatedAt = serverTimestamp();
 
       if (!loadId) {
-        const newRef = doc(collection(db, "tenants", tenantId, "loads"));
-        finalLoadId = newRef.id;
-        cleanFormData.id = finalLoadId;
-        cleanFormData.createdAt = serverTimestamp();
-        batch.set(newRef, cleanFormData);
-        if (user) await logSystemEvent(db, tenantId, user, 'create', 'load', finalLoadId, { orderNumber: finalOrderNumber });
+        const created = await createLoad(cleanFormData);
+        finalLoadId = created.id;
       } else {
-        batch.update(doc(db, "tenants", tenantId, "loads", loadId), cleanFormData);
-        if (user) await logSystemEvent(db, tenantId, user, 'update', 'load', loadId, { orderNumber: finalOrderNumber });
+        await updateLoad(loadId, cleanFormData);
+        finalLoadId = loadId;
       }
 
       for (const rid of selectedRemitoIds) {
-        batch.update(doc(db, "tenants", tenantId, "pending_remitos", rid), {
+        await updateRemito(rid, {
           status: 'dispatched',
           loadId: finalLoadId,
-          dispatchedDate: formData.pickupDate,
-          updatedAt: serverTimestamp()
+          dispatchedDate: formData.pickupDate
         });
       }
 
-      await batch.commit();
       toast({ title: "Flete Guardado", description: `Orden ${finalOrderNumber} emitida con éxito.` });
       router.push('/cargas');
     } catch (e: any) {

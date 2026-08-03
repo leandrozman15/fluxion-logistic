@@ -1,58 +1,63 @@
 
 'use client';
 
-import { useMemo, useState } from "react";
-import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, orderBy, where } from "firebase/firestore";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useEffect, useMemo, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { 
   ShoppingBag, 
-  Truck, 
-  Package, 
   CheckCircle2, 
-  Clock, 
-  AlertTriangle, 
   Navigation, 
-  BarChart3, 
   Timer,
   Search,
   Loader2,
-  ExternalLink,
-  ChevronRight,
-  TrendingUp,
-  MapPin,
   Activity,
   User,
   XCircle
 } from "lucide-react";
-import { Load, Truck as TruckType, Driver } from "@/app/lib/types";
+import { Load, Driver } from "@/app/lib/types";
 import { Progress } from "@/components/ui/progress";
 import Link from "next/link";
-import { cn } from "@/lib/utils";
-import { formatSafeDate } from "@/lib/utils/date-utils";
+import { listLoads } from "@/lib/loads-api";
+import { listDrivers } from "@/lib/drivers-api";
 
 export default function MercadoLibrePage() {
-  const db = useFirestore();
   const [searchTerm, setSearchTerm] = useState("");
-  
-  const loadsQuery = useMemo(() => {
-    if (!db) return null;
-    return query(collection(db, "loads"), orderBy("createdAt", "desc"));
-  }, [db]);
+  const [loading, setLoading] = useState(true);
+  const [loads, setLoads] = useState<Load[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
 
-  const trucksQuery = useMemo(() => db ? collection(db, "trucks") : null, [db]);
-  const driversQuery = useMemo(() => db ? collection(db, "drivers") : null, [db]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: loads, loading } = useCollection<Load>(loadsQuery);
-  const { data: trucks } = useCollection<TruckType>(trucksQuery);
-  const { data: drivers } = useCollection<Driver>(driversQuery);
+    async function loadData() {
+      try {
+        if (active) setLoading(true);
+        const [loadRows, driverRows] = await Promise.all([
+          listLoads(),
+          listDrivers(),
+        ]);
+        if (!active) return;
+        setLoads(loadRows);
+        setDrivers(driverRows);
+      } catch {
+        if (!active) return;
+        setLoads([]);
+        setDrivers([]);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const meliLoads = useMemo(() => {
-    if (!loads) return [];
     return loads.filter(l => 
       l.serviceType === 'meli' && (
         l.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||

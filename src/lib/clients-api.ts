@@ -35,6 +35,39 @@ export async function listClients() {
   return getListData(response).map(normalizeClient);
 }
 
+export async function getClient(id: string) {
+  const response = await backendRequest<any>(`/api/clients/${id}`);
+  const raw = response.data || response.payload;
+  if (!raw) {
+    throw new Error('Client not found');
+  }
+  return normalizeClient(raw);
+}
+
+export async function createClient(data: Partial<Client>) {
+  const response = await backendRequest<any>('/api/clients', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  const raw = response.data || response.payload;
+  if (!raw) {
+    throw new Error('Failed to create client');
+  }
+  return normalizeClient(raw);
+}
+
+export async function updateClient(id: string, data: Partial<Client>) {
+  const response = await backendRequest<any>(`/api/clients/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+  const raw = response.data || response.payload;
+  if (!raw) {
+    throw new Error('Failed to update client');
+  }
+  return normalizeClient(raw);
+}
+
 export async function deleteClient(id: string) {
   await backendRequest(`/api/clients/${id}`, { method: 'DELETE' });
 }

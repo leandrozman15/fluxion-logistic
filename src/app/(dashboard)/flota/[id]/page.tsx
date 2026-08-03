@@ -3,9 +3,7 @@
 
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useFirestore, useDoc, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc, updateDoc, serverTimestamp, collection, query, where, getDoc, orderBy } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +25,10 @@ import { es } from "date-fns/locale";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toSafeDate } from "@/lib/utils/date-utils";
 import { compressImage } from "@/lib/utils/image-compression";
+import { listDrivers } from "@/lib/drivers-api";
+import { listExpenses } from "@/lib/expenses-api";
+import { listMaintenance } from "@/lib/maintenance-api";
+import { getTruck, updateTruck } from "@/lib/trucks-api";
 
 const DEFAULT_DOCS: Omit<VehicleDocument, 'status'>[] = [
   { id: 'cedula_verde', name: 'Cédula de Identificación (Verde)', category: 'unit', description: 'Acredita la titularidad del camión.', isRequired: true },
@@ -42,10 +44,13 @@ const DEFAULT_DOCS: Omit<VehicleDocument, 'status'>[] = [
 export default function TruckDetailPage() {
   const { id } = useParams();
   const router = useRouter();
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const { toast } = useToast();
   
+  const [truck, setTruck] = useState<Truck | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [fuelExpensesRaw, setFuelExpensesRaw] = useState<Expense[]>([]);
+  const [maintenanceHistoryRaw, setMaintenanceHistoryRaw] = useState<Maintenance[]>([]);
   const [assignedDriver, setAssignedDriver] = useState<Driver | null>(null);
   const [assignedCompanions, setAssignedCompanions] = useState<Driver[]>([]);
   const [loadingStaff, setLoadingStaff] = useState(false);
@@ -54,32 +59,49 @@ export default function TruckDetailPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const truckRef = useMemo(() => {
-    if (!db || !id || !tenantId) return null;
-    return doc(db, "tenants", tenantId, "trucks", id as string);
-  }, [db, id, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: truck, loading } = useDoc<Truck>(truckRef);
+    async function loadData() {
+      if (!tenantId || !id) {
+        if (active) {
+          setTruck(null);
+          setFuelExpensesRaw([]);
+          setMaintenanceHistoryRaw([]);
+          setLoading(false);
+        }
+        return;
+      }
 
-  const fuelExpensesQuery = useMemo(() => {
-    if (!db || !id || !tenantId) return null;
-    return query(
-      collection(db, "tenants", tenantId, "expenses"), 
-      where("truckId", "==", id as string), 
-      where("category", "==", "fuel")
-    );
-  }, [db, id, tenantId]);
+      try {
+        if (active) setLoading(true);
+        const [truckRow, expensesRows, maintenanceRows] = await Promise.all([
+          getTruck(id as string),
+          listExpenses(),
+          listMaintenance(),
+        ]);
 
-  const maintenanceHistoryQuery = useMemo(() => {
-    if (!db || !id || !tenantId) return null;
-    return query(
-      collection(db, "tenants", tenantId, "maintenance"), 
-      where("truckId", "==", id as string)
-    );
-  }, [db, id, tenantId]);
+        if (!active) return;
+        setTruck(truckRow);
+        setFuelExpensesRaw(expensesRows.filter((expense) => expense.truckId === (id as string) && expense.category === 'fuel'));
+        setMaintenanceHistoryRaw(maintenanceRows.filter((row) => row.truckId === (id as string)));
+      } catch (error) {
+        if (active) {
+          setTruck(null);
+          setFuelExpensesRaw([]);
+          setMaintenanceHistoryRaw([]);
+          toast({ variant: "destructive", title: "Error al cargar unidad", description: (error as Error).message });
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
 
-  const { data: fuelExpensesRaw } = useCollection<Expense>(fuelExpensesQuery);
-  const { data: maintenanceHistoryRaw } = useCollection<Maintenance>(maintenanceHistoryQuery);
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, id, toast]);
 
   const fuelExpenses = useMemo(() => {
     if (!fuelExpensesRaw) return [];
@@ -126,41 +148,36 @@ export default function TruckDetailPage() {
   }, [truck, fuelExpenses]);
 
   useEffect(() => {
-    if (truck && !truck.documentation && truckRef) {
-      const initialDocs = DEFAULT_DOCS.map(d => ({ ...d, status: 'pending' as DocStatus }));
-      updateDoc(truckRef, { documentation: initialDocs });
-    }
-    
     const fetchStaff = async () => {
-      if (!db || !truck || !tenantId) return;
+      if (!truck || !tenantId) return;
       setLoadingStaff(true);
       try {
+        const people = await listDrivers();
+        const byId = new Map(people.map((person) => [person.id, person]));
+
         if (truck.assignedDriverId && truck.assignedDriverId !== 'none') {
-          const dSnap = await getDoc(doc(db, "tenants", tenantId, "drivers", truck.assignedDriverId));
-          if (dSnap.exists()) setAssignedDriver(dSnap.data() as Driver);
+          setAssignedDriver(byId.get(truck.assignedDriverId) || null);
         } else {
           setAssignedDriver(null);
         }
 
-        if (truck.assignedCompanionIds && truck.assignedCompanionIds.length > 0) {
-          const companionPromises = truck.assignedCompanionIds.map(cid => getDoc(doc(db, "tenants", tenantId, "drivers", cid)));
-          const companionSnaps = await Promise.all(companionPromises);
-          const companions = companionSnaps
-            .filter(s => s.exists())
-            .map(s => s.data() as Driver);
-          setAssignedCompanions(companions);
-        } else {
-          setAssignedCompanions([]);
-        }
+        setAssignedCompanions((truck.assignedCompanionIds || []).map((cid) => byId.get(cid)).filter(Boolean) as Driver[]);
       } catch (e) {
         console.error(e);
       } finally {
         setLoadingStaff(false);
       }
     };
+
+    if (truck && (!truck.documentation || truck.documentation.length === 0)) {
+      const initialDocs = DEFAULT_DOCS.map((d) => ({ ...d, status: 'pending' as DocStatus }));
+      updateTruck(truck.id, { documentation: initialDocs }).then(() => {
+        setTruck((prev) => (prev ? { ...prev, documentation: initialDocs } : prev));
+      }).catch(() => {});
+    }
     
     fetchStaff();
-  }, [truck, truckRef, db, tenantId]);
+  }, [truck, tenantId]);
 
   const getStatusIcon = (status: DocStatus) => {
     switch (status) {
@@ -172,7 +189,7 @@ export default function TruckDetailPage() {
   };
 
   const handleUpdateDocDate = async (docId: string, date: string) => {
-    if (!truck || !truckRef) return;
+    if (!truck) return;
     const now = new Date();
     const expiryDate = parseISO(date);
     let status: DocStatus = 'valid';
@@ -184,7 +201,8 @@ export default function TruckDetailPage() {
     );
 
     try {
-      await updateDoc(truckRef, { documentation: updatedDocs, updatedAt: serverTimestamp() });
+      await updateTruck(truck.id, { documentation: updatedDocs });
+      setTruck((prev) => (prev ? { ...prev, documentation: updatedDocs } : prev));
       toast({ title: "Vencimiento actualizado" });
     } catch (e) {
       toast({ variant: "destructive", title: "Error" });
@@ -198,7 +216,7 @@ export default function TruckDetailPage() {
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !activeUploadId || !truck || !truckRef) return;
+    if (!file || !activeUploadId || !truck) return;
 
     setIsProcessing(true);
     const reader = new FileReader();
@@ -208,7 +226,8 @@ export default function TruckDetailPage() {
       if (file.type.startsWith('image/')) finalData = await compressImage(base64);
       const updatedDocs = truck.documentation.map(d => d.id === activeUploadId ? { ...d, fileUrl: finalData } : d);
       try {
-        await updateDoc(truckRef, { documentation: updatedDocs });
+        await updateTruck(truck.id, { documentation: updatedDocs });
+        setTruck((prev) => (prev ? { ...prev, documentation: updatedDocs } : prev));
         toast({ title: "Documento adjuntado" });
       } catch (err) {
         toast({ variant: "destructive", title: "Error" });
@@ -520,7 +539,7 @@ export default function TruckDetailPage() {
                     <TableBody>
                       {fuelExpenses?.map(exp => (
                         <TableRow key={exp.id}>
-                          <TableCell className="text-xs">{exp.createdAt?.toDate ? format(exp.createdAt.toDate(), "dd/MM/yy") : '-'}</TableCell>
+                          <TableCell className="text-xs">{toSafeDate(exp.createdAt) ? format(toSafeDate(exp.createdAt) as Date, "dd/MM/yy") : '-'}</TableCell>
                           <TableCell className="text-xs font-bold">{exp.liters} L</TableCell>
                           <TableCell className="text-xs font-mono text-blue-600">${exp.pricePerLiter?.toFixed(2)}</TableCell>
                           <TableCell className="text-xs font-bold text-green-700">${exp.amount.toLocaleString()}</TableCell>

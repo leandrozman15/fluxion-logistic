@@ -2,9 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -32,7 +30,7 @@ import {
     AlertDialogHeader, 
     AlertDialogTitle 
 } from "@/components/ui/alert-dialog";
-import { Quotation, QuotationStatus, Tenant } from "@/app/lib/types";
+import { Quotation, QuotationStatus } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -40,7 +38,6 @@ import { generateQuotationPDF } from "@/lib/pdf-service";
 import { deleteQuotation, listQuotations } from "@/lib/quotations-api";
 
 export default function PresupuestosPage() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const router = useRouter();
   const { toast } = useToast();
@@ -85,9 +82,6 @@ export default function PresupuestosPage() {
     };
   }, [tenantId, toast]);
 
-  const tenantRef = useMemo(() => (db && tenantId) ? doc(db, "tenants", tenantId) : null, [db, tenantId]);
-  const { data: tenant } = useDoc<Tenant>(tenantRef);
-
   const filteredQuotes = useMemo(() => {
     if (!quotes) return [];
     return quotes.filter(q => 
@@ -99,7 +93,7 @@ export default function PresupuestosPage() {
   const handleDownloadPDF = async (quote: Quotation) => {
     setIsDownloadingId(quote.id);
     try {
-      await generateQuotationPDF(quote, tenant || undefined);
+      await generateQuotationPDF(quote, undefined);
       toast({ title: "PDF Generado", description: `Se ha descargado la cotización ${quote.number}.` });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al generar PDF" });

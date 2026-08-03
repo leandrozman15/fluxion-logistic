@@ -2,8 +2,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from "react";
-import { useFirestore, useDoc, useUser } from "@/firebase";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { useUser } from "@/firebase";
 import { useRouter, useParams } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,6 +39,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Tenant } from "@/app/lib/types";
+import { getTenantById, updateTenant } from "@/lib/tenants-admin-api";
 
 const SUPER_ADMIN_EMAIL = "leozman15@gmail.com";
 
@@ -63,13 +63,11 @@ const AVAILABLE_MODULES = [
 
 export default function EditTenantPage() {
   const { id } = useParams();
-  const db = useFirestore();
   const { user, loading: userLoading } = useUser();
   const router = useRouter();
   const { toast } = useToast();
-  
-  const tenantRef = useMemo(() => (db && id) ? doc(db, "tenants", id as string) : null, [db, id]);
-  const { data: tenant, loading: tenantLoading } = useDoc<Tenant>(tenantRef);
+  const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [tenantLoading, setTenantLoading] = useState(true);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [enabledModules, setEnabledModules] = useState<string[]>([]);
@@ -93,24 +91,47 @@ export default function EditTenantPage() {
     }
   }, [user, userLoading, router]);
 
-  // Cargar datos existentes
   useEffect(() => {
-    if (tenant) {
-      setFormData({
-        name: tenant.name || "",
-        cuit: tenant.settings?.cuit || "",
-        country: tenant.settings?.country || "Argentina",
-        plan: tenant.plan || "free",
-        monthlyFee: tenant.monthlyFee || 0,
-        adminEmail: tenant.settings?.adminEmail || "",
-        legalAddress: tenant.settings?.legalAddress || "",
-        legalCityState: tenant.settings?.legalCityState || "",
-        centralPhone: tenant.settings?.centralPhone || "",
-        responsibleName: tenant.settings?.responsibleName || ""
-      });
-      setEnabledModules(tenant.settings?.enabledModules || AVAILABLE_MODULES.map(m => m.id));
+    let active = true;
+
+    async function loadTenant() {
+      if (!id) {
+        if (active) setTenantLoading(false);
+        return;
+      }
+
+      try {
+        if (active) setTenantLoading(true);
+        const tenantData = await getTenantById(id as string);
+        if (!active) return;
+        setTenant(tenantData);
+        setFormData({
+          name: tenantData.name || "",
+          cuit: tenantData.settings?.cuit || "",
+          country: tenantData.settings?.country || "Argentina",
+          plan: tenantData.plan || "free",
+          monthlyFee: tenantData.monthlyFee || 0,
+          adminEmail: tenantData.settings?.adminEmail || "",
+          legalAddress: tenantData.settings?.legalAddress || "",
+          legalCityState: tenantData.settings?.legalCityState || "",
+          centralPhone: tenantData.settings?.centralPhone || "",
+          responsibleName: tenantData.settings?.responsibleName || ""
+        });
+        setEnabledModules(tenantData.settings?.enabledModules || AVAILABLE_MODULES.map((m) => m.id));
+      } catch (error) {
+        if (!active) return;
+        setTenant(null);
+        toast({ variant: "destructive", title: "Error al cargar tenant", description: (error as Error).message });
+      } finally {
+        if (active) setTenantLoading(false);
+      }
     }
-  }, [tenant]);
+
+    loadTenant();
+    return () => {
+      active = false;
+    };
+  }, [id, toast]);
 
   const toggleModule = (moduleId: string) => {
     setEnabledModules(prev => 
@@ -119,23 +140,26 @@ export default function EditTenantPage() {
   };
 
   const handleSubmit = async () => {
-    if (!tenantRef || !formData.name) return;
+    if (!tenant || !formData.name) return;
     setIsSubmitting(true);
     try {
-      await updateDoc(tenantRef, {
+      await updateTenant(tenant.id, {
         name: formData.name,
         plan: formData.plan,
         monthlyFee: formData.monthlyFee,
-        updatedAt: serverTimestamp(),
-        "settings.cuit": formData.cuit,
-        "settings.country": formData.country,
-        "settings.adminEmail": formData.adminEmail,
-        "settings.legalAddress": formData.legalAddress,
-        "settings.legalCityState": formData.legalCityState,
-        "settings.centralPhone": formData.centralPhone,
-        "settings.responsibleName": formData.responsibleName,
-        "settings.enabledModules": enabledModules
-      });
+        updatedAt: new Date().toISOString(),
+        settings: {
+          ...(tenant.settings || {}),
+          cuit: formData.cuit,
+          country: formData.country,
+          adminEmail: formData.adminEmail,
+          legalAddress: formData.legalAddress,
+          legalCityState: formData.legalCityState,
+          centralPhone: formData.centralPhone,
+          responsibleName: formData.responsibleName,
+          enabledModules,
+        } as any,
+      } as any);
       
       toast({ 
         title: "Configuración Actualizada", 

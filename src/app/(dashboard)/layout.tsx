@@ -42,16 +42,15 @@ import {
   FileText
 } from "lucide-react";
 import Link from "next/link";
-import { useAuth, useFirestore, useDoc, useUser } from "@/firebase";
+import { useAuth, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { signOut } from "firebase/auth";
 import { useRouter, usePathname } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
-import { useMemo, useState, useEffect } from "react";
-import { doc } from "firebase/firestore";
-import { Tenant } from "@/app/lib/types";
+import { useState, useEffect } from "react";
+import { getTenantProfile } from "@/lib/settings-api";
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
@@ -78,13 +77,13 @@ const ADMIN_MENU_ITEMS = [
 function DashboardSidebar() {
   const { setOpenMobile, isMobile } = useSidebar();
   const auth = useAuth();
-  const db = useFirestore();
   const { user } = useUser();
   const { tenantId, role } = useTenant();
   const router = useRouter();
   const pathname = usePathname();
   const { toast } = useToast();
   const [mounted, setMounted] = useState(false);
+  const [tenant, setTenant] = useState<any>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -93,12 +92,30 @@ function DashboardSidebar() {
   const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
   const isDriver = role === 'driver';
 
-  const tenantRef = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return doc(db, "tenants", tenantId);
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: tenant } = useDoc<Tenant>(tenantRef);
+    async function loadTenant() {
+      if (!tenantId) {
+        if (active) setTenant(null);
+        return;
+      }
+
+      try {
+        const tenantData = await getTenantProfile();
+        if (!active) return;
+        setTenant(tenantData);
+      } catch {
+        if (!active) return;
+        setTenant(null);
+      }
+    }
+
+    loadTenant();
+    return () => {
+      active = false;
+    };
+  }, [tenantId]);
 
   const filteredMenu = useMemo(() => {
     if (isDriver) return [];

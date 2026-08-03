@@ -1,10 +1,9 @@
 'use client';
 
 import { useState, useMemo } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, updateDoc, doc, serverTimestamp } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -17,25 +16,48 @@ import {
 import { Load } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
+import { listLoads, updateLoad } from "@/lib/loads-api";
 
 export default function CargasArchivePage() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const router = useRouter();
   const { toast } = useToast();
   
   const [searchTerm, setSearchTerm] = useState("");
+  const [allLoads, setAllLoads] = useState<Load[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Simplificamos la consulta para no requerir índices compuestos (status + updatedAt)
-  const loadsQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(
-      collection(db, "tenants", tenantId, "loads"), 
-      orderBy("updatedAt", "desc")
-    );
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: allLoads, loading } = useCollection<Load>(loadsQuery);
+    async function loadData() {
+      if (!tenantId) {
+        if (active) {
+          setAllLoads([]);
+          setLoading(false);
+        }
+        return;
+      }
+
+      try {
+        if (active) setLoading(true);
+        const rows = await listLoads();
+        if (active) setAllLoads(rows);
+      } catch (error) {
+        if (active) {
+          setAllLoads([]);
+          toast({ variant: "destructive", title: "Error al cargar archivo", description: (error as Error).message });
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, toast]);
 
   const filteredLoads = useMemo(() => {
     if (!allLoads) return [];
@@ -52,15 +74,13 @@ export default function CargasArchivePage() {
   }, [allLoads, searchTerm]);
 
   const handleRestoreLoad = async (id: string) => {
-    if (!db || !tenantId) return;
+    if (!tenantId) return;
     try {
-      await updateDoc(doc(db, "tenants", tenantId, "loads", id), {
-        status: 'delivered', // Restaurar a un estado final lógico
-        updatedAt: serverTimestamp()
-      });
+      await updateLoad(id, { status: 'delivered' });
+      setAllLoads((prev) => prev.map((load) => (load.id === id ? { ...load, status: 'delivered' } : load)));
       toast({ title: "Flete Restaurado", description: "La operación volvió al panel activo." });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al restaurar" });
+      toast({ variant: "destructive", title: "Error al restaurar", description: (e as Error).message });
     }
   };
 

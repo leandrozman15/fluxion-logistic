@@ -1,421 +1,282 @@
-
 'use client';
 
-import { useMemo, useState, useEffect, useRef } from "react";
-import dynamic from "next/dynamic";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useFirestore, useDoc, useCollection } from "@/firebase";
-import { useTenant } from "@/hooks/use-tenant";
-import { doc, updateDoc, serverTimestamp, increment, arrayUnion, collection } from "firebase/firestore";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import dynamic from "next/dynamic";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Truck as TruckIcon, MapPin, Navigation, Clock, Gauge, 
-  Fuel, ArrowLeft, RefreshCw, 
-  Activity, Phone, MessageSquare, ShieldAlert,
-  Compass, Zap, Loader2, Siren, CheckCircle2
+import {
+  ArrowLeft,
+  Loader2,
+  Navigation,
+  Route,
+  Gauge,
+  Clock,
+  Play,
+  Pause,
+  CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
-import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, 
-  Tooltip, ResponsiveContainer, ReferenceLine 
-} from "recharts";
-import { Load, Truck } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
-import { format, addMinutes } from "date-fns";
-import { cn } from "@/lib/utils";
-import { estimateFuelFactor, calculateAdjustedETA, calculateLiveDelay } from "@/lib/utils/tracking-math";
+import { getLoadById, updateLoad } from "@/lib/loads-api";
+import { listTrucks, updateTruck } from "@/lib/trucks-api";
 
-const MapContainer = dynamic(
-  () => import("react-leaflet").then((mod) => mod.MapContainer),
-  { ssr: false, loading: () => <div className="h-full w-full bg-slate-100 flex items-center justify-center"><Loader2 className="animate-spin" /></div> }
-);
-const TileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), { ssr: false });
-const Marker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), { ssr: false });
-const Popup = dynamic(() => import("react-leaflet").then((mod) => mod.Popup), { ssr: false });
-const Polyline = dynamic(() => import("react-leaflet").then((mod) => mod.Polyline), { ssr: false });
+const RouteMap = dynamic(() => import("@/components/maps/route-map"), { ssr: false });
 
-const ALERT_LABELS: Record<string, string> = {
-  security: 'SEGURIDAD / PELIGRO',
-  mechanical: 'FALLA MECÁNICA',
-  accident: 'SINIESTRO VIAL'
+type TrackingPoint = {
+  lat: number;
+  lng: number;
+  speed?: number;
+  timestamp?: string;
 };
 
-export default function LiveTrackingPage() {
-  const { id } = useParams();
+export default function TrackingPage() {
+  const params = useParams();
   const router = useRouter();
-  const db = useFirestore();
-  const { tenantId } = useTenant();
   const { toast } = useToast();
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [isResolving, setIsResolving] = useState(false);
-  const [L, setL] = useState<any>(null);
-  const [mounted, setMounted] = useState(false);
-  const loadRefData = useRef<Load | null>(null);
+
+  const loadId = String(params?.id || "");
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [loadData, setLoadData] = useState<any>(null);
+  const [truckData, setTruckData] = useState<any>(null);
+  const [isRunning, setIsRunning] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
-    import('leaflet').then((leaflet) => {
-      setL(leaflet.default);
-    });
-  }, []);
+    let active = true;
 
-  const loadRef = useMemo(() => {
-    if (!db || !id || !tenantId) return null;
-    return doc(db, "tenants", tenantId, "loads", id as string);
-  }, [db, id, tenantId]);
+    async function fetchData() {
+      if (!loadId) {
+        if (active) setLoading(false);
+        return;
+      }
 
-  const { data: load, loading } = useDoc<Load>(loadRef);
+      try {
+        if (active) setLoading(true);
+        const load = await getLoadById(loadId);
+        if (!active) return;
+        setLoadData(load);
 
-  const trucksQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return collection(db, "tenants", tenantId, "trucks");
-  }, [db, tenantId]);
+        if (load.assignedTruckId) {
+          const trucks = await listTrucks();
+          if (!active) return;
+          const assigned = trucks.find((truck) => truck.id === load.assignedTruckId) || null;
+          setTruckData(assigned);
+        } else {
+          setTruckData(null);
+        }
+      } catch (error) {
+        if (!active) return;
+        toast({ variant: "destructive", title: "Error al cargar tracking", description: (error as Error).message });
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
 
-  const { data: allTrucks } = useCollection<Truck>(trucksQuery);
-  const truck = useMemo(() => allTrucks?.find(t => t.id === load?.assignedTruckId), [allTrucks, load?.assignedTruckId]);
+    fetchData();
+    return () => {
+      active = false;
+    };
+  }, [loadId, toast]);
 
-  useEffect(() => {
-    if (load) loadRefData.current = load;
-  }, [load]);
+  const history = useMemo<TrackingPoint[]>(() => {
+    const rows = loadData?.tracking?.history;
+    return Array.isArray(rows) ? rows : [];
+  }, [loadData]);
 
-  useEffect(() => {
-    if (!isSimulating || !loadRef) return;
-
-    const interval = setInterval(async () => {
-      const currentLoad = loadRefData.current;
-      if (!currentLoad) return;
-
-      const currentTracking = currentLoad.tracking || {
-        currentLat: currentLoad.origin.lat || -34.6037,
-        currentLng: currentLoad.origin.lng || -58.3816,
-        currentSpeed: 75,
-        estimatedFuelLiters: 4,
+  const currentPoint = useMemo<TrackingPoint | null>(() => {
+    if (history.length > 0) return history[history.length - 1];
+    if (typeof loadData?.tracking?.currentLat === "number" && typeof loadData?.tracking?.currentLng === "number") {
+      return {
+        lat: loadData.tracking.currentLat,
+        lng: loadData.tracking.currentLng,
+        speed: loadData.tracking.currentSpeed,
       };
+    }
+    return null;
+  }, [history, loadData]);
 
-      const newLat = currentTracking.currentLat + (Math.random() * 0.002 - 0.001);
-      const newLng = currentTracking.currentLng + (Math.random() * 0.002 - 0.001);
-      const newSpeed = 70 + Math.floor(Math.random() * 15);
-      
-      const newPoint = {
-        lat: newLat,
-        lng: newLng,
-        speed: newSpeed,
-        timestamp: new Date().toISOString()
-      };
+  const destination = useMemo(() => {
+    const stop = loadData?.outboundStops?.[0];
+    if (!stop) return null;
+    if (typeof stop.lat === "number" && typeof stop.lng === "number") {
+      return { lat: stop.lat, lng: stop.lng, name: stop.name || "Destino" };
+    }
+    return null;
+  }, [loadData]);
 
-      const fuelDelta = (estimateFuelFactor(newSpeed) * 0.016); 
+  const etaLabel = useMemo(() => {
+    const remaining = Number(loadData?.tracking?.distanceRemainingKm || 0);
+    const speed = Number(loadData?.tracking?.currentSpeed || 0);
+    if (!remaining || !speed) return "--";
+    const hours = remaining / Math.max(speed, 1);
+    const minutes = Math.round(hours * 60);
+    return `${minutes} min`;
+  }, [loadData]);
 
-      await updateDoc(loadRef, {
-        "tracking.currentLat": newLat,
-        "tracking.currentLng": newLng,
-        "tracking.currentSpeed": newSpeed,
-        "tracking.maxSpeed": newSpeed > (currentLoad.tracking?.maxSpeed || 0) ? newSpeed : (currentLoad.tracking?.maxSpeed || 0),
-        "tracking.distanceTraveledKm": increment(1.2), 
-        "tracking.distanceRemainingKm": increment(-1.2),
-        "tracking.estimatedFuelLiters": increment(fuelDelta),
-        "tracking.history": arrayUnion(newPoint),
-        "tracking.lastUpdateAt": serverTimestamp()
-      });
-    }, 60000);
-
-    return () => clearInterval(interval);
-  }, [isSimulating, loadRef]);
-
-  const handleDeactivateAlert = async () => {
-    if (!db || !tenantId || !truck || !loadRef) return;
-    setIsResolving(true);
+  const handleStatus = async (next: "on_route" | "completed") => {
+    if (!loadData?.id) return;
+    setSaving(true);
     try {
-      const tRef = doc(db, "tenants", tenantId, "trucks", truck.id);
-      await updateDoc(tRef, {
-        hasActiveAlert: false,
-        alertType: null,
-        updatedAt: serverTimestamp()
-      });
-
-      await updateDoc(loadRef, {
-        status: 'on_route',
-        updatedAt: serverTimestamp()
-      });
-
-      toast({ title: "Situación Resuelta", description: "La alerta ha sido desactivada." });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Error al resolver" });
+      const updated = await updateLoad(loadData.id, {
+        status: next,
+        updatedAt: new Date().toISOString(),
+      } as any);
+      setLoadData((prev: any) => ({ ...prev, ...updated }));
+      toast({ title: next === "completed" ? "Viaje finalizado" : "Viaje reanudado" });
+    } catch (error) {
+      toast({ variant: "destructive", title: "No se pudo actualizar", description: (error as Error).message });
     } finally {
-      setIsResolving(false);
+      setSaving(false);
     }
   };
 
-  const getTruckIcon = (hasAlert: boolean = false) => {
-    if (!L) return null;
-    return L.divIcon({
-      className: 'custom-truck-icon',
-      html: `
-        <div class="relative">
-          ${hasAlert ? '<div class="absolute -inset-4 bg-red-500 rounded-full animate-ping opacity-30"></div>' : ''}
-          <div class="${hasAlert ? 'bg-red-600 animate-pulse' : 'bg-blue-600'} text-white p-2 rounded-full shadow-2xl border-4 border-white transition-colors duration-500">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/>
-              <path d="M15 18H9V4"/>
-              <path d="M19 18h2a1 1 0 0 0 1-1v-4.24a2 2 0 0 0-.81-1.6l-3.19-2.39A2 2 0 0 0 17 8.17V18Z"/>
-              <circle cx="7" cy="18" r="2"/>
-              <circle cx="17" cy="18" r="2"/>
-            </svg>
-          </div>
-        </div>
-      `,
-      iconSize: [40, 40],
-      iconAnchor: [20, 20]
-    });
+  const simulateTick = async () => {
+    if (!loadData?.id || !currentPoint || !destination) return;
+    setSaving(true);
+    try {
+      const latStep = (destination.lat - currentPoint.lat) * 0.15;
+      const lngStep = (destination.lng - currentPoint.lng) * 0.15;
+      const nextPoint: TrackingPoint = {
+        lat: currentPoint.lat + latStep,
+        lng: currentPoint.lng + lngStep,
+        speed: 28 + Math.round(Math.random() * 12),
+        timestamp: new Date().toISOString(),
+      };
+
+      const updatedHistory = [...history, nextPoint];
+      const remainingKm = Math.sqrt(Math.pow(destination.lat - nextPoint.lat, 2) + Math.pow(destination.lng - nextPoint.lng, 2)) * 111;
+
+      const updatedLoad = await updateLoad(loadData.id, {
+        tracking: {
+          ...(loadData.tracking || {}),
+          currentLat: nextPoint.lat,
+          currentLng: nextPoint.lng,
+          currentSpeed: nextPoint.speed,
+          history: updatedHistory,
+          distanceRemainingKm: Number(remainingKm.toFixed(2)),
+        },
+        updatedAt: new Date().toISOString(),
+      } as any);
+
+      setLoadData((prev: any) => ({ ...prev, ...updatedLoad, tracking: { ...(prev?.tracking || {}), ...(updatedLoad?.tracking || {}) } }));
+
+      if (truckData?.id) {
+        await updateTruck(truckData.id, {
+          currentLocation: {
+            lat: nextPoint.lat,
+            lng: nextPoint.lng,
+            updatedAt: new Date().toISOString(),
+          },
+        } as any);
+      }
+    } catch (error) {
+      toast({ variant: "destructive", title: "Error en simulacion", description: (error as Error).message });
+      setIsRunning(false);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const breadcrumbs = useMemo(() => {
-    if (!load?.tracking?.history) return [];
-    return load.tracking.history.map(p => [p.lat, p.lng] as [number, number]);
-  }, [load?.tracking?.history]);
+  useEffect(() => {
+    if (!isRunning) return;
+    const interval = setInterval(() => {
+      simulateTick();
+    }, 5000);
+    return () => clearInterval(interval);
+  });
 
-  const liveStats = useMemo(() => {
-    if (!load?.tracking) return { delay: 0, eta: "---" };
-    const tracking = load.tracking;
-    
-    // Cálculo dinámico de retraso
-    const delay = calculateLiveDelay(tracking.tripStartedAt, tracking.distanceTraveledKm);
-    
-    // Cálculo dinámico de ETA
-    let eta = "---";
-    if (tracking.distanceRemainingKm && tracking.currentSpeed > 5) {
-      const minsRemaining = calculateAdjustedETA(
-        tracking.distanceRemainingKm, 
-        tracking.currentSpeed, 
-        tracking.avgSpeed || 60
-      );
-      eta = format(addMinutes(new Date(), minsRemaining), "HH:mm") + " hs";
-    } else if (tracking.distanceRemainingKm > 0) {
-      eta = "DETENIDO";
-    }
+  if (loading) {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <Loader2 className="animate-spin w-8 h-8 text-blue-600" />
+      </div>
+    );
+  }
 
-    return { delay, eta };
-  }, [load]);
-
-  if (loading) return <div className="h-screen flex items-center justify-center"><Activity className="animate-spin text-blue-600" /></div>;
-  if (!load) return <div className="p-10 text-center">Operación no encontrada.</div>;
-
-  const tracking = load.tracking;
-  const chartData = tracking?.history?.map(p => ({
-    time: format(new Date(p.timestamp), "HH:mm:ss"),
-    speed: p.speed
-  })) || [];
+  if (!loadData) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center gap-4">
+        <AlertTriangle className="text-amber-500" />
+        <p className="font-bold text-slate-700">No se encontro el viaje.</p>
+        <Button onClick={() => router.push("/rutas")}>Volver</Button>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-20">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => router.back()}>
-            <ArrowLeft />
-          </Button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-slate-900">Seguimiento en Vivo</h1>
-              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-100 font-mono">
-                #{load.orderNumber}
-              </Badge>
-              {truck?.hasActiveAlert && (
-                <Badge className="bg-red-600 text-white animate-pulse border-none flex items-center gap-1">
-                  <Siren size={10}/> ALERT: {ALERT_LABELS[truck.alertType || ''] || 'EMERGENCIA'}
-                </Badge>
-              )}
-            </div>
-            <p className="text-sm text-slate-500 flex items-center gap-1">
-              <TruckIcon size={14} className="text-blue-600" /> {load.clientName} | Ruta: {load.origin.province} → {load.outboundStops?.[load.outboundStops.length-1]?.province || 'Destino'}
-            </p>
+    <div className="space-y-6 pb-16">
+      <div className="flex items-center justify-between">
+        <Button variant="ghost" onClick={() => router.back()} className="rounded-xl">
+          <ArrowLeft className="mr-2" size={16} /> Volver
+        </Button>
+        <Badge className="bg-blue-50 text-blue-700 border-blue-100">Tracking en vivo</Badge>
+      </div>
+
+      <Card className="border-none shadow-xl">
+        <CardHeader>
+          <CardTitle className="text-xl font-black italic uppercase tracking-tighter flex items-center gap-2">
+            <Route className="text-blue-600" size={20} />
+            Viaje {loadData.orderNumber || loadData.id}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="p-4 rounded-2xl bg-slate-50">
+            <p className="text-[10px] uppercase font-black text-slate-400">Estado</p>
+            <p className="text-sm font-black text-slate-800">{String(loadData.status || "--").toUpperCase()}</p>
           </div>
-        </div>
-        <div className="flex gap-2">
-          <Button 
-            variant={isSimulating ? "destructive" : "outline"} 
-            size="sm" 
-            onClick={() => setIsSimulating(!isSimulating)}
-          >
-            {isSimulating ? "Detener Simulación" : "Simular GPS Conductor"}
-          </Button>
-          <Button className="bg-blue-600">
-            <RefreshCw size={14} className="mr-2" /> Actualizar Datos
-          </Button>
-        </div>
-      </div>
+          <div className="p-4 rounded-2xl bg-slate-50">
+            <p className="text-[10px] uppercase font-black text-slate-400">Velocidad</p>
+            <p className="text-sm font-black text-slate-800 flex items-center gap-1"><Gauge size={14} /> {Number(loadData?.tracking?.currentSpeed || 0)} km/h</p>
+          </div>
+          <div className="p-4 rounded-2xl bg-slate-50">
+            <p className="text-[10px] uppercase font-black text-slate-400">Restante</p>
+            <p className="text-sm font-black text-slate-800">{Number(loadData?.tracking?.distanceRemainingKm || 0).toFixed(1)} km</p>
+          </div>
+          <div className="p-4 rounded-2xl bg-slate-50">
+            <p className="text-[10px] uppercase font-black text-slate-400">ETA</p>
+            <p className="text-sm font-black text-slate-800 flex items-center gap-1"><Clock size={14} /> {etaLabel}</p>
+          </div>
+        </CardContent>
+      </Card>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-        <Card className="bg-slate-900 text-white border-none shadow-sm">
-          <CardContent className="pt-4 flex flex-col items-center text-center gap-1">
-            <Gauge size={20} className="text-blue-400" />
-            <p className="text-[10px] uppercase font-bold text-white/50">Velocidad</p>
-            <p className="text-2xl font-bold">{tracking?.currentSpeed || 0} <span className="text-xs font-normal opacity-50">km/h</span></p>
-          </CardContent>
-        </Card>
-        <Card className="border-none shadow-sm">
-          <CardContent className="pt-4 flex flex-col items-center text-center gap-1">
-            <Navigation size={20} className="text-blue-600" />
-            <p className="text-[10px] uppercase font-bold text-slate-400">Recorrido</p>
-            <p className="text-2xl font-bold">{tracking?.distanceTraveledKm?.toFixed(1) || 0} <span className="text-xs font-normal text-slate-400">km</span></p>
-          </CardContent>
-        </Card>
-        <Card className="border-none shadow-sm">
-          <CardContent className="pt-4 flex flex-col items-center text-center gap-1">
-            <Compass size={20} className="text-orange-600" />
-            <p className="text-[10px] uppercase font-bold text-slate-400">Restante</p>
-            <p className="text-2xl font-bold">{tracking?.distanceRemainingKm?.toFixed(1) || 0} <span className="text-xs font-normal text-slate-400">km</span></p>
-          </CardContent>
-        </Card>
-        <Card className="border-none shadow-sm">
-          <CardContent className="pt-4 flex flex-col items-center text-center gap-1">
-            <Clock size={20} className="text-green-600" />
-            <p className="text-[10px] uppercase font-bold text-slate-400">ETA Ajustado</p>
-            <p className="text-2xl font-bold">{liveStats.eta}</p>
-          </CardContent>
-        </Card>
-        <Card className="border-none shadow-sm">
-          <CardContent className="pt-4 flex flex-col items-center text-center gap-1">
-            <Fuel size={20} className="text-purple-600" />
-            <p className="text-[10px] uppercase font-bold text-slate-400">Combustible Est.</p>
-            <p className="text-2xl font-bold">{tracking?.estimatedFuelLiters?.toFixed(1) || 0} <span className="text-xs font-normal text-slate-400">L</span></p>
-          </CardContent>
-        </Card>
-        <Card className={cn("border-none shadow-sm", liveStats.delay > 0 ? "bg-red-50" : "bg-white")}>
-          <CardContent className="pt-4 flex flex-col items-center text-center gap-1">
-            <Zap size={20} className={cn(liveStats.delay > 0 ? "text-red-500" : "text-yellow-500")} />
-            <p className="text-[10px] uppercase font-bold text-slate-400">Delay Real</p>
-            <p className={cn("text-2xl font-bold", liveStats.delay > 0 ? "text-red-600" : "text-green-600")}>
-              {liveStats.delay > 0 ? `+${liveStats.delay}` : liveStats.delay} 
-              <span className="text-xs font-normal text-slate-400 ml-1">min</span>
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <Card className="border-none shadow-xl overflow-hidden">
+        <CardContent className="p-0 h-[460px]">
+          <RouteMap
+            currentPosition={currentPoint ? { lat: currentPoint.lat, lng: currentPoint.lng } : null}
+            routeHistory={history.map((h) => ({ lat: h.lat, lng: h.lng }))}
+            destination={destination ? { lat: destination.lat, lng: destination.lng } : null}
+          />
+        </CardContent>
+      </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          {truck?.hasActiveAlert && (
-            <Card className="border-2 border-red-500 bg-red-50 shadow-lg animate-in zoom-in-95">
-               <CardHeader className="flex flex-row items-center justify-between">
-                  <div className="flex items-center gap-3">
-                     <div className="w-12 h-12 bg-red-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-red-200">
-                        <Siren size={28} className="animate-bounce" />
-                     </div>
-                     <div>
-                        <CardTitle className="text-red-700 font-black uppercase italic tracking-tighter">Acción de Emergencia Requerida</CardTitle>
-                        <CardDescription className="text-red-500 font-bold text-xs">Tipo detectado: {ALERT_LABELS[truck.alertType || ''] || 'DESCONOCIDO'}</CardDescription>
-                     </div>
-                  </div>
-                  <Button 
-                    variant="destructive" 
-                    className="font-black h-12 px-8 rounded-xl shadow-xl"
-                    onClick={handleDeactivateAlert}
-                    disabled={isResolving}
-                  >
-                    {isResolving ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2" />}
-                    RESOLVER INCIDENTE
-                  </Button>
-               </CardHeader>
-            </Card>
-          )}
+      <div className="flex flex-wrap gap-3">
+        <Button
+          className="bg-blue-600 hover:bg-blue-700 text-white"
+          onClick={() => setIsRunning((v) => !v)}
+          disabled={saving}
+        >
+          {isRunning ? <Pause size={16} className="mr-2" /> : <Play size={16} className="mr-2" />}
+          {isRunning ? "Pausar simulacion" : "Iniciar simulacion"}
+        </Button>
 
-          <Card className="border-none shadow-sm overflow-hidden h-[450px] relative">
-             {mounted && (
-               <MapContainer 
-                 center={[tracking?.currentLat || -34.6037, tracking?.currentLng || -58.3816]} 
-                 zoom={13} 
-                 className="h-full w-full"
-                 zoomControl={false}
-               >
-                 <TileLayer
-                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                   attribution='&copy; OpenStreetMap contributors'
-                 />
-                 
-                 {breadcrumbs.length > 1 && (
-                   <Polyline positions={breadcrumbs} color="#2563eb" weight={4} opacity={0.6} />
-                 )}
+        <Button
+          variant="outline"
+          onClick={() => handleStatus("on_route")}
+          disabled={saving}
+        >
+          <Navigation size={16} className="mr-2" /> Marcar en ruta
+        </Button>
 
-                 <Marker 
-                   position={[tracking?.currentLat || -34.6037, tracking?.currentLng || -58.3816]} 
-                   icon={getTruckIcon(!!truck?.hasActiveAlert)}
-                 >
-                   <Popup>
-                     <div className="p-1 font-bold">Unidad: {truck?.plate}</div>
-                   </Popup>
-                 </Marker>
-               </MapContainer>
-             )}
-          </Card>
-
-          <Card className="border-none shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Activity size={16} className="text-blue-600" /> Análisis de Velocidad (Historial)
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="h-[200px] pt-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
-                  <XAxis dataKey="time" fontSize={10} axisLine={false} tickLine={false} />
-                  <YAxis fontSize={10} axisLine={false} tickLine={false} unit="km/h" />
-                  <Tooltip />
-                  <ReferenceLine y={90} label={{ position: 'right', value: 'Límite', fontSize: 10, fill: '#ef4444' }} stroke="#ef4444" strokeDasharray="3 3" />
-                  <Line 
-                    type="monotone" 
-                    dataKey="speed" 
-                    stroke="#2563eb" 
-                    strokeWidth={3} 
-                    dot={false} 
-                    animationDuration={300}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="space-y-6">
-           <Card className="border-none shadow-sm bg-slate-900 text-white">
-              <CardHeader>
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <ShieldAlert size={16} className="text-yellow-400" /> Seguridad y Eventos
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                 <div className="space-y-3">
-                    {tracking?.alerts?.map((alert, i) => (
-                      <div key={i} className="flex gap-3 text-xs border-l border-white/10 pl-3">
-                         <span className="opacity-40 font-mono">{(alert.timestamp as any)?.toDate ? format((alert.timestamp as any).toDate(), "HH:mm") : '---'}</span>
-                         <span className={alert.type === 'warning' ? "text-yellow-400" : alert.type === 'critical' ? "text-red-500 font-bold" : "text-green-400"}>{alert.message}</span>
-                      </div>
-                    )) || (
-                      <div className="text-[10px] text-white/30 italic">Sin alertas en la jornada actual.</div>
-                    )}
-                 </div>
-                 <div className="pt-4 border-t border-white/5 space-y-2">
-                    <p className="text-[10px] uppercase font-bold text-white/40">Score del Conductor</p>
-                    <div className="flex items-center justify-between">
-                       <span className="text-3xl font-bold text-green-400">92<span className="text-xs opacity-50">/100</span></span>
-                       <Badge variant="outline" className="border-green-400 text-green-400 text-[10px] font-black uppercase">Nivel Pro</Badge>
-                    </div>
-                 </div>
-              </CardContent>
-           </Card>
-
-           <Card className="border-none shadow-sm">
-             <CardHeader className="pb-3 border-b bg-slate-50"><CardTitle className="text-xs uppercase font-black text-slate-400">Comunicación Directa</CardTitle></CardHeader>
-             <CardContent className="p-4 space-y-3">
-                <Button className="w-full bg-green-600 hover:bg-green-700 h-14 text-sm font-black uppercase" onClick={() => window.open(`https://wa.me/${load.origin.phone}`, '_blank')}>
-                   <MessageSquare className="mr-2" /> WhatsApp Chofer
-                </Button>
-                <Button variant="outline" className="w-full h-14 text-slate-700 font-black uppercase border-slate-200">
-                   <Phone className="mr-2" /> Llamada de Voz
-                </Button>
-             </CardContent>
-           </Card>
-        </div>
+        <Button
+          className="bg-green-600 hover:bg-green-700 text-white"
+          onClick={() => handleStatus("completed")}
+          disabled={saving}
+        >
+          <CheckCircle2 size={16} className="mr-2" /> Finalizar viaje
+        </Button>
       </div>
     </div>
   );

@@ -1,10 +1,7 @@
 'use client';
 
-import { useMemo, useState } from "react";
-import { useFirestore, useCollection, useUser } from "@/firebase";
+import { useEffect, useMemo, useState } from "react";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, where, orderBy, doc, updateDoc, serverTimestamp, getDoc } from "firebase/firestore";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -27,23 +24,47 @@ import { isBefore, isToday, addDays, isAfter } from "date-fns";
 import Link from "next/link";
 import { normalizePhoneBR, buildWaMeUrl } from "@/lib/utils/whatsapp";
 import { formatSafeDate, toSafeDate } from "@/lib/utils/date-utils";
+import { listTasks, updateTask } from "@/lib/tasks-api";
+import { getProspectById } from "@/lib/prospects-api";
 
 export default function TasksPage() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const { toast } = useToast();
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [allTasks, setAllTasks] = useState<Task[]>([]);
 
-  // Simplified query to avoid composite index requirement
-  const tasksQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(
-      collection(db, "tenants", tenantId, "tasks"),
-      orderBy("dueAt", "asc")
-    );
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: allTasks, loading } = useCollection<Task>(tasksQuery);
+    async function loadData() {
+      if (!tenantId) {
+        if (active) {
+          setAllTasks([]);
+          setLoading(false);
+        }
+        return;
+      }
+
+      try {
+        if (active) setLoading(true);
+        const rows = await listTasks();
+        if (!active) return;
+        setAllTasks(rows as Task[]);
+      } catch (error) {
+        if (!active) return;
+        setAllTasks([]);
+        toast({ variant: "destructive", title: "Erro ao carregar tarefas", description: (error as Error).message });
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, toast]);
 
   const groupedTasks = useMemo(() => {
     if (!allTasks) return { overdue: [], today: [], upcoming: [] };
@@ -69,13 +90,14 @@ export default function TasksPage() {
   }, [allTasks]);
 
   const handleCompleteTask = async (taskId: string) => {
-    if (!db || !tenantId) return;
+    if (!tenantId) return;
     setIsActionLoading(taskId);
     try {
-      await updateDoc(doc(db, "tenants", tenantId, "tasks", taskId), {
+      const updated = await updateTask(taskId, {
         state: "done",
-        completedAt: serverTimestamp()
+        completedAt: new Date().toISOString(),
       });
+      setAllTasks((prev) => prev.map((task) => (task.id === taskId ? ({ ...task, ...updated } as Task) : task)));
       toast({ title: "Tarefa concluída!" });
     } catch (e) {
       toast({ variant: "destructive", title: "Erro ao concluir tarefa" });
@@ -85,14 +107,15 @@ export default function TasksPage() {
   };
 
   const handleSnoozeTask = async (taskId: string, days: number) => {
-    if (!db || !tenantId) return;
+    if (!tenantId) return;
     setIsActionLoading(taskId);
     try {
       const newDate = addDays(new Date(), days);
-      await updateDoc(doc(db, "tenants", tenantId, "tasks", taskId), {
+      const updated = await updateTask(taskId, {
         dueAt: newDate,
-        state: "open"
+        state: "open",
       });
+      setAllTasks((prev) => prev.map((task) => (task.id === taskId ? ({ ...task, ...updated } as Task) : task)));
       toast({ title: `Adiada para ${formatSafeDate(newDate, "dd/MM")}` });
     } catch (e) {
       toast({ variant: "destructive", title: "Erro ao adiar" });
@@ -102,15 +125,21 @@ export default function TasksPage() {
   };
 
   const handleTaskAction = async (task: Task) => {
-    if (!db || !tenantId) return;
+    if (!tenantId) return;
     
     if (task.type === 'followup_whatsapp') {
-      const pSnap = await getDoc(doc(db, "tenants", tenantId, "prospects", task.prospectId));
-      const pData = pSnap.data();
-      const phone = pData?.contacts?.[0]?.phone || pData?.contacts?.[0]?.whatsapp;
-      const normalized = normalizePhoneBR(phone || "");
-      if (normalized) window.open(buildWaMeUrl(normalized, task.notes), "_blank");
-      else toast({ variant: "destructive", title: "Telefone não encontrado" });
+      try {
+        const prospect = await getProspectById(task.prospectId);
+        const phone = prospect.contacts?.[0]?.phone || prospect.contacts?.[0]?.whatsapp;
+        const normalized = normalizePhoneBR(phone || "");
+        if (normalized) {
+          window.open(buildWaMeUrl(normalized, task.notes), "_blank");
+        } else {
+          toast({ variant: "destructive", title: "Telefone não encontrado" });
+        }
+      } catch (error) {
+        toast({ variant: "destructive", title: "Erro ao carregar contato", description: (error as Error).message });
+      }
     } else if (task.type === 'followup_email') {
       window.location.href = `/prospects/${task.prospectId}?action=prepare`;
     } else {

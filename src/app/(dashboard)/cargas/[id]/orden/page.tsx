@@ -2,65 +2,82 @@
 
 import { useMemo, useEffect, useState, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useFirestore, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc, getDoc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
   ArrowLeft, Loader2, ClipboardCheck, ShieldCheck, Truck, User, MapPin, Download
 } from "lucide-react";
-import { Load, Driver, Truck as TruckType, Tenant } from "@/app/lib/types";
+import { Load, Driver, Truck as TruckType } from "@/app/lib/types";
 import { QRCodeSVG } from "qrcode.react";
 import { format } from "date-fns";
+import { getDriver } from "@/lib/drivers-api";
+import { getLoad } from "@/lib/loads-api";
+import { getTruck } from "@/lib/trucks-api";
 
 function LoadOrderContent() {
   const { id } = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const db = useFirestore();
   const { tenantId } = useTenant();
   
+  const [load, setLoad] = useState<Load | null>(null);
+  const [loadLoading, setLoadLoading] = useState(true);
   const [driver, setDriver] = useState<Driver | null>(null);
   const [truck, setTruck] = useState<TruckType | null>(null);
   const [loadingExtras, setLoadingExtras] = useState(true);
 
   const autoPrint = searchParams.get('print') === 'true';
 
-  const loadRef = useMemo(() => {
-    if (!db || !id || !tenantId) return null;
-    return doc(db, "tenants", tenantId, "loads", id as string);
-  }, [db, id, tenantId]);
-
-  const { data: load, loading: loadLoading } = useDoc<Load>(loadRef);
-
-  const tenantRef = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return doc(db, "tenants", tenantId);
-  }, [db, tenantId]);
-
-  const { data: tenant } = useDoc<Tenant>(tenantRef);
-
   useEffect(() => {
-    async function fetchExtras() {
-      if (!db || !load || !tenantId) return;
+    let active = true;
+
+    async function loadData() {
+      if (!tenantId || !id) {
+        if (active) {
+          setLoad(null);
+          setLoadLoading(false);
+          setLoadingExtras(false);
+        }
+        return;
+      }
+
       try {
-        if (load.assignedDriverId && load.assignedDriverId !== 'none') {
-          const dSnap = await getDoc(doc(db, "tenants", tenantId, "drivers", load.assignedDriverId));
-          if (dSnap.exists()) setDriver(dSnap.data() as Driver);
+        if (active) {
+          setLoadLoading(true);
+          setLoadingExtras(true);
         }
-        if (load.assignedTruckId) {
-          const tSnap = await getDoc(doc(db, "tenants", tenantId, "trucks", load.assignedTruckId));
-          if (tSnap.exists()) setTruck(tSnap.data() as TruckType);
+
+        const loadRow = await getLoad(id as string);
+        if (!active) return;
+        setLoad(loadRow);
+
+        if (loadRow.assignedDriverId && loadRow.assignedDriverId !== 'none') {
+          setDriver(await getDriver(loadRow.assignedDriverId));
         }
-      } catch (e) {
-        console.error(e);
+
+        if (loadRow.assignedTruckId) {
+          setTruck(await getTruck(loadRow.assignedTruckId));
+        }
+      } catch {
+        if (active) {
+          setLoad(null);
+          setDriver(null);
+          setTruck(null);
+        }
       } finally {
-        setLoadingExtras(false);
+        if (active) {
+          setLoadLoading(false);
+          setLoadingExtras(false);
+        }
       }
     }
-    if (load) fetchExtras();
-  }, [db, load, tenantId]);
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, id]);
 
   useEffect(() => {
     if (autoPrint && !loadLoading && !loadingExtras && load) {
@@ -75,7 +92,7 @@ function LoadOrderContent() {
   if (!load) return <div className="p-20 text-center">Orden no encontrada.</div>;
 
   const confirmationUrl = typeof window !== 'undefined' ? `${window.location.origin}/rutas/${load.id}` : '';
-  const orgName = tenant?.name || "LOGÍSTICA AR";
+  const orgName = "LOGÍSTICA AR";
 
   // Encontrar la última firma para mostrar en el cierre si el viaje terminó
   const lastPod = [...(load.outboundStops || [])].reverse().find(s => !!s.proofOfDelivery?.receiverSignatureUrl)?.proofOfDelivery;
@@ -100,11 +117,10 @@ function LoadOrderContent() {
           <div className="p-12 print:p-10 flex flex-col h-full w-full box-border">
             <div className="flex justify-between items-start border-b-[5px] border-black pb-8 mb-8">
               <div className="flex items-center gap-6">
-                {tenant?.settings?.logoUrl && <img src={tenant.settings.logoUrl} className="h-20 w-auto object-contain" alt="Logo" />}
                 <div>
                   <h1 className="text-4xl font-black uppercase italic tracking-tighter leading-none text-blue-800">{orgName}</h1>
                   <p className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-500 mt-2">Transporte Terrestre Nacional e Internacional</p>
-                  <p className="pt-3 text-[10px] font-bold text-slate-400">CUIT: {tenant?.settings?.cuit || '30-XXXXXXXX-X'}</p>
+                  <p className="pt-3 text-[10px] font-bold text-slate-400">CUIT: 30-XXXXXXXX-X</p>
                 </div>
               </div>
               <div className="text-right border-l-[3px] border-black pl-8">

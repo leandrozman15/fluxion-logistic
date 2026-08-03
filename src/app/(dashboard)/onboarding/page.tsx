@@ -1,10 +1,9 @@
 
 'use client';
 
-import { useState, useMemo } from "react";
-import { useFirestore, useDoc, useUser } from "@/firebase";
+import { useState } from "react";
+import { useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc, setDoc, serverTimestamp, collection, addDoc } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,10 +26,10 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { Tenant, TenantSettings } from "@/app/lib/types";
+import { updateTenantProfile } from "@/lib/settings-api";
+import { createTemplate } from "@/lib/templates-api";
 
 export default function OnboardingPage() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const { user } = useUser();
   const { toast } = useToast();
@@ -44,21 +43,15 @@ export default function OnboardingPage() {
   const [dailyLimit, setDailyLimit] = useState(30);
   const [templateName, setTemplateName] = useState("Primeiro Contato Industrial");
 
-  const tenantRef = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return doc(db, "tenants", tenantId);
-  }, [db, tenantId]);
-
   const handleCompleteStep = () => {
     setStep(prev => prev + 1);
   };
 
   const handleFinishOnboarding = async () => {
-    if (!tenantRef || !db || !user) return;
+    if (!tenantId || !user) return;
     setIsSaving(true);
     try {
-      // 1. Update Tenant Settings
-      await setDoc(tenantRef, {
+      await updateTenantProfile({
         settings: {
           scoringWeights: weights,
           dailyTopLimit: dailyLimit,
@@ -69,17 +62,14 @@ export default function OnboardingPage() {
           hourlyEmailLimit: 20,
           dailyEmailLimit: 200,
           defaultTemplateId: null
-        },
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+        }
+      });
 
-      // 2. Create Default Template
-      await addDoc(collection(db, "tenants", tenantId!, "templates"), {
+      await createTemplate({
         name: templateName,
         subject: "Olá {{contactName}}, solução para {{companyName}}",
         body: `Olá {{contactName}}, <br><br> Vi que a <b>{{companyName}}</b> atua fortemente no setor industrial em {{city}}/{{state}} e gostaria de apresentar nossa solução.<br><br>Atenciosamente,`,
         variablesUsed: ['contactName', 'companyName', 'city', 'state'],
-        createdAt: serverTimestamp(),
         createdBy: user.uid,
         tenantId
       });

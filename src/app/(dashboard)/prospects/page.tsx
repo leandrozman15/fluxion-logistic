@@ -1,53 +1,74 @@
 
 'use client';
 
-import { useState, useMemo } from "react";
-import { useFirestore, useCollection, useUser } from "@/firebase";
+import { useEffect, useMemo, useState } from "react";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, writeBatch, doc, serverTimestamp, runTransaction, increment, limit, setDoc } from "firebase/firestore";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { 
-  Search, Filter, Plus, FileDown, MoreHorizontal, Loader2, 
-  Sparkles, ChevronDown, Building2, MapPin, Activity, UserPlus
+  Search, Filter, Plus, MoreHorizontal, Loader2, MapPin
 } from "lucide-react";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import Link from "next/link";
-import { Prospect, ProspectStatus } from "@/app/lib/types";
+import { Prospect } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { calculateEffectiveScore } from "@/lib/utils/scoring";
+import { createProspect, listProspects } from "@/lib/prospects-api";
 
 export default function ProspectsPage() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
-  const { user } = useUser();
   const { toast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [prospects, setProspects] = useState<Prospect[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
   const [isManualOpen, setIsManualOpen] = useState(false);
 
   // Manual Form State
   const [manualForm, setManualForm] = useState({ name: "", cnpj: "", industry: "", city: "", state: "" });
 
-  const prospectsQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "prospects"), orderBy("effectiveScore", "desc"), limit(200));
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: prospects, loading } = useCollection<Prospect>(prospectsQuery);
+    async function loadData() {
+      if (!tenantId) {
+        if (active) {
+          setProspects([]);
+          setLoading(false);
+        }
+        return;
+      }
+
+      try {
+        if (active) setLoading(true);
+        const rows = await listProspects();
+        if (!active) return;
+        setProspects(rows.sort((a, b) => (b.effectiveScore || 0) - (a.effectiveScore || 0)).slice(0, 200));
+      } catch (error) {
+        if (!active) return;
+        setProspects([]);
+        toast({ variant: "destructive", title: "Erro ao carregar prospects", description: (error as Error).message });
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, toast]);
 
   const filteredProspects = useMemo(() => {
     if (!prospects) return [];
@@ -59,12 +80,10 @@ export default function ProspectsPage() {
   }, [prospects, searchTerm, statusFilter]);
 
   const handleAddManual = async () => {
-    if (!db || !tenantId || !manualForm.name) return;
+    if (!tenantId || !manualForm.name) return;
     setIsBulkProcessing(true);
     try {
-      const id = `manual_${Date.now()}`;
       const newProspect: Partial<Prospect> = {
-        id,
         tenantId,
         companyName: manualForm.name,
         cnpj: manualForm.cnpj.replace(/\D/g, ""),
@@ -79,7 +98,8 @@ export default function ProspectsPage() {
       };
 
       const score = calculateEffectiveScore(newProspect);
-      await setDoc(doc(db, "tenants", tenantId, "prospects", id), { ...newProspect, effectiveScore: score });
+      const created = await createProspect({ ...newProspect, effectiveScore: score });
+      setProspects((prev) => [created, ...prev]);
       
       toast({ title: "Prospect cadastrado!" });
       setIsManualOpen(false);

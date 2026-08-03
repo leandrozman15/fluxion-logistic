@@ -3,9 +3,8 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useDoc, useUser } from "@/firebase";
+import { useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, serverTimestamp, doc, setDoc, writeBatch } from "firebase/firestore";
 import { initializeApp, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import { firebaseConfig } from "@/firebase/config";
@@ -43,7 +42,7 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { compressImage } from "@/lib/utils/image-compression";
 import { uploadBase64 } from "@/lib/storage-service";
-import { logSystemEvent } from "@/lib/audit-service";
+import { createDriver, getDriver, updateDriver } from "@/lib/drivers-api";
 
 interface DriverFormWizardProps {
   driverId?: string;
@@ -52,14 +51,14 @@ interface DriverFormWizardProps {
 const LICENSE_CLASSES = ["A1", "A2", "A3", "B1", "B2", "C1", "C2", "C3", "D1", "D2", "E1", "E2", "G1", "G2"];
 
 export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
-  const db = useFirestore();
   const { tenantId } = useTenant();
-  const { user } = useUser();
+   useUser();
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isProcessingFile, setIsProcessingFile] = useState<string | null>(null);
+   const [loadingExisting, setLoadingExisting] = useState(Boolean(driverId));
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const dniFRef = useRef<HTMLInputElement>(null);
@@ -103,15 +102,32 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
     lintiFileUrl: ""
   });
 
-  const driverRef = useMemo(() => 
-    (driverId && db && tenantId) ? doc(db, "tenants", tenantId, "drivers", driverId) : null
-  , [db, tenantId, driverId]);
-
-  const { data: existingDriver, loading: loadingExisting } = useDoc<Driver>(driverRef);
-
   useEffect(() => {
-    if (existingDriver) setFormData(existingDriver);
-  }, [existingDriver]);
+      let active = true;
+
+      async function loadExisting() {
+         if (!driverId) {
+            if (active) setLoadingExisting(false);
+            return;
+         }
+
+         try {
+            const existingDriver = await getDriver(driverId);
+            if (active) setFormData(existingDriver);
+         } catch (error) {
+            if (active) {
+               toast({ variant: "destructive", title: "Error al cargar chofer", description: (error as Error).message });
+            }
+         } finally {
+            if (active) setLoadingExisting(false);
+         }
+      }
+
+      loadExisting();
+      return () => {
+         active = false;
+      };
+   }, [driverId, toast]);
 
   const onFileChange = (key: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -127,10 +143,6 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
         const url = await uploadBase64(storagePath, compressed);
         
         setFormData(prev => ({ ...prev, [key]: url }));
-        
-        if (db && user) {
-          await logSystemEvent(db, tenantId, user, 'document_upload', 'driver', formData.dni || 'unknown', { documentType: key });
-        }
         
         toast({ title: "Documento digitalizado", description: "El archivo se ha guardado en el legajo." });
       } catch (err) {
@@ -155,7 +167,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   };
 
   const handleSubmit = async () => {
-    if (!db || !tenantId) return;
+   if (!tenantId) return;
     
     setIsSubmitting(true);
     
@@ -165,34 +177,18 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
 
     try {
       let uid = driverId;
-      const batch = writeBatch(db);
       const cleanEmail = formData.email?.toLowerCase().trim() || "";
 
       if (!driverId && cleanEmail) {
         if (!formData.password) throw new Error("Debe definir una contraseña inicial para crear el acceso.");
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, cleanEmail, formData.password);
         uid = userCredential.user.uid;
-
-        batch.set(doc(db, "users", cleanEmail), {
-          uid,
-          email: cleanEmail,
-          tenantId,
-          role: formData.role,
-          status: "active",
-          createdAt: serverTimestamp()
-        });
-        
-        if (user) {
-          await logSystemEvent(db, tenantId, user, 'create', 'driver', uid, { email: cleanEmail, dni: formData.dni });
-        }
       }
 
       if (!uid) {
         uid = formData.dni || Math.random().toString(36).substring(7);
       }
 
-      const tenantUserRef = doc(db, "tenants", tenantId, "drivers", uid!);
-      
       const { password, ...restData } = formData;
       const finalData: any = {};
       
@@ -203,16 +199,12 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
 
       finalData.id = uid;
       finalData.email = cleanEmail;
-      finalData.updatedAt = serverTimestamp();
       
       if (!driverId) {
-        finalData.createdAt = serverTimestamp();
-        batch.set(tenantUserRef, finalData);
+            await createDriver(finalData);
       } else {
-        batch.update(tenantUserRef, finalData);
+            await updateDriver(driverId, finalData);
       }
-
-      await batch.commit();
       toast({ title: "Legajo Digital Guardado", description: `El perfil ha sido actualizado correctamente.` });
       router.push('/choferes');
     } catch (e: any) {

@@ -3,9 +3,7 @@
 
 import { useState, useMemo, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useFirestore, useCollection, useDoc, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, doc, updateDoc, serverTimestamp, setDoc, deleteDoc } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +44,8 @@ import { Hub, Product, WarehouseSlot } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { listHubs, updateHub } from "@/lib/hubs-api";
+import { listProducts, updateProduct } from "@/lib/products-api";
 
 /**
  * Componente de Slot de Rack (Ubicación física individual)
@@ -107,9 +107,7 @@ function RackSlot({ coordinate, status, product, onClick }: { coordinate: string
 }
 
 function LayoutContent() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
-  const { user } = useUser();
   const router = useRouter();
   const { toast } = useToast();
   const searchParams = useSearchParams();
@@ -118,6 +116,10 @@ function LayoutContent() {
   const [selectedHubId, setSelectedHubId] = useState<string>(hubIdFromUrl || "");
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [hubs, setHubs] = useState<Hub[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [slotOverrides, setSlotOverrides] = useState<Record<string, WarehouseSlot>>({});
 
   const [selectedSlotCoord, setSelectedSlotCoord] = useState<string | null>(null);
   const [slotForm, setSlotForm] = useState<Partial<WarehouseSlot>>({
@@ -136,34 +138,61 @@ function LayoutContent() {
     prefix: ""
   });
 
-  const hubsQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "hubs"), orderBy("name"));
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const productsQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return collection(db, "tenants", tenantId, "products");
-  }, [db, tenantId]);
+    async function loadData() {
+      if (!tenantId) {
+        if (active) {
+          setHubs([]);
+          setProducts([]);
+          setLoading(false);
+        }
+        return;
+      }
 
-  const slotsQuery = useMemo(() => {
-    if (!db || !tenantId || !selectedHubId) return null;
-    return collection(db, "tenants", tenantId, "hubs", selectedHubId, "slots");
-  }, [db, tenantId, selectedHubId]);
+      try {
+        if (active) setLoading(true);
+        const [hubRows, productRows] = await Promise.all([listHubs(), listProducts()]);
+        if (!active) return;
+        setHubs(hubRows);
+        setProducts(productRows);
+      } catch (error) {
+        if (!active) return;
+        setHubs([]);
+        setProducts([]);
+        toast({ variant: "destructive", title: "Error al cargar layout", description: (error as Error).message });
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
 
-  const { data: hubs, loading: hubsLoading } = useCollection<Hub>(hubsQuery);
-  const { data: products } = useCollection<Product>(productsQuery);
-  const { data: slotsData } = useCollection<WarehouseSlot>(slotsQuery);
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, toast]);
 
   const activeHub = useMemo(() => hubs?.find(h => h.id === selectedHubId), [hubs, selectedHubId]);
 
   const assignedSlots = useMemo(() => {
-    const map: Record<string, WarehouseSlot> = {};
-    slotsData?.forEach(s => {
-      map[s.coordinate] = s;
+    const map: Record<string, WarehouseSlot> = { ...slotOverrides };
+    products.forEach((product) => {
+      (product.warehouses || []).forEach((warehouse) => {
+        if (warehouse.hubId !== selectedHubId || !warehouse.location) return;
+        map[warehouse.location] = {
+          id: warehouse.location,
+          coordinate: warehouse.location,
+          productId: product.id,
+          productSku: product.sku,
+          productName: product.name,
+          status: 'occupied',
+          currentWeightKg: product.unitWeightKg,
+        };
+      });
     });
     return map;
-  }, [slotsData]);
+  }, [products, selectedHubId, slotOverrides]);
 
   useEffect(() => {
     if (activeHub?.settings?.layoutConfig) {
@@ -177,7 +206,27 @@ function LayoutContent() {
     } else if (activeHub) {
       setConfigForm(prev => ({ ...prev, prefix: activeHub.name.substring(0, 5).toUpperCase() }));
     }
+
+    const rawOverrides = (activeHub as any)?.settings?.slotOverrides || {};
+    setSlotOverrides(rawOverrides);
   }, [activeHub]);
+
+  const persistSlotOverrides = async (nextOverrides: Record<string, WarehouseSlot>) => {
+    if (!selectedHubId || !activeHub) return;
+    await updateHub(selectedHubId, {
+      settings: {
+        ...(activeHub.settings || {}),
+        slotOverrides: nextOverrides as any,
+      } as any,
+    });
+    setHubs((prev) => prev.map((hub) => (hub.id === selectedHubId ? {
+      ...hub,
+      settings: {
+        ...(hub.settings || {}),
+        slotOverrides: nextOverrides as any,
+      } as any,
+    } : hub)));
+  };
 
   const displayRacks = useMemo(() => {
     const corridorsArray = configForm.corridors.split(',').map(s => s.trim().toUpperCase()).filter(s => s !== "");
@@ -209,19 +258,23 @@ function LayoutContent() {
   }, [totalPositions, assignedSlots]);
 
   const handleSaveConfig = async () => {
-    if (!db || !tenantId || !selectedHubId) return;
+    if (!tenantId || !selectedHubId || !activeHub) return;
     setIsSaving(true);
     try {
       const corridorsArray = configForm.corridors.split(',').map(s => s.trim().toUpperCase()).filter(s => s !== "");
-      await updateDoc(doc(db, "tenants", tenantId, "hubs", selectedHubId), {
-        "settings.layoutConfig": {
-          corridors: corridorsArray,
-          positions: configForm.positions,
-          levels: configForm.levels,
-          prefix: configForm.prefix
-        },
-        updatedAt: serverTimestamp()
+      const updated = await updateHub(selectedHubId, {
+        settings: {
+          ...(activeHub.settings || {}),
+          layoutConfig: {
+            corridors: corridorsArray,
+            positions: configForm.positions,
+            levels: configForm.levels,
+            prefix: configForm.prefix,
+          },
+          slotOverrides: slotOverrides as any,
+        } as any,
       });
+      setHubs((prev) => prev.map((hub) => (hub.id === selectedHubId ? updated : hub)));
       toast({ title: "Configuración Guardada" });
       setIsConfigOpen(false);
     } catch (e) {
@@ -243,39 +296,121 @@ function LayoutContent() {
   };
 
   const handleSaveSlot = async () => {
-    if (!db || !tenantId || !selectedHubId || !selectedSlotCoord) return;
+    if (!tenantId || !selectedHubId || !selectedSlotCoord || !activeHub) return;
     setIsSaving(true);
     try {
-      const slotRef = doc(db, "tenants", tenantId, "hubs", selectedHubId, "slots", selectedSlotCoord);
-      await setDoc(slotRef, {
-        ...slotForm,
-        id: selectedSlotCoord,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+      const nextOverrides = { ...slotOverrides };
+      const currentOccupant = assignedSlots[selectedSlotCoord];
+
+      if (slotForm.status === 'occupied' && slotForm.productId) {
+        const selectedProduct = products.find((p) => p.id === slotForm.productId);
+        if (!selectedProduct) throw new Error('Producto no encontrado');
+
+        if (currentOccupant?.productId && currentOccupant.productId !== selectedProduct.id) {
+          const occupyingProduct = products.find((p) => p.id === currentOccupant.productId);
+          if (occupyingProduct) {
+            const occupyingWarehouses = (occupyingProduct.warehouses || []).map((entry) =>
+              entry.hubId === selectedHubId && entry.location === selectedSlotCoord
+                ? { ...entry, location: undefined }
+                : entry
+            );
+            const updatedOccupying = await updateProduct(occupyingProduct.id, { warehouses: occupyingWarehouses });
+            setProducts((prev) => prev.map((row) => (row.id === occupyingProduct.id ? updatedOccupying : row)));
+          }
+        }
+
+        const existingWarehouseIdx = (selectedProduct.warehouses || []).findIndex((entry) => entry.hubId === selectedHubId);
+        const nextWarehouses = [...(selectedProduct.warehouses || [])];
+        if (existingWarehouseIdx >= 0) {
+          nextWarehouses[existingWarehouseIdx] = {
+            ...nextWarehouses[existingWarehouseIdx],
+            hubName: activeHub.name,
+            location: selectedSlotCoord,
+          };
+        } else {
+          nextWarehouses.push({
+            hubId: selectedHubId,
+            hubName: activeHub.name,
+            location: selectedSlotCoord,
+            stockQuantity: selectedProduct.stockQuantity || 0,
+            minStock: selectedProduct.minStockAlert || 0,
+            maxStock: selectedProduct.maxStockAlert || 0,
+          });
+        }
+
+        const updatedSelected = await updateProduct(selectedProduct.id, { warehouses: nextWarehouses });
+        setProducts((prev) => prev.map((row) => (row.id === selectedProduct.id ? updatedSelected : row)));
+        delete nextOverrides[selectedSlotCoord];
+      } else {
+        if (currentOccupant?.productId) {
+          const occupyingProduct = products.find((p) => p.id === currentOccupant.productId);
+          if (occupyingProduct) {
+            const occupyingWarehouses = (occupyingProduct.warehouses || []).map((entry) =>
+              entry.hubId === selectedHubId && entry.location === selectedSlotCoord
+                ? { ...entry, location: undefined }
+                : entry
+            );
+            const updatedOccupying = await updateProduct(occupyingProduct.id, { warehouses: occupyingWarehouses });
+            setProducts((prev) => prev.map((row) => (row.id === occupyingProduct.id ? updatedOccupying : row)));
+          }
+        }
+
+        if (slotForm.status === 'blocked' || slotForm.status === 'reserved') {
+          nextOverrides[selectedSlotCoord] = {
+            id: selectedSlotCoord,
+            coordinate: selectedSlotCoord,
+            status: slotForm.status,
+          } as WarehouseSlot;
+        } else {
+          delete nextOverrides[selectedSlotCoord];
+        }
+      }
+
+      await persistSlotOverrides(nextOverrides);
       toast({ title: "Ubicación Actualizada" });
       setSelectedSlotCoord(null);
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al guardar" });
+      toast({ variant: "destructive", title: "Error al guardar", description: (e as Error).message });
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleClearSlot = async () => {
-    if (!db || !tenantId || !selectedHubId || !selectedSlotCoord) return;
+    if (!tenantId || !selectedHubId || !selectedSlotCoord) return;
     setIsSaving(true);
     try {
-      await deleteDoc(doc(db, "tenants", tenantId, "hubs", selectedHubId, "slots", selectedSlotCoord));
+      const currentOccupant = assignedSlots[selectedSlotCoord];
+      if (currentOccupant?.productId) {
+        const occupyingProduct = products.find((p) => p.id === currentOccupant.productId);
+        if (occupyingProduct) {
+          const occupyingWarehouses = (occupyingProduct.warehouses || []).map((entry) =>
+            entry.hubId === selectedHubId && entry.location === selectedSlotCoord
+              ? { ...entry, location: undefined }
+              : entry
+          );
+          const updatedOccupying = await updateProduct(occupyingProduct.id, { warehouses: occupyingWarehouses });
+          setProducts((prev) => prev.map((row) => (row.id === occupyingProduct.id ? updatedOccupying : row)));
+        }
+      }
+
+      const nextOverrides = { ...slotOverrides };
+      delete nextOverrides[selectedSlotCoord];
+      await persistSlotOverrides(nextOverrides);
       toast({ title: "Ubicación Liberada" });
       setSelectedSlotCoord(null);
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al borrar" });
+      toast({ variant: "destructive", title: "Error al borrar", description: (e as Error).message });
     } finally {
       setIsSaving(false);
     }
   };
 
   const prefix = configForm.prefix || activeHub?.name.substring(0, 5).toUpperCase() || "DEPO";
+
+  if (!tenantId || loading) {
+    return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
+  }
 
   return (
     <div className="space-y-6 pb-20">

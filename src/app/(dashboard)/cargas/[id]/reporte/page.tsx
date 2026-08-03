@@ -3,9 +3,7 @@
 
 import { useMemo, useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useFirestore, useDoc, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc, collection, query, orderBy, updateDoc, serverTimestamp } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +29,8 @@ import { cn } from "@/lib/utils";
 import { formatSafeDate, toSafeDate } from "@/lib/utils/date-utils";
 import dynamic from "next/dynamic";
 import { useToast } from "@/hooks/use-toast";
+import { listExpenses, updateExpense } from "@/lib/expenses-api";
+import { getLoad } from "@/lib/loads-api";
 
 // Carga dinámica del mapa
 const MapContainer = dynamic(
@@ -45,11 +45,13 @@ const Popup = dynamic(() => import("react-leaflet").then((mod) => mod.Popup), { 
 export default function TripReportPage() {
   const { id } = useParams();
   const router = useRouter();
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const { toast } = useToast();
   const [L, setL] = useState<any>(null);
   const [isUpdatingExpenseId, setIsUpdatingExpenseId] = useState<string | null>(null);
+  const [load, setLoad] = useState<Load | null>(null);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [loadLoading, setLoadLoading] = useState(true);
 
   useEffect(() => {
     import('leaflet').then((leaflet) => {
@@ -57,19 +59,49 @@ export default function TripReportPage() {
     });
   }, []);
 
-  const loadRef = useMemo(() => {
-    if (!db || !id || !tenantId) return null;
-    return doc(db, "tenants", tenantId, "loads", id as string);
-  }, [db, id, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: load, loading: loadLoading } = useDoc<Load>(loadRef);
+    async function loadData() {
+      if (!tenantId || !id) {
+        if (active) {
+          setLoad(null);
+          setExpenses([]);
+          setLoadLoading(false);
+        }
+        return;
+      }
 
-  const expensesQuery = useMemo(() => {
-    if (!db || !id || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "loads", id as string, "expenses"), orderBy("createdAt", "asc"));
-  }, [db, id, tenantId]);
+      try {
+        if (active) setLoadLoading(true);
+        const [loadRow, expenseRows] = await Promise.all([
+          getLoad(id as string),
+          listExpenses(),
+        ]);
 
-  const { data: expenses } = useCollection<Expense>(expensesQuery);
+        if (!active) return;
+        setLoad(loadRow);
+        setExpenses(expenseRows.filter((expense) => expense.loadId === (id as string)).sort((a, b) => {
+          const aTime = toSafeDate(a.createdAt)?.getTime() || 0;
+          const bTime = toSafeDate(b.createdAt)?.getTime() || 0;
+          return aTime - bTime;
+        }));
+      } catch (error) {
+        if (active) {
+          setLoad(null);
+          setExpenses([]);
+          toast({ variant: "destructive", title: "Error al cargar reporte", description: (error as Error).message });
+        }
+      } finally {
+        if (active) setLoadLoading(false);
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, id, toast]);
 
   const stats = useMemo(() => {
     if (!load?.tracking) return { avgSpeed: 0, maxSpeed: 0, totalKm: 0, totalFuel: 0, fuelCost: 0, otherCost: 0, totalCost: 0, durationMinutes: 0, drivingMinutes: 0, idleMinutes: 0 };
@@ -140,34 +172,34 @@ export default function TripReportPage() {
   }, [load?.tracking?.history]);
 
   const handleUpdateExpenseStatus = async (expId: string, status: 'approved' | 'rejected') => {
-    if (!db || !id || !tenantId) return;
+    if (!id || !tenantId) return;
     setIsUpdatingExpenseId(expId);
     try {
-      const expRef = doc(db, "tenants", tenantId, "loads", id as string, "expenses", expId);
-      await updateDoc(expRef, { status, updatedAt: serverTimestamp() });
+      await updateExpense(expId, { status });
+      setExpenses((prev) => prev.map((expense) => (expense.id === expId ? { ...expense, status } : expense)));
       toast({ title: `Gasto ${status === 'approved' ? 'Aprobado' : 'Rechazado'}` });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al actualizar" });
+      toast({ variant: "destructive", title: "Error al actualizar", description: (e as Error).message });
     } finally {
       setIsUpdatingExpenseId(null);
     }
   };
 
   const handleUpdateReceiptNumber = async (expId: string, receiptNumber: string) => {
-    if (!db || !id || !tenantId) return;
+    if (!id || !tenantId) return;
     try {
-      const expRef = doc(db, "tenants", tenantId, "loads", id as string, "expenses", expId);
-      await updateDoc(expRef, { receiptNumber, updatedAt: serverTimestamp() });
+      await updateExpense(expId, { receiptNumber });
+      setExpenses((prev) => prev.map((expense) => (expense.id === expId ? { ...expense, receiptNumber } : expense)));
     } catch (e) {
       console.error(e);
     }
   };
 
   const handleToggleDocsPresented = async (expId: string, docsPresented: boolean) => {
-    if (!db || !id || !tenantId) return;
+    if (!id || !tenantId) return;
     try {
-      const expRef = doc(db, "tenants", tenantId, "loads", id as string, "expenses", expId);
-      await updateDoc(expRef, { docsPresented, updatedAt: serverTimestamp() });
+      await updateExpense(expId, { docsPresented });
+      setExpenses((prev) => prev.map((expense) => (expense.id === expId ? { ...expense, docsPresented } : expense)));
     } catch (e) {
       console.error(e);
     }

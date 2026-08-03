@@ -2,9 +2,8 @@
 
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useFirestore, useDoc, useUser } from "@/firebase";
+import { useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc, updateDoc, serverTimestamp, arrayUnion, writeBatch } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,13 +28,16 @@ import {
   Truck as TruckIcon,
   X
 } from "lucide-react";
-import { Load, ProofOfDelivery, Tenant } from "@/app/lib/types";
+import { Load, ProofOfDelivery } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { SignaturePad } from "@/components/SignaturePad";
 import { normalizePhone, buildWaMeUrl } from "@/lib/utils/whatsapp";
 import { compressImage } from "@/lib/utils/image-compression";
 import { uploadBase64 } from "@/lib/storage-service";
+import { getLoad, updateLoad } from "@/lib/loads-api";
+import { updateTruck } from "@/lib/trucks-api";
+import { getTenantProfile } from "@/lib/settings-api";
 
 const INCIDENT_REASONS = [
   { id: 'absent', label: 'Cliente Ausente' },
@@ -54,7 +56,6 @@ const EMERGENCY_TYPES = [
 export default function RouteDetailPage() {
   const { id } = useParams();
   const router = useRouter();
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const { user } = useUser();
   const { toast } = useToast();
@@ -64,6 +65,9 @@ export default function RouteDetailPage() {
   const [isFailedOpen, setIsFailedOpen] = useState(false);
   const [isEmergencyOpen, setIsEmergencyOpen] = useState(false);
   const [gpsStatus, setGpsStatus] = useState<'off' | 'requesting' | 'active' | 'error'>('off');
+  const [load, setLoad] = useState<Load | null>(null);
+  const [tenant, setTenant] = useState<any>(null);
+  const [loadLoading, setLoadLoading] = useState(true);
   
   const photoInputRef = useRef<HTMLInputElement>(null);
   const watchIdRef = useRef<number | null>(null);
@@ -77,14 +81,57 @@ export default function RouteDetailPage() {
     status: 'delivered'
   });
 
-  const loadRef = useMemo(() => (db && tenantId && id) ? doc(db, "tenants", tenantId, "loads", id as string) : null, [db, tenantId, id]);
-  const { data: load, loading: loadLoading } = useDoc<Load>(loadRef);
+  useEffect(() => {
+    let active = true;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
 
-  const tenantRef = useMemo(() => (db && tenantId) ? doc(db, "tenants", tenantId) : null, [db, tenantId]);
-  const { data: tenant } = useDoc<Tenant>(tenantRef);
+    async function loadData() {
+      if (!tenantId || !id) {
+        if (active) {
+          setLoad(null);
+          setTenant(null);
+          setLoadLoading(false);
+        }
+        return;
+      }
+
+      try {
+        if (active) setLoadLoading(true);
+        const [loadData, tenantData] = await Promise.all([getLoad(id as string), getTenantProfile()]);
+        if (!active) return;
+        setLoad(loadData);
+        setTenant(tenantData);
+      } catch {
+        if (!active) return;
+        setLoad(null);
+        setTenant(null);
+      } finally {
+        if (active) setLoadLoading(false);
+      }
+    }
+
+    loadData();
+
+    intervalId = setInterval(() => {
+      if (!id) return;
+      getLoad(id as string)
+        .then((loadData) => {
+          if (!active) return;
+          setLoad(loadData);
+        })
+        .catch(() => {
+          // Keep current state if background refresh fails.
+        });
+    }, 15000);
+
+    return () => {
+      active = false;
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [tenantId, id]);
 
   useEffect(() => {
-    if (!load || load.status !== 'on_route' || !loadRef || !db || !tenantId) {
+    if (!load || load.status !== 'on_route' || !tenantId) {
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
@@ -108,26 +155,38 @@ export default function RouteDetailPage() {
         const currentSpeed = speed ? Math.round(speed * 3.6) : 0;
 
         try {
-          updateDoc(loadRef, {
-            "tracking.currentLat": latitude,
-            "tracking.currentLng": longitude,
-            "tracking.currentSpeed": currentSpeed,
-            "tracking.lastUpdateAt": serverTimestamp(),
-            "tracking.history": arrayUnion({
+          const tracking = {
+            ...(load.tracking || {}),
+            currentLat: latitude,
+            currentLng: longitude,
+            currentSpeed,
+            lastUpdateAt: new Date().toISOString(),
+            history: [
+              ...((load.tracking as any)?.history || []),
+              {
               lat: latitude,
               lng: longitude,
               speed: currentSpeed,
               timestamp: new Date().toISOString()
-            })
-          });
+              },
+            ],
+          };
+
+          const updatedLoad = await updateLoad(load.id, {
+            tracking,
+            updatedAt: new Date().toISOString(),
+          } as any);
+          setLoad(updatedLoad);
 
           if (load.assignedTruckId) {
-            const truckRef = doc(db, "tenants", tenantId, "trucks", load.assignedTruckId);
-            updateDoc(truckRef, {
-              "location.lat": latitude,
-              "location.lng": longitude,
-              "location.city": "En Tránsito",
-              updatedAt: serverTimestamp()
+            await updateTruck(load.assignedTruckId, {
+              location: {
+                ...(updatedLoad as any).location,
+                lat: latitude,
+                lng: longitude,
+                city: "En Tránsito",
+              } as any,
+              updatedAt: new Date().toISOString(),
             });
           }
         } catch (e) {
@@ -148,7 +207,7 @@ export default function RouteDetailPage() {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
     };
-  }, [load?.status, loadRef, db, tenantId, toast]);
+  }, [load?.status, tenantId]);
 
   const currentStop = useMemo(() => {
     if (!load?.outboundStops) return null;
@@ -156,33 +215,37 @@ export default function RouteDetailPage() {
   }, [load?.outboundStops]);
 
   const handleStartTrip = async () => {
-    if (!load || !loadRef || !tenantId || !db) return;
+    if (!load || !tenantId) return;
     setIsUpdating(true);
     setGpsStatus('requesting');
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         try {
-          const batch = writeBatch(db);
-          batch.update(loadRef, {
+          const updatedLoad = await updateLoad(load.id, {
             status: 'on_route',
-            "tracking.tripStartedAt": serverTimestamp(),
-            "tracking.currentLat": pos.coords.latitude,
-            "tracking.currentLng": pos.coords.longitude,
-            updatedAt: serverTimestamp()
-          });
+            tracking: {
+              ...(load.tracking || {}),
+              tripStartedAt: new Date().toISOString(),
+              currentLat: pos.coords.latitude,
+              currentLng: pos.coords.longitude,
+            },
+            updatedAt: new Date().toISOString(),
+          } as any);
+          setLoad(updatedLoad);
 
           if (load.assignedTruckId) {
-            const truckRef = doc(db, "tenants", tenantId, "trucks", load.assignedTruckId);
-            batch.update(truckRef, { 
+            await updateTruck(load.assignedTruckId, {
               status: 'in_trip',
-              "location.lat": pos.coords.latitude,
-              "location.lng": pos.coords.longitude,
-              updatedAt: serverTimestamp()
+              location: {
+                ...(load as any).location,
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+              } as any,
+              updatedAt: new Date().toISOString(),
             });
           }
 
-          await batch.commit();
           setGpsStatus('active');
           toast({ title: "Jornada Iniciada", description: "GPS transmitiendo en vivo." });
         } catch (e) {
@@ -218,7 +281,7 @@ export default function RouteDetailPage() {
   };
 
   const handleConfirmDelivery = async () => {
-    if (!load || !loadRef || !currentStop || !db || !tenantId) return;
+    if (!load || !currentStop || !tenantId) return;
     setIsUpdating(true);
     
     try {
@@ -256,22 +319,20 @@ export default function RouteDetailPage() {
       );
 
       const allFinished = updatedStops.every(s => !!s.deliveredAt || !!s.failedAt);
-      const batch = writeBatch(db);
-      
-      batch.update(loadRef, {
+      const updatedLoad = await updateLoad(load.id, {
         outboundStops: updatedStops,
         status: allFinished ? 'delivered' : load.status,
-        updatedAt: serverTimestamp()
-      });
+        updatedAt: new Date().toISOString(),
+      } as any);
+      setLoad(updatedLoad);
 
       if (allFinished && load.assignedTruckId) {
-        batch.update(doc(db, "tenants", tenantId, "trucks", load.assignedTruckId), { 
+        await updateTruck(load.assignedTruckId, {
           status: 'available',
-          updatedAt: serverTimestamp()
+          updatedAt: new Date().toISOString(),
         });
       }
 
-      await batch.commit();
       toast({ title: "Entrega Exitosa" });
       setIsPodOpen(false);
       setPodForm({ receiverName: "", receiverSignatureUrl: "", driverSignatureUrl: "", photoUrl: "", notes: "", status: 'delivered' });
@@ -284,7 +345,7 @@ export default function RouteDetailPage() {
   };
 
   const handleReportFailure = async (reason: any) => {
-    if (!load || !loadRef || !currentStop || !db || !tenantId) return;
+    if (!load || !currentStop || !tenantId) return;
     setIsUpdating(true);
     try {
       const updatedStops = load.outboundStops.map(s => 
@@ -296,10 +357,20 @@ export default function RouteDetailPage() {
       );
 
       const allFinished = updatedStops.every(s => !!s.deliveredAt || !!s.failedAt);
-      const batch = writeBatch(db);
-      batch.update(loadRef, { outboundStops: updatedStops, status: allFinished ? 'delivered' : load.status, updatedAt: serverTimestamp() });
-      if (allFinished && load.assignedTruckId) batch.update(doc(db, "tenants", tenantId, "trucks", load.assignedTruckId), { status: 'available', updatedAt: serverTimestamp() });
-      await batch.commit();
+      const updatedLoad = await updateLoad(load.id, {
+        outboundStops: updatedStops,
+        status: allFinished ? 'delivered' : load.status,
+        updatedAt: new Date().toISOString(),
+      } as any);
+      setLoad(updatedLoad);
+
+      if (allFinished && load.assignedTruckId) {
+        await updateTruck(load.assignedTruckId, {
+          status: 'available',
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
       toast({ title: "Incidente Registrado" });
       setIsFailedOpen(false);
     } catch (e) {
@@ -310,11 +381,27 @@ export default function RouteDetailPage() {
   };
 
   const handleTriggerEmergency = async (type: string, label: string) => {
-    if (!db || !tenantId || !load?.assignedTruckId || !loadRef) return;
+    if (!tenantId || !load?.assignedTruckId || !load) return;
     setIsUpdating(true);
     try {
-      await updateDoc(doc(db, "tenants", tenantId, "trucks", load.assignedTruckId), { hasActiveAlert: true, alertType: type, updatedAt: serverTimestamp() });
-      await updateDoc(loadRef, { status: 'incident', "tracking.alerts": arrayUnion({ type: 'critical', message: `S.O.S: ${label}`, timestamp: new Date().toISOString() }), updatedAt: serverTimestamp() });
+      await updateTruck(load.assignedTruckId, {
+        hasActiveAlert: true,
+        alertType: type as any,
+        updatedAt: new Date().toISOString(),
+      });
+
+      const updatedLoad = await updateLoad(load.id, {
+        status: 'incident',
+        tracking: {
+          ...(load.tracking || {}),
+          alerts: [
+            ...((load.tracking as any)?.alerts || []),
+            { type: 'critical', message: `S.O.S: ${label}`, timestamp: new Date().toISOString() },
+          ],
+        },
+        updatedAt: new Date().toISOString(),
+      } as any);
+      setLoad(updatedLoad);
       toast({ variant: "destructive", title: "ALERTA ENVIADA" });
       setIsEmergencyOpen(false);
     } catch (e) {

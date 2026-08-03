@@ -1,11 +1,9 @@
 
 'use client';
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, addDoc, serverTimestamp } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,9 +19,11 @@ import { Client, Product, PendingRemitoItem } from "@/app/lib/types";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { compressImage } from "@/lib/utils/image-compression";
+import { listClients } from "@/lib/clients-api";
+import { listProducts } from "@/lib/products-api";
+import { createRemito } from "@/lib/remitos-api";
 
 export default function NewRemitoPage() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const router = useRouter();
   const { toast } = useToast();
@@ -31,6 +31,8 @@ export default function NewRemitoPage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
 
   const [formData, setFormData] = useState({
     number: "",
@@ -43,11 +45,37 @@ export default function NewRemitoPage() {
   const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [currentQuantity, setCurrentQuantity] = useState<number>(1);
 
-  const clientsQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "clients"), orderBy("name")) : null, [db, tenantId]);
-  const productsQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "products"), orderBy("name")) : null, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: clients } = useCollection<Client>(clientsQuery);
-  const { data: products } = useCollection<Product>(productsQuery);
+    async function loadData() {
+      if (!tenantId) {
+        if (active) {
+          setClients([]);
+          setProducts([]);
+        }
+        return;
+      }
+
+      try {
+        const [clientRows, productRows] = await Promise.all([listClients(), listProducts()]);
+        if (!active) return;
+        setClients(clientRows);
+        setProducts(productRows);
+      } catch (error) {
+        if (active) {
+          setClients([]);
+          setProducts([]);
+          toast({ variant: "destructive", title: "Error al cargar datos", description: (error as Error).message });
+        }
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, toast]);
 
   const selectedProduct = useMemo(() => products?.find(p => p.id === selectedProductId) || null, [products, selectedProductId]);
 
@@ -55,7 +83,7 @@ export default function NewRemitoPage() {
   const totalVolume = useMemo(() => formData.items.reduce((acc, item) => acc + (item.volumeM3 || 0), 0), [formData.items]);
 
   const handleSave = async () => {
-    if (!db || !tenantId || !formData.clientId || !formData.number || formData.items.length === 0) {
+    if (!tenantId || !formData.clientId || !formData.number || formData.items.length === 0) {
       toast({ variant: "destructive", title: "Datos incompletos" });
       return;
     }
@@ -65,7 +93,7 @@ export default function NewRemitoPage() {
       const client = clients?.find(c => c.id === formData.clientId);
       if (!client) throw new Error("Cliente no encontrado");
 
-      await addDoc(collection(db, "tenants", tenantId, "pending_remitos"), {
+      await createRemito({
         ...formData,
         clientName: client.name,
         address: `${client.address.street} ${client.address.number}`,
@@ -75,9 +103,7 @@ export default function NewRemitoPage() {
         lng: client.address.lng,
         weightKg: totalWeight,
         volumeM3: totalVolume,
-        status: 'pending',
-        tenantId,
-        createdAt: serverTimestamp()
+        status: 'pending'
       });
 
       toast({ title: "Remito Emitido" });

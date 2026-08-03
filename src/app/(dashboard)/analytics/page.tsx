@@ -1,9 +1,7 @@
 'use client';
 
 import { useMemo, useState, useEffect } from "react";
-import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, limit } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { 
   TrendingUp, 
@@ -50,6 +48,10 @@ import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toSafeDate } from "@/lib/utils/date-utils";
 import { calculateDistance } from "@/lib/utils/tracking-math";
+import { listLoads } from "@/lib/loads-api";
+import { listExpenses } from "@/lib/expenses-api";
+import { listTrucks } from "@/lib/trucks-api";
+import { listDrivers } from "@/lib/drivers-api";
 
 const COLORS = ['#2563eb', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#6366f1'];
 
@@ -60,24 +62,57 @@ const MONTHS = [
 ];
 
 export default function AnalyticsPage() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const [mounted, setMounted] = useState(false);
   const [selectedMonths, setSelectedMonths] = useState<number[]>([new Date().getMonth()]);
+   const [loadingData, setLoadingData] = useState(true);
+   const [allLoads, setAllLoads] = useState<Load[]>([]);
+   const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
+   const [trucks, setTrucks] = useState<Truck[]>([]);
+   const [drivers, setDrivers] = useState<Driver[]>([]);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  const loadsQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "loads"), orderBy("createdAt", "desc"), limit(1000)) : null, [db, tenantId]);
-  const expensesQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "expenses"), orderBy("createdAt", "desc")) : null, [db, tenantId]);
-  const trucksQuery = useMemo(() => (db && tenantId) ? collection(db, "tenants", tenantId, "trucks") : null, [db, tenantId]);
-  const driversQuery = useMemo(() => (db && tenantId) ? collection(db, "tenants", tenantId, "drivers") : null, [db, tenantId]);
+   useEffect(() => {
+      let active = true;
 
-  const { data: allLoads, loading: loadsLoading } = useCollection<Load>(loadsQuery);
-  const { data: allExpenses } = useCollection<Expense>(expensesQuery);
-  const { data: trucks } = useCollection<Truck>(trucksQuery);
-  const { data: drivers } = useCollection<Driver>(driversQuery);
+      async function loadData() {
+         if (!tenantId) {
+            if (active) {
+               setAllLoads([]);
+               setAllExpenses([]);
+               setTrucks([]);
+               setDrivers([]);
+               setLoadingData(false);
+            }
+            return;
+         }
+
+         try {
+            if (active) setLoadingData(true);
+            const [loadsRows, expensesRows, trucksRows, driversRows] = await Promise.all([
+               listLoads(),
+               listExpenses(),
+               listTrucks(),
+               listDrivers(),
+            ]);
+            if (!active) return;
+            setAllLoads(loadsRows);
+            setAllExpenses(expensesRows);
+            setTrucks(trucksRows);
+            setDrivers(driversRows);
+         } finally {
+            if (active) setLoadingData(false);
+         }
+      }
+
+      loadData();
+      return () => {
+         active = false;
+      };
+   }, [tenantId]);
 
   const filteredData = useMemo(() => {
     if (!allLoads) return { loads: [], expenses: [] };
@@ -194,7 +229,7 @@ export default function AnalyticsPage() {
     })).sort((a, b) => b.value - a.value);
   }, [filteredData]);
 
-  if (!mounted || loadsLoading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-blue-600" /></div>;
+   if (!mounted || loadingData) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-blue-600" /></div>;
 
   return (
     <div className="space-y-6 pb-20">

@@ -68,6 +68,39 @@ export async function listProducts() {
   return getListData(response).map(normalizeProduct);
 }
 
+export async function getProduct(id: string) {
+  const response = await backendRequest<any>(`/api/products/${id}`);
+  const raw = response.data || response.payload;
+  if (!raw) {
+    throw new Error('Product not found');
+  }
+  return normalizeProduct(raw);
+}
+
+export async function createProduct(data: Partial<Product>) {
+  const response = await backendRequest<any>('/api/products', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  const raw = response.data || response.payload;
+  if (!raw) {
+    throw new Error('Failed to create product');
+  }
+  return normalizeProduct(raw);
+}
+
+export async function updateProduct(id: string, data: Partial<Product>) {
+  const response = await backendRequest<any>(`/api/products/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+  const raw = response.data || response.payload;
+  if (!raw) {
+    throw new Error('Failed to update product');
+  }
+  return normalizeProduct(raw);
+}
+
 export async function deleteProduct(id: string) {
   await backendRequest(`/api/products/${id}`, { method: 'DELETE' });
 }

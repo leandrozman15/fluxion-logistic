@@ -1,10 +1,8 @@
 'use client';
 
-import { useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, where, orderBy, updateDoc, doc, serverTimestamp } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,32 +33,66 @@ import { es } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { compressImage } from "@/lib/utils/image-compression";
 import { cn } from "@/lib/utils";
+import { getDriver, updateDriver } from "@/lib/drivers-api";
+import { listLoads } from "@/lib/loads-api";
 
 export default function DriverSelfProfilePage() {
   const router = useRouter();
-  const db = useFirestore();
   const { tenantId, uid } = useTenant();
   const { toast } = useToast();
 
   const [isUploading, setIsUploading] = useState<string | null>(null);
+  const [driver, setDriver] = useState<Driver | null>(null);
+  const [trips, setTrips] = useState<Load[]>([]);
+  const [driverLoading, setDriverLoading] = useState(true);
+  const [tripsLoading, setTripsLoading] = useState(true);
 
   const licFRef = useRef<HTMLInputElement>(null);
   const licBRef = useRef<HTMLInputElement>(null);
   const lintiRef = useRef<HTMLInputElement>(null);
 
-  // Recuperar datos reales del chofer logueado
-  const driverRef = useMemo(() => (db && tenantId && uid) ? doc(db, "tenants", tenantId, "drivers", uid) : null, [db, tenantId, uid]);
-  const { data: driver, loading: driverLoading } = useDoc<Driver>(driverRef);
+  useEffect(() => {
+    let active = true;
 
-  const tripsQuery = useMemo(() => {
-    if (!db || !tenantId || !uid) return null;
-    return query(
-      collection(db, "tenants", tenantId, "loads"),
-      where("assignedDriverId", "==", uid)
-    );
-  }, [db, tenantId, uid]);
+    async function loadData() {
+      if (!tenantId || !uid) {
+        if (active) {
+          setDriver(null);
+          setTrips([]);
+          setDriverLoading(false);
+          setTripsLoading(false);
+        }
+        return;
+      }
 
-  const { data: trips, loading: tripsLoading } = useCollection<Load>(tripsQuery);
+      try {
+        if (active) {
+          setDriverLoading(true);
+          setTripsLoading(true);
+        }
+
+        const [driverData, allLoads] = await Promise.all([getDriver(uid), listLoads()]);
+        if (!active) return;
+
+        setDriver(driverData);
+        setTrips(allLoads.filter((load) => load.assignedDriverId === uid));
+      } catch {
+        if (!active) return;
+        setDriver(null);
+        setTrips([]);
+      } finally {
+        if (active) {
+          setDriverLoading(false);
+          setTripsLoading(false);
+        }
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, uid]);
 
   const stats = useMemo(() => {
     if (!trips) return { totalKm: 0, totalTrips: 0, chartData: [] };
@@ -82,9 +114,10 @@ export default function DriverSelfProfilePage() {
   }, [trips]);
 
   const handleUpdateField = async (field: keyof Driver, value: any) => {
-    if (!driverRef) return;
+    if (!driver || !uid) return;
     try {
-      await updateDoc(driverRef, { [field]: value, updatedAt: serverTimestamp() });
+      const updated = await updateDriver(uid, { [field]: value, updatedAt: new Date().toISOString() } as any);
+      setDriver(updated);
       toast({ title: "Datos actualizados" });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al actualizar" });
@@ -93,7 +126,7 @@ export default function DriverSelfProfilePage() {
 
   const onFileChange = (key: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !driverRef) return;
+    if (!file || !uid || !driver) return;
 
     setIsUploading(key);
     const reader = new FileReader();
@@ -101,7 +134,8 @@ export default function DriverSelfProfilePage() {
       try {
         const base64 = event.target?.result as string;
         const compressed = await compressImage(base64);
-        await updateDoc(driverRef, { [key]: compressed, updatedAt: serverTimestamp() });
+        const updated = await updateDriver(uid, { [key]: compressed, updatedAt: new Date().toISOString() } as any);
+        setDriver(updated);
         toast({ title: "Documento actualizado" });
       } catch (err) {
         toast({ variant: "destructive", title: "Error al procesar" });

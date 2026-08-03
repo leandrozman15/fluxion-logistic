@@ -1,9 +1,6 @@
 'use client';
 
 import { useState, useMemo, useEffect } from "react";
-import { useFirestore, useDoc, useCollection } from "@/firebase";
-import { useTenant } from "@/hooks/use-tenant";
-import { doc, setDoc, serverTimestamp, collection, query, limit } from "firebase/firestore";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,106 +8,169 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { EmailTemplate, Prospect } from "@/app/lib/types";
 import { renderTemplate, extractVariables, PERMITTED_VARIABLES } from "@/lib/utils/template-renderer";
 import { Loader2, ArrowLeft, Save, Eye, Info, Image as ImageIcon, Bold, Type } from "lucide-react";
 import Link from "next/link";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { createTemplate, getTemplate, updateTemplate } from "@/lib/templates-api";
+import { getProspectById } from "@/lib/prospects-api";
+
+type ProspectPreview = {
+  id: string;
+  companyName?: string;
+  cnpj?: string;
+  websiteUrl?: string;
+  domain?: string;
+  address?: {
+    city?: string;
+    state?: string;
+  };
+  contacts?: Array<{
+    name?: string;
+    role?: string;
+    email?: string;
+    phone?: string;
+  }>;
+};
 
 export default function TemplateEditorPage() {
   const params = useParams();
   const id = params?.id as string;
   const router = useRouter();
-  const db = useFirestore();
-  const { tenantId } = useTenant();
   const { toast } = useToast();
-  
-  // Una plantilla es nueva si el ID es 'new' o si no hay ID (ruta /templates/new)
-  const isNew = !id || id === 'new';
+
+  const isNew = !id || id === "new";
 
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [selectedProspectId, setSelectedProspectId] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
-
-  const templateRef = useMemo(() => {
-    if (!db || !tenantId || isNew) return null;
-    return doc(db, "tenants", tenantId, "templates", id);
-  }, [db, tenantId, id, isNew]);
-
-  const { data: template, loading: templateLoading } = useDoc<EmailTemplate>(templateRef);
+  const [loading, setLoading] = useState(!isNew);
+  const [prospects, setProspects] = useState<ProspectPreview[]>([]);
 
   useEffect(() => {
-    if (template) {
-      setName(template.name || "");
-      setSubject(template.subject || "");
-      setBody(template.body || "");
+    let active = true;
+
+    async function loadTemplate() {
+      if (isNew) return;
+      try {
+        if (active) setLoading(true);
+        const template = await getTemplate(id);
+        if (!active) return;
+        setName(template.name || "");
+        setSubject(template.subject || "");
+        setBody(template.body || "");
+      } catch (error) {
+        if (!active) return;
+        toast({ variant: "destructive", title: "Erro ao carregar template", description: (error as Error).message });
+      } finally {
+        if (active) setLoading(false);
+      }
     }
-  }, [template]);
 
-  const prospectsQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "prospects"), limit(5));
-  }, [db, tenantId]);
-
-  const { data: prospects } = useCollection<Prospect>(prospectsQuery);
-  const selectedProspect = prospects.find(p => p.id === selectedProspectId) || (prospects && prospects.length > 0 ? prospects[0] : null);
+    loadTemplate();
+    return () => {
+      active = false;
+    };
+  }, [id, isNew, toast]);
 
   useEffect(() => {
-    if (prospects && prospects.length > 0 && !selectedProspectId) {
-      setSelectedProspectId(prospects[0].id);
+    let active = true;
+
+    async function loadPreviewProspects() {
+      try {
+        const ids = ["preview-a", "preview-b", "preview-c", "preview-d", "preview-e"];
+        const previews: ProspectPreview[] = [];
+
+        for (const candidate of ids) {
+          try {
+            const prospect = await getProspectById(candidate);
+            previews.push({
+              id: prospect.id,
+              companyName: (prospect as any).companyName,
+              cnpj: (prospect as any).cnpj,
+              websiteUrl: (prospect as any).websiteUrl,
+              domain: (prospect as any).domain,
+              address: (prospect as any).address,
+              contacts: (prospect as any).contacts,
+            });
+          } catch {
+            // Ignore preview candidates not found
+          }
+        }
+
+        if (!active) return;
+
+        const fallback: ProspectPreview[] = previews.length > 0
+          ? previews
+          : [{
+              id: "preview-fallback",
+              companyName: "Empresa Exemplo",
+              cnpj: "00.000.000/0000-00",
+              websiteUrl: "https://example.com",
+              domain: "example.com",
+              address: { city: "São Paulo", state: "SP" },
+              contacts: [{ name: "Contato", role: "Compras", email: "contato@example.com", phone: "+55 11 99999-9999" }],
+            }];
+
+        setProspects(fallback);
+        if (!selectedProspectId) {
+          setSelectedProspectId(fallback[0].id);
+        }
+      } catch {
+        if (!active) return;
+        setProspects([]);
+      }
     }
-  }, [prospects, selectedProspectId]);
+
+    loadPreviewProspects();
+    return () => {
+      active = false;
+    };
+  }, [selectedProspectId]);
+
+  const selectedProspect = prospects.find((prospect) => prospect.id === selectedProspectId) || prospects[0] || null;
 
   const handleSave = async () => {
-    if (!db || !tenantId) {
-      toast({ variant: "destructive", title: "Erro de conexão", description: "Não foi possível conectar ao banco de dados." });
-      return;
-    }
-    
     if (!name.trim() || !subject.trim() || !body.trim()) {
       toast({ variant: "destructive", title: "Campos obrigatórios", description: "Por favor, preencha o nome, assunto e corpo do e-mail." });
       return;
     }
 
     setIsSaving(true);
-    
-    try {
-      // Si es nuevo, generamos un ID único; si no, usamos el ID existente
-      const finalId = isNew ? doc(collection(db, "tenants", tenantId, "templates")).id : id;
-      const finalRef = doc(db, "tenants", tenantId, "templates", finalId);
 
-      await setDoc(finalRef, {
-        id: finalId,
-        name: name.trim(),
-        subject: subject.trim(),
-        body: body.trim(),
-        tenantId,
-        variablesUsed: extractVariables(subject + " " + body),
-        updatedAt: serverTimestamp(),
-        ...(isNew ? { createdAt: serverTimestamp() } : {})
-      }, { merge: true });
+    try {
+      if (isNew) {
+        await createTemplate({
+          name: name.trim(),
+          subject: subject.trim(),
+          body: body.trim(),
+          variablesUsed: extractVariables(subject + " " + body),
+        });
+      } else {
+        await updateTemplate(id, {
+          name: name.trim(),
+          subject: subject.trim(),
+          body: body.trim(),
+          variablesUsed: extractVariables(subject + " " + body),
+        });
+      }
 
       toast({ title: "Template salvo!", description: "As alterações foram registradas com sucesso." });
-      
+
       if (isNew) {
         router.push("/templates");
       }
-    } catch (e: any) {
-      console.error("Error saving template:", e);
-      toast({ 
-        variant: "destructive", 
-        title: "Erro ao salvar", 
-        description: e.message || "Ocorreu un erro inesperado ao tentar salvar a plantilla." 
-      });
+    } catch (error) {
+      toast({ variant: "destructive", title: "Erro ao salvar", description: (error as Error).message });
     } finally {
       setIsSaving(false);
     }
   };
 
   const insertHtml = (html: string) => {
-    setBody(prev => prev + html);
+    setBody((prev) => prev + html);
   };
 
   const insertImage = () => {
@@ -120,7 +180,7 @@ export default function TemplateEditorPage() {
     }
   };
 
-  if (templateLoading && !isNew) {
+  if (loading && !isNew) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
         <Loader2 className="w-10 h-10 animate-spin text-muted-foreground" />
@@ -128,7 +188,7 @@ export default function TemplateEditorPage() {
     );
   }
 
-  const renderedPreviewBody = selectedProspect ? renderTemplate(body, selectedProspect) : body;
+  const renderedPreviewBody = selectedProspect ? renderTemplate(body, selectedProspect as any) : body;
 
   return (
     <div className="space-y-6">
@@ -156,10 +216,10 @@ export default function TemplateEditorPage() {
                 <CardDescription>Suporte a HTML e imagens hospedadas.</CardDescription>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => insertHtml('<b></b>')} title="Negrito">
+                <Button variant="outline" size="sm" onClick={() => insertHtml("<b></b>")} title="Negrito">
                   <Bold className="w-4 h-4" />
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => insertHtml('<br>')} title="Quebra de Linha">
+                <Button variant="outline" size="sm" onClick={() => insertHtml("<br>")} title="Quebra de Linha">
                   <Type className="w-4 h-4" />
                 </Button>
                 <Button variant="outline" size="sm" onClick={insertImage} title="Inserir Imagem">
@@ -170,19 +230,19 @@ export default function TemplateEditorPage() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Nome do Template (Interno)</Label>
-                <Input id="name" value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Primeiro Contato Industrial" />
+                <Input id="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex: Primeiro Contato Industrial" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="subject">Assunto do E-mail</Label>
-                <Input id="subject" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Olá {{contactName}}, solução para {{companyName}}" />
+                <Input id="subject" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Olá {{contactName}}, solução para {{companyName}}" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="body">Corpo do E-mail (HTML permitido)</Label>
-                <Textarea 
-                  id="body" 
-                  className="min-h-[350px] font-mono text-sm leading-relaxed" 
-                  value={body} 
-                  onChange={e => setBody(e.target.value)} 
+                <Textarea
+                  id="body"
+                  className="min-h-[350px] font-mono text-sm leading-relaxed"
+                  value={body}
+                  onChange={(event) => setBody(event.target.value)}
                   placeholder="Olá {{contactName}}, <br><br> Veja nossa nova solução..."
                 />
               </div>
@@ -196,14 +256,14 @@ export default function TemplateEditorPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
-              {PERMITTED_VARIABLES.map(v => (
-                <button 
-                  key={v} 
+              {PERMITTED_VARIABLES.map((variable) => (
+                <button
+                  key={variable}
                   type="button"
                   className="text-[10px] bg-card border px-2 py-1 rounded hover:bg-accent hover:text-white transition-colors"
-                  onClick={() => insertHtml(`{{${v}}}`)}
+                  onClick={() => insertHtml(`{{${variable}}}`)}
                 >
-                  {"{{" + v + "}}"}
+                  {"{{" + variable + "}}"}
                 </button>
               ))}
             </CardContent>
@@ -222,8 +282,8 @@ export default function TemplateEditorPage() {
                     <SelectValue placeholder="Escolha um prospect" />
                   </SelectTrigger>
                   <SelectContent>
-                    {prospects && prospects.map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.companyName}</SelectItem>
+                    {prospects.map((prospect) => (
+                      <SelectItem key={prospect.id} value={prospect.id}>{prospect.companyName || prospect.id}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -234,18 +294,18 @@ export default function TemplateEditorPage() {
                 <div className="mb-4">
                   <div className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Assunto</div>
                   <div className="text-sm font-semibold text-primary border-b pb-2">
-                    {selectedProspect ? renderTemplate(subject, selectedProspect) : subject || '...'}
+                    {selectedProspect ? renderTemplate(subject, selectedProspect as any) : subject || "..."}
                   </div>
                 </div>
                 <div>
                   <div className="text-[10px] font-bold text-muted-foreground uppercase mb-2">Mensagem (HTML Renderizado)</div>
-                  <div 
+                  <div
                     className="prose prose-sm max-w-none text-sm leading-relaxed text-gray-700"
-                    dangerouslySetInnerHTML={{ __html: renderedPreviewBody || '<i>Corpo vazio...</i>' }}
+                    dangerouslySetInnerHTML={{ __html: renderedPreviewBody || "<i>Corpo vazio...</i>" }}
                   />
                 </div>
               </div>
-              
+
               <div className="bg-amber-50 p-3 rounded-lg border border-amber-100 flex items-start gap-2">
                 <Info className="w-4 h-4 text-amber-600 mt-0.5" />
                 <p className="text-[11px] text-amber-700">

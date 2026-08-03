@@ -3,9 +3,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, deleteDoc, doc, where, writeBatch, getDocs, serverTimestamp, getDoc, updateDoc } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -36,22 +34,28 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Load, LoadStatus, Truck as TruckType, Driver, Expense, Tenant } from "@/app/lib/types";
+import { Load, LoadStatus, Truck as TruckType, Driver } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { generateLoadOrderPDF, generateLoadWalletPDF } from "@/lib/pdf-service";
 import Link from "next/link";
+import { deleteLoad, listLoads, updateLoad } from "@/lib/loads-api";
+import { listTrucks } from "@/lib/trucks-api";
+import { listDrivers } from "@/lib/drivers-api";
 
 export default function CargasPage() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const router = useRouter();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [mounted, setMounted] = useState(false);
+  const [loads, setLoads] = useState<Load[]>([]);
+  const [trucks, setTrucks] = useState<TruckType[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [loadsLoading, setLoadsLoading] = useState(true);
   const [isDownloadingId, setIsDownloadingId] = useState<string | null>(null);
   
   // AlertDialog state
@@ -62,27 +66,48 @@ export default function CargasPage() {
     setMounted(true);
   }, []);
 
-  const loadsQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "loads"), orderBy("createdAt", "desc"));
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const trucksQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return collection(db, "tenants", tenantId, "trucks");
-  }, [db, tenantId]);
+    async function loadData() {
+      if (!tenantId) {
+        if (active) {
+          setLoads([]);
+          setTrucks([]);
+          setDrivers([]);
+          setLoadsLoading(false);
+        }
+        return;
+      }
 
-  const driversQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return collection(db, "tenants", tenantId, "drivers");
-  }, [db, tenantId]);
+      try {
+        if (active) setLoadsLoading(true);
+        const [loadRows, truckRows, driverRows] = await Promise.all([
+          listLoads(),
+          listTrucks(),
+          listDrivers(),
+        ]);
+        if (!active) return;
+        setLoads(loadRows);
+        setTrucks(truckRows);
+        setDrivers(driverRows);
+      } catch (error) {
+        if (active) {
+          setLoads([]);
+          setTrucks([]);
+          setDrivers([]);
+          toast({ variant: "destructive", title: "Error al cargar operaciones", description: (error as Error).message });
+        }
+      } finally {
+        if (active) setLoadsLoading(false);
+      }
+    }
 
-  const { data: loads, loading: loadsLoading } = useCollection<Load>(loadsQuery);
-  const { data: trucks } = useCollection<TruckType>(trucksQuery);
-  const { data: drivers } = useCollection<Driver>(driversQuery);
-
-  const tenantRef = useMemo(() => (db && tenantId) ? doc(db, "tenants", tenantId) : null, [db, tenantId]);
-  const { data: tenant } = useDoc<Tenant>(tenantRef);
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, toast]);
 
   const filteredLoads = useMemo(() => {
     if (!loads) return [];
@@ -101,7 +126,7 @@ export default function CargasPage() {
   }, [loads, searchTerm, statusFilter]);
 
   const handleDownloadDirect = async (load: Load, type: 'orden' | 'billetera') => {
-    if (!db || !tenantId) return;
+    if (!tenantId) return;
     setIsDownloadingId(`${load.id}-${type}`);
     
     try {
@@ -109,11 +134,9 @@ export default function CargasPage() {
       const truck = trucks?.find(t => t.id === load.assignedTruckId) || null;
 
       if (type === 'orden') {
-        await generateLoadOrderPDF(load, driver, truck, tenant || undefined);
+        await generateLoadOrderPDF(load, driver, truck, undefined);
       } else {
-        const expSnap = await getDocs(query(collection(db, "tenants", tenantId, "loads", load.id, "expenses"), where("status", "==", "approved")));
-        const expenses = expSnap.docs.map(d => ({ ...d.data(), id: d.id } as Expense));
-        await generateLoadWalletPDF(load, expenses, driver, truck, tenant || undefined);
+        await generateLoadWalletPDF(load, [], driver, truck, undefined);
       }
       
       toast({ title: "Archivo descargado con éxito" });
@@ -125,15 +148,13 @@ export default function CargasPage() {
   };
 
   const handleArchiveLoad = async (id: string) => {
-    if (!db || !tenantId) return;
+    if (!tenantId) return;
     try {
-      await updateDoc(doc(db, "tenants", tenantId, "loads", id), {
-        status: 'archived',
-        updatedAt: serverTimestamp()
-      });
+      await updateLoad(id, { status: 'archived' });
+      setLoads((prev) => prev.map((load) => (load.id === id ? { ...load, status: 'archived' } : load)));
       toast({ title: "Flete Archivado", description: "La operación se movió al archivo histórico." });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al archivar" });
+      toast({ variant: "destructive", title: "Error al archivar", description: (e as Error).message });
     }
   };
 
@@ -149,28 +170,15 @@ export default function CargasPage() {
   };
 
   const confirmDelete = async () => {
-    if (!db || !tenantId || !deleteId) return;
+    if (!tenantId || !deleteId) return;
     
     setIsDeleting(true);
     try {
-      const batch = writeBatch(db);
-      const remitosQuery = query(collection(db, "tenants", tenantId, "pending_remitos"), where("loadId", "==", deleteId));
-      const remitosSnap = await getDocs(remitosQuery);
-      
-      remitosSnap.docs.forEach(docSnap => {
-        batch.update(docSnap.ref, {
-          status: 'pending',
-          loadId: null,
-          dispatchedDate: null,
-          updatedAt: serverTimestamp()
-        });
-      });
-
-      batch.delete(doc(db, "tenants", tenantId, "loads", deleteId));
-      await batch.commit();
+      await deleteLoad(deleteId);
+      setLoads((prev) => prev.filter((load) => load.id !== deleteId));
       toast({ title: "Operación eliminada" });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al eliminar" });
+      toast({ variant: "destructive", title: "Error al eliminar", description: (e as Error).message });
     } finally {
       setIsDeleting(false);
       setDeleteId(null);

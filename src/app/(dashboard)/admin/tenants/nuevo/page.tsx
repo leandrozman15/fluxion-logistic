@@ -2,8 +2,7 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import { useFirestore, useUser } from "@/firebase";
-import { collection, serverTimestamp, doc, setDoc } from "firebase/firestore";
+import { useUser } from "@/firebase";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,6 +42,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { createTenant } from "@/lib/tenants-admin-api";
 
 const SUPER_ADMIN_EMAIL = "leozman15@gmail.com";
 
@@ -65,7 +65,6 @@ const AVAILABLE_MODULES = [
 ];
 
 export default function NewTenantPage() {
-  const db = useFirestore();
   const { user, loading: userLoading } = useUser();
   const router = useRouter();
   const { toast } = useToast();
@@ -100,16 +99,14 @@ export default function NewTenantPage() {
   };
 
   const handleSubmit = async () => {
-    if (!db || !formData.name) return;
+    if (!formData.name) return;
     setIsSubmitting(true);
     try {
-      const newRef = doc(collection(db, "tenants"));
-      await setDoc(newRef, {
-        id: newRef.id,
+      await createTenant({
         name: formData.name,
         plan: formData.plan,
         monthlyFee: formData.monthlyFee,
-        createdAt: serverTimestamp(),
+        createdAt: new Date().toISOString(),
         subscriptionStatus: 'active',
         settings: {
           onboardingCompleted: false,

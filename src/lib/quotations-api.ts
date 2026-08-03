@@ -1,4 +1,5 @@
 import { Quotation, QuotationItem, QuotationStatus } from '@/app/lib/types';
+import { resolveBackendToken } from '@/lib/backend-api';
 
 type ListMeta = {
   page: number;
@@ -27,8 +28,6 @@ type Primitive = string | number | boolean | null | undefined;
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_BACKEND_API_URL?.trim() || 'https://fluxion-logistic-backend.onrender.com';
-
-const API_BEARER_TOKEN = process.env.NEXT_PUBLIC_BACKEND_BEARER_TOKEN?.trim() || '';
 
 function toNumber(value: Primitive, fallback = 0): number {
   if (typeof value === 'number') return value;
@@ -96,22 +95,20 @@ function normalizeQuotation(raw: any): Quotation {
   };
 }
 
-function ensureToken() {
-  if (!API_BEARER_TOKEN) {
-    throw new Error('Missing NEXT_PUBLIC_BACKEND_BEARER_TOKEN');
-  }
-}
-
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<ApiResponse<T>> {
-  ensureToken();
+  const token = resolveBackendToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(init?.headers as Record<string, string> | undefined),
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${API_BEARER_TOKEN}`,
-      ...(init?.headers || {}),
-    },
+    headers,
   });
 
   const body = (await response.json()) as ApiResponse<T>;

@@ -1,53 +1,71 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { useFirestore, useCollection } from "@/firebase";
+import { useEffect, useState } from "react";
 import { useTenant } from "@/hooks/use-tenant";
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  query, 
-  writeBatch, 
-  doc, 
-  serverTimestamp,
-  orderBy,
-  limit
-} from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { FileSpreadsheet, Upload, CheckCircle2, AlertCircle, Clock, Loader2, Database, FileCode } from "lucide-react";
+import { FileSpreadsheet, AlertCircle, Clock, Loader2, Database, FileCode } from "lucide-react";
 import { calculateEffectiveScore } from "@/lib/utils/scoring";
 import { Prospect } from "@/app/lib/types";
 import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import * as XLSX from 'xlsx';
+import { createProspect, listProspects } from "@/lib/prospects-api";
+import { createImportLog, ImportLogItem, listImportLogs } from "@/lib/imports-api";
 
 export default function ImportsPage() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const { toast } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [importHistory, setImportHistory] = useState<ImportLogItem[]>([]);
 
-  const importsQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(
-      collection(db, "tenants", tenantId, "imports"),
-      orderBy("createdAt", "desc"),
-      limit(10)
-    );
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: importHistory, loading: historyLoading } = useCollection<any>(importsQuery);
+    async function loadHistory() {
+      if (!tenantId) {
+        if (active) {
+          setImportHistory([]);
+          setHistoryLoading(false);
+        }
+        return;
+      }
+
+      try {
+        if (active) setHistoryLoading(true);
+        const rows = await listImportLogs();
+        if (!active) return;
+        setImportHistory(rows);
+      } catch {
+        if (!active) return;
+        setImportHistory([]);
+      } finally {
+        if (active) setHistoryLoading(false);
+      }
+    }
+
+    loadHistory();
+    return () => {
+      active = false;
+    };
+  }, [tenantId]);
+
+  const formatCreatedAt = (value: any) => {
+    if (!value) return "Agora";
+    if (typeof value?.toDate === 'function') return format(value.toDate(), "dd/MM/yyyy HH:mm");
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Agora";
+    return format(date, "dd/MM/yyyy HH:mm");
+  };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || !db || !tenantId) return;
+    if (!file || !tenantId) return;
 
     const isCsv = file.name.endsWith('.csv');
     const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
@@ -80,19 +98,17 @@ export default function ImportsPage() {
       let importedCount = 0;
       let skippedCount = 0;
 
-      // 1. Carregar CNPJs existentes para evitar duplicidade
+      // Load existing prospects once to deduplicate CNPJ before bulk create.
       const existingCnpjs = new Set<string>();
-      const q = query(collection(db, "tenants", tenantId, "prospects"));
-      const snapshot = await getDocs(q);
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        if (data.cnpj) existingCnpjs.add(data.cnpj);
+      const existingProspects = await listProspects(2000);
+      existingProspects.forEach((item) => {
+        if (item.cnpj) existingCnpjs.add(item.cnpj);
       });
 
-      const batchSize = 20;
+      const batchSize = 10;
       for (let i = 0; i < dataRows.length; i += batchSize) {
-        const batch = writeBatch(db);
         const chunk = dataRows.slice(i, i + batchSize);
+        const creations: Promise<void>[] = [];
 
         chunk.forEach(row => {
           const companyName = String(row[0] || '').trim();
@@ -107,11 +123,7 @@ export default function ImportsPage() {
             return;
           }
 
-          const id = `imp_${cnpj}`;
-          const pRef = doc(db, "tenants", tenantId, "prospects", id);
-          
           const prospectData: Partial<Prospect> = {
-            id,
             tenantId,
             companyName,
             cnpj,
@@ -132,31 +144,39 @@ export default function ImportsPage() {
           };
 
           const effectiveScore = calculateEffectiveScore(prospectData);
-          
-          batch.set(pRef, {
-            ...prospectData,
-            effectiveScore,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          }, { merge: true });
 
-          importedCount++;
-          existingCnpjs.add(cnpj);
+          creations.push(
+            createProspect({ ...prospectData, effectiveScore })
+              .then(() => {
+                importedCount++;
+                existingCnpjs.add(cnpj);
+              })
+              .catch(() => {
+                skippedCount++;
+              })
+          );
         });
 
-        await batch.commit();
+        await Promise.all(creations);
         setProgress(Math.round(((i + chunk.length) / total) * 100));
       }
 
-      await addDoc(collection(db, "tenants", tenantId, "imports"), {
+      const payload = {
         fileName: file.name,
         fileType: isExcel ? 'excel' : 'csv',
         totalRows: total,
         importedCount,
         skippedCount,
-        createdAt: serverTimestamp(),
         status: "done"
-      });
+      };
+
+      const savedLog = await createImportLog(payload as any);
+      const localLog: ImportLogItem = {
+        id: savedLog?.id || `local-${Date.now()}`,
+        ...payload,
+        createdAt: savedLog?.createdAt || new Date().toISOString(),
+      };
+      setImportHistory((prev) => [localLog, ...prev].slice(0, 10));
 
       toast({
         title: "Importação concluída!",
@@ -271,7 +291,7 @@ export default function ImportsPage() {
                   {importHistory.map((item) => (
                     <TableRow key={item.id} className="hover:bg-accent/5 transition-colors">
                       <TableCell className="text-xs font-medium">
-                        {item.createdAt?.toDate ? format(item.createdAt.toDate(), "dd/MM/yyyy HH:mm") : "Agora"}
+                        {formatCreatedAt(item.createdAt)}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2 text-xs font-semibold text-primary">

@@ -1,10 +1,8 @@
 
 'use client';
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, orderBy, deleteDoc, doc, where } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -20,20 +18,39 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import { formatSafeDate } from "@/lib/utils/date-utils";
+import { listRemitos } from "@/lib/remitos-api";
 
 export default function RemitosArchivePage() {
-  const db = useFirestore();
   const router = useRouter();
   const { toast } = useToast();
   
   const [searchTerm, setSearchTerm] = useState("");
+  const [allRemitos, setAllRemitos] = useState<PendingRemito[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const remitosQuery = useMemo(() => {
-    if (!db) return null;
-    return query(collection(db, "pending_remitos"), orderBy("createdAt", "desc"));
-  }, [db]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: allRemitos, loading } = useCollection<PendingRemito>(remitosQuery);
+    async function loadData() {
+      try {
+        if (active) setLoading(true);
+        const rows = await listRemitos();
+        if (active) setAllRemitos(rows);
+      } catch (error) {
+        if (active) {
+          setAllRemitos([]);
+          toast({ variant: "destructive", title: "Error al cargar archivo", description: (error as Error).message });
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [toast]);
 
   const archivedRemitos = useMemo(() => {
     if (!allRemitos) return [];

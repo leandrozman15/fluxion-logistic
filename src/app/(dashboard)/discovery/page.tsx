@@ -1,10 +1,8 @@
 
 'use client';
 
-import { useState, useMemo } from "react";
-import { useFirestore, useCollection } from "@/firebase";
+import { useEffect, useMemo, useState } from "react";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, addDoc, serverTimestamp, query, where, doc, setDoc } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -19,7 +17,7 @@ import { calculateEffectiveScore } from "@/lib/utils/scoring";
 import { Prospect, IndustryIndexCompany, Contact } from "@/app/lib/types";
 import { fetchCnpjData, type ReceitaWSResponse } from "@/services/receita-ws";
 import { mineIndustries, type MineIndustriesOutput } from "@/ai/flows/mine-industries-flow";
-import Link from "next/link";
+import { createProspect, listProspects } from "@/lib/prospects-api";
 
 // Base Real Expandida com contatos para testes de campanha
 const MOCK_RADAR_INDEX: IndustryIndexCompany[] = [
@@ -34,7 +32,6 @@ const MOCK_RADAR_INDEX: IndustryIndexCompany[] = [
 ];
 
 export default function DiscoveryPage() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const { toast } = useToast();
   
@@ -54,16 +51,35 @@ export default function DiscoveryPage() {
   const [isMining, setIsMining] = useState(false);
   const [miningStatus, setMiningStatus] = useState<string | null>(null);
   const [miningResults, setMiningResults] = useState<MineIndustriesOutput | null>(null);
+  const [existingProspects, setExistingProspects] = useState<Prospect[]>([]);
 
-  const prospectsQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "prospects"));
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: existingProspects } = useCollection<Prospect>(prospectsQuery);
+    async function loadExistingProspects() {
+      if (!tenantId) {
+        if (active) setExistingProspects([]);
+        return;
+      }
+
+      try {
+        const rows = await listProspects(2000);
+        if (!active) return;
+        setExistingProspects(rows);
+      } catch {
+        if (!active) return;
+        setExistingProspects([]);
+      }
+    }
+
+    loadExistingProspects();
+    return () => {
+      active = false;
+    };
+  }, [tenantId]);
 
   const existingCnpjs = useMemo(() => {
-    return new Set(existingProspects?.map(p => p.cnpj.replace(/\D/g, "")));
+    return new Set(existingProspects.map((p) => (p.cnpj || '').replace(/\D/g, "")));
   }, [existingProspects]);
 
   const handleSearch = () => {
@@ -129,7 +145,7 @@ export default function DiscoveryPage() {
   };
 
   const handleAddToPipeline = async (item: any, source: Prospect['source'] = 'radar_index') => {
-    if (!db || !tenantId) return;
+    if (!tenantId) return;
     const cleanCnpj = (item.cnpj || `00000000000000`).replace(/\D/g, "");
     
     const id = item.cnpj ? (source === 'auto_discovery' ? `rf_${cleanCnpj}` : `idx_${cleanCnpj}`) : `ai_${Date.now()}`;
@@ -185,12 +201,13 @@ export default function DiscoveryPage() {
 
       const effectiveScore = calculateEffectiveScore(prospectData);
       
-      await setDoc(doc(db, "tenants", tenantId, "prospects", id), {
+      const created = await createProspect({
         ...prospectData,
         effectiveScore,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       });
+      setExistingProspects((prev) => [created, ...prev]);
 
       toast({ title: "Importada!" });
       if (source === 'auto_discovery') setCnpjResult(null);

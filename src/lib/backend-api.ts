@@ -14,22 +14,45 @@ const API_BASE_URL =
 
 const API_BEARER_TOKEN = process.env.NEXT_PUBLIC_BACKEND_BEARER_TOKEN?.trim() || '';
 
+function getRuntimeToken() {
+  if (typeof window === 'undefined') return '';
+
+  return (
+    window.localStorage.getItem('NEXT_PUBLIC_BACKEND_BEARER_TOKEN') ||
+    window.localStorage.getItem('backendBearerToken') ||
+    window.sessionStorage.getItem('NEXT_PUBLIC_BACKEND_BEARER_TOKEN') ||
+    window.sessionStorage.getItem('backendBearerToken') ||
+    ''
+  );
+}
+
+export function resolveBackendToken() {
+  return API_BEARER_TOKEN || getRuntimeToken();
+}
+
 export function ensureBackendToken() {
-  if (!API_BEARER_TOKEN) {
-    throw new Error('Missing NEXT_PUBLIC_BACKEND_BEARER_TOKEN');
+  const token = resolveBackendToken();
+  if (!token) {
+    return null;
   }
+
+  return token;
 }
 
 export async function backendRequest<T>(path: string, init?: RequestInit): Promise<ApiResponse<T>> {
-  ensureBackendToken();
+  const token = ensureBackendToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(init?.headers as Record<string, string> | undefined),
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${API_BEARER_TOKEN}`,
-      ...(init?.headers || {}),
-    },
+    headers,
   });
 
   const body = (await response.json()) as ApiResponse<T>;

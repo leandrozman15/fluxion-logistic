@@ -3,9 +3,7 @@
 
 import { useMemo, useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useFirestore, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Barcode from "react-barcode";
@@ -27,18 +25,20 @@ import {
   Download,
   FileText
 } from "lucide-react";
-import { Product, Tenant } from "@/app/lib/types";
+import { Product } from "@/app/lib/types";
 import { QRCodeSVG } from "qrcode.react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { getProduct } from "@/lib/products-api";
 
 export default function ProductTechnicalSheetPage() {
   const { id } = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const db = useFirestore();
-  const { tenantId } = useTenant();
+   const { tenantId } = useTenant();
   const [mounted, setMounted] = useState(false);
+   const [loading, setLoading] = useState(true);
+   const [product, setProduct] = useState<Product | null>(null);
 
   const autoPrint = searchParams.get('print') === 'true';
 
@@ -46,19 +46,34 @@ export default function ProductTechnicalSheetPage() {
     setMounted(true);
   }, []);
 
-  const productRef = useMemo(() => {
-    if (!db || !id || !tenantId) return null;
-    return doc(db, "tenants", tenantId, "products", id as string);
-  }, [db, id, tenantId]);
+   useEffect(() => {
+      let active = true;
 
-  const { data: product, loading } = useDoc<Product>(productRef);
+      async function loadProduct() {
+         if (!id || !tenantId) {
+            if (active) {
+               setProduct(null);
+               setLoading(false);
+            }
+            return;
+         }
 
-  const tenantRef = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return doc(db, "tenants", tenantId);
-  }, [db, tenantId]);
+         try {
+            if (active) setLoading(true);
+            const row = await getProduct(id as string);
+            if (active) setProduct(row);
+         } catch {
+            if (active) setProduct(null);
+         } finally {
+            if (active) setLoading(false);
+         }
+      }
 
-  const { data: tenant } = useDoc<Tenant>(tenantRef);
+      loadProduct();
+      return () => {
+         active = false;
+      };
+   }, [id, tenantId]);
 
   useEffect(() => {
     if (autoPrint && !loading && product) {
@@ -73,7 +88,7 @@ export default function ProductTechnicalSheetPage() {
   if (!product) return <div className="p-20 text-center text-slate-400">Producto no encontrado.</div>;
 
   const validationUrl = typeof window !== 'undefined' ? `${window.location.origin}/productos/${product.id}` : '';
-  const orgName = tenant?.name || "LOGÍSTICA AR";
+   const orgName = "LOGÍSTICA AR";
 
   return (
     <div className="min-h-screen bg-slate-800 py-8 print:bg-white print:py-0 overflow-y-auto">
@@ -96,12 +111,11 @@ export default function ProductTechnicalSheetPage() {
           {/* CABECERA */}
           <div className="flex justify-between items-start border-b-[5px] border-slate-900 pb-8 mb-8">
             <div className="flex items-center gap-6">
-              {tenant?.settings?.logoUrl && <img src={tenant.settings.logoUrl} className="h-20 w-auto object-contain" alt="Logo" />}
               <div>
                 <h1 className="text-4xl font-black uppercase italic tracking-tighter leading-none text-blue-800">{orgName}</h1>
                 <p className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-500 mt-2">Ficha Técnica Certificada - LogísticaAr</p>
                 <div className="pt-3 text-[10px] font-bold space-y-0.5 text-slate-400">
-                    <p className="flex items-center gap-1"><FileText size={10} /> CUIT: {tenant?.settings?.cuit || '30-XXXXXXXX-X'}</p>
+                              <p className="flex items-center gap-1"><FileText size={10} /> CUIT: 30-XXXXXXXX-X</p>
                     <p className="flex items-center gap-1"><Globe size={10}/> Argentina | Control de Cargas v3.0</p>
                 </div>
               </div>

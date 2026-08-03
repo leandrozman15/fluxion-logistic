@@ -1,109 +1,153 @@
 'use client';
 
-import { useMemo, useState } from "react";
-import { useFirestore, useCollection, useUser } from "@/firebase";
+import { useEffect, useMemo, useState } from "react";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Layers, Plus, Edit, Trash2, Loader2, Play, Pause, Clock, MessageCircle, Mail, CheckCircle2, Bot, Zap } from "lucide-react";
-import { Sequence, SequenceStep, EmailTemplate } from "@/app/lib/types";
+import { Layers, Plus, Trash2, Loader2, Play, Pause, Clock, MessageCircle, Mail, Bot, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import Link from "next/link";
+import { createSequence, deleteSequence, listSequences, updateSequence } from "@/lib/sequences-api";
+
+type SequenceStep = {
+  dayOffset: number;
+  channel: string;
+  purpose: string;
+  useAgent?: boolean;
+};
+
+type SequenceItem = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  steps: SequenceStep[];
+  createdAt?: any;
+};
 
 export default function SequencesPage() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
-  const { user } = useUser();
   const { toast } = useToast();
-  
+
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
+  const [sequences, setSequences] = useState<SequenceItem[]>([]);
 
-  const sequencesQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "sequences"), orderBy("createdAt", "desc"));
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: sequences, loading } = useCollection<Sequence>(sequencesQuery);
+    async function loadData() {
+      if (!tenantId) {
+        if (active) {
+          setSequences([]);
+          setLoading(false);
+        }
+        return;
+      }
 
-  const handleCreateSequence = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!db || !tenantId || !newName) return;
+      try {
+        if (active) setLoading(true);
+        const rows = await listSequences();
+        if (!active) return;
+        setSequences(
+          [...rows].sort((a, b) => {
+            const aTime = typeof a.createdAt === "object" && a.createdAt?.seconds ? Number(a.createdAt.seconds) : new Date(a.createdAt || 0).getTime() / 1000;
+            const bTime = typeof b.createdAt === "object" && b.createdAt?.seconds ? Number(b.createdAt.seconds) : new Date(b.createdAt || 0).getTime() / 1000;
+            return bTime - aTime;
+          })
+        );
+      } catch (error) {
+        if (!active) return;
+        setSequences([]);
+        toast({ variant: "destructive", title: "Erro ao carregar sequências", description: (error as Error).message });
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, toast]);
+
+  const handleCreateSequence = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!tenantId || !newName) return;
 
     setIsSubmitting(true);
     try {
-      // Default initial steps for a standard industrial sequence
       const defaultSteps: SequenceStep[] = [
-        { dayOffset: 0, channel: 'whatsapp', purpose: 'first_touch', useAgent: true },
-        { dayOffset: 2, channel: 'email', purpose: 'followup', useAgent: true },
-        { dayOffset: 5, channel: 'email', purpose: 'followup', useAgent: false },
-        { dayOffset: 10, channel: 'task_only', purpose: 'final', useAgent: false }
+        { dayOffset: 0, channel: "whatsapp", purpose: "first_touch", useAgent: true },
+        { dayOffset: 2, channel: "email", purpose: "followup", useAgent: true },
+        { dayOffset: 5, channel: "email", purpose: "followup", useAgent: false },
+        { dayOffset: 10, channel: "task_only", purpose: "final", useAgent: false },
       ];
 
-      await addDoc(collection(db, "tenants", tenantId, "sequences"), {
+      const created = await createSequence({
         name: newName,
         isActive: true,
         steps: defaultSteps,
         rules: {
           cooldownDays: 3,
           maxEmailAttempts: 3,
-          requireContactMethod: 'email_or_phone',
-          respectDNC: true
+          requireContactMethod: "email_or_phone",
+          respectDNC: true,
         },
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        tenantId
       });
-      
+
+      setSequences((prev) => [created, ...prev]);
       toast({ title: "Sequência criada!", description: "Você pode editá-la agora." });
       setIsCreateOpen(false);
       setNewName("");
     } catch (error) {
-      toast({ variant: "destructive", title: "Erro ao criar sequência" });
+      toast({ variant: "destructive", title: "Erro ao criar sequência", description: (error as Error).message });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleToggleActive = async (id: string, current: boolean) => {
-    if (!db || !tenantId) return;
+    if (!tenantId) return;
     try {
-      await updateDoc(doc(db, "tenants", tenantId, "sequences", id), {
-        isActive: !current,
-        updatedAt: serverTimestamp()
-      });
-      toast({ title: `Sequência ${!current ? 'ativada' : 'pausada'}` });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Erro ao atualizar" });
+      const updated = await updateSequence(id, { isActive: !current });
+      setSequences((prev) => prev.map((row) => (row.id === id ? updated : row)));
+      toast({ title: `Sequência ${!current ? "ativada" : "pausada"}` });
+    } catch (error) {
+      toast({ variant: "destructive", title: "Erro ao atualizar", description: (error as Error).message });
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!db || !tenantId || !confirm("Remover esta sequência?")) return;
+    if (!tenantId || !confirm("Remover esta sequência?")) return;
     try {
-      await deleteDoc(doc(db, "tenants", tenantId, "sequences", id));
+      await deleteSequence(id);
+      setSequences((prev) => prev.filter((row) => row.id !== id));
       toast({ title: "Sequência removida" });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Erro ao excluir" });
+    } catch (error) {
+      toast({ variant: "destructive", title: "Erro ao excluir", description: (error as Error).message });
     }
   };
 
   const getStepIcon = (channel: string) => {
     switch (channel) {
-      case 'whatsapp': return <MessageCircle className="w-3 h-3 text-green-500" />;
-      case 'email': return <Mail className="w-3 h-3 text-blue-500" />;
-      default: return <Clock className="w-3 h-3 text-muted-foreground" />;
+      case "whatsapp":
+        return <MessageCircle className="w-3 h-3 text-green-500" />;
+      case "email":
+        return <Mail className="w-3 h-3 text-blue-500" />;
+      default:
+        return <Clock className="w-3 h-3 text-muted-foreground" />;
     }
   };
+
+  const totalSteps = useMemo(() => {
+    return sequences.reduce((acc, seq) => acc + seq.steps.length, 0);
+  }, [sequences]);
 
   return (
     <div className="space-y-6">
@@ -111,8 +155,9 @@ export default function SequencesPage() {
         <div>
           <h1 className="text-2xl font-bold text-primary">Sequências Assistidas</h1>
           <p className="text-muted-foreground">Cadências padronizadas para garantir o follow-up industrial.</p>
+          <p className="text-xs text-muted-foreground mt-1">{sequences.length} playbooks • {totalSteps} passos</p>
         </div>
-        
+
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
             <Button className="bg-accent hover:bg-accent/90">
@@ -128,7 +173,7 @@ export default function SequencesPage() {
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
                   <Label htmlFor="name">Nome da Sequência</Label>
-                  <Input id="name" value={newName} onChange={e => setNewName(e.target.value)} placeholder="Ex: Prospecção Cold Outbound" required />
+                  <Input id="name" value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Ex: Prospecção Cold Outbound" required />
                 </div>
                 <div className="p-3 bg-secondary/30 rounded-lg border text-[10px] text-muted-foreground italic leading-relaxed">
                   <Bot className="w-3 h-3 mb-1 text-accent" /> Ao criar, geramos automaticamente 4 passos padrão: Dia 0 (WA), Dia 2 (Email), Dia 5 (Follow-up) e Dia 10 (Handoff).
@@ -158,7 +203,7 @@ export default function SequencesPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {sequences.map((seq) => (
             <Card key={seq.id} className="relative overflow-hidden group">
-              <div className={`absolute top-0 left-0 w-1.5 h-full ${seq.isActive ? 'bg-accent' : 'bg-muted'}`}></div>
+              <div className={`absolute top-0 left-0 w-1.5 h-full ${seq.isActive ? "bg-accent" : "bg-muted"}`}></div>
               <CardHeader className="pb-3">
                 <div className="flex justify-between items-start">
                   <Badge variant={seq.isActive ? "default" : "secondary"} className={seq.isActive ? "bg-accent" : ""}>
@@ -175,18 +220,18 @@ export default function SequencesPage() {
                 </div>
                 <CardTitle className="text-lg mt-2">{seq.name}</CardTitle>
                 <CardDescription className="text-xs">
-                  {seq.steps.length} passos em {seq.steps[seq.steps.length-1].dayOffset} dias.
+                  {seq.steps.length} passos em {seq.steps[seq.steps.length - 1]?.dayOffset || 0} dias.
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2 mt-2">
-                  {seq.steps.map((step, i) => (
-                    <div key={i} className="flex items-center justify-between p-2 rounded bg-secondary/20 text-xs">
+                  {seq.steps.map((step, index) => (
+                    <div key={`${seq.id}-${index}`} className="flex items-center justify-between p-2 rounded bg-secondary/20 text-xs">
                       <div className="flex items-center gap-3">
                         <span className="font-bold text-muted-foreground w-8">D+{step.dayOffset}</span>
                         <div className="flex items-center gap-1.5 font-medium">
                           {getStepIcon(step.channel)}
-                          <span className="capitalize">{step.channel.replace('_', ' ')}</span>
+                          <span className="capitalize">{step.channel.replace("_", " ")}</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">

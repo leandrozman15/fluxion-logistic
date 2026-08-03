@@ -1,36 +1,72 @@
 
 'use client';
 
-import { useMemo } from "react";
-import { useFirestore, useCollection, useDoc } from "@/firebase";
+import { useEffect, useMemo, useState } from "react";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, limit, doc } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Mail, Clock, ShieldCheck, Loader2 } from "lucide-react";
-import { DailyStats, Tenant } from "@/app/lib/types";
+import { getTenantProfile, listDailyStats } from "@/lib/settings-api";
+
+type DailyStats = {
+  id?: string;
+  emailsSent?: number;
+  quotaUsed?: number;
+};
+
+type TenantLike = {
+  plan?: 'pro' | 'free';
+  settings?: {
+    dailyEmailLimit?: number;
+    hourlyEmailLimit?: number;
+  };
+};
 
 export default function LimitsPage() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
+  const [loading, setLoading] = useState(true);
+  const [tenant, setTenant] = useState<TenantLike | null>(null);
+  const [stats, setStats] = useState<DailyStats[]>([]);
 
-  const tenantRef = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return doc(db, "tenants", tenantId);
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: tenant } = useDoc<Tenant>(tenantRef);
+    async function loadData() {
+      if (!tenantId) {
+        if (active) {
+          setTenant(null);
+          setStats([]);
+          setLoading(false);
+        }
+        return;
+      }
 
-  const statsQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "dailyStats"), limit(31));
-  }, [db, tenantId]);
+      try {
+        if (active) setLoading(true);
+        const [tenantData, dailyStats] = await Promise.all([getTenantProfile(), listDailyStats(31)]);
+        if (!active) return;
+        setTenant({
+          plan: tenantData.plan === 'pro' ? 'pro' : 'free',
+          settings: tenantData.settings,
+        });
+        setStats(dailyStats);
+      } catch {
+        if (!active) return;
+        setTenant(null);
+        setStats([]);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
 
-  const { data: stats, loading } = useCollection<DailyStats>(statsQuery);
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId]);
 
   const monthlyConsumption = useMemo(() => {
-    if (!stats) return { emails: 0, quota: 0 };
     return stats.reduce((acc, s) => ({
       emails: acc.emails + (s.emailsSent || 0),
       quota: acc.quota + (s.quotaUsed || 0)

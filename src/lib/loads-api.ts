@@ -52,3 +52,40 @@ export async function listLoads() {
   const response = await backendRequest<any[]>('/api/loads?page=1&pageSize=500');
   return getListData(response).map(normalizeLoad);
 }
+
+export async function getLoad(id: string) {
+  const response = await backendRequest<any>(`/api/loads/${id}`);
+  const raw = response.data || response.payload;
+  if (!raw) {
+    throw new Error('Load not found');
+  }
+  return normalizeLoad(raw);
+}
+
+export async function createLoad(data: Partial<Load>) {
+  const response = await backendRequest<any>('/api/loads', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  const raw = response.data || response.payload;
+  if (!raw) {
+    throw new Error('Failed to create load');
+  }
+  return normalizeLoad(raw);
+}
+
+export async function updateLoad(id: string, data: Partial<Load>) {
+  const response = await backendRequest<any>(`/api/loads/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+  const raw = response.data || response.payload;
+  if (!raw) {
+    throw new Error('Failed to update load');
+  }
+  return normalizeLoad(raw);
+}
+
+export async function deleteLoad(id: string) {
+  await backendRequest(`/api/loads/${id}`, { method: 'DELETE' });
+}

@@ -3,9 +3,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import dynamic from "next/dynamic";
-import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, serverTimestamp, doc, setDoc, getDocs, limit, writeBatch, where } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +38,10 @@ import { optimizeDistribution } from "@/services/route-optimizer";
 import { format } from "date-fns";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { listRemitos, updateRemito } from "@/lib/remitos-api";
+import { listTrucks } from "@/lib/trucks-api";
+import { listHubs } from "@/lib/hubs-api";
+import { createLoad, listLoads } from "@/lib/loads-api";
 
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
@@ -51,7 +53,6 @@ const Polyline = dynamic(() => import("react-leaflet").then((mod) => mod.Polylin
 const Popup = dynamic(() => import("react-leaflet").then((mod) => mod.Popup), { ssr: false });
 
 export default function DespachoInteligentePage() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const { toast } = useToast();
   const router = useRouter();
@@ -66,6 +67,12 @@ export default function DespachoInteligentePage() {
   const [planDate, setPlanDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [L, setL] = useState<any>(null);
   const [mounted, setMounted] = useState(false);
+  const [allRemitos, setAllRemitos] = useState<PendingRemito[]>([]);
+  const [trucks, setTrucks] = useState<TruckType[]>([]);
+  const [hubs, setHubs] = useState<Hub[]>([]);
+  const [loadingRemitos, setLoadingRemitos] = useState(true);
+  const [loadingTrucks, setLoadingTrucks] = useState(true);
+  const [loadingHubs, setLoadingHubs] = useState(true);
 
   useEffect(() => {
     setMounted(true);
@@ -74,17 +81,60 @@ export default function DespachoInteligentePage() {
     });
   }, []);
 
-  const remitosQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "pending_remitos"), orderBy("createdAt", "desc"));
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const trucksQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "trucks"), orderBy("plate")) : null, [db, tenantId]);
-  const hubsQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "hubs"), orderBy("name")) : null, [db, tenantId]);
+    async function loadData() {
+      if (!tenantId) {
+        if (active) {
+          setAllRemitos([]);
+          setTrucks([]);
+          setHubs([]);
+          setLoadingRemitos(false);
+          setLoadingTrucks(false);
+          setLoadingHubs(false);
+        }
+        return;
+      }
 
-  const { data: allRemitos, loading: loadingRemitos } = useCollection<PendingRemito>(remitosQuery);
-  const { data: trucks, loading: loadingTrucks } = useCollection<TruckType>(trucksQuery);
-  const { data: hubs, loading: loadingHubs } = useCollection<Hub>(hubsQuery);
+      try {
+        if (active) {
+          setLoadingRemitos(true);
+          setLoadingTrucks(true);
+          setLoadingHubs(true);
+        }
+
+        const [remitoRows, truckRows, hubRows] = await Promise.all([
+          listRemitos(),
+          listTrucks(),
+          listHubs(),
+        ]);
+
+        if (!active) return;
+        setAllRemitos(remitoRows);
+        setTrucks(truckRows);
+        setHubs(hubRows);
+      } catch (error) {
+        if (active) {
+          setAllRemitos([]);
+          setTrucks([]);
+          setHubs([]);
+          toast({ variant: "destructive", title: "Error al cargar datos de despacho", description: (error as Error).message });
+        }
+      } finally {
+        if (active) {
+          setLoadingRemitos(false);
+          setLoadingTrucks(false);
+          setLoadingHubs(false);
+        }
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, toast]);
 
   const remitos = useMemo(() => {
     return allRemitos?.filter(r => r.status === 'pending') || [];
@@ -205,17 +255,17 @@ export default function DespachoInteligentePage() {
   };
 
   const handleConfirmAndCreateLoads = async () => {
-    if (!db || !tenantId || !proposals || !activeHub || !endHub) return;
+    if (!tenantId || !proposals || !activeHub || !endHub) return;
     setIsSaving(true);
     
     try {
-      const batch = writeBatch(db);
-      const loadsSnap = await getDocs(query(collection(db, "tenants", tenantId, "loads"), orderBy("orderNumber", "desc"), limit(1)));
+      const existingLoads = await listLoads();
       let nextSeq = 1;
-      if (!loadsSnap.empty) {
-        const parts = (loadsSnap.docs[0].data() as Load).orderNumber.split("-");
+      if (existingLoads.length > 0) {
+        const sorted = [...existingLoads].sort((a, b) => String(b.orderNumber || '').localeCompare(String(a.orderNumber || '')));
+        const parts = sorted[0].orderNumber.split("-");
         const lastNum = parseInt(parts[parts.length - 1]);
-        if (!isNaN(lastNum)) nextSeq = lastNum + 1;
+        if (!Number.isNaN(lastNum)) nextSeq = lastNum + 1;
       }
 
       for (const prop of proposals) {
@@ -224,9 +274,9 @@ export default function DespachoInteligentePage() {
         const orderNum = `FL-${new Date().getFullYear()}-${String(nextSeq).padStart(4, '0')}`;
         nextSeq++;
 
-        const newLoadRef = doc(collection(db, "tenants", tenantId, "loads"));
+        const newLoadId = crypto.randomUUID();
         const loadData: Partial<Load> = {
-          id: newLoadRef.id,
+          id: newLoadId,
           orderNumber: orderNum,
           clientName: prop.stops.length === 1 ? prop.stops[0].clientName : "Reparto Multi-Remito",
           status: 'assigned',
@@ -272,27 +322,22 @@ export default function DespachoInteligentePage() {
           returnStops: [],
           totalAmount: 0,
           basePrice: 0,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
           tracking: {
             currentLat: 0, currentLng: 0, currentSpeed: 0, avgSpeed: 0, maxSpeed: 0, distanceTraveledKm: 0, distanceRemainingKm: prop.totalDistanceKm, timeOnRouteMinutes: 0, timeStoppedMinutes: 0, lastUpdateAt: null, history: [], alerts: []
           }
         };
 
-        batch.set(newLoadRef, loadData);
+        await createLoad(loadData);
 
-        // Actualizar remitos originales a DISPATCHED
-        prop.stops.forEach(r => {
-           batch.update(doc(db, "tenants", tenantId, "pending_remitos", r.id), { 
-             status: 'dispatched', 
-             loadId: newLoadRef.id,
-             dispatchedDate: planDate,
-             updatedAt: serverTimestamp() 
-           });
-        });
+        for (const r of prop.stops) {
+          await updateRemito(r.id, {
+            status: 'dispatched',
+            loadId: newLoadId,
+            dispatchedDate: planDate,
+          });
+        }
       }
 
-      await batch.commit();
       toast({ title: "Viajes Emitidos", description: "Los remitos ya están asignados a los choferes." });
       router.push('/dashboard');
     } catch (e: any) {

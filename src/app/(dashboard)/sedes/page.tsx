@@ -1,10 +1,8 @@
 
 'use client';
 
-import { useState, useMemo } from "react";
-import { useFirestore, useCollection } from "@/firebase";
+import { useState, useMemo, useEffect } from "react";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, addDoc, serverTimestamp, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,31 +29,39 @@ import { Hub, HubType, Country, Product, WarehouseSlot } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { createHub, listHubs, updateHub } from "@/lib/hubs-api";
+import { listProducts } from "@/lib/products-api";
 
 /**
  * Componente para cargar métricas de ocupación real de una sede
  */
 function HubSpaceMetrics({ hub, products }: { hub: Hub, products: Product[] | undefined }) {
-  const db = useFirestore();
-  const { tenantId } = useTenant();
-  
-  const slotsQuery = useMemo(() => {
-    if (!db || !tenantId || !hub.id) return null;
-    return collection(db, "tenants", tenantId, "hubs", hub.id, "slots");
-  }, [db, tenantId, hub.id]);
-
-  const { data: slots, loading } = useCollection<WarehouseSlot>(slotsQuery);
+  const loading = false;
 
   const config = hub.settings?.layoutConfig;
   const totalSlots = config ? (config.corridors?.length || 1) * (config.positions || 1) * (config.levels || 1) : 32;
 
   const occupiedSlots = useMemo(() => {
-    return slots?.filter(s => s.status === 'occupied').length || 0;
-  }, [slots]);
+    if (!products) return 0;
 
-  const blockedSlots = useMemo(() => {
-    return slots?.filter(s => s.status === 'blocked').length || 0;
-  }, [slots]);
+    const withLocation = new Set<string>();
+    let noLocationCounter = 0;
+
+    products.forEach((product) => {
+      const warehouse = product.warehouses?.find((entry) => entry.hubId === hub.id && entry.stockQuantity > 0);
+      if (!warehouse) return;
+
+      if (warehouse.location) {
+        withLocation.add(warehouse.location);
+      } else {
+        noLocationCounter += 1;
+      }
+    });
+
+    return withLocation.size + noLocationCounter;
+  }, [products, hub.id]);
+
+  const blockedSlots = 0;
 
   const currentStockUnits = useMemo(() => {
     return products?.reduce((acc, p) => {
@@ -142,21 +148,52 @@ const INITIAL_FORM_DATA: Partial<Hub> = {
 };
 
 export default function SedesPage() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [hubsLoading, setHubsLoading] = useState(true);
+  const [hubs, setHubs] = useState<Hub[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
 
   const [formData, setFormData] = useState<Partial<Hub>>(INITIAL_FORM_DATA);
 
-  const hubsQuery = useMemo(() => (db && tenantId) ? query(collection(db, "tenants", tenantId, "hubs"), orderBy("name")) : null, [db, tenantId]);
-  const productsQuery = useMemo(() => (db && tenantId) ? collection(db, "tenants", tenantId, "products") : null, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: hubs, loading: hubsLoading } = useCollection<Hub>(hubsQuery);
-  const { data: products } = useCollection<Product>(productsQuery);
+    async function loadData() {
+      if (!tenantId) {
+        if (active) {
+          setHubs([]);
+          setProducts([]);
+          setHubsLoading(false);
+        }
+        return;
+      }
+
+      try {
+        if (active) setHubsLoading(true);
+        const [hubRows, productRows] = await Promise.all([listHubs(), listProducts()]);
+        if (!active) return;
+        setHubs(hubRows);
+        setProducts(productRows);
+      } catch (error) {
+        if (!active) return;
+        setHubs([]);
+        setProducts([]);
+        toast({ variant: "destructive", title: "Error al cargar sedes", description: (error as Error).message });
+      } finally {
+        if (active) setHubsLoading(false);
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, toast]);
 
   const filteredHubs = useMemo(() => {
     if (!hubs) return [];
@@ -173,18 +210,22 @@ export default function SedesPage() {
   };
 
   const handleSubmitHub = async () => {
-    if (!db || !tenantId || !formData.name) return;
+    if (!tenantId || !formData.name) return;
     setIsSubmitting(true);
     try {
       if (editingId) {
-        await updateDoc(doc(db, "tenants", tenantId, "hubs", editingId), { ...formData, updatedAt: serverTimestamp() });
+        const updated = await updateHub(editingId, formData);
+        setHubs((prev) => prev.map((hub) => (hub.id === editingId ? updated : hub)));
       } else {
-        await addDoc(collection(db, "tenants", tenantId, "hubs"), { ...formData, createdAt: serverTimestamp() });
+        const created = await createHub(formData);
+        setHubs((prev) => [...prev, created]);
       }
+      setFormData(INITIAL_FORM_DATA);
+      setEditingId(null);
       setIsDialogOpen(false);
       toast({ title: "Sede guardada" });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al guardar" });
+      toast({ variant: "destructive", title: "Error al guardar", description: (e as Error).message });
     } finally {
       setIsSubmitting(false);
     }

@@ -3,9 +3,8 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useDoc, useUser } from "@/firebase";
+import { useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, serverTimestamp, doc, setDoc, updateDoc } from "firebase/firestore";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { compressImage } from "@/lib/utils/image-compression";
 import { uploadBase64 } from "@/lib/storage-service";
-import { logSystemEvent } from "@/lib/audit-service";
+import { createClient, getClient, updateClient } from "@/lib/clients-api";
 
 interface ClientFormWizardProps {
   clientId?: string;
@@ -53,14 +52,14 @@ const PAYMENT_METHODS = [
 ];
 
 export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
-  const db = useFirestore();
   const { tenantId } = useTenant();
-  const { user } = useUser();
+  useUser();
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
+  const [loadingExisting, setLoadingExisting] = useState(Boolean(clientId));
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<Partial<Client>>({
@@ -78,35 +77,51 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
     defaultPaymentMethod: "Transferencia Bancaria"
   });
 
-  const clientRef = useMemo(() => 
-    (clientId && db && tenantId) ? doc(db, "tenants", tenantId, "clients", clientId) : null
-  , [db, tenantId, clientId]);
-
-  const { data: existingClient, loading: loadingExisting } = useDoc<Client>(clientRef);
-
   useEffect(() => {
-    if (existingClient) {
-      setFormData({
-        ...existingClient,
-        mainContact: {
-          name: existingClient.mainContact?.name || "",
-          email: existingClient.mainContact?.email || "",
-          phone: existingClient.mainContact?.phone || "",
-        },
-        address: {
-          ...existingClient.address,
-          street: existingClient.address?.street || "",
-          number: existingClient.address?.number || "",
-          city: existingClient.address?.city || "",
-          province: existingClient.address?.province || "",
-          zip: existingClient.address?.zip || "",
-          country: existingClient.address?.country || "Argentina",
-          lat: existingClient.address?.lat || -34.6037,
-          lng: existingClient.address?.lng || -58.3816
+    let active = true;
+
+    async function loadExisting() {
+      if (!clientId) {
+        if (active) setLoadingExisting(false);
+        return;
+      }
+
+      try {
+        const existingClient = await getClient(clientId);
+        if (!active) return;
+        setFormData({
+          ...existingClient,
+          mainContact: {
+            name: existingClient.mainContact?.name || "",
+            email: existingClient.mainContact?.email || "",
+            phone: existingClient.mainContact?.phone || "",
+          },
+          address: {
+            ...existingClient.address,
+            street: existingClient.address?.street || "",
+            number: existingClient.address?.number || "",
+            city: existingClient.address?.city || "",
+            province: existingClient.address?.province || "",
+            zip: existingClient.address?.zip || "",
+            country: existingClient.address?.country || "Argentina",
+            lat: existingClient.address?.lat || -34.6037,
+            lng: existingClient.address?.lng || -58.3816
+          }
+        });
+      } catch (error) {
+        if (active) {
+          toast({ variant: "destructive", title: "Error al cargar cliente", description: (error as Error).message });
         }
-      });
+      } finally {
+        if (active) setLoadingExisting(false);
+      }
     }
-  }, [existingClient]);
+
+    loadExisting();
+    return () => {
+      active = false;
+    };
+  }, [clientId, toast]);
 
   useEffect(() => {
     if (!clientId) {
@@ -154,10 +169,6 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
           const url = await uploadBase64(storagePath, compressed);
           setFormData(prev => ({ ...prev, facadePhotoUrl: url }));
           
-          if (db && user) {
-            await logSystemEvent(db, tenantId, user, 'document_upload', 'client', formData.cuit || 'unknown', { fileType: 'facade' });
-          }
-          
           toast({ title: "Foto de fachada guardada" });
         } catch (err) {
           toast({ variant: "destructive", title: "Error al subir foto" });
@@ -170,7 +181,7 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
   };
 
   const handleSubmit = async () => {
-    if (!db || !tenantId) return;
+    if (!tenantId) return;
     setIsSubmitting(true);
     try {
       const dataToSave = { ...formData };
@@ -182,20 +193,9 @@ export default function ClientFormWizard({ clientId }: ClientFormWizardProps) {
       }
 
       if (clientId) {
-        await updateDoc(doc(db, "tenants", tenantId, "clients", clientId), {
-          ...dataToSave,
-          updatedAt: serverTimestamp()
-        });
-        if (user) await logSystemEvent(db, tenantId, user, 'update', 'client', clientId, { name: formData.name });
+        await updateClient(clientId, dataToSave);
       } else {
-        const newRef = doc(collection(db, "tenants", tenantId, "clients"));
-        await setDoc(newRef, {
-          ...dataToSave,
-          id: newRef.id,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
-        if (user) await logSystemEvent(db, tenantId, user, 'create', 'client', newRef.id, { name: formData.name });
+        await createClient(dataToSave);
       }
       toast({ title: "Cliente Guardado" });
       router.push('/clientes');

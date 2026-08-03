@@ -1,9 +1,8 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { onAuthStateChanged, User } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { getIdTokenResult, onAuthStateChanged, User } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import { AppUser } from "./types";
 
 interface AuthContextType {
@@ -34,20 +33,30 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       
-      if (firebaseUser && db) {
-        // En un sistema multi-tenant serio, buscamos el mapeo uid -> tenantId
-        // Por ahora, asumiremos que existe una colección global de perfiles o buscamos en tenants
-        // Para el MVP, intentaremos encontrar al usuario en la base de datos
+      if (firebaseUser) {
         try {
-          // Nota: Aquí necesitaríamos una forma de saber a qué tenant pertenece el usuario
-          // Una opción es que el tenantId esté en los custom claims del token o en una colección 'users' raíz
-          // Para este diseño, buscaremos en una colección de 'profiles' raíz que apunte al tenant
-          const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
-          if (userDoc.exists()) {
-            setAppUser(userDoc.data() as AppUser);
-          }
+          const tokenResult = await getIdTokenResult(firebaseUser, true);
+          const claims = tokenResult.claims as Record<string, unknown>;
+
+          const tenantId = typeof claims.tenantId === "string" ? claims.tenantId : "";
+          const role = typeof claims.role === "string" ? claims.role : "viewer";
+          const status = typeof claims.status === "string" ? claims.status : "active";
+
+          const resolvedUser: AppUser = {
+            uid: firebaseUser.uid,
+            tenantId,
+            email: firebaseUser.email || "",
+            displayName: firebaseUser.displayName || undefined,
+            role: role as AppUser["role"],
+            status: status as AppUser["status"],
+            lastLogin: firebaseUser.metadata.lastSignInTime || undefined,
+            createdAt: firebaseUser.metadata.creationTime || new Date().toISOString(),
+          };
+
+          setAppUser(resolvedUser);
         } catch (e) {
           console.error("Error cargando perfil de usuario:", e);
+          setAppUser(null);
         }
       } else {
         setAppUser(null);
