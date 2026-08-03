@@ -10,6 +10,7 @@ out/
 # Producción / Build
 build/
 dist/
+*.tsbuildinfo
 
 # Entorno y Secretos
 .env

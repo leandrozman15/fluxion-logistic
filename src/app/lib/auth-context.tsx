@@ -1,9 +1,29 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { getIdTokenResult, onAuthStateChanged, User } from "firebase/auth";
+import { getIdTokenResult, onIdTokenChanged, User } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { AppUser } from "./types";
+
+const BACKEND_TOKEN_KEY = "backendBearerToken";
+
+async function refreshBackendSession(idToken: string) {
+  try {
+    const response = await fetch("/api/auth/backend-session", {
+      method: "POST",
+      headers: { authorization: `Bearer ${idToken}` },
+    });
+    const data = await response.json();
+    if (response.ok && data.token) {
+      sessionStorage.setItem(BACKEND_TOKEN_KEY, data.token);
+    } else {
+      console.error("No se pudo obtener la sesión del backend:", data.message);
+      sessionStorage.removeItem(BACKEND_TOKEN_KEY);
+    }
+  } catch (e) {
+    console.error("Error al conectar con el backend:", e);
+  }
+}
 
 interface AuthContextType {
   user: User | null;
@@ -30,12 +50,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribe = onIdTokenChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       
       if (firebaseUser) {
         try {
-          const tokenResult = await getIdTokenResult(firebaseUser, true);
+          const tokenResult = await getIdTokenResult(firebaseUser);
           const claims = tokenResult.claims as Record<string, unknown>;
 
           const tenantId = typeof claims.tenantId === "string" ? claims.tenantId : "";
@@ -54,12 +74,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           };
 
           setAppUser(resolvedUser);
+          await refreshBackendSession(tokenResult.token);
         } catch (e) {
           console.error("Error cargando perfil de usuario:", e);
           setAppUser(null);
         }
       } else {
         setAppUser(null);
+        sessionStorage.removeItem(BACKEND_TOKEN_KEY);
       }
       setLoading(false);
     });

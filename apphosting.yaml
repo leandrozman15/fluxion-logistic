@@ -5,3 +5,24 @@ runConfig:
   # Increase this value if you'd like to automatically spin up
   # more instances in response to increased traffic.
   maxInstances: 1
+
+env:
+  # Debe coincidir con el JWT_SECRET configurado en el backend de Render.
+  - variable: JWT_SECRET
+    secret: JWT_SECRET
+    availability:
+      - RUNTIME
+  # No es secreto (ya está público en el bundle del cliente), pero lo dejamos server-side.
+  - variable: FIREBASE_PROJECT_ID
+    value: studio-5171832922-39b6b
+    availability:
+      - RUNTIME
+  - variable: FIREBASE_CLIENT_EMAIL
+    secret: FIREBASE_CLIENT_EMAIL
+    availability:
+      - RUNTIME
+  - variable: FIREBASE_PRIVATE_KEY
+    secret: FIREBASE_PRIVATE_KEY
+    availability:
+      - RUNTIME
+
