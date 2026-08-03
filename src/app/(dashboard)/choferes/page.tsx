@@ -1,10 +1,8 @@
 'use client';
 
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, deleteDoc, doc, where } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -39,38 +37,65 @@ import { format, parseISO, differenceInDays, isBefore } from "date-fns";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { deleteDriver, listDrivers } from "@/lib/drivers-api";
+import { listTrucks } from "@/lib/trucks-api";
+import { listLoads } from "@/lib/loads-api";
 
 export default function ChoferesPage() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const router = useRouter();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [trucks, setTrucks] = useState<Truck[]>([]);
+  const [loads, setLoads] = useState<Load[]>([]);
+  const [loading, setLoading] = useState(true);
   
   // AlertDialog state
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteName, setDeleteName] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const driversQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "drivers"), orderBy("lastName"));
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const trucksQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return collection(db, "tenants", tenantId, "trucks");
-  }, [db, tenantId]);
+    async function loadData() {
+      if (!tenantId) {
+        if (active) {
+          setDrivers([]);
+          setTrucks([]);
+          setLoads([]);
+          setLoading(false);
+        }
+        return;
+      }
 
-  const loadsQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return collection(db, "tenants", tenantId, "loads");
-  }, [db, tenantId]);
+      try {
+        if (active) setLoading(true);
+        const [driverRows, truckRows, loadRows] = await Promise.all([listDrivers(), listTrucks(), listLoads()]);
+        if (active) {
+          setDrivers(driverRows);
+          setTrucks(truckRows);
+          setLoads(loadRows);
+        }
+      } catch (error) {
+        if (active) {
+          setDrivers([]);
+          setTrucks([]);
+          setLoads([]);
+          toast({ variant: "destructive", title: "Error al cargar personal", description: (error as Error).message });
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
 
-  const { data: drivers, loading } = useCollection<Driver>(driversQuery);
-  const { data: trucks } = useCollection<Truck>(trucksQuery);
-  const { data: loads } = useCollection<Load>(loadsQuery);
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, toast]);
 
   const filteredDrivers = useMemo(() => {
     if (!drivers) return [];
@@ -85,13 +110,14 @@ export default function ChoferesPage() {
   }, [drivers, searchTerm, statusFilter]);
 
   const confirmDelete = async () => {
-    if (!db || !tenantId || !deleteId) return;
+    if (!tenantId || !deleteId) return;
     setIsDeleting(true);
     try {
-      await deleteDoc(doc(db, "tenants", tenantId, "drivers", deleteId));
+      await deleteDriver(deleteId);
+      setDrivers((prev) => prev.filter((driver) => driver.id !== deleteId));
       toast({ title: "Registro eliminado", description: "El registro ha sido removido del sistema." });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al eliminar" });
+      toast({ variant: "destructive", title: "Error al eliminar", description: (e as Error).message });
     } finally {
       setIsDeleting(false);
       setDeleteId(null);

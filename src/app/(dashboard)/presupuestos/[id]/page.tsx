@@ -1,10 +1,10 @@
 'use client';
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useFirestore, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,7 @@ import { Quotation, QuotationStatus, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { generateQuotationPDF } from "@/lib/pdf-service";
+import { getQuotationById, updateQuotation } from "@/lib/quotations-api";
 
 const statusConfig: Record<QuotationStatus, { label: string, color: string }> = {
   draft: { label: 'Borrador', color: 'bg-slate-500' },
@@ -32,27 +33,60 @@ const statusConfig: Record<QuotationStatus, { label: string, color: string }> = 
 
 export default function QuotationDetailPage() {
   const { id } = useParams();
+  const quoteId = Array.isArray(id) ? id[0] : id;
   const router = useRouter();
   const db = useFirestore();
   const { tenantId } = useTenant();
   const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [quote, setQuote] = useState<Quotation | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
-  const quoteRef = useMemo(() => (db && tenantId && id) ? doc(db, "tenants", tenantId, "quotations", id as string) : null, [db, tenantId, id]);
-  const { data: quote, loading } = useDoc<Quotation>(quoteRef);
+  useEffect(() => {
+    let active = true;
+
+    async function loadQuote() {
+      if (!quoteId || !tenantId) {
+        if (active) {
+          setQuote(null);
+          setLoading(false);
+        }
+        return;
+      }
+
+      try {
+        if (active) setLoading(true);
+        const payload = await getQuotationById(quoteId);
+        if (active) setQuote(payload);
+      } catch (error) {
+        if (active) {
+          toast({ variant: 'destructive', title: 'Error al cargar presupuesto', description: (error as Error).message });
+          setQuote(null);
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadQuote();
+    return () => {
+      active = false;
+    };
+  }, [quoteId, tenantId, toast]);
 
   const tenantRef = useMemo(() => (db && tenantId) ? doc(db, "tenants", tenantId) : null, [db, tenantId]);
   const { data: tenant } = useDoc<Tenant>(tenantRef);
 
   const handleUpdateStatus = async (newStatus: QuotationStatus) => {
-    if (!quoteRef) return;
+    if (!quoteId) return;
     setIsUpdating(true);
     try {
-      await updateDoc(quoteRef, { status: newStatus, updatedAt: serverTimestamp() });
+      const updated = await updateQuotation(quoteId, { status: newStatus });
+      setQuote(updated);
       toast({ title: `Estado actualizado: ${newStatus.toUpperCase()}` });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al actualizar" });
+      toast({ variant: "destructive", title: "Error al actualizar", description: (e as Error).message });
     } finally {
       setIsUpdating(false);
     }

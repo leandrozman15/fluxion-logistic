@@ -1,10 +1,10 @@
 'use client';
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { collection, doc, orderBy, query, serverTimestamp, updateDoc } from "firebase/firestore";
-import { useCollection, useDoc, useFirestore } from "@/firebase";
+import { doc } from "firebase/firestore";
+import { useDoc, useFirestore } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -15,6 +15,7 @@ import { ArrowLeft, Archive, Calendar, Download, Eye, Loader2, RotateCcw, Search
 import { Quotation, QuotationStatus, Tenant } from "@/app/lib/types";
 import { generateQuotationPDF } from "@/lib/pdf-service";
 import { useToast } from "@/hooks/use-toast";
+import { listQuotations, updateQuotation } from "@/lib/quotations-api";
 
 const ARCHIVE_STATUSES: QuotationStatus[] = ['accepted', 'rejected', 'expired', 'ordered'];
 
@@ -40,15 +41,42 @@ export default function PresupuestosArchivoPage() {
   const { toast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [quotes, setQuotes] = useState<Quotation[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isDownloadingId, setIsDownloadingId] = useState<string | null>(null);
   const [isReopeningId, setIsReopeningId] = useState<string | null>(null);
 
-  const quotesQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, 'tenants', tenantId, 'quotations'), orderBy('createdAt', 'desc'));
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: quotes, loading } = useCollection<Quotation>(quotesQuery);
+    async function loadQuotes() {
+      if (!tenantId) {
+        if (active) {
+          setQuotes([]);
+          setLoading(false);
+        }
+        return;
+      }
+
+      try {
+        if (active) setLoading(true);
+        const result = await listQuotations({ page: 1, pageSize: 300 });
+        if (active) setQuotes(result.data);
+      } catch (error) {
+        if (active) {
+          toast({ variant: 'destructive', title: 'Error al cargar archivo', description: (error as Error).message });
+          setQuotes([]);
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadQuotes();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, toast]);
 
   const tenantRef = useMemo(() => (db && tenantId ? doc(db, 'tenants', tenantId) : null), [db, tenantId]);
   const { data: tenant } = useDoc<Tenant>(tenantRef);
@@ -81,18 +109,18 @@ export default function PresupuestosArchivoPage() {
   };
 
   const handleReopenQuote = async (quote: Quotation) => {
-    if (!db || !tenantId) return;
+    if (!tenantId) return;
 
     setIsReopeningId(quote.id);
     try {
-      await updateDoc(doc(db, 'tenants', tenantId, 'quotations', quote.id), {
+      const updated = await updateQuotation(quote.id, {
         status: 'draft',
-        updatedAt: serverTimestamp(),
       });
+      setQuotes((prev) => prev.map((row) => (row.id === quote.id ? updated : row)));
 
       toast({ title: 'Presupuesto reabierto', description: `${quote.number} volvió a Borrador.` });
-    } catch {
-      toast({ variant: 'destructive', title: 'Error al reabrir presupuesto' });
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Error al reabrir presupuesto', description: (error as Error).message });
     } finally {
       setIsReopeningId(null);
     }

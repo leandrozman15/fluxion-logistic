@@ -2,9 +2,9 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useCollection, useDoc } from "@/firebase";
+import { useFirestore, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, deleteDoc, doc } from "firebase/firestore";
+import { doc } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,7 @@ import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { generateQuotationPDF } from "@/lib/pdf-service";
+import { deleteQuotation, listQuotations } from "@/lib/quotations-api";
 
 export default function PresupuestosPage() {
   const db = useFirestore();
@@ -44,18 +45,45 @@ export default function PresupuestosPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
+  const [quotes, setQuotes] = useState<Quotation[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isDownloadingId, setIsDownloadingId] = useState<string | null>(null);
   
   // AlertDialog state
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const quotesQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "quotations"), orderBy("createdAt", "desc"));
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: quotes, loading } = useCollection<Quotation>(quotesQuery);
+    async function loadQuotes() {
+      if (!tenantId) {
+        if (active) {
+          setQuotes([]);
+          setLoading(false);
+        }
+        return;
+      }
+
+      try {
+        if (active) setLoading(true);
+        const result = await listQuotations({ page: 1, pageSize: 300 });
+        if (active) setQuotes(result.data);
+      } catch (error) {
+        if (active) {
+          toast({ variant: "destructive", title: "Error al cargar presupuestos", description: (error as Error).message });
+          setQuotes([]);
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadQuotes();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, toast]);
 
   const tenantRef = useMemo(() => (db && tenantId) ? doc(db, "tenants", tenantId) : null, [db, tenantId]);
   const { data: tenant } = useDoc<Tenant>(tenantRef);
@@ -81,13 +109,14 @@ export default function PresupuestosPage() {
   };
 
   const confirmDelete = async () => {
-    if (!db || !tenantId || !deleteId) return;
+    if (!tenantId || !deleteId) return;
     setIsDeleting(true);
     try {
-      await deleteDoc(doc(db, "tenants", tenantId, "quotations", deleteId));
+      await deleteQuotation(deleteId);
+      setQuotes((prev) => prev.filter((quote) => quote.id !== deleteId));
       toast({ title: "Presupuesto eliminado" });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al eliminar" });
+      toast({ variant: "destructive", title: "Error al eliminar", description: (e as Error).message });
     } finally {
       setIsDeleting(false);
       setDeleteId(null);

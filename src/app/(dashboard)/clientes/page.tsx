@@ -1,10 +1,8 @@
 'use client';
 
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, deleteDoc, doc } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -37,13 +35,15 @@ import { Client, Hub } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { calculateDistance, estimateFuelLiters } from "@/lib/utils/tracking-math";
 import Link from "next/link";
+import { deleteClient, listClients } from "@/lib/clients-api";
 
 export default function ClientesPage() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const router = useRouter();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   
   // AlertDialog state
@@ -51,24 +51,40 @@ export default function ClientesPage() {
   const [deleteName, setDeleteName] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const clientsQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "clients"), orderBy("name"));
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const hubsQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "hubs"));
-  }, [db, tenantId]);
+    async function loadData() {
+      if (!tenantId) {
+        if (active) {
+          setClients([]);
+          setLoading(false);
+        }
+        return;
+      }
 
-  const { data: clients, loading } = useCollection<Client>(clientsQuery);
-  const { data: hubs } = useCollection<Hub>(hubsQuery);
+      try {
+        if (active) setLoading(true);
+        const rows = await listClients();
+        if (active) setClients(rows);
+      } catch (error) {
+        if (active) {
+          setClients([]);
+          toast({ variant: "destructive", title: "Error al cargar clientes", description: (error as Error).message });
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, toast]);
 
   // Identificar la sede principal para los cálculos
-  const mainHub = useMemo(() => {
-    if (!hubs) return null;
-    return hubs.find(h => h.isMainBase) || hubs[0];
-  }, [hubs]);
+  const mainHub: Hub | null = null;
 
   const filteredClients = useMemo(() => {
     if (!clients) return [];
@@ -80,13 +96,14 @@ export default function ClientesPage() {
   }, [clients, searchTerm]);
 
   const confirmDelete = async () => {
-    if (!db || !tenantId || !deleteId) return;
+    if (!tenantId || !deleteId) return;
     setIsDeleting(true);
     try {
-      await deleteDoc(doc(db, "tenants", tenantId, "clients", deleteId));
+      await deleteClient(deleteId);
+      setClients((prev) => prev.filter((client) => client.id !== deleteId));
       toast({ title: "Cliente eliminado" });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al eliminar" });
+      toast({ variant: "destructive", title: "Error al eliminar", description: (e as Error).message });
     } finally {
       setIsDeleting(false);
       setDeleteId(null);
@@ -151,10 +168,6 @@ export default function ClientesPage() {
                     // Cálculo de logística desde la base principal
                     let distance = 0;
                     let fuel = 0;
-                    if (mainHub && client.address?.lat && client.address?.lng) {
-                      distance = calculateDistance(mainHub.lat, mainHub.lng, client.address.lat, client.address.lng);
-                      fuel = estimateFuelLiters(distance);
-                    }
 
                     return (
                       <TableRow key={client.id} className="hover:bg-slate-50 transition-colors">

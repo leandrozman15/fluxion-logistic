@@ -5,7 +5,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useFirestore, useCollection, useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, addDoc, serverTimestamp, doc, setDoc, getDocs, limit } from "firebase/firestore";
+import { collection, query, orderBy } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { format, addDays } from "date-fns";
 import { logSystemEvent } from "@/lib/audit-service";
 import { cn } from "@/lib/utils";
+import { createQuotation, listQuotations } from "@/lib/quotations-api";
 
 const CURRENCIES = [
   { id: 'ARS', label: 'Pesos Argentinos ($)', symbol: '$' },
@@ -107,15 +108,18 @@ export default function NewQuotationPage() {
 
   useEffect(() => {
     async function fetchNextNumber() {
-      if (!db || !tenantId) return;
-      const q = query(collection(db, "tenants", tenantId, "quotations"), orderBy("number", "desc"), limit(1));
-      const snap = await getDocs(q);
+         if (!tenantId) return;
       let next = 1;
-      if (!snap.empty) {
-        const lastNum = snap.docs[0].data().number;
+         try {
+            const result = await listQuotations({ page: 1, pageSize: 1 });
+            const lastNum = result.data[0]?.number;
+            if (lastNum) {
         const lastSeqString = lastNum.split("-").pop();
         const lastSeq = parseInt(lastSeqString!);
         if (!isNaN(lastSeq)) next = lastSeq + 1;
+            }
+         } catch {
+            next = 1;
       }
       const num = `PRE-${new Date().getFullYear()}-${String(next).padStart(4, '0')}`;
       setQuoteNumber(num);
@@ -193,27 +197,26 @@ export default function NewQuotationPage() {
   };
 
   const handleSave = async () => {
-    if (!db || !tenantId || !formData.clientId || (formData.items || []).length === 0) {
+      if (!tenantId || !formData.clientId || (formData.items || []).length === 0) {
       toast({ variant: "destructive", title: "Faltan datos", description: "Seleccione un cliente y al menos un producto." });
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const newRef = doc(collection(db, "tenants", tenantId, "quotations"));
-      await setDoc(newRef, {
-        ...formData,
-        id: newRef.id,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
+         const payload = await createQuotation({
+            ...formData,
+            items: formData.items,
+         });
 
-      if (user) await logSystemEvent(db, tenantId, user, 'create', 'quotation', newRef.id, { number: formData.number });
+         if (db && user) {
+            await logSystemEvent(db, tenantId, user, 'create', 'quotation', payload.id, { number: formData.number });
+         }
       
       toast({ title: "Presupuesto Generado", description: `La cotización ${formData.number} ha sido guardada.` });
       router.push('/presupuestos');
-    } catch (e) {
-      toast({ variant: "destructive", title: "Error al guardar" });
+      } catch (e) {
+         toast({ variant: "destructive", title: "Error al guardar", description: (e as Error).message });
     } finally {
       setIsSubmitting(false);
     }

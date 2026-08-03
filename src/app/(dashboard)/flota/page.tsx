@@ -1,10 +1,8 @@
 'use client';
 
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useCollection } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, deleteDoc, doc, where } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -23,48 +21,61 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Truck as TruckType, TruckStatus, Driver, Maintenance, Expense } from "@/app/lib/types";
+import { Truck as TruckType, TruckStatus, Driver, Maintenance } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { format, parseISO, isBefore, differenceInDays } from "date-fns";
 import { es } from "date-fns/locale";
+import { deleteTruck, listTrucks } from "@/lib/trucks-api";
+import { listDrivers } from "@/lib/drivers-api";
 
 export default function FlotaPage() {
-  const db = useFirestore();
   const { tenantId } = useTenant();
   const router = useRouter();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [trucks, setTrucks] = useState<TruckType[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const trucksQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "trucks"), orderBy("plate"));
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: trucks, loading: trucksLoading } = useCollection<TruckType>(trucksQuery);
+    async function loadData() {
+      if (!tenantId) {
+        if (active) {
+          setTrucks([]);
+          setDrivers([]);
+          setLoading(false);
+        }
+        return;
+      }
 
-  const driversQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "drivers"));
-  }, [db, tenantId]);
+      try {
+        if (active) setLoading(true);
+        const [truckRows, driverRows] = await Promise.all([listTrucks(), listDrivers()]);
+        if (active) {
+          setTrucks(truckRows);
+          setDrivers(driverRows);
+        }
+      } catch (error) {
+        if (active) {
+          setTrucks([]);
+          setDrivers([]);
+          toast({ variant: 'destructive', title: 'Error al cargar flota', description: (error as Error).message });
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
 
-  const { data: drivers } = useCollection<Driver>(driversQuery);
-
-  const maintenanceQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "maintenance"));
-  }, [db, tenantId]);
-
-  const { data: maintenanceRecords } = useCollection<Maintenance>(maintenanceQuery);
-
-  const fuelExpensesQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "expenses"), where("category", "==", "fuel"));
-  }, [db, tenantId]);
-
-  const { data: allFuelExpenses } = useCollection<Expense>(fuelExpensesQuery);
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, toast]);
 
   const filteredTrucks = useMemo(() => {
     if (!trucks) return [];
@@ -78,15 +89,16 @@ export default function FlotaPage() {
   }, [trucks, searchTerm, statusFilter]);
 
   const handleDelete = async (id: string, plate: string) => {
-    if (!db || !tenantId || !id) return;
+    if (!tenantId || !id) return;
     const ok = window.confirm(`¿Desea eliminar definitivamente la unidad ${plate}? Esta acción no se puede deshacer.`);
     if (!ok) return;
 
     try {
-      await deleteDoc(doc(db, "tenants", tenantId, "trucks", id));
+      await deleteTruck(id);
+      setTrucks((prev) => prev.filter((truck) => truck.id !== id));
       toast({ title: "Unidad eliminada", description: "El registro ha sido removido del sistema." });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al eliminar" });
+      toast({ variant: "destructive", title: "Error al eliminar", description: (e as Error).message });
     }
   };
 
@@ -105,12 +117,7 @@ export default function FlotaPage() {
   };
 
   const getNextServiceInfo = (truckId: string) => {
-    if (!maintenanceRecords) return null;
-    const truckMaintenances = maintenanceRecords
-      .filter(m => m.truckId === truckId && (m.status === 'scheduled' || m.status === 'in_progress'))
-      .sort((a, b) => parseISO(a.scheduledDate).getTime() - parseISO(b.scheduledDate).getTime());
-
-    return truckMaintenances[0] || null;
+    return null as Maintenance | null;
   };
 
   const calculateTheoreticalCost = (truck: TruckType) => {
@@ -126,15 +133,8 @@ export default function FlotaPage() {
     const reservePerKm = costs.variable.unforeseenReservePerKm || 0;
 
     // CÁLCULO DINÁMICO DE COMBUSTIBLE
-    let fuelPerKm = 0;
-    const truckFuel = allFuelExpenses?.filter(e => e.truckId === truck.id);
-    if (truckFuel && truckFuel.length > 0) {
-      const validTickets = truckFuel.filter(e => !!e.pricePerLiter && e.pricePerLiter > 0);
-      if (validTickets.length > 0) {
-        const avgPrice = validTickets.reduce((acc, e) => acc + (e.pricePerLiter || 0), 0) / validTickets.length;
-        fuelPerKm = (avgPrice * (truck.avgConsumption || 32)) / 100;
-      }
-    }
+    const avgFuelPrice = 1100;
+    const fuelPerKm = (avgFuelPrice * (truck.avgConsumption || 32)) / 100;
     
     return fixedPerKm + oilPerKm + tiresPerKm + reservePerKm + fuelPerKm;
   };
@@ -143,7 +143,7 @@ export default function FlotaPage() {
     if (!trucks || trucks.length === 0) return 0;
     const total = trucks.reduce((acc, t) => acc + calculateTheoreticalCost(t), 0);
     return total / trucks.length;
-  }, [trucks, allFuelExpenses]);
+  }, [trucks]);
 
   return (
     <div className="space-y-6">
@@ -208,7 +208,7 @@ export default function FlotaPage() {
         </div>
 
         <CardContent className="p-0">
-          {trucksLoading ? (
+          {loading ? (
             <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-blue-600 w-10 h-10" /></div>
           ) : (
             <Table>

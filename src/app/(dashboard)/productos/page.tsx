@@ -2,9 +2,9 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useFirestore, useCollection, useDoc } from "@/firebase";
+import { useFirestore, useDoc } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
-import { collection, query, orderBy, deleteDoc, doc } from "firebase/firestore";
+import { doc } from "firebase/firestore";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,7 @@ import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { generateProductPDF } from "@/lib/pdf-service";
+import { deleteProduct, listProducts } from "@/lib/products-api";
 
 export default function ProductosPage() {
   const db = useFirestore();
@@ -45,6 +46,8 @@ export default function ProductosPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isDownloadingId, setIsDownloadingId] = useState<string | null>(null);
   
   // AlertDialog state
@@ -52,12 +55,37 @@ export default function ProductosPage() {
   const [deleteSku, setDeleteSku] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const productsQuery = useMemo(() => {
-    if (!db || !tenantId) return null;
-    return query(collection(db, "tenants", tenantId, "products"), orderBy("name"));
-  }, [db, tenantId]);
+  useEffect(() => {
+    let active = true;
 
-  const { data: products, loading } = useCollection<Product>(productsQuery);
+    async function loadData() {
+      if (!tenantId) {
+        if (active) {
+          setProducts([]);
+          setLoading(false);
+        }
+        return;
+      }
+
+      try {
+        if (active) setLoading(true);
+        const rows = await listProducts();
+        if (active) setProducts(rows);
+      } catch (error) {
+        if (active) {
+          setProducts([]);
+          toast({ variant: 'destructive', title: 'Error al cargar productos', description: (error as Error).message });
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, [tenantId, toast]);
 
   const tenantRef = useMemo(() => (db && tenantId) ? doc(db, "tenants", tenantId) : null, [db, tenantId]);
   const { data: tenant } = useDoc<Tenant>(tenantRef);
@@ -88,13 +116,14 @@ export default function ProductosPage() {
   };
 
   const confirmDelete = async () => {
-    if (!db || !tenantId || !deleteId) return;
+    if (!tenantId || !deleteId) return;
     setIsDeleting(true);
     try {
-      await deleteDoc(doc(db, "tenants", tenantId, "products", deleteId));
+      await deleteProduct(deleteId);
+      setProducts((prev) => prev.filter((product) => product.id !== deleteId));
       toast({ title: "Producto eliminado" });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al eliminar" });
+      toast({ variant: "destructive", title: "Error al eliminar", description: (e as Error).message });
     } finally {
       setIsDeleting(false);
       setDeleteId(null);
