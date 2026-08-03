@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { buildListMeta, ListOptions } from '../utils/listQuery.js';
 
 export type CreateDriverInput = {
+  tenantId: string;
   name: string;
   email: string;
   phone?: string;
@@ -24,8 +25,9 @@ export type CreateDriverInput = {
 
 export type UpdateDriverInput = Partial<CreateDriverInput>;
 
-export async function listDrivers(options: ListOptions) {
+export async function listDrivers(tenantId: string, options: ListOptions) {
   const where: Prisma.DriverWhereInput = {
+    tenantId,
     ...(options.status ? { status: options.status as Prisma.EnumDriverStatusFilter['equals'] } : {}),
     ...(options.search
       ? {
@@ -58,6 +60,7 @@ export async function listDrivers(options: ListOptions) {
 export async function createDriver(payload: CreateDriverInput) {
   return prisma.driver.create({
     data: {
+      tenantId: payload.tenantId,
       name: payload.name,
       email: payload.email,
       phone: payload.phone,
@@ -70,9 +73,9 @@ export async function createDriver(payload: CreateDriverInput) {
   });
 }
 
-export async function updateDriver(id: string, payload: UpdateDriverInput) {
+export async function updateDriver(tenantId: string, id: string, payload: UpdateDriverInput) {
   const result = await prisma.driver.updateMany({
-    where: { id },
+    where: { id, tenantId },
     data: {
       name: payload.name,
       email: payload.email,
@@ -89,10 +92,10 @@ export async function updateDriver(id: string, payload: UpdateDriverInput) {
     return null;
   }
 
-  return prisma.driver.findUnique({ where: { id } });
+  return prisma.driver.findFirst({ where: { id, tenantId } });
 }
 
-export async function deleteDriver(id: string) {
-  const result = await prisma.driver.deleteMany({ where: { id } });
+export async function deleteDriver(tenantId: string, id: string) {
+  const result = await prisma.driver.deleteMany({ where: { id, tenantId } });
   return result.count > 0;
 }

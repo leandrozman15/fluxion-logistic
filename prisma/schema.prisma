@@ -9,6 +9,8 @@ datasource db {
 
 model Customer {
   id        String     @id @default(cuid())
+  tenantId  String?
+  tenant    Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name      String
   email     String     @unique
   phone     String?
@@ -17,10 +19,14 @@ model Customer {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   shipments Shipment[]
+
+  @@index([tenantId, createdAt])
 }
 
 model Driver {
   id                       String       @id @default(cuid())
+  tenantId                 String?
+  tenant                   Tenant?      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name                     String
   email                    String       @unique
   phone                    String?
@@ -60,6 +66,8 @@ model Driver {
   assignedTrucks           Truck[]      @relation("TruckAssignedDriver")
   loads                    Load[]       @relation("LoadAssignedDriver")
   Expense                  Expense[]
+
+  @@index([tenantId, status])
 }
 
 model Vehicle {
@@ -187,6 +195,8 @@ model Tenant {
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
   users              AppUser[]
+  drivers            Driver[]
+  customers          Customer[]
   clients            Client[]
   trucks             Truck[]
   hubs               Hub[]

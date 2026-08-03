@@ -7,7 +7,7 @@ import {
   getQuotationsByStatus,
   getRevenueTrend,
 } from '../services/analyticsService.js';
-import { requireTenantId } from '../utils/tenant.js';
+import { requireTenantIdFromAuth } from '../utils/tenant.js';
 
 function parseMonths(value: unknown): number {
   if (typeof value !== 'string') {
@@ -48,12 +48,12 @@ function parseDateRange(query: Request['query']): DateRangeFilter {
 
 export async function getChartsOverview(req: Request, res: Response) {
   try {
-    const tenantId = requireTenantId(req.query.tenantId);
+    const tenantId = requireTenantIdFromAuth(req);
     const dateRange = parseDateRange(req.query);
     const data = await getOverviewMetrics(tenantId, dateRange);
     res.json({ success: true, data });
   } catch (error) {
-    const badRequestErrors = ['tenantId is required', 'Invalid date format. Use ISO date in from/to query params', 'from must be before or equal to to'];
+    const badRequestErrors = ['tenant context is required', 'Invalid date format. Use ISO date in from/to query params', 'from must be before or equal to to'];
     const status = badRequestErrors.includes((error as Error).message) ? 400 : 500;
     res.status(status).json({ success: false, message: (error as Error).message });
   }
@@ -61,12 +61,12 @@ export async function getChartsOverview(req: Request, res: Response) {
 
 export async function getLoadsStatusChart(req: Request, res: Response) {
   try {
-    const tenantId = requireTenantId(req.query.tenantId);
+    const tenantId = requireTenantIdFromAuth(req);
     const dateRange = parseDateRange(req.query);
     const data = await getLoadsByStatus(tenantId, dateRange);
     res.json({ success: true, data });
   } catch (error) {
-    const badRequestErrors = ['tenantId is required', 'Invalid date format. Use ISO date in from/to query params', 'from must be before or equal to to'];
+    const badRequestErrors = ['tenant context is required', 'Invalid date format. Use ISO date in from/to query params', 'from must be before or equal to to'];
     const status = badRequestErrors.includes((error as Error).message) ? 400 : 500;
     res.status(status).json({ success: false, message: (error as Error).message });
   }
@@ -74,12 +74,12 @@ export async function getLoadsStatusChart(req: Request, res: Response) {
 
 export async function getQuotationsStatusChart(req: Request, res: Response) {
   try {
-    const tenantId = requireTenantId(req.query.tenantId);
+    const tenantId = requireTenantIdFromAuth(req);
     const dateRange = parseDateRange(req.query);
     const data = await getQuotationsByStatus(tenantId, dateRange);
     res.json({ success: true, data });
   } catch (error) {
-    const badRequestErrors = ['tenantId is required', 'Invalid date format. Use ISO date in from/to query params', 'from must be before or equal to to'];
+    const badRequestErrors = ['tenant context is required', 'Invalid date format. Use ISO date in from/to query params', 'from must be before or equal to to'];
     const status = badRequestErrors.includes((error as Error).message) ? 400 : 500;
     res.status(status).json({ success: false, message: (error as Error).message });
   }
@@ -87,13 +87,13 @@ export async function getQuotationsStatusChart(req: Request, res: Response) {
 
 export async function getRevenueTrendChart(req: Request, res: Response) {
   try {
-    const tenantId = requireTenantId(req.query.tenantId);
+    const tenantId = requireTenantIdFromAuth(req);
     const months = parseMonths(req.query.months);
     const dateRange = parseDateRange(req.query);
     const data = await getRevenueTrend(tenantId, months, dateRange);
     res.json({ success: true, data, months: Math.min(Math.max(months, 1), 24) });
   } catch (error) {
-    const badRequestErrors = ['tenantId is required', 'Invalid date format. Use ISO date in from/to query params', 'from must be before or equal to to'];
+    const badRequestErrors = ['tenant context is required', 'Invalid date format. Use ISO date in from/to query params', 'from must be before or equal to to'];
     const status = badRequestErrors.includes((error as Error).message) ? 400 : 500;
     res.status(status).json({ success: false, message: (error as Error).message });
   }
@@ -101,12 +101,12 @@ export async function getRevenueTrendChart(req: Request, res: Response) {
 
 export async function getExpensesCategoryChart(req: Request, res: Response) {
   try {
-    const tenantId = requireTenantId(req.query.tenantId);
+    const tenantId = requireTenantIdFromAuth(req);
     const dateRange = parseDateRange(req.query);
     const data = await getExpensesByCategory(tenantId, dateRange);
     res.json({ success: true, data });
   } catch (error) {
-    const badRequestErrors = ['tenantId is required', 'Invalid date format. Use ISO date in from/to query params', 'from must be before or equal to to'];
+    const badRequestErrors = ['tenant context is required', 'Invalid date format. Use ISO date in from/to query params', 'from must be before or equal to to'];
     const status = badRequestErrors.includes((error as Error).message) ? 400 : 500;
     res.status(status).json({ success: false, message: (error as Error).message });
   }

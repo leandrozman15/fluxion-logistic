@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import healthRoutes from './routes/health.js';
 import customersRoutes from './routes/customers.js';
 import tenantsRoutes from './routes/tenants.js';
@@ -13,14 +15,57 @@ import productsRoutes from './routes/products.js';
 import quotationsRoutes from './routes/quotations.js';
 import analyticsRoutes from './routes/analytics.js';
 import { prisma } from './lib/prisma.js';
+import { requireApiToken, requireTenantAdmin } from './middlewares/security.js';
 
 dotenv.config();
 
 const app = express();
 const port = Number(process.env.PORT) || 3001;
 
-app.use(cors());
-app.use(express.json());
+const allowedOrigins = (process.env.CORS_ORIGINS ?? '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter((origin) => origin.length > 0);
+
+const corsOptions: cors.CorsOptions = {
+  origin(origin, callback) {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    if (allowedOrigins.length === 0) {
+      if (process.env.NODE_ENV !== 'production') {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error('CORS blocked: CORS_ORIGINS is not configured for production'));
+      return;
+    }
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error('CORS blocked: origin not allowed'));
+  },
+};
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many requests, try again later' },
+});
+
+app.disable('x-powered-by');
+app.use(helmet());
+app.use(cors(corsOptions));
+app.use(express.json({ limit: '1mb' }));
+app.use('/api', apiLimiter, requireApiToken);
 
 app.get('/health', async (_req, res) => {
   try {
@@ -33,7 +78,7 @@ app.get('/health', async (_req, res) => {
 
 app.use('/api/health', healthRoutes);
 app.use('/api/customers', customersRoutes);
-app.use('/api/tenants', tenantsRoutes);
+app.use('/api/tenants', requireTenantAdmin, tenantsRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/clients', clientsRoutes);
 app.use('/api/drivers', driversRoutes);

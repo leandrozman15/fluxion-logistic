@@ -80,7 +80,7 @@ export async function getOverviewMetrics(tenantId: string, range?: DateRangeFilt
   const [clients, drivers, trucks, products, loads, quotations, users, deliveredLoads, activeLoads, loadRevenue, quotationRevenue] =
     await Promise.all([
       prisma.client.count({ where: { tenantId } }),
-      prisma.driver.count(),
+      prisma.driver.count({ where: { tenantId } }),
       prisma.truck.count({ where: { tenantId } }),
       prisma.product.count({ where: { tenantId } }),
       prisma.load.count({ where: { tenantId, ...(createdAt ? { createdAt } : {}) } }),
