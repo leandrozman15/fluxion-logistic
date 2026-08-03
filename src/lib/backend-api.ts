@@ -12,6 +12,8 @@ type ApiResponse<T> = {
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_BACKEND_API_URL?.trim() || 'https://fluxion-logistic-backend.onrender.com';
 
+const BROWSER_PROXY_BASE = '/api/backend-proxy';
+
 const API_BEARER_TOKEN = process.env.NEXT_PUBLIC_BACKEND_BEARER_TOKEN?.trim() || '';
 
 function getRuntimeToken() {
@@ -50,7 +52,10 @@ export async function backendRequest<T>(path: string, init?: RequestInit): Promi
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const baseUrl = typeof window === 'undefined' ? API_BASE_URL : BROWSER_PROXY_BASE;
+
+  const response = await fetch(`${baseUrl}${normalizedPath}`, {
     ...init,
     headers,
   });
