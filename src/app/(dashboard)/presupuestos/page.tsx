@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { 
   FileText, Plus, Search, MoreVertical, Trash2, Edit2, 
-  Loader2, DollarSign, Calendar, Clock, Eye, Download, Printer
+  Loader2, DollarSign, Calendar, Clock, Eye, Download, Printer, Archive
 } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -113,12 +113,19 @@ export default function PresupuestosPage() {
           <h1 className="text-3xl font-black text-slate-900 italic tracking-tighter uppercase leading-none">Presupuestos de Venta</h1>
           <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Gestión de cotizaciones comerciales y propuestas de flete.</p>
         </div>
-        
-        <Button className="bg-emerald-600 hover:bg-emerald-700 shadow-xl shadow-emerald-100 font-black italic uppercase text-[11px] h-12 px-6 rounded-2xl" asChild>
-          <Link href="/presupuestos/nuevo">
-            <Plus className="w-5 h-5 mr-2" /> Nueva Cotización
-          </Link>
-        </Button>
+
+        <div className="flex items-center gap-2">
+          <Button variant="outline" className="h-12 px-5 rounded-2xl font-black uppercase text-[11px] border-slate-200 bg-white" asChild>
+            <Link href="/presupuestos/archivo">
+              <Archive className="w-4 h-4 mr-2" /> Archivo
+            </Link>
+          </Button>
+          <Button className="bg-emerald-600 hover:bg-emerald-700 shadow-xl shadow-emerald-100 font-black italic uppercase text-[11px] h-12 px-6 rounded-2xl" asChild>
+            <Link href="/presupuestos/nuevo">
+              <Plus className="w-5 h-5 mr-2" /> Nueva Cotización
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-white">
