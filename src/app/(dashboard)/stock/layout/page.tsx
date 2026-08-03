@@ -40,7 +40,7 @@ import {
   Settings2,
   Trash2
 } from "lucide-react";
-import { Hub, Product, WarehouseSlot } from "@/app/lib/types";
+import { Hub, Product, WarehouseSlot, WarehouseSlotMaterial } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -128,7 +128,23 @@ function LayoutContent() {
     productSku: "",
     productName: "",
     capacityKg: 1000,
-    currentWeightKg: 0
+    currentWeightKg: 0,
+    quantityUnits: 0,
+    lotNumber: "",
+    entryDate: "",
+    expirationDate: "",
+    optionalExitDate: "",
+    notes: "",
+  });
+  const [slotMaterials, setSlotMaterials] = useState<WarehouseSlotMaterial[]>([]);
+  const [materialDraft, setMaterialDraft] = useState<Partial<WarehouseSlotMaterial>>({
+    productId: "",
+    quantityUnits: 0,
+    lotNumber: "",
+    entryDate: "",
+    expirationDate: "",
+    optionalExitDate: "",
+    notes: "",
   });
 
   const [configForm, setConfigForm] = useState({
@@ -175,12 +191,24 @@ function LayoutContent() {
 
   const activeHub = useMemo(() => hubs?.find(h => h.id === selectedHubId), [hubs, selectedHubId]);
 
+  const selectedProduct = useMemo(() => {
+    if (!slotForm.productId) return null;
+    return products.find((product) => product.id === slotForm.productId) || null;
+  }, [products, slotForm.productId]);
+
+  const selectedDraftProduct = useMemo(() => {
+    if (!materialDraft.productId) return null;
+    return products.find((product) => product.id === materialDraft.productId) || null;
+  }, [products, materialDraft.productId]);
+
   const assignedSlots = useMemo(() => {
     const map: Record<string, WarehouseSlot> = { ...slotOverrides };
     products.forEach((product) => {
       (product.warehouses || []).forEach((warehouse) => {
         if (warehouse.hubId !== selectedHubId || !warehouse.location) return;
+        const persisted = map[warehouse.location];
         map[warehouse.location] = {
+          ...(persisted || {}),
           id: warehouse.location,
           coordinate: warehouse.location,
           productId: product.id,
@@ -287,12 +315,129 @@ function LayoutContent() {
   const handleOpenSlot = (coord: string) => {
     setSelectedSlotCoord(coord);
     const existingData = assignedSlots[coord] || { status: 'empty' };
+    const currentProduct = existingData.productId ? products?.find((p) => p.id === existingData.productId) : null;
+
+    const existingMaterials = Array.isArray(existingData.materials) && existingData.materials.length > 0
+      ? existingData.materials
+      : currentProduct
+        ? [{
+            productId: currentProduct.id,
+            productSku: currentProduct.sku,
+            productName: currentProduct.name,
+            quantityUnits: existingData.quantityUnits ?? currentProduct.stockQuantity ?? 0,
+            lotNumber: existingData.lotNumber,
+            entryDate: existingData.entryDate,
+            expirationDate: existingData.expirationDate,
+            optionalExitDate: existingData.optionalExitDate,
+            notes: existingData.notes,
+          }]
+        : [];
+
+    setSlotMaterials(existingMaterials);
+    setMaterialDraft({
+      productId: "",
+      quantityUnits: 0,
+      lotNumber: "",
+      entryDate: existingData.entryDate || "",
+      expirationDate: "",
+      optionalExitDate: "",
+      notes: "",
+    });
+
     setSlotForm({
       coordinate: coord,
       ...existingData,
-      currentWeightKg: existingData.productId ? products?.find(p => p.id === existingData.productId)?.unitWeightKg : 0,
-      capacityKg: 1000
+      currentWeightKg: currentProduct?.unitWeightKg || 0,
+      capacityKg: existingData.capacityKg || 1000,
+      quantityUnits: existingData.quantityUnits ?? currentProduct?.stockQuantity ?? 0,
+      lotNumber: existingData.lotNumber || "",
+      entryDate: existingData.entryDate || "",
+      expirationDate: existingData.expirationDate || "",
+      optionalExitDate: existingData.optionalExitDate || "",
+      notes: existingData.notes || "",
     });
+  };
+
+  const handleAddMaterial = () => {
+    if (!materialDraft.productId) return;
+    const product = products.find((row) => row.id === materialDraft.productId);
+    if (!product) return;
+
+    const quantity = Number(materialDraft.quantityUnits || 0);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      toast({ variant: "destructive", title: "Cantidad inválida", description: "Ingresá una cantidad mayor a cero." });
+      return;
+    }
+
+    const nextMaterial: WarehouseSlotMaterial = {
+      productId: product.id,
+      productSku: product.sku,
+      productName: product.name,
+      quantityUnits: quantity,
+      lotNumber: (materialDraft.lotNumber || "").trim() || undefined,
+      entryDate: materialDraft.entryDate || undefined,
+      expirationDate: materialDraft.expirationDate || undefined,
+      optionalExitDate: materialDraft.optionalExitDate || undefined,
+      notes: (materialDraft.notes || "").trim() || undefined,
+    };
+
+    setSlotMaterials((prev) => {
+      const existingIndex = prev.findIndex((item) => item.productId === nextMaterial.productId && (item.lotNumber || "") === (nextMaterial.lotNumber || ""));
+      if (existingIndex === -1) return [...prev, nextMaterial];
+
+      const clone = [...prev];
+      clone[existingIndex] = {
+        ...clone[existingIndex],
+        quantityUnits: clone[existingIndex].quantityUnits + nextMaterial.quantityUnits,
+        entryDate: nextMaterial.entryDate || clone[existingIndex].entryDate,
+        expirationDate: nextMaterial.expirationDate || clone[existingIndex].expirationDate,
+        optionalExitDate: nextMaterial.optionalExitDate || clone[existingIndex].optionalExitDate,
+        notes: nextMaterial.notes || clone[existingIndex].notes,
+      };
+      return clone;
+    });
+
+    setMaterialDraft({
+      productId: "",
+      quantityUnits: 0,
+      lotNumber: "",
+      entryDate: materialDraft.entryDate || "",
+      expirationDate: "",
+      optionalExitDate: "",
+      notes: "",
+    });
+  };
+
+  const handleRemoveMaterial = (index: number) => {
+    setSlotMaterials((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const updateProductLocation = async (productId: string, location: string | undefined) => {
+    const product = products.find((row) => row.id === productId);
+    if (!product || !selectedHubId || !activeHub) return;
+
+    const existingWarehouseIdx = (product.warehouses || []).findIndex((entry) => entry.hubId === selectedHubId);
+    const nextWarehouses = [...(product.warehouses || [])];
+
+    if (existingWarehouseIdx >= 0) {
+      nextWarehouses[existingWarehouseIdx] = {
+        ...nextWarehouses[existingWarehouseIdx],
+        hubName: activeHub.name,
+        location,
+      };
+    } else if (location) {
+      nextWarehouses.push({
+        hubId: selectedHubId,
+        hubName: activeHub.name,
+        location,
+        stockQuantity: product.stockQuantity || 0,
+        minStock: product.minStockAlert || 0,
+        maxStock: product.maxStockAlert || 0,
+      });
+    }
+
+    const updated = await updateProduct(product.id, { warehouses: nextWarehouses });
+    setProducts((prev) => prev.map((row) => (row.id === product.id ? updated : row)));
   };
 
   const handleSaveSlot = async () => {
@@ -302,57 +447,79 @@ function LayoutContent() {
       const nextOverrides = { ...slotOverrides };
       const currentOccupant = assignedSlots[selectedSlotCoord];
 
-      if (slotForm.status === 'occupied' && slotForm.productId) {
-        const selectedProduct = products.find((p) => p.id === slotForm.productId);
-        if (!selectedProduct) throw new Error('Producto no encontrado');
+      if (slotForm.status === 'occupied') {
+        let materialsToSave = [...slotMaterials];
 
-        if (currentOccupant?.productId && currentOccupant.productId !== selectedProduct.id) {
-          const occupyingProduct = products.find((p) => p.id === currentOccupant.productId);
-          if (occupyingProduct) {
-            const occupyingWarehouses = (occupyingProduct.warehouses || []).map((entry) =>
-              entry.hubId === selectedHubId && entry.location === selectedSlotCoord
-                ? { ...entry, location: undefined }
-                : entry
-            );
-            const updatedOccupying = await updateProduct(occupyingProduct.id, { warehouses: occupyingWarehouses });
-            setProducts((prev) => prev.map((row) => (row.id === occupyingProduct.id ? updatedOccupying : row)));
+        if (materialsToSave.length === 0 && slotForm.productId) {
+          const fallbackProduct = products.find((p) => p.id === slotForm.productId);
+          if (fallbackProduct) {
+            materialsToSave = [{
+              productId: fallbackProduct.id,
+              productSku: fallbackProduct.sku,
+              productName: fallbackProduct.name,
+              quantityUnits: Number(slotForm.quantityUnits || 0),
+              lotNumber: (slotForm.lotNumber || "").trim() || undefined,
+              entryDate: slotForm.entryDate || undefined,
+              expirationDate: slotForm.expirationDate || undefined,
+              optionalExitDate: slotForm.optionalExitDate || undefined,
+              notes: (slotForm.notes || "").trim() || undefined,
+            }];
           }
         }
 
-        const existingWarehouseIdx = (selectedProduct.warehouses || []).findIndex((entry) => entry.hubId === selectedHubId);
-        const nextWarehouses = [...(selectedProduct.warehouses || [])];
-        if (existingWarehouseIdx >= 0) {
-          nextWarehouses[existingWarehouseIdx] = {
-            ...nextWarehouses[existingWarehouseIdx],
-            hubName: activeHub.name,
-            location: selectedSlotCoord,
-          };
-        } else {
-          nextWarehouses.push({
-            hubId: selectedHubId,
-            hubName: activeHub.name,
-            location: selectedSlotCoord,
-            stockQuantity: selectedProduct.stockQuantity || 0,
-            minStock: selectedProduct.minStockAlert || 0,
-            maxStock: selectedProduct.maxStockAlert || 0,
-          });
+        materialsToSave = materialsToSave.filter((material) => material.productId && Number(material.quantityUnits || 0) > 0);
+        if (materialsToSave.length === 0) {
+          throw new Error('Agregá al menos un material con cantidad para ocupar el slot.');
         }
 
-        const updatedSelected = await updateProduct(selectedProduct.id, { warehouses: nextWarehouses });
-        setProducts((prev) => prev.map((row) => (row.id === selectedProduct.id ? updatedSelected : row)));
-        delete nextOverrides[selectedSlotCoord];
+        const previousProductIds = Array.from(new Set([
+          ...(currentOccupant?.materials || []).map((item) => item.productId),
+          currentOccupant?.productId,
+        ].filter(Boolean) as string[]));
+
+        for (const prevProductId of previousProductIds) {
+          await updateProductLocation(prevProductId, undefined);
+        }
+
+        const nextProductIds = Array.from(new Set(materialsToSave.map((item) => item.productId)));
+        for (const productId of nextProductIds) {
+          await updateProductLocation(productId, selectedSlotCoord);
+        }
+
+        const totalUnits = materialsToSave.reduce((sum, item) => sum + Number(item.quantityUnits || 0), 0);
+        const primaryMaterial = materialsToSave[0];
+
+        nextOverrides[selectedSlotCoord] = {
+          id: selectedSlotCoord,
+          coordinate: selectedSlotCoord,
+          status: 'occupied',
+          productId: primaryMaterial.productId,
+          productSku: primaryMaterial.productSku,
+          productName: materialsToSave.length > 1
+            ? `${primaryMaterial.productName} +${materialsToSave.length - 1} más`
+            : primaryMaterial.productName,
+          capacityKg: slotForm.capacityKg || 1000,
+          currentWeightKg: materialsToSave.reduce((sum, item) => {
+            const product = products.find((row) => row.id === item.productId);
+            return sum + Number(product?.unitWeightKg || 0) * Number(item.quantityUnits || 0);
+          }, 0),
+          quantityUnits: totalUnits,
+          lotNumber: primaryMaterial.lotNumber,
+          entryDate: primaryMaterial.entryDate,
+          expirationDate: primaryMaterial.expirationDate,
+          optionalExitDate: primaryMaterial.optionalExitDate,
+          notes: (slotForm.notes || "").trim() || primaryMaterial.notes,
+          materials: materialsToSave,
+          lastAuditAt: new Date().toISOString(),
+        } as WarehouseSlot;
       } else {
-        if (currentOccupant?.productId) {
-          const occupyingProduct = products.find((p) => p.id === currentOccupant.productId);
-          if (occupyingProduct) {
-            const occupyingWarehouses = (occupyingProduct.warehouses || []).map((entry) =>
-              entry.hubId === selectedHubId && entry.location === selectedSlotCoord
-                ? { ...entry, location: undefined }
-                : entry
-            );
-            const updatedOccupying = await updateProduct(occupyingProduct.id, { warehouses: occupyingWarehouses });
-            setProducts((prev) => prev.map((row) => (row.id === occupyingProduct.id ? updatedOccupying : row)));
-          }
+        const previousProductIds = Array.from(new Set([
+          ...(currentOccupant?.materials || []).map((item) => item.productId),
+          currentOccupant?.productId,
+        ].filter(Boolean) as string[]));
+
+        for (const prevProductId of previousProductIds) {
+          await updateProductLocation(prevProductId, undefined);
         }
 
         if (slotForm.status === 'blocked' || slotForm.status === 'reserved') {
@@ -360,6 +527,13 @@ function LayoutContent() {
             id: selectedSlotCoord,
             coordinate: selectedSlotCoord,
             status: slotForm.status,
+            lotNumber: (slotForm.lotNumber || "").trim() || undefined,
+            entryDate: slotForm.entryDate || undefined,
+            expirationDate: slotForm.expirationDate || undefined,
+            optionalExitDate: slotForm.optionalExitDate || undefined,
+            notes: (slotForm.notes || "").trim() || undefined,
+            materials: [],
+            lastAuditAt: new Date().toISOString(),
           } as WarehouseSlot;
         } else {
           delete nextOverrides[selectedSlotCoord];
@@ -368,6 +542,7 @@ function LayoutContent() {
 
       await persistSlotOverrides(nextOverrides);
       toast({ title: "Ubicación Actualizada" });
+      setSlotMaterials([]);
       setSelectedSlotCoord(null);
     } catch (e) {
       toast({ variant: "destructive", title: "Error al guardar", description: (e as Error).message });
@@ -381,23 +556,21 @@ function LayoutContent() {
     setIsSaving(true);
     try {
       const currentOccupant = assignedSlots[selectedSlotCoord];
-      if (currentOccupant?.productId) {
-        const occupyingProduct = products.find((p) => p.id === currentOccupant.productId);
-        if (occupyingProduct) {
-          const occupyingWarehouses = (occupyingProduct.warehouses || []).map((entry) =>
-            entry.hubId === selectedHubId && entry.location === selectedSlotCoord
-              ? { ...entry, location: undefined }
-              : entry
-          );
-          const updatedOccupying = await updateProduct(occupyingProduct.id, { warehouses: occupyingWarehouses });
-          setProducts((prev) => prev.map((row) => (row.id === occupyingProduct.id ? updatedOccupying : row)));
-        }
+
+      const productIds = Array.from(new Set([
+        ...(currentOccupant?.materials || []).map((item) => item.productId),
+        currentOccupant?.productId,
+      ].filter(Boolean) as string[]));
+
+      for (const productId of productIds) {
+        await updateProductLocation(productId, undefined);
       }
 
       const nextOverrides = { ...slotOverrides };
       delete nextOverrides[selectedSlotCoord];
       await persistSlotOverrides(nextOverrides);
       toast({ title: "Ubicación Liberada" });
+      setSlotMaterials([]);
       setSelectedSlotCoord(null);
     } catch (e) {
       toast({ variant: "destructive", title: "Error al borrar", description: (e as Error).message });
@@ -528,10 +701,16 @@ function LayoutContent() {
            </div>
            
            <div className="p-8 space-y-6 bg-slate-50">
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                  <div className="space-y-1.5">
                     <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Estado</Label>
-                    <Select value={slotForm.status} onValueChange={(v: any) => setSlotForm({...slotForm, status: v})}>
+                  <Select value={slotForm.status} onValueChange={(v: any) => {
+                    setSlotForm({...slotForm, status: v, ...(v !== 'occupied' ? { productId: "", productSku: "", productName: "" } : {})});
+                    if (v !== 'occupied') {
+                      setSlotMaterials([]);
+                      setMaterialDraft((prev) => ({ ...prev, productId: "", quantityUnits: 0 }));
+                    }
+                  }}>
                        <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                        <SelectContent>
                           <SelectItem value="empty">🟢 Disponible</SelectItem>
@@ -542,16 +721,241 @@ function LayoutContent() {
                     </Select>
                  </div>
                  <div className="space-y-1.5">
-                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Producto</Label>
-                    <Select value={slotForm.productId} onValueChange={v => {
-                       const p = products?.find(x => x.id === v);
-                       setSlotForm({...slotForm, productId: v, productSku: p?.sku || "", productName: p?.name || "", status: 'occupied'});
-                    }}>
-                       <SelectTrigger className="bg-white"><SelectValue placeholder="Elegir..." /></SelectTrigger>
-                       <SelectContent>{products?.map(p => <SelectItem key={p.id} value={p.id}>{p.sku} - {p.name}</SelectItem>)}</SelectContent>
+                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Capacidad del slot (kg)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      className="bg-white"
+                      value={slotForm.capacityKg ?? 1000}
+                      onChange={(e) => setSlotForm({ ...slotForm, capacityKg: Number(e.target.value || 0) })}
+                    />
+                 </div>
+              </div>
+
+              <Card className="border border-blue-100 shadow-none bg-white">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-black uppercase tracking-widest text-blue-700">Agregar material al contenedor</CardTitle>
+                  <CardDescription>Cada slot puede contener múltiples materiales con lote y fechas.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Material</Label>
+                      <Select value={materialDraft.productId || ""} onValueChange={(v) => {
+                        const p = products.find((x) => x.id === v);
+                        setMaterialDraft({
+                          ...materialDraft,
+                          productId: v,
+                          productSku: p?.sku || "",
+                          productName: p?.name || "",
+                          quantityUnits: materialDraft.quantityUnits || p?.stockQuantity || 0,
+                        });
+                        setSlotForm({ ...slotForm, status: 'occupied' });
+                      }}>
+                        <SelectTrigger className="bg-white" disabled={slotForm.status !== 'occupied'}><SelectValue placeholder="Elegir..." /></SelectTrigger>
+                        <SelectContent>{products?.map(p => <SelectItem key={p.id} value={p.id}>{p.sku} - {p.name}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Cantidad (u.)</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        className="bg-white"
+                        value={materialDraft.quantityUnits ?? 0}
+                        onChange={(e) => setMaterialDraft({ ...materialDraft, quantityUnits: Number(e.target.value || 0) })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Lote</Label>
+                      <Input
+                        className="bg-white"
+                        placeholder="Ej: LT-2408-A"
+                        value={materialDraft.lotNumber || ""}
+                        onChange={(e) => setMaterialDraft({ ...materialDraft, lotNumber: e.target.value.toUpperCase() })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Vencimiento</Label>
+                      <Input
+                        type="date"
+                        className="bg-white"
+                        value={materialDraft.expirationDate || ""}
+                        onChange={(e) => setMaterialDraft({ ...materialDraft, expirationDate: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Fecha de entrada</Label>
+                      <Input
+                        type="date"
+                        className="bg-white"
+                        value={materialDraft.entryDate || ""}
+                        onChange={(e) => setMaterialDraft({ ...materialDraft, entryDate: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Fecha de salida (opcional)</Label>
+                      <Input
+                        type="date"
+                        className="bg-white"
+                        value={materialDraft.optionalExitDate || ""}
+                        onChange={(e) => setMaterialDraft({ ...materialDraft, optionalExitDate: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <Button type="button" variant="outline" className="w-full border-blue-200 text-blue-700" onClick={handleAddMaterial} disabled={slotForm.status !== 'occupied'}>
+                    <Plus size={14} className="mr-2" /> Agregar material al slot
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Observaciones generales del slot</Label>
+                <Textarea
+                  className="bg-white min-h-[80px]"
+                  placeholder="Ej: prioridad de picking, manipulación especial, control FEFO"
+                  value={slotForm.notes || ""}
+                  onChange={(e) => setSlotForm({ ...slotForm, notes: e.target.value })}
+                />
+              </div>
+
+              <Card className="border border-slate-300 shadow-none bg-white overflow-hidden">
+                <CardHeader className="pb-2 bg-slate-900 text-white">
+                  <CardTitle className="text-sm font-black uppercase tracking-widest">Etiqueta simulada de caja contenedora</CardTitle>
+                  <CardDescription className="text-slate-300">Vista rápida para operación y trazabilidad.</CardDescription>
+                </CardHeader>
+                <CardContent className="p-4 space-y-4">
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="rounded-lg border p-2"><p className="font-black text-slate-500 uppercase">Ubicación</p><p className="font-mono font-bold text-slate-900">{selectedSlotCoord || '-'}</p></div>
+                    <div className="rounded-lg border p-2"><p className="font-black text-slate-500 uppercase">Estado</p><p className="font-bold text-slate-900 uppercase">{slotForm.status || 'empty'}</p></div>
+                    <div className="rounded-lg border p-2"><p className="font-black text-slate-500 uppercase">Materiales</p><p className="font-bold text-slate-900">{slotMaterials.length}</p></div>
+                    <div className="rounded-lg border p-2"><p className="font-black text-slate-500 uppercase">Cantidad total</p><p className="font-bold text-slate-900">{slotMaterials.reduce((sum, item) => sum + Number(item.quantityUnits || 0), 0).toLocaleString()} u.</p></div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {slotMaterials.length === 0 ? (
+                      <div className="rounded-lg border border-dashed p-4 text-center text-xs text-slate-500 font-bold uppercase tracking-widest">Sin materiales cargados</div>
+                    ) : (
+                      slotMaterials.map((item, idx) => (
+                        <div key={`${item.productId}-${item.lotNumber || 'NL'}-${idx}`} className="rounded-xl border p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-black text-slate-900 text-sm">{item.productName}</p>
+                              <p className="text-[10px] font-mono text-slate-500">SKU: {item.productSku}</p>
+                            </div>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500" onClick={() => handleRemoveMaterial(idx)}>
+                              <Trash2 size={14} />
+                            </Button>
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2 text-[11px]">
+                            <div><p className="font-black text-slate-500 uppercase">Cantidad</p><p className="font-bold">{item.quantityUnits} u.</p></div>
+                            <div><p className="font-black text-slate-500 uppercase">Lote</p><p className="font-bold">{item.lotNumber || 'N/I'}</p></div>
+                            <div><p className="font-black text-slate-500 uppercase">Entrada</p><p className="font-bold">{item.entryDate ? format(new Date(item.entryDate), 'dd/MM/yyyy') : 'N/I'}</p></div>
+                            <div><p className="font-black text-slate-500 uppercase">Vencimiento</p><p className="font-bold">{item.expirationDate ? format(new Date(item.expirationDate), 'dd/MM/yyyy') : 'N/I'}</p></div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
                     </Select>
                  </div>
               </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Cantidad (unidades)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    className="bg-white"
+                    value={slotForm.quantityUnits ?? 0}
+                    onChange={(e) => setSlotForm({ ...slotForm, quantityUnits: Number(e.target.value || 0) })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Lote</Label>
+                  <Input
+                    className="bg-white"
+                    placeholder="Ej: LT-2408-A"
+                    value={slotForm.lotNumber || ""}
+                    onChange={(e) => setSlotForm({ ...slotForm, lotNumber: e.target.value.toUpperCase() })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Vencimiento</Label>
+                  <Input
+                    type="date"
+                    className="bg-white"
+                    value={slotForm.expirationDate || ""}
+                    onChange={(e) => setSlotForm({ ...slotForm, expirationDate: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Fecha de entrada</Label>
+                  <Input
+                    type="date"
+                    className="bg-white"
+                    value={slotForm.entryDate || ""}
+                    onChange={(e) => setSlotForm({ ...slotForm, entryDate: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Fecha de salida (opcional)</Label>
+                  <Input
+                    type="date"
+                    className="bg-white"
+                    value={slotForm.optionalExitDate || ""}
+                    onChange={(e) => setSlotForm({ ...slotForm, optionalExitDate: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Observaciones</Label>
+                <Textarea
+                  className="bg-white min-h-[90px]"
+                  placeholder="Ej: material sensible a humedad, control FEFO, requiere inspección visual"
+                  value={slotForm.notes || ""}
+                  onChange={(e) => setSlotForm({ ...slotForm, notes: e.target.value })}
+                />
+              </div>
+
+              <Card className="border border-slate-200 shadow-none">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-700">Resumen operativo del slot</CardTitle>
+                  <CardDescription>Información básica para control rápido de trazabilidad.</CardDescription>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                  <div className="rounded-xl bg-slate-100 p-3">
+                    <p className="text-[10px] uppercase font-black text-slate-500">Material</p>
+                    <p className="font-bold text-slate-900">{slotForm.productName || selectedProduct?.name || 'Sin material asignado'}</p>
+                  </div>
+                  <div className="rounded-xl bg-slate-100 p-3">
+                    <p className="text-[10px] uppercase font-black text-slate-500">Cantidad</p>
+                    <p className="font-bold text-slate-900">{Number(slotForm.quantityUnits || 0).toLocaleString()} u.</p>
+                  </div>
+                  <div className="rounded-xl bg-slate-100 p-3">
+                    <p className="text-[10px] uppercase font-black text-slate-500">Lote</p>
+                    <p className="font-bold text-slate-900">{slotForm.lotNumber || 'No informado'}</p>
+                  </div>
+                  <div className="rounded-xl bg-slate-100 p-3">
+                    <p className="text-[10px] uppercase font-black text-slate-500">Vencimiento</p>
+                    <p className="font-bold text-slate-900">{slotForm.expirationDate ? format(new Date(slotForm.expirationDate), 'dd/MM/yyyy') : 'Sin vencimiento'}</p>
+                  </div>
+                </CardContent>
+              </Card>
            </div>
 
            <div className="p-6 bg-white border-t flex justify-between">

@@ -211,7 +211,26 @@ export interface WarehouseSlot {
   status: 'empty' | 'occupied' | 'reserved' | 'blocked';
   capacityKg?: number;
   currentWeightKg?: number;
+  quantityUnits?: number;
+  lotNumber?: string;
+  entryDate?: string;
+  expirationDate?: string;
+  optionalExitDate?: string;
+  notes?: string;
   lastAuditAt?: any;
+  materials?: WarehouseSlotMaterial[];
+}
+
+export interface WarehouseSlotMaterial {
+  productId: string;
+  productSku: string;
+  productName: string;
+  quantityUnits: number;
+  lotNumber?: string;
+  entryDate?: string;
+  expirationDate?: string;
+  optionalExitDate?: string;
+  notes?: string;
 }
 
 export interface WarehouseRack {
