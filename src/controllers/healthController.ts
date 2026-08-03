@@ -1,7 +1,6 @@
-export function getHealthStatus() {
-  return {
-    status: 'ok',
-    service: 'fluxion-logistic-backend',
-    timestamp: new Date().toISOString(),
-  };
+import { Request, Response } from 'express';
+import { getHealthPayload } from '../services/healthService.js';
+
+export function getHealth(_req: Request, res: Response) {
+  res.json(getHealthPayload());
 }

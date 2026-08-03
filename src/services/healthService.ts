@@ -1,5 +1,7 @@
-import { getHealthStatus } from '../controllers/healthController.js';
-
 export function getHealthPayload() {
-  return getHealthStatus();
+  return {
+    status: 'ok',
+    service: 'fluxion-logistic-backend',
+    timestamp: new Date().toISOString(),
+  };
 }
