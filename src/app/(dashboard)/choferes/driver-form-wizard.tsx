@@ -3,10 +3,11 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useUser } from "@/firebase";
+import { useUser, useFirestore } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { initializeApp, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
 import { firebaseConfig } from "@/firebase/config";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -53,6 +54,7 @@ const LICENSE_CLASSES = ["A1", "A2", "A3", "B1", "B2", "C1", "C2", "C3", "D1", "
 export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
   const { tenantId } = useTenant();
    useUser();
+  const firestore = useFirestore();
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
@@ -183,6 +185,17 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
         if (!formData.password) throw new Error("Debe definir una contraseña inicial para crear el acceso.");
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, cleanEmail, formData.password);
         uid = userCredential.user.uid;
+
+        // Perfil canónico que usan useTenant() y /api/auth/backend-session para resolver tenant/rol.
+        await setDoc(doc(firestore, `users/${cleanEmail}`), {
+          uid,
+          email: cleanEmail,
+          displayName: `${formData.firstName || ""} ${formData.lastName || ""}`.trim() || null,
+          tenantId,
+          role: formData.role || 'driver',
+          status: 'active',
+          createdAt: new Date().toISOString(),
+        });
       }
 
       if (!uid) {
@@ -199,6 +212,7 @@ export default function DriverFormWizard({ driverId }: DriverFormWizardProps) {
 
       finalData.id = uid;
       finalData.email = cleanEmail;
+      finalData.name = `${formData.firstName || ""} ${formData.lastName || ""}`.trim() || cleanEmail;
       
       if (!driverId) {
             await createDriver(finalData);
