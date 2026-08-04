@@ -329,7 +329,10 @@ function LayoutContent() {
             productId: currentProduct.id,
             productSku: currentProduct.sku,
             productName: currentProduct.name,
-            quantityUnits: existingData.quantityUnits ?? currentProduct.stockQuantity ?? 0,
+            // Si la ubicación vino "reconciliada" desde el campo libre de ubicación del producto
+            // (sin slotOverride real todavía), puede no haber cantidad registrada. Usamos al menos 1
+            // para no bloquear el guardado con la validación de "cantidad > 0".
+            quantityUnits: Math.max(Number(existingData.quantityUnits ?? currentProduct.stockQuantity ?? 0), 1),
             lotNumber: existingData.lotNumber,
             entryDate: existingData.entryDate,
             expirationDate: existingData.expirationDate,
@@ -354,7 +357,7 @@ function LayoutContent() {
       ...existingData,
       currentWeightKg: currentProduct?.unitWeightKg || 0,
       capacityKg: existingData.capacityKg || 1000,
-      quantityUnits: existingData.quantityUnits ?? currentProduct?.stockQuantity ?? 0,
+      quantityUnits: Math.max(Number(existingData.quantityUnits ?? currentProduct?.stockQuantity ?? 0), currentProduct ? 1 : 0),
       lotNumber: existingData.lotNumber || "",
       entryDate: existingData.entryDate || "",
       expirationDate: existingData.expirationDate || "",

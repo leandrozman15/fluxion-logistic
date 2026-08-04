@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useUser } from "@/firebase";
 import { useTenant } from "@/hooks/use-tenant";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,12 +34,13 @@ import { es } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { compressImage } from "@/lib/utils/image-compression";
 import { cn } from "@/lib/utils";
-import { getDriver, updateDriver } from "@/lib/drivers-api";
+import { listDrivers, updateDriver } from "@/lib/drivers-api";
 import { listLoads } from "@/lib/loads-api";
 
 export default function DriverSelfProfilePage() {
   const router = useRouter();
   const { tenantId, uid } = useTenant();
+  const { user } = useUser();
   const { toast } = useToast();
 
   const [isUploading, setIsUploading] = useState<string | null>(null);
@@ -46,6 +48,7 @@ export default function DriverSelfProfilePage() {
   const [trips, setTrips] = useState<Load[]>([]);
   const [driverLoading, setDriverLoading] = useState(true);
   const [tripsLoading, setTripsLoading] = useState(true);
+  const [myDriverId, setMyDriverId] = useState<string | null>(null);
 
   const licFRef = useRef<HTMLInputElement>(null);
   const licBRef = useRef<HTMLInputElement>(null);
@@ -71,11 +74,16 @@ export default function DriverSelfProfilePage() {
           setTripsLoading(true);
         }
 
-        const [driverData, allLoads] = await Promise.all([getDriver(uid), listLoads()]);
+        const [driversData, allLoads] = await Promise.all([listDrivers(), listLoads()]);
         if (!active) return;
 
-        setDriver(driverData);
-        setTrips(allLoads.filter((load) => load.assignedDriverId === uid));
+        // Resolvemos el Driver real por email: el uid de Firebase no coincide con el id del Driver en Prisma.
+        const myEmail = user?.email?.toLowerCase().trim();
+        const myDriver = myEmail ? driversData.find((d) => d.email?.toLowerCase().trim() === myEmail) : null;
+
+        setMyDriverId(myDriver?.id || null);
+        setDriver(myDriver || null);
+        setTrips(myDriver ? allLoads.filter((load) => load.assignedDriverId === myDriver.id) : []);
       } catch {
         if (!active) return;
         setDriver(null);
@@ -92,7 +100,7 @@ export default function DriverSelfProfilePage() {
     return () => {
       active = false;
     };
-  }, [tenantId, uid]);
+  }, [tenantId, uid, user?.email]);
 
   const stats = useMemo(() => {
     if (!trips) return { totalKm: 0, totalTrips: 0, chartData: [] };
@@ -114,9 +122,9 @@ export default function DriverSelfProfilePage() {
   }, [trips]);
 
   const handleUpdateField = async (field: keyof Driver, value: any) => {
-    if (!driver || !uid) return;
+    if (!driver || !myDriverId) return;
     try {
-      const updated = await updateDriver(uid, { [field]: value, updatedAt: new Date().toISOString() } as any);
+      const updated = await updateDriver(myDriverId, { [field]: value, updatedAt: new Date().toISOString() } as any);
       setDriver(updated);
       toast({ title: "Datos actualizados" });
     } catch (e) {
@@ -126,7 +134,7 @@ export default function DriverSelfProfilePage() {
 
   const onFileChange = (key: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !uid || !driver) return;
+    if (!file || !myDriverId || !driver) return;
 
     setIsUploading(key);
     const reader = new FileReader();
@@ -134,7 +142,7 @@ export default function DriverSelfProfilePage() {
       try {
         const base64 = event.target?.result as string;
         const compressed = await compressImage(base64);
-        const updated = await updateDriver(uid, { [key]: compressed, updatedAt: new Date().toISOString() } as any);
+        const updated = await updateDriver(myDriverId, { [key]: compressed, updatedAt: new Date().toISOString() } as any);
         setDriver(updated);
         toast({ title: "Documento actualizado" });
       } catch (err) {
