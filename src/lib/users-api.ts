@@ -1,4 +1,4 @@
-import { backendRequest, getListData } from '@/lib/backend-api';
+import { backendRequest, getListData, resolveBackendToken } from '@/lib/backend-api';
 import { AppUser, UserRole } from '@/app/lib/types';
 
 type UserPayload = {
@@ -26,26 +26,9 @@ function normalizeUser(raw: UserPayload): AppUser {
   };
 }
 
-const LIST_PATHS = [
-  '/api/users?page=1&pageSize=1000',
-  '/api/tenant/users',
-  '/api/settings/users',
-];
-
-const CREATE_PATHS = ['/api/users', '/api/users/invite', '/api/tenant/users'];
-
 export async function listUsers() {
-  for (const path of LIST_PATHS) {
-    try {
-      const response = await backendRequest<UserPayload[]>(path);
-      const rows = getListData(response);
-      return rows.map(normalizeUser);
-    } catch {
-      // Try next known endpoint shape.
-    }
-  }
-
-  return [] as AppUser[];
+  const response = await backendRequest<UserPayload[]>('/api/users?page=1&pageSize=1000');
+  return getListData(response).map(normalizeUser);
 }
 
 export async function createUser(input: {
@@ -53,27 +36,39 @@ export async function createUser(input: {
   password: string;
   role: UserRole;
   tenantId?: string;
+  displayName?: string;
 }) {
-  const payload = {
-    email: input.email.toLowerCase().trim(),
-    password: input.password,
-    role: input.role,
-    tenantId: input.tenantId,
-  };
+  const cleanEmail = input.email.toLowerCase().trim();
 
-  for (const path of CREATE_PATHS) {
-    try {
-      const response = await backendRequest<UserPayload>(path, {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-
-      const raw = response.data || response.payload;
-      if (raw) return normalizeUser(raw);
-    } catch {
-      // Try next known endpoint shape.
-    }
+  // Paso 1: crear la cuenta real en Firebase Auth (solo Next.js tiene Admin SDK).
+  const authResponse = await fetch('/api/auth/create-user', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(resolveBackendToken() ? { Authorization: `Bearer ${resolveBackendToken()}` } : {}),
+    },
+    body: JSON.stringify({ email: cleanEmail, password: input.password, displayName: input.displayName }),
+  });
+  const authData = await authResponse.json();
+  if (!authResponse.ok || !authData.success) {
+    throw new Error(authData.message || 'No se pudo crear el usuario en Firebase Auth');
   }
 
-  throw new Error('No user creation endpoint available');
+  // Paso 2: crear la fila en Postgres vinculada al uid recién creado.
+  const response = await backendRequest<UserPayload>('/api/users', {
+    method: 'POST',
+    body: JSON.stringify({
+      uid: authData.uid,
+      email: cleanEmail,
+      displayName: input.displayName,
+      role: input.role,
+      tenantId: input.tenantId,
+    }),
+  });
+
+  const raw = response.data || response.payload;
+  if (!raw) {
+    throw new Error('El backend no devolvió el usuario creado');
+  }
+  return normalizeUser(raw);
 }
