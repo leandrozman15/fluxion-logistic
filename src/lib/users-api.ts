@@ -47,7 +47,13 @@ export async function createUser(input: {
       'Content-Type': 'application/json',
       ...(resolveBackendToken() ? { Authorization: `Bearer ${resolveBackendToken()}` } : {}),
     },
-    body: JSON.stringify({ email: cleanEmail, password: input.password, displayName: input.displayName }),
+    body: JSON.stringify({
+      email: cleanEmail,
+      password: input.password,
+      displayName: input.displayName,
+      tenantId: input.tenantId,
+      role: input.role,
+    }),
   });
   const authData = await authResponse.json();
   if (!authResponse.ok || !authData.success) {

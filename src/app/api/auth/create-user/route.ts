@@ -1,6 +1,17 @@
 import { NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { getFirebaseAdminAuth } from '@/lib/firebase-admin';
+import { getFirebaseAdminAuth, getFirebaseAdminFirestore } from '@/lib/firebase-admin';
+
+const ALLOWED_USER_ROLES = new Set([
+  'admin',
+  'sales_admin',
+  'purchasing_admin',
+  'coordinator',
+  'manager',
+  'warehouse',
+  'driver',
+  'viewer',
+]);
 
 /**
  * Crea la cuenta de Firebase Auth para un nuevo usuario del ecosistema.
@@ -21,28 +32,46 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, message: 'Falta el token de sesión' }, { status: 401 });
   }
 
-  let role: string;
+  let sessionRole: string;
+  let sessionTenantId: string;
   try {
-    const decoded = jwt.verify(token, secret) as { role?: string };
-    role = decoded.role || '';
+    const decoded = jwt.verify(token, secret) as { role?: string; tenantId?: string };
+    sessionRole = decoded.role || '';
+    sessionTenantId = decoded.tenantId || '';
   } catch {
     return NextResponse.json({ success: false, message: 'Token de sesión inválido o expirado' }, { status: 401 });
   }
 
-  if (role !== 'superadmin' && role !== 'platform_admin' && role !== 'admin' && role !== 'manager') {
+  if (sessionRole !== 'superadmin' && sessionRole !== 'platform_admin' && sessionRole !== 'admin' && sessionRole !== 'manager') {
     return NextResponse.json({ success: false, message: 'No autorizado para crear usuarios' }, { status: 403 });
   }
 
-  const { email, password, displayName } = await request.json();
-  if (!email || !password) {
-    return NextResponse.json({ success: false, message: 'email y password son obligatorios' }, { status: 400 });
+  const { email, password, displayName, tenantId, role } = await request.json();
+  if (!email || !password || !tenantId || !ALLOWED_USER_ROLES.has(role)) {
+    return NextResponse.json({ success: false, message: 'email, password, tenantId y role válidos son obligatorios' }, { status: 400 });
+  }
+
+  const isPlatformAdmin = sessionRole === 'superadmin' || sessionRole === 'platform_admin';
+  if (!isPlatformAdmin && tenantId !== sessionTenantId) {
+    return NextResponse.json({ success: false, message: 'No autorizado para crear usuarios en otro tenant' }, { status: 403 });
   }
 
   try {
+    const cleanEmail = String(email).toLowerCase().trim();
     const userRecord = await getFirebaseAdminAuth().createUser({
-      email: String(email).toLowerCase().trim(),
+      email: cleanEmail,
       password,
       displayName: displayName || undefined,
+    });
+
+    await getFirebaseAdminFirestore().doc(`users/${cleanEmail}`).set({
+      uid: userRecord.uid,
+      email: cleanEmail,
+      displayName: displayName || null,
+      tenantId,
+      role,
+      status: 'active',
+      createdAt: new Date().toISOString(),
     });
 
     return NextResponse.json({ success: true, uid: userRecord.uid });

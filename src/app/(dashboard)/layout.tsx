@@ -262,7 +262,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (!loading && role === 'driver') {
-      const isAdminPath = pathname !== '/' && !pathname.startsWith('/rutas') && !pathname.startsWith('/cargas');
+      const isDriverPath = pathname === '/rutas' || pathname.startsWith('/rutas/');
+      const isAdminPath = pathname !== '/' && !isDriverPath;
       if (isAdminPath) {
         router.replace('/rutas');
       }
