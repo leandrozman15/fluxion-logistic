@@ -207,6 +207,9 @@ function LayoutContent() {
       (product.warehouses || []).forEach((warehouse) => {
         if (warehouse.hubId !== selectedHubId || !warehouse.location) return;
         const persisted = map[warehouse.location];
+        // Si el slot ya tiene datos persistidos (multi-material, lote, fechas), no los pisamos:
+        // esto solo actúa como reconciliación para ubicaciones legacy sin slotOverride propio.
+        if (persisted && persisted.status === 'occupied') return;
         map[warehouse.location] = {
           ...(persisted || {}),
           id: warehouse.location,
@@ -216,6 +219,8 @@ function LayoutContent() {
           productName: product.name,
           status: 'occupied',
           currentWeightKg: product.unitWeightKg,
+          lotNumber: warehouse.lotNumber,
+          entryDate: warehouse.entryDate,
         };
       });
     });
@@ -412,7 +417,11 @@ function LayoutContent() {
     setSlotMaterials((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const updateProductLocation = async (productId: string, location: string | undefined) => {
+  const updateProductLocation = async (
+    productId: string,
+    location: string | undefined,
+    lotInfo?: { lotNumber?: string; entryDate?: string }
+  ) => {
     const product = products.find((row) => row.id === productId);
     if (!product || !selectedHubId || !activeHub) return;
 
@@ -424,6 +433,8 @@ function LayoutContent() {
         ...nextWarehouses[existingWarehouseIdx],
         hubName: activeHub.name,
         location,
+        lotNumber: lotInfo?.lotNumber ?? nextWarehouses[existingWarehouseIdx].lotNumber,
+        entryDate: lotInfo?.entryDate ?? nextWarehouses[existingWarehouseIdx].entryDate,
       };
     } else if (location) {
       nextWarehouses.push({
@@ -433,6 +444,8 @@ function LayoutContent() {
         stockQuantity: product.stockQuantity || 0,
         minStock: product.minStockAlert || 0,
         maxStock: product.maxStockAlert || 0,
+        lotNumber: lotInfo?.lotNumber,
+        entryDate: lotInfo?.entryDate,
       });
     }
 
@@ -483,7 +496,11 @@ function LayoutContent() {
 
         const nextProductIds = Array.from(new Set(materialsToSave.map((item) => item.productId)));
         for (const productId of nextProductIds) {
-          await updateProductLocation(productId, selectedSlotCoord);
+          const material = materialsToSave.find((item) => item.productId === productId);
+          await updateProductLocation(productId, selectedSlotCoord, {
+            lotNumber: material?.lotNumber,
+            entryDate: material?.entryDate,
+          });
         }
 
         const totalUnits = materialsToSave.reduce((sum, item) => sum + Number(item.quantityUnits || 0), 0);

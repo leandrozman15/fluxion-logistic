@@ -231,6 +231,42 @@ export default function ProductTechnicalSheetPage() {
             </div>
           </div>
 
+          <div className="mt-12 space-y-4">
+            <h3 className="text-[12px] font-black uppercase tracking-[0.3em] text-slate-400 border-b-[3px] border-slate-100 pb-2">Distribución en Depósito (Lote / Ubicación)</h3>
+            {product.warehouses && product.warehouses.length > 0 ? (
+              <div className="grid grid-cols-2 gap-4">
+                {product.warehouses.map((w, idx) => (
+                  <div key={idx} className="p-5 border-[2px] border-slate-200 rounded-2xl grid grid-cols-2 gap-3 bg-slate-50/30">
+                    <div className="space-y-0.5">
+                      <p className="text-[8px] font-black text-slate-400 uppercase">Sede</p>
+                      <p className="text-xs font-bold text-slate-800 flex items-center gap-1"><Building2 size={11} className="text-blue-600" /> {w.hubName}</p>
+                    </div>
+                    <div className="space-y-0.5">
+                      <p className="text-[8px] font-black text-slate-400 uppercase">Ubicación Rack</p>
+                      <p className="text-xs font-mono font-black text-blue-700">{w.location || 'SIN POSICIÓN'}</p>
+                    </div>
+                    <div className="space-y-0.5">
+                      <p className="text-[8px] font-black text-slate-400 uppercase">N° Lote</p>
+                      <p className="text-xs font-bold text-slate-800">{w.lotNumber || 'S/D'}</p>
+                    </div>
+                    <div className="space-y-0.5">
+                      <p className="text-[8px] font-black text-slate-400 uppercase">Ingreso</p>
+                      <p className="text-xs font-bold text-slate-800">{w.entryDate || 'S/D'}</p>
+                    </div>
+                    <div className="col-span-2 pt-2 border-t border-slate-200 flex justify-between items-center">
+                      <span className="text-[9px] font-black text-slate-500 uppercase">Existencia</span>
+                      <span className="text-sm font-black italic text-blue-700">{w.stockQuantity} {product.unitType}(s)</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-8 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                <p className="text-[10px] font-black text-slate-300 uppercase italic">Sin ubicaciones de depósito configuradas para este producto.</p>
+              </div>
+            )}
+          </div>
+
           <div className="mt-auto pt-16 border-t-[6px] border-slate-900 flex justify-between items-end">
             <div className="space-y-1">
                <p className="text-[12px] font-black uppercase italic text-slate-900">Validado por Auditoría Central LogísticaAr</p>

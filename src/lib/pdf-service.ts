@@ -129,7 +129,69 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
     styles: { fontSize: 9 }
   });
 
-  const footerY = 250;
+  let cursorY = (doc as any).lastAutoTable.finalY + 15;
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
+  doc.text("TRAZABILIDAD Y ALMACENAMIENTO", margin, cursorY - 5);
+  doc.line(margin, cursorY - 3, pageWidth - margin, cursorY - 3);
+
+  autoTable(doc, {
+    startY: cursorY,
+    margin: { left: margin, right: margin },
+    head: [["PARÁMETRO", "VALOR REGISTRADO"]],
+    body: [
+      ["GTIN / CÓDIGO DE BARRAS", product.gtin || "NO ASIGNADO"],
+      ["TIPO DE UNIDAD", product.unitType.toUpperCase()],
+      ["DIMENSIONES (L x A x H)", product.dimensions ? `${product.dimensions.l} x ${product.dimensions.w} x ${product.dimensions.h} CM` : "NO REGISTRADAS"],
+      ["CONTROL POR LOTE", product.isLotTracked ? "SÍ" : "NO"],
+      ["CONTROL POR N° DE SERIE", product.isSerialTracked ? "SÍ" : "NO"],
+      ["CONTROL DE VENCIMIENTO", product.expiryControl ? "SÍ" : "NO"],
+      ...(product.requiresReefer && product.tempRange ? [["RANGO DE TEMPERATURA", `${product.tempRange.min}°C A ${product.tempRange.max}°C`]] : [])
+    ],
+    theme: "striped",
+    headStyles: { fillColor: BLUE_LOGISTIC as any },
+    styles: { fontSize: 9 }
+  });
+
+  cursorY = (doc as any).lastAutoTable.finalY + 15;
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.text("DISTRIBUCIÓN EN DEPÓSITO (LOTE / UBICACIÓN)", margin, cursorY - 5);
+  doc.line(margin, cursorY - 3, pageWidth - margin, cursorY - 3);
+
+  if (product.warehouses && product.warehouses.length > 0) {
+    autoTable(doc, {
+      startY: cursorY,
+      margin: { left: margin, right: margin },
+      head: [["SEDE", "UBICACIÓN RACK", "N° LOTE", "INGRESO", "STOCK"]],
+      body: product.warehouses.map((w) => [
+        w.hubName || "S/D",
+        w.location || "SIN POSICIÓN",
+        w.lotNumber || "S/D",
+        w.entryDate || "S/D",
+        `${w.stockQuantity} ${product.unitType.toUpperCase()}${w.stockQuantity === 1 ? "" : "S"}`
+      ]),
+      theme: "grid",
+      headStyles: { fillColor: SLATE_DARK as any },
+      styles: { fontSize: 8 }
+    });
+    cursorY = (doc as any).lastAutoTable.finalY + 15;
+  } else {
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(150);
+    doc.text("Sin ubicaciones de depósito configuradas para este producto.", margin, cursorY + 3);
+    doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
+    cursorY += 15;
+  }
+
+  let footerY = Math.max(cursorY, 250);
+  if (footerY > 260) {
+    doc.addPage();
+    footerY = 240;
+  }
+
   doc.setDrawColor(0);
   doc.setLineWidth(1);
   doc.rect(pageWidth - 60, footerY, 45, 25);
@@ -140,7 +202,7 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
 
   doc.setFontSize(8);
   doc.setTextColor(150);
-  doc.text(`Documento generado automáticamente el ${format(new Date(), "dd/MM/yyyy HH:mm")}`, margin, 285);
+  doc.text(`Documento generado automáticamente el ${format(new Date(), "dd/MM/yyyy HH:mm")}`, margin, Math.min(footerY + 35, 290));
 
   doc.save(`Ficha_${product.sku}.pdf`);
 };

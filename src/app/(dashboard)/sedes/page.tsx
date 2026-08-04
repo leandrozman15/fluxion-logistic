@@ -143,6 +143,12 @@ function HubSpaceMetrics({ hub, products }: { hub: Hub, products: Product[] | un
 
 const COUNTRIES: Country[] = ["Argentina", "Chile", "Paraguay", "Bolivia", "Uruguay", "Brasil"];
 
+const HUB_TYPES: { value: HubType; label: string }[] = [
+  { value: "warehouse", label: "Depósito" },
+  { value: "hub", label: "Hub" },
+  { value: "office", label: "Oficina" },
+];
+
 const INITIAL_FORM_DATA: Partial<Hub> = {
   name: "", address: "", city: "", province: "", country: "Argentina", type: "warehouse", phone: "", isMainBase: false, lat: -34.6, lng: -58.3
 };
@@ -310,15 +316,43 @@ export default function SedesPage() {
           <DialogHeader><DialogTitle>{editingId ? 'Editar Sede' : 'Nueva Sede'}</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-4">
             <Input placeholder="Nombre de Sede" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+            <Input placeholder="Dirección" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
             <div className="grid grid-cols-2 gap-4">
               <Input placeholder="Ciudad" value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} />
+              <Input placeholder="Provincia" value={formData.province} onChange={e => setFormData({...formData, province: e.target.value})} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
               <Select value={formData.country} onValueChange={(v: any) => setFormData({...formData, country: v})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="País" /></SelectTrigger>
                 <SelectContent>{COUNTRIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
               </Select>
+              <Select value={formData.type} onValueChange={(v: any) => setFormData({...formData, type: v})}>
+                <SelectTrigger><SelectValue placeholder="Tipo de Sede" /></SelectTrigger>
+                <SelectContent>{HUB_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+              </Select>
             </div>
-            <div className="p-4 bg-slate-900 text-white rounded-2xl">
-               <Button variant="outline" className="w-full text-white border-white/20" onClick={handleGetLocation}>CAPTURAR GPS</Button>
+            <Input placeholder="Teléfono" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+              <div>
+                <p className="text-sm font-black text-slate-900">Sede Principal (HQ)</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Marcar como base central de operaciones</p>
+              </div>
+              <Switch checked={!!formData.isMainBase} onCheckedChange={(v) => setFormData({...formData, isMainBase: v})} />
+            </div>
+            <div className="p-4 bg-slate-900 text-white rounded-2xl space-y-3">
+               <Button variant="outline" className="w-full text-white border-white/20" onClick={handleGetLocation}>
+                  <Crosshair className="w-4 h-4 mr-2" /> CAPTURAR GPS
+               </Button>
+               <div className="grid grid-cols-2 gap-4 text-center">
+                  <div>
+                     <p className="text-[8px] font-bold text-white/40 uppercase">Latitud</p>
+                     <p className="text-xs font-black">{formData.lat?.toFixed(5)}</p>
+                  </div>
+                  <div>
+                     <p className="text-[8px] font-bold text-white/40 uppercase">Longitud</p>
+                     <p className="text-xs font-black">{formData.lng?.toFixed(5)}</p>
+                  </div>
+               </div>
             </div>
           </div>
           <DialogFooter><Button onClick={handleSubmitHub} disabled={isSubmitting} className="bg-blue-600 w-full h-12 rounded-xl font-black">CONFIRMAR REGISTRO</Button></DialogFooter>
