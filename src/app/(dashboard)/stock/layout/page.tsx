@@ -705,8 +705,8 @@ function LayoutContent() {
       </div>
 
       <Dialog open={!!selectedSlotCoord} onOpenChange={(o) => !o && setSelectedSlotCoord(null)}>
-        <DialogContent className="rounded-[2.5rem] max-w-2xl p-0 overflow-hidden border-none shadow-2xl">
-           <div className="bg-slate-900 text-white p-8 pb-6">
+        <DialogContent className="rounded-[2.5rem] max-w-2xl p-0 overflow-hidden border-none shadow-2xl max-h-[90vh] flex flex-col">
+           <div className="bg-slate-900 text-white p-8 pb-6 shrink-0">
               <DialogHeader>
                  <div className="flex justify-between items-start">
                    <div>
@@ -717,7 +717,7 @@ function LayoutContent() {
               </DialogHeader>
            </div>
            
-           <div className="p-8 space-y-6 bg-slate-50">
+           <div className="p-8 space-y-6 bg-slate-50 overflow-y-auto min-h-0 flex-1">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                  <div className="space-y-1.5">
                     <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Estado</Label>
@@ -885,7 +885,7 @@ function LayoutContent() {
               </Card>
            </div>
 
-           <div className="p-6 bg-white border-t flex justify-between">
+           <div className="p-6 bg-white border-t flex justify-between shrink-0">
               <Button variant="outline" className="text-red-600" onClick={handleClearSlot}><Trash2 size={16} className="mr-2" /> LIBERAR</Button>
               <div className="flex gap-2">
                  <Button variant="ghost" onClick={() => setSelectedSlotCoord(null)}>CANCELAR</Button>
