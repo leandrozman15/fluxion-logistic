@@ -29,6 +29,7 @@ import { format, parseISO, isBefore, differenceInDays } from "date-fns";
 import { es } from "date-fns/locale";
 import { deleteTruck, listTrucks } from "@/lib/trucks-api";
 import { listDrivers } from "@/lib/drivers-api";
+import { listMaintenance } from "@/lib/maintenance-api";
 
 export default function FlotaPage() {
   const { tenantId } = useTenant();
@@ -38,6 +39,7 @@ export default function FlotaPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [trucks, setTrucks] = useState<TruckType[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [maintenanceRecords, setMaintenanceRecords] = useState<Maintenance[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -48,6 +50,7 @@ export default function FlotaPage() {
         if (active) {
           setTrucks([]);
           setDrivers([]);
+          setMaintenanceRecords([]);
           setLoading(false);
         }
         return;
@@ -55,15 +58,17 @@ export default function FlotaPage() {
 
       try {
         if (active) setLoading(true);
-        const [truckRows, driverRows] = await Promise.all([listTrucks(), listDrivers()]);
+        const [truckRows, driverRows, maintenanceRows] = await Promise.all([listTrucks(), listDrivers(), listMaintenance()]);
         if (active) {
           setTrucks(truckRows);
           setDrivers(driverRows);
+          setMaintenanceRecords(maintenanceRows);
         }
       } catch (error) {
         if (active) {
           setTrucks([]);
           setDrivers([]);
+          setMaintenanceRecords([]);
           toast({ variant: 'destructive', title: 'Error al cargar flota', description: (error as Error).message });
         }
       } finally {
@@ -116,8 +121,11 @@ export default function FlotaPage() {
     return drivers?.find(dr => dr.id === driverId) || null;
   };
 
-  const getNextServiceInfo = (truckId: string) => {
-    return null as Maintenance | null;
+  const getNextServiceInfo = (truckId: string): Maintenance | null => {
+    const pending = maintenanceRecords
+      .filter((record) => record.truckId === truckId && (record.status === 'scheduled' || record.status === 'in_progress'))
+      .sort((a, b) => (a.scheduledDate || "").localeCompare(b.scheduledDate || ""));
+    return pending[0] || null;
   };
 
   const calculateTheoreticalCost = (truck: TruckType) => {

@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { parseLogisticsLabel, type LabelOutput } from "@/ai/flows/parse-logistics-label-flow";
 import { geocodeAddress } from "@/services/google-maps";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { format, addHours } from "date-fns";
 import { getTenantProfile } from "@/lib/settings-api";
 import { createLoad, updateLoad } from "@/lib/loads-api";
 
@@ -137,6 +137,7 @@ function MercadoLibreScanner() {
         router.push(`/rutas/${preAssignedLoadId}`);
       } else {
         const orderNum = `ML-${new Date().getFullYear()}-${Math.floor(Math.random() * 9000)}`;
+        const estimatedArrival = addHours(new Date(), 4);
         const created = await createLoad({
           orderNumber: orderNum,
           clientName: "Mercado Libre (Colecta Directa)",
@@ -145,6 +146,8 @@ function MercadoLibreScanner() {
           assignedDriverId: user?.uid || 'demo_driver',
           pickupDate: new Date().toISOString().split('T')[0],
           pickupTime: format(new Date(), "HH:mm"),
+          estimatedArrivalDate: format(estimatedArrival, "yyyy-MM-dd"),
+          estimatedArrivalTime: format(estimatedArrival, "HH:mm"),
           origin: { name: "Deposito MELI", address: "CABA", city: "Capital Federal", country: "Argentina" } as any,
           outboundStops: stops as any,
           createdAt: new Date().toISOString(),

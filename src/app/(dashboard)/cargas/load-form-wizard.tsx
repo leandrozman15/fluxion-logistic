@@ -72,6 +72,8 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
     isRoundTrip: false,
     pickupDate: format(new Date(), "yyyy-MM-dd"),
     pickupTime: "08:00",
+    estimatedArrivalDate: format(new Date(), "yyyy-MM-dd"),
+    estimatedArrivalTime: "18:00",
     origin: { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", country: "Argentina", zip: "", instructions: "", dockName: "" },
     returnDestination: { name: "", phone: "", contact: "", address: "", province: "Buenos Aires", country: "Argentina", zip: "", instructions: "", dockName: "" },
     outboundStops: [],
@@ -476,6 +478,10 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-slate-400">Fecha Carga</Label><Input type="date" value={formData.pickupDate ?? ''} onChange={e => setFormData({...formData, pickupDate: e.target.value})} /></div>
                     <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-slate-400">Hora</Label><Input type="time" value={formData.pickupTime ?? ''} onChange={e => setFormData({...formData, pickupTime: e.target.value})} /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-slate-400">Fecha Est. Llegada</Label><Input type="date" value={formData.estimatedArrivalDate ?? ''} onChange={e => setFormData({...formData, estimatedArrivalDate: e.target.value})} /></div>
+                    <div className="space-y-1"><Label className="text-[10px] uppercase font-bold text-slate-400">Hora Est. Llegada</Label><Input type="time" value={formData.estimatedArrivalTime ?? ''} onChange={e => setFormData({...formData, estimatedArrivalTime: e.target.value})} /></div>
                   </div>
                 </CardContent>
               </Card>
