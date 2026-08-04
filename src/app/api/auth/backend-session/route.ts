@@ -34,7 +34,8 @@ export async function POST(request: Request) {
 
     if (email === SUPER_ADMIN_EMAIL) {
       tenantId = 'default_tenant';
-      role = 'admin';
+      // El backend Express (requireTenantAdmin) espera este role exacto para acceso a /api/tenants.
+      role = 'superadmin';
     } else if (email) {
       const snapshot = await getFirebaseAdminFirestore().doc(`users/${email}`).get();
       const data = snapshot.data();
