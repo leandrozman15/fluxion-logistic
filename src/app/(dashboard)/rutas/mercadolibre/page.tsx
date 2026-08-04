@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { format, addHours } from "date-fns";
 import { getTenantProfile } from "@/lib/settings-api";
 import { createLoad, updateLoad } from "@/lib/loads-api";
+import { listDrivers } from "@/lib/drivers-api";
 
 function MercadoLibreScanner() {
   const router = useRouter();
@@ -35,6 +36,7 @@ function MercadoLibreScanner() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tenantMapApiKey, setTenantMapApiKey] = useState<string | null>(null);
+  const [myDriverId, setMyDriverId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -44,6 +46,14 @@ function MercadoLibreScanner() {
         const tenant = await getTenantProfile();
         if (!active) return;
         setTenantMapApiKey((tenant.settings as any)?.mapApiKey || null);
+
+        const myEmail = user?.email?.toLowerCase().trim();
+        if (myEmail) {
+          const drivers = await listDrivers();
+          if (!active) return;
+          const myDriver = drivers.find(d => d.email?.toLowerCase().trim() === myEmail);
+          setMyDriverId(myDriver?.id || null);
+        }
       } catch {
         if (!active) return;
         setTenantMapApiKey(null);
@@ -53,7 +63,7 @@ function MercadoLibreScanner() {
     return () => {
       active = false;
     };
-  }, [tenantId]);
+  }, [tenantId, user?.email]);
 
   const handleOpenScanner = () => {
     fileInputRef.current?.click();
@@ -143,7 +153,7 @@ function MercadoLibreScanner() {
           clientName: "Mercado Libre (Colecta Directa)",
           serviceType: 'meli' as any,
           status: 'on_route',
-          assignedDriverId: user?.uid || 'demo_driver',
+          assignedDriverId: myDriverId || undefined,
           pickupDate: new Date().toISOString().split('T')[0],
           pickupTime: format(new Date(), "HH:mm"),
           estimatedArrivalDate: format(estimatedArrival, "yyyy-MM-dd"),

@@ -32,6 +32,7 @@ import { format, addDays, isSameDay } from "date-fns";
 import { es } from "date-fns/locale";
 import { normalizePhone, buildWaMeUrl } from "@/lib/utils/whatsapp";
 import { listLoads } from "@/lib/loads-api";
+import { listDrivers } from "@/lib/drivers-api";
 import { getTenantProfile } from "@/lib/settings-api";
 
 export default function DriverRoutesPage() {
@@ -45,6 +46,7 @@ export default function DriverRoutesPage() {
   const [tenant, setTenant] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [rawRoutes, setRawRoutes] = useState<Load[]>([]);
+  const [myDriverId, setMyDriverId] = useState<string | null>(null);
 
   const dateRange = useMemo(() => {
     const dates = [];
@@ -69,14 +71,18 @@ export default function DriverRoutesPage() {
 
       try {
         if (active) setLoading(true);
-        const [routesData, tenantData] = await Promise.all([listLoads(), getTenantProfile()]);
+        const [routesData, tenantData, driversData] = await Promise.all([listLoads(), getTenantProfile(), listDrivers()]);
         if (!active) return;
         setRawRoutes(routesData);
         setTenant(tenantData);
+        const myEmail = user?.email?.toLowerCase().trim();
+        const myDriver = myEmail ? driversData.find(d => d.email?.toLowerCase().trim() === myEmail) : null;
+        setMyDriverId(myDriver?.id || null);
       } catch {
         if (!active) return;
         setRawRoutes([]);
         setTenant(null);
+        setMyDriverId(null);
       } finally {
         if (active) setLoading(false);
       }
@@ -86,15 +92,16 @@ export default function DriverRoutesPage() {
     return () => {
       active = false;
     };
-  }, [tenantId]);
+  }, [tenantId, user?.email]);
 
   const routes = useMemo(() => {
     if (!rawRoutes) return [];
     
     return rawRoutes
       .filter(r => {
-        // Filtrar por conductor logueado (si el rol es chofer)
-        const matchesDriver = role === 'driver' ? r.assignedDriverId === user?.uid : true;
+        // Filtrar por conductor logueado (si el rol es chofer): matchea por el Driver real (resuelto por email),
+        // NO por user.uid, ya que Load.assignedDriverId referencia el id del registro Driver, no el UID de Firebase Auth.
+        const matchesDriver = role === 'driver' ? !!myDriverId && r.assignedDriverId === myDriverId : true;
         // Excluir archivados del panel del chofer
         const notArchived = r.status !== 'archived';
         return matchesDriver && notArchived;
@@ -104,7 +111,7 @@ export default function DriverRoutesPage() {
         const dateTimeB = `${b.pickupDate} ${b.pickupTime}`;
         return dateTimeA.localeCompare(dateTimeB);
       });
-  }, [rawRoutes, role, user?.uid]);
+  }, [rawRoutes, role, myDriverId]);
 
   const dateStatusMap = useMemo(() => {
     if (!routes) return {};
