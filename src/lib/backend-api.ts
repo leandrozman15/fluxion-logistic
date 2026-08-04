@@ -16,14 +16,20 @@ const BROWSER_PROXY_BASE = '/api/backend-proxy';
 
 const API_BEARER_TOKEN = process.env.NEXT_PUBLIC_BACKEND_BEARER_TOKEN?.trim() || '';
 
+const BACKEND_TOKEN_KEY = 'backendBearerToken';
+
+// Refresh en curso disparado por FirebaseClientProvider/AuthProvider; backendRequest lo espera
+// para evitar 401 por una carrera entre el listener de Firestore (tenantId) y este intercambio.
+let pendingSessionPromise: Promise<string | null> | null = null;
+
 function getRuntimeToken() {
   if (typeof window === 'undefined') return '';
 
   return (
     window.localStorage.getItem('NEXT_PUBLIC_BACKEND_BEARER_TOKEN') ||
-    window.localStorage.getItem('backendBearerToken') ||
+    window.localStorage.getItem(BACKEND_TOKEN_KEY) ||
     window.sessionStorage.getItem('NEXT_PUBLIC_BACKEND_BEARER_TOKEN') ||
-    window.sessionStorage.getItem('backendBearerToken') ||
+    window.sessionStorage.getItem(BACKEND_TOKEN_KEY) ||
     ''
   );
 }
@@ -41,8 +47,51 @@ export function ensureBackendToken() {
   return token;
 }
 
+/** Intercambia el ID token de Firebase por el JWT del backend y lo guarda en sessionStorage. */
+export function refreshBackendSession(idToken: string) {
+  const promise = (async () => {
+    try {
+      const response = await fetch('/api/auth/backend-session', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${idToken}` },
+      });
+      const data = await response.json();
+      if (response.ok && data.token) {
+        window.sessionStorage.setItem(BACKEND_TOKEN_KEY, data.token);
+        return data.token as string;
+      }
+      console.error('No se pudo obtener la sesión del backend:', data.message);
+      window.sessionStorage.removeItem(BACKEND_TOKEN_KEY);
+      return null;
+    } catch (e) {
+      console.error('Error al conectar con el backend:', e);
+      return null;
+    }
+  })();
+
+  pendingSessionPromise = promise;
+  return promise;
+}
+
+export function clearBackendSession() {
+  pendingSessionPromise = null;
+  if (typeof window !== 'undefined') {
+    window.sessionStorage.removeItem(BACKEND_TOKEN_KEY);
+  }
+}
+
+async function resolveBackendTokenAsync(): Promise<string> {
+  const cached = resolveBackendToken();
+  if (cached) return cached;
+  if (pendingSessionPromise) {
+    const fresh = await pendingSessionPromise;
+    if (fresh) return fresh;
+  }
+  return '';
+}
+
 export async function backendRequest<T>(path: string, init?: RequestInit): Promise<ApiResponse<T>> {
-  const token = ensureBackendToken();
+  const token = typeof window === 'undefined' ? ensureBackendToken() || '' : await resolveBackendTokenAsync();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(init?.headers as Record<string, string> | undefined),

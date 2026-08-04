@@ -3,27 +3,8 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { getIdTokenResult, onIdTokenChanged, User } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { refreshBackendSession, clearBackendSession } from "@/lib/backend-api";
 import { AppUser } from "./types";
-
-const BACKEND_TOKEN_KEY = "backendBearerToken";
-
-async function refreshBackendSession(idToken: string) {
-  try {
-    const response = await fetch("/api/auth/backend-session", {
-      method: "POST",
-      headers: { authorization: `Bearer ${idToken}` },
-    });
-    const data = await response.json();
-    if (response.ok && data.token) {
-      sessionStorage.setItem(BACKEND_TOKEN_KEY, data.token);
-    } else {
-      console.error("No se pudo obtener la sesión del backend:", data.message);
-      sessionStorage.removeItem(BACKEND_TOKEN_KEY);
-    }
-  } catch (e) {
-    console.error("Error al conectar con el backend:", e);
-  }
-}
 
 interface AuthContextType {
   user: User | null;
@@ -81,7 +62,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
       } else {
         setAppUser(null);
-        sessionStorage.removeItem(BACKEND_TOKEN_KEY);
+        clearBackendSession();
       }
       setLoading(false);
     });
