@@ -35,7 +35,7 @@ import {
 import { PendingRemito, Truck as TruckType, Hub, OptimizedRouteProposal, Load } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { optimizeDistribution } from "@/services/route-optimizer";
-import { format } from "date-fns";
+import { format, addMinutes } from "date-fns";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { listRemitos, updateRemito } from "@/lib/remitos-api";
@@ -275,6 +275,8 @@ export default function DespachoInteligentePage() {
         nextSeq++;
 
         const newLoadId = crypto.randomUUID();
+        const pickupDateTime = new Date(`${planDate}T08:00:00`);
+        const estimatedArrivalDateTime = addMinutes(pickupDateTime, prop.estimatedDurationMinutes || 0);
         const loadData: Partial<Load> = {
           id: newLoadId,
           orderNumber: orderNum,
@@ -282,9 +284,11 @@ export default function DespachoInteligentePage() {
           status: 'assigned',
           serviceType: 'standard',
           assignedTruckId: prop.truckId,
-          assignedDriverId: prop.driverId || 'none',
+          assignedDriverId: prop.driverId && prop.driverId !== 'none' ? prop.driverId : undefined,
           pickupDate: planDate,
           pickupTime: "08:00",
+          estimatedArrivalDate: format(estimatedArrivalDateTime, "yyyy-MM-dd"),
+          estimatedArrivalTime: format(estimatedArrivalDateTime, "HH:mm"),
           isRoundTrip: activeHub.id !== endHub.id,
           origin: {
             name: activeHub.name, address: activeHub.address, province: activeHub.province, city: activeHub.city, country: activeHub.country, phone: activeHub.phone, contact: "Tráfico", zip: "", instructions: "", lat: activeHub.lat, lng: activeHub.lng
