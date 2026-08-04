@@ -769,7 +769,7 @@ function LayoutContent() {
                         });
                         setSlotForm({ ...slotForm, status: 'occupied' });
                       }}>
-                        <SelectTrigger className="bg-white" disabled={slotForm.status !== 'occupied'}><SelectValue placeholder="Elegir..." /></SelectTrigger>
+                        <SelectTrigger className="bg-white"><SelectValue placeholder="Elegir..." /></SelectTrigger>
                         <SelectContent>{products?.map(p => <SelectItem key={p.id} value={p.id}>{p.sku} - {p.name}</SelectItem>)}</SelectContent>
                       </Select>
                     </div>
