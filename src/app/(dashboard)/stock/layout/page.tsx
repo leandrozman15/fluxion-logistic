@@ -423,7 +423,7 @@ function LayoutContent() {
   const updateProductLocation = async (
     productId: string,
     location: string | undefined,
-    lotInfo?: { lotNumber?: string; entryDate?: string }
+    lotInfo?: { lotNumber?: string; entryDate?: string; quantityUnits?: number }
   ) => {
     const product = products.find((row) => row.id === productId);
     if (!product || !selectedHubId || !activeHub) return;
@@ -436,6 +436,9 @@ function LayoutContent() {
         ...nextWarehouses[existingWarehouseIdx],
         hubName: activeHub.name,
         location,
+        stockQuantity: location
+          ? lotInfo?.quantityUnits ?? nextWarehouses[existingWarehouseIdx].stockQuantity
+          : 0,
         lotNumber: lotInfo?.lotNumber ?? nextWarehouses[existingWarehouseIdx].lotNumber,
         entryDate: lotInfo?.entryDate ?? nextWarehouses[existingWarehouseIdx].entryDate,
       };
@@ -444,7 +447,7 @@ function LayoutContent() {
         hubId: selectedHubId,
         hubName: activeHub.name,
         location,
-        stockQuantity: product.stockQuantity || 0,
+        stockQuantity: lotInfo?.quantityUnits ?? product.stockQuantity ?? 0,
         minStock: product.minStockAlert || 0,
         maxStock: product.maxStockAlert || 0,
         lotNumber: lotInfo?.lotNumber,
@@ -452,7 +455,10 @@ function LayoutContent() {
       });
     }
 
-    const updated = await updateProduct(product.id, { warehouses: nextWarehouses });
+    // La cantidad total del producto es la suma del stock en todas sus sedes/ubicaciones.
+    const totalStock = nextWarehouses.reduce((sum, w) => sum + Number(w.stockQuantity || 0), 0);
+
+    const updated = await updateProduct(product.id, { warehouses: nextWarehouses, stockQuantity: totalStock });
     setProducts((prev) => prev.map((row) => (row.id === product.id ? updated : row)));
   };
 
@@ -503,6 +509,7 @@ function LayoutContent() {
           await updateProductLocation(productId, selectedSlotCoord, {
             lotNumber: material?.lotNumber,
             entryDate: material?.entryDate,
+            quantityUnits: material?.quantityUnits,
           });
         }
 
