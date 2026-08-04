@@ -38,7 +38,7 @@ function normalizeDailyStat(raw: any): DailyStat {
   };
 }
 
-const TENANT_PATHS = ['/api/tenant', '/api/tenants/me', '/api/settings/tenant'];
+const TENANT_PATHS = ['/api/tenants/me', '/api/tenant', '/api/settings/tenant'];
 const DAILY_STATS_PATHS = ['/api/daily-stats', '/api/stats/daily', '/api/tenant/daily-stats'];
 
 export async function getTenantProfile() {
