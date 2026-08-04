@@ -41,27 +41,36 @@ function HubSpaceMetrics({ hub, products }: { hub: Hub, products: Product[] | un
   const config = hub.settings?.layoutConfig;
   const totalSlots = config ? (config.corridors?.length || 1) * (config.positions || 1) * (config.levels || 1) : 32;
 
-  const occupiedSlots = useMemo(() => {
-    if (!products) return 0;
-
-    const withLocation = new Set<string>();
-    let noLocationCounter = 0;
-
-    products.forEach((product) => {
-      const warehouse = product.warehouses?.find((entry) => entry.hubId === hub.id && entry.stockQuantity > 0);
-      if (!warehouse) return;
-
-      if (warehouse.location) {
-        withLocation.add(warehouse.location);
-      } else {
-        noLocationCounter += 1;
-      }
+  // Reconciliamos el estado real de los slots: primero los overrides guardados desde el Mapa de Racks
+  // (incluye bloqueados/reservados) y como fallback la ubicación cargada directamente en la ficha del producto.
+  const assignedSlots = useMemo(() => {
+    const map: Record<string, WarehouseSlot> = { ...((hub.settings?.slotOverrides as Record<string, WarehouseSlot>) || {}) };
+    (products || []).forEach((product) => {
+      (product.warehouses || []).forEach((warehouse) => {
+        if (warehouse.hubId !== hub.id || !warehouse.location) return;
+        const persisted = map[warehouse.location];
+        if (persisted && persisted.status === 'occupied') return;
+        map[warehouse.location] = {
+          ...(persisted || {}),
+          id: warehouse.location,
+          coordinate: warehouse.location,
+          productId: product.id,
+          status: 'occupied',
+        } as WarehouseSlot;
+      });
     });
+    return map;
+  }, [hub.settings?.slotOverrides, products, hub.id]);
 
-    return withLocation.size + noLocationCounter;
-  }, [products, hub.id]);
+  const occupiedSlots = useMemo(
+    () => Object.values(assignedSlots).filter((s) => s.status === 'occupied').length,
+    [assignedSlots]
+  );
 
-  const blockedSlots = 0;
+  const blockedSlots = useMemo(
+    () => Object.values(assignedSlots).filter((s) => s.status === 'blocked' || s.status === 'reserved').length,
+    [assignedSlots]
+  );
 
   const currentStockUnits = useMemo(() => {
     return products?.reduce((acc, p) => {
@@ -343,14 +352,26 @@ export default function SedesPage() {
                <Button variant="outline" className="w-full text-white border-white/20" onClick={handleGetLocation}>
                   <Crosshair className="w-4 h-4 mr-2" /> CAPTURAR GPS
                </Button>
-               <div className="grid grid-cols-2 gap-4 text-center">
-                  <div>
+               <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
                      <p className="text-[8px] font-bold text-white/40 uppercase">Latitud</p>
-                     <p className="text-xs font-black">{formData.lat?.toFixed(5)}</p>
+                     <Input
+                       type="number"
+                       step="any"
+                       className="bg-white/10 border-white/20 text-white text-xs font-black h-9"
+                       value={formData.lat ?? ""}
+                       onChange={(e) => setFormData({ ...formData, lat: e.target.value === "" ? undefined : Number(e.target.value) })}
+                     />
                   </div>
-                  <div>
+                  <div className="space-y-1">
                      <p className="text-[8px] font-bold text-white/40 uppercase">Longitud</p>
-                     <p className="text-xs font-black">{formData.lng?.toFixed(5)}</p>
+                     <Input
+                       type="number"
+                       step="any"
+                       className="bg-white/10 border-white/20 text-white text-xs font-black h-9"
+                       value={formData.lng ?? ""}
+                       onChange={(e) => setFormData({ ...formData, lng: e.target.value === "" ? undefined : Number(e.target.value) })}
+                     />
                   </div>
                </div>
             </div>
