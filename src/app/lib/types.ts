@@ -605,6 +605,7 @@ export interface PendingRemito {
   cotNumber?: string;
   clientId: string;
   clientName: string;
+  clientCuit?: string;
   address: string;
   city: string;
   province: string;
@@ -612,6 +613,7 @@ export interface PendingRemito {
   lng: number;
   weightKg: number;
   volumeM3: number;
+  notes?: string;
   items: PendingRemitoItem[];
   fileUrl?: string;
   status: 'pending' | 'dispatched' | 'delivered' | 'archived';
