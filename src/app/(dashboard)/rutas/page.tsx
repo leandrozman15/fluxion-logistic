@@ -103,9 +103,14 @@ export default function DriverRoutesPage() {
     
     return rawRoutes
       .filter(r => {
-        // Filtrar por conductor logueado (si el rol es chofer): matchea por el Driver real (resuelto por email),
-        // NO por user.uid, ya que Load.assignedDriverId referencia el id del registro Driver, no el UID de Firebase Auth.
-        const matchesDriver = role === 'driver' ? !!myDriverId && r.assignedDriverId === myDriverId : true;
+        // Si el usuario logueado matchea un Driver real (por email), esta pantalla SIEMPRE
+        // restringe a sus propios viajes (titular o acompañante) sin importar el campo `role`
+        // de Firestore (evita que un chofer sin `role: 'driver'` seteado vea viajes ajenos).
+        // Solo se muestran todos los viajes si no hay ningún Driver asociado a esta cuenta
+        // (staff administrativo genuino navegando la pantalla del chofer con fines de monitoreo).
+        const matchesDriver = myDriverId
+          ? (r.assignedDriverId === myDriverId || !!r.assignedCompanionIds?.includes(myDriverId))
+          : role !== 'driver';
         // Excluir archivados del panel del chofer
         const notArchived = r.status !== 'archived';
         return matchesDriver && notArchived;

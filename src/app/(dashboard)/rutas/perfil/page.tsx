@@ -83,7 +83,9 @@ export default function DriverSelfProfilePage() {
 
         setMyDriverId(myDriver?.id || null);
         setDriver(myDriver || null);
-        setTrips(myDriver ? allLoads.filter((load) => load.assignedDriverId === myDriver.id) : []);
+        setTrips(myDriver
+          ? allLoads.filter((load) => load.assignedDriverId === myDriver.id || !!load.assignedCompanionIds?.includes(myDriver.id))
+          : []);
       } catch {
         if (!active) return;
         setDriver(null);
