@@ -464,6 +464,11 @@ export default function MonitorOperativoPage() {
                                     })()}
                                   </div>
                                 )}
+                                {!isStarted && (
+                                  <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200 w-fit">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-slate-300" /> GPS bloqueado (sin iniciar)
+                                  </div>
+                                )}
                             </div>
                          </div>
                       </div>
