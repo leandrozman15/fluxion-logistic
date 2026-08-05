@@ -337,7 +337,7 @@ export default function TruckDetailPage() {
                
                <div className="grid grid-cols-2 gap-4 border-t border-white/5 pt-4">
                   <div>
-                    <p className="text-[8px] uppercase font-bold text-white/40">Fijos + Seguros</p>
+                    <p className="text-[8px] uppercase font-bold text-white/40">Fijos (Total Mensual)</p>
                     <p className="text-sm font-black text-blue-300">${costCalculation.fixedPerKm.toFixed(2)}</p>
                   </div>
                   <div>
@@ -511,7 +511,7 @@ export default function TruckDetailPage() {
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <div className="flex justify-between items-center text-xs">
-                          <span>Fijos (Sueldos/Seguros)</span>
+                          <span>Fijos (Total Mensual)</span>
                           <span className="font-bold">${costCalculation.fixedPerKm.toFixed(2)}</span>
                         </div>
                         <div className="flex justify-between items-center text-xs">
