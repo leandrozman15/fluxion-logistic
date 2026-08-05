@@ -72,6 +72,14 @@ export default function RouteDetailPage() {
   
   const photoInputRef = useRef<HTMLInputElement>(null);
   const watchIdRef = useRef<number | null>(null);
+  // El closure de watchPosition se crea una sola vez por viaje: sin esta ref, cada
+  // posición nueva se calculaba siempre contra el "load" congelado del momento en que
+  // arrancó el GPS, en vez de contra la última posición real (rompiendo el km acumulado
+  // y el historial de la ruta).
+  const loadRef = useRef<Load | null>(null);
+  useEffect(() => {
+    loadRef.current = load;
+  }, [load]);
 
   const [podForm, setPodForm] = useState<Partial<ProofOfDelivery>>({
     receiverName: "",
@@ -154,31 +162,35 @@ export default function RouteDetailPage() {
         setGpsStatus('active');
         const { latitude, longitude, speed } = pos.coords;
         const currentSpeed = speed ? Math.round(speed * 3.6) : 0;
+        // Usa siempre la última versión conocida del viaje (no la congelada al montar
+        // el efecto), para que el km acumulado y el historial reflejen el recorrido real.
+        const current = loadRef.current;
+        if (!current) return;
 
         try {
-          const prevLat = load.tracking?.currentLat;
-          const prevLng = load.tracking?.currentLng;
+          const prevLat = current.tracking?.currentLat;
+          const prevLng = current.tracking?.currentLng;
           // Ignora saltos GPS mínimos (ruido en parada) para no inflar el total con jitter.
           const segmentKm = (typeof prevLat === 'number' && typeof prevLng === 'number')
             ? calculateDistance(prevLat, prevLng, latitude, longitude)
             : 0;
-          const distanceTraveledKm = (load.tracking?.distanceTraveledKm || 0) + (segmentKm > 0.02 ? segmentKm : 0);
-          const maxSpeed = Math.max(load.tracking?.maxSpeed || 0, currentSpeed);
+          const distanceTraveledKm = (current.tracking?.distanceTraveledKm || 0) + (segmentKm > 0.02 ? segmentKm : 0);
+          const maxSpeed = Math.max(current.tracking?.maxSpeed || 0, currentSpeed);
 
-          const outboundDone = load.outboundStops.every(s => !!s.deliveredAt || !!s.failedAt);
-          const needsReturn = load.isRoundTrip || (load.returnStops?.length || 0) > 0;
-          const inReturnPhase = outboundDone && needsReturn && !!load.tracking?.returnStartedAt;
+          const outboundDone = current.outboundStops.every(s => !!s.deliveredAt || !!s.failedAt);
+          const needsReturn = current.isRoundTrip || (current.returnStops?.length || 0) > 0;
+          const inReturnPhase = outboundDone && needsReturn && !!current.tracking?.returnStartedAt;
           const activeStop = inReturnPhase
-            ? (load.returnStops || []).find(s => !s.deliveredAt && !s.failedAt)
-            : load.outboundStops.find(s => !s.deliveredAt && !s.failedAt);
-          const fallbackTarget = inReturnPhase ? (load.returnDestination || (load.isRoundTrip ? load.origin : null)) : load.destination;
+            ? (current.returnStops || []).find(s => !s.deliveredAt && !s.failedAt)
+            : current.outboundStops.find(s => !s.deliveredAt && !s.failedAt);
+          const fallbackTarget = inReturnPhase ? (current.returnDestination || (current.isRoundTrip ? current.origin : null)) : current.destination;
           const target = activeStop || fallbackTarget;
           const distanceRemainingKm = (target?.lat && target?.lng)
             ? calculateDistance(latitude, longitude, target.lat, target.lng)
-            : (load.tracking?.distanceRemainingKm || 0);
+            : (current.tracking?.distanceRemainingKm || 0);
 
           const tracking = {
-            ...(load.tracking || {}),
+            ...(current.tracking || {}),
             currentLat: latitude,
             currentLng: longitude,
             currentSpeed,
@@ -187,7 +199,7 @@ export default function RouteDetailPage() {
             distanceRemainingKm: Number(distanceRemainingKm.toFixed(2)),
             lastUpdateAt: new Date().toISOString(),
             history: [
-              ...((load.tracking as any)?.history || []),
+              ...((current.tracking as any)?.history || []),
               {
               lat: latitude,
               lng: longitude,
@@ -197,14 +209,14 @@ export default function RouteDetailPage() {
             ],
           };
 
-          const updatedLoad = await updateLoad(load.id, {
+          const updatedLoad = await updateLoad(current.id, {
             tracking,
             updatedAt: new Date().toISOString(),
           } as any);
           setLoad(updatedLoad);
 
-          if (load.assignedTruckId) {
-            await updateTruck(load.assignedTruckId, {
+          if (current.assignedTruckId) {
+            await updateTruck(current.assignedTruckId, {
               location: {
                 ...(updatedLoad as any).location,
                 lat: latitude,
