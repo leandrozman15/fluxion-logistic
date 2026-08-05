@@ -53,6 +53,7 @@ import { useState, useEffect, useMemo } from "react";
 import { getTenantProfile } from "@/lib/settings-api";
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { DriverGpsPermission } from "@/components/DriverGpsPermission";
 
 const SUPER_ADMIN_EMAIL = "leozman15@gmail.com";
 
@@ -308,7 +309,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                </div>
             </div>
           </header>
-          <main className="p-4 sm:p-6">{children}</main>
+          <main className="p-4 sm:p-6">
+            {role === 'driver' && <DriverGpsPermission />}
+            {children}
+          </main>
         </SidebarInset>
       </div>
     </SidebarProvider>
