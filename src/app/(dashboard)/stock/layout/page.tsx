@@ -328,7 +328,7 @@ function LayoutContent() {
       toast({ title: "Configuración Guardada" });
       setIsConfigOpen(false);
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al guardar" });
+      toast({ variant: "destructive", title: "Error al guardar", description: (e as Error).message });
     } finally {
       setIsSaving(false);
     }
