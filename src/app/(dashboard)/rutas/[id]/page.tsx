@@ -38,6 +38,7 @@ import { uploadBase64 } from "@/lib/storage-service";
 import { getLoad, updateLoad } from "@/lib/loads-api";
 import { updateTruck } from "@/lib/trucks-api";
 import { getTenantProfile } from "@/lib/settings-api";
+import { calculateDistance } from "@/lib/utils/tracking-math";
 
 const INCIDENT_REASONS = [
   { id: 'absent', label: 'Cliente Ausente' },
@@ -155,11 +156,35 @@ export default function RouteDetailPage() {
         const currentSpeed = speed ? Math.round(speed * 3.6) : 0;
 
         try {
+          const prevLat = load.tracking?.currentLat;
+          const prevLng = load.tracking?.currentLng;
+          // Ignora saltos GPS mínimos (ruido en parada) para no inflar el total con jitter.
+          const segmentKm = (typeof prevLat === 'number' && typeof prevLng === 'number')
+            ? calculateDistance(prevLat, prevLng, latitude, longitude)
+            : 0;
+          const distanceTraveledKm = (load.tracking?.distanceTraveledKm || 0) + (segmentKm > 0.02 ? segmentKm : 0);
+          const maxSpeed = Math.max(load.tracking?.maxSpeed || 0, currentSpeed);
+
+          const outboundDone = load.outboundStops.every(s => !!s.deliveredAt || !!s.failedAt);
+          const needsReturn = load.isRoundTrip || (load.returnStops?.length || 0) > 0;
+          const inReturnPhase = outboundDone && needsReturn && !!load.tracking?.returnStartedAt;
+          const activeStop = inReturnPhase
+            ? (load.returnStops || []).find(s => !s.deliveredAt && !s.failedAt)
+            : load.outboundStops.find(s => !s.deliveredAt && !s.failedAt);
+          const fallbackTarget = inReturnPhase ? (load.returnDestination || (load.isRoundTrip ? load.origin : null)) : load.destination;
+          const target = activeStop || fallbackTarget;
+          const distanceRemainingKm = (target?.lat && target?.lng)
+            ? calculateDistance(latitude, longitude, target.lat, target.lng)
+            : (load.tracking?.distanceRemainingKm || 0);
+
           const tracking = {
             ...(load.tracking || {}),
             currentLat: latitude,
             currentLng: longitude,
             currentSpeed,
+            maxSpeed,
+            distanceTraveledKm: Number(distanceTraveledKm.toFixed(2)),
+            distanceRemainingKm: Number(distanceRemainingKm.toFixed(2)),
             lastUpdateAt: new Date().toISOString(),
             history: [
               ...((load.tracking as any)?.history || []),
@@ -209,10 +234,43 @@ export default function RouteDetailPage() {
     };
   }, [load?.status, tenantId]);
 
-  const currentStop = useMemo(() => {
-    if (!load?.outboundStops) return null;
-    return load.outboundStops.find(s => !s.deliveredAt && !s.failedAt);
+  const outboundDone = useMemo(() => {
+    if (!load?.outboundStops) return false;
+    return load.outboundStops.every(s => !!s.deliveredAt || !!s.failedAt);
   }, [load?.outboundStops]);
+
+  const needsReturn = !!load && (load.isRoundTrip || (load.returnStops?.length || 0) > 0);
+  const returnStarted = !!load?.tracking?.returnStartedAt;
+
+  const returnStopsDone = useMemo(() => {
+    return (load?.returnStops || []).every(s => !!s.deliveredAt || !!s.failedAt);
+  }, [load?.returnStops]);
+
+  const returnArrived = !!load?.tracking?.returnArrivedAt;
+
+  // Fases del viaje: entregas de ida -> (si aplica) inicio de regreso -> entregas de regreso -> llegada a base.
+  const phase: 'outbound' | 'awaiting_return_start' | 'return' | 'awaiting_return_arrival' | 'finished' = !load
+    ? 'outbound'
+    : !outboundDone
+    ? 'outbound'
+    : !needsReturn
+    ? 'finished'
+    : !returnStarted
+    ? 'awaiting_return_start'
+    : !returnStopsDone
+    ? 'return'
+    : !returnArrived
+    ? 'awaiting_return_arrival'
+    : 'finished';
+
+  const activeStopsField: 'outboundStops' | 'returnStops' = phase === 'return' ? 'returnStops' : 'outboundStops';
+
+  const currentStop = useMemo(() => {
+    if (!load) return null;
+    if (phase === 'return') return (load.returnStops || []).find(s => !s.deliveredAt && !s.failedAt) || null;
+    if (phase === 'outbound') return load.outboundStops.find(s => !s.deliveredAt && !s.failedAt) || null;
+    return null;
+  }, [load, phase]);
 
   const handleStartTrip = async () => {
     if (!load || !tenantId) return;
@@ -280,6 +338,56 @@ export default function RouteDetailPage() {
     else window.open(buildWaMeUrl(normalized!, `Hola Central, soy el chofer del viaje ${load?.orderNumber}.`), '_blank');
   };
 
+  const handleStartReturn = async () => {
+    if (!load || !tenantId) return;
+    setIsUpdating(true);
+    try {
+      const updatedLoad = await updateLoad(load.id, {
+        tracking: {
+          ...(load.tracking || {}),
+          returnStartedAt: new Date().toISOString(),
+          outboundDistanceKm: load.tracking?.distanceTraveledKm || 0,
+        },
+        updatedAt: new Date().toISOString(),
+      } as any);
+      setLoad(updatedLoad);
+      toast({ title: "Regreso Iniciado", description: "El GPS sigue transmitiendo, ahora contabilizando km de regreso." });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error" });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleConfirmReturnArrival = async () => {
+    if (!load || !tenantId) return;
+    setIsUpdating(true);
+    try {
+      const updatedLoad = await updateLoad(load.id, {
+        status: 'delivered',
+        tracking: {
+          ...(load.tracking || {}),
+          returnArrivedAt: new Date().toISOString(),
+        },
+        updatedAt: new Date().toISOString(),
+      } as any);
+      setLoad(updatedLoad);
+
+      if (load.assignedTruckId) {
+        await updateTruck(load.assignedTruckId, {
+          status: 'available',
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      toast({ title: "Regreso Completado", description: "Jornada finalizada." });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error" });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handleConfirmDelivery = async () => {
     if (!load || !currentStop || !tenantId) return;
     setIsUpdating(true);
@@ -314,19 +422,23 @@ export default function RouteDetailPage() {
         confirmedAt: new Date().toISOString()
       };
 
-      const updatedStops = load.outboundStops.map(s => 
+      const currentStops = (load[activeStopsField] || []) as typeof load.outboundStops;
+      const updatedStops = currentStops.map(s => 
         s.id === currentStop.id ? { ...s, deliveredAt: new Date().toISOString(), proofOfDelivery: finalPod } : s
       );
 
       const allFinished = updatedStops.every(s => !!s.deliveredAt || !!s.failedAt);
+      // Solo se cierra el viaje acá si es de ida simple (sin regreso); con regreso, la fase de
+      // "awaiting_return_start"/"awaiting_return_arrival" es la que finalmente marca 'delivered'.
+      const closesTrip = phase === 'outbound' && allFinished && !needsReturn;
       const updatedLoad = await updateLoad(load.id, {
-        outboundStops: updatedStops,
-        status: allFinished ? 'delivered' : load.status,
+        [activeStopsField]: updatedStops,
+        status: closesTrip ? 'delivered' : load.status,
         updatedAt: new Date().toISOString(),
       } as any);
       setLoad(updatedLoad);
 
-      if (allFinished && load.assignedTruckId) {
+      if (closesTrip && load.assignedTruckId) {
         await updateTruck(load.assignedTruckId, {
           status: 'available',
           updatedAt: new Date().toISOString(),
@@ -348,7 +460,8 @@ export default function RouteDetailPage() {
     if (!load || !currentStop || !tenantId) return;
     setIsUpdating(true);
     try {
-      const updatedStops = load.outboundStops.map(s => 
+      const currentStops = (load[activeStopsField] || []) as typeof load.outboundStops;
+      const updatedStops = currentStops.map(s => 
         s.id === currentStop.id ? { 
           ...s, 
           failedAt: new Date().toISOString(),
@@ -357,14 +470,15 @@ export default function RouteDetailPage() {
       );
 
       const allFinished = updatedStops.every(s => !!s.deliveredAt || !!s.failedAt);
+      const closesTrip = phase === 'outbound' && allFinished && !needsReturn;
       const updatedLoad = await updateLoad(load.id, {
-        outboundStops: updatedStops,
-        status: allFinished ? 'delivered' : load.status,
+        [activeStopsField]: updatedStops,
+        status: closesTrip ? 'delivered' : load.status,
         updatedAt: new Date().toISOString(),
       } as any);
       setLoad(updatedLoad);
 
-      if (allFinished && load.assignedTruckId) {
+      if (closesTrip && load.assignedTruckId) {
         await updateTruck(load.assignedTruckId, {
           status: 'available',
           updatedAt: new Date().toISOString(),
@@ -445,7 +559,7 @@ export default function RouteDetailPage() {
             <CardContent className="p-8 space-y-6">
                <div className="flex justify-between items-start">
                   <div className="space-y-1">
-                    <p className="text-[10px] font-black uppercase text-blue-400 tracking-widest">Siguiente Entrega</p>
+                    <p className="text-[10px] font-black uppercase text-blue-400 tracking-widest">{phase === 'return' ? 'Entrega en Regreso' : 'Siguiente Entrega'}</p>
                     <h2 className="text-2xl font-black uppercase italic tracking-tighter leading-tight">{currentStop.name}</h2>
                   </div>
                   <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center text-blue-400"><MapPin size={24} /></div>
@@ -465,6 +579,24 @@ export default function RouteDetailPage() {
 
           <Button variant="destructive" className="w-full h-16 rounded-2xl font-black text-lg animate-pulse" onClick={() => setIsEmergencyOpen(true)}>S.O.S / EMERGENCIA</Button>
         </div>
+      ) : phase === 'awaiting_return_start' ? (
+        <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-white">
+          <CardHeader className="bg-orange-500 text-white p-8 text-center">
+             <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl"><TruckIcon size={32} /></div>
+             <CardTitle className="text-xl font-black uppercase italic tracking-tighter">Entregas de Ida Completas</CardTitle>
+             <CardDescription className="text-white/80 font-bold">Iniciá el regreso a base para seguir contabilizando los km.</CardDescription>
+          </CardHeader>
+          <CardFooter className="p-8"><Button className="w-full h-20 bg-orange-500 hover:bg-orange-600 text-white font-black text-xl rounded-3xl" onClick={handleStartReturn} disabled={isUpdating}>{isUpdating ? <Loader2 className="animate-spin mr-2" /> : <Play className="mr-2 fill-current" />} INICIAR REGRESO</Button></CardFooter>
+        </Card>
+      ) : phase === 'awaiting_return_arrival' ? (
+        <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-white">
+          <CardHeader className="bg-slate-900 text-white p-8 text-center">
+             <div className="w-16 h-16 bg-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl"><MapPin size={32} /></div>
+             <CardTitle className="text-xl font-black uppercase italic tracking-tighter">En Camino a Base</CardTitle>
+             <CardDescription className="text-white/80 font-bold">Confirmá tu llegada para cerrar la jornada y los km de regreso.</CardDescription>
+          </CardHeader>
+          <CardFooter className="p-8"><Button className="w-full h-20 bg-green-600 hover:bg-green-700 text-white font-black text-xl rounded-3xl" onClick={handleConfirmReturnArrival} disabled={isUpdating}>{isUpdating ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2" />} CONFIRMAR LLEGADA A BASE</Button></CardFooter>
+        </Card>
       ) : (
         <div className="h-[60vh] flex flex-col items-center justify-center text-center space-y-6">
            <CheckCircle2 size={64} className="text-green-600" />

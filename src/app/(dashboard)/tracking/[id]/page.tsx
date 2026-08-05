@@ -47,14 +47,14 @@ export default function TrackingPage() {
   useEffect(() => {
     let active = true;
 
-    async function fetchData() {
+    async function fetchData(showSpinner: boolean) {
       if (!loadId) {
         if (active) setLoading(false);
         return;
       }
 
       try {
-        if (active) setLoading(true);
+        if (active && showSpinner) setLoading(true);
         const load = await getLoadById(loadId);
         if (!active) return;
         setLoadData(load);
@@ -69,15 +69,19 @@ export default function TrackingPage() {
         }
       } catch (error) {
         if (!active) return;
-        toast({ variant: "destructive", title: "Error al cargar tracking", description: (error as Error).message });
+        if (showSpinner) toast({ variant: "destructive", title: "Error al cargar tracking", description: (error as Error).message });
       } finally {
-        if (active) setLoading(false);
+        if (active && showSpinner) setLoading(false);
       }
     }
 
-    fetchData();
+    fetchData(true);
+    // Refresco silencioso: refleja en vivo el GPS real que transmite el chofer desde su app,
+    // sin esto el mapa quedaba congelado en la posición del momento en que se abrió la pantalla.
+    const interval = setInterval(() => fetchData(false), 8000);
     return () => {
       active = false;
+      clearInterval(interval);
     };
   }, [loadId, toast]);
 
@@ -165,11 +169,12 @@ export default function TrackingPage() {
 
       if (truckData?.id) {
         await updateTruck(truckData.id, {
-          currentLocation: {
+          location: {
+            ...(truckData.location || {}),
             lat: nextPoint.lat,
             lng: nextPoint.lng,
-            updatedAt: new Date().toISOString(),
           },
+          updatedAt: new Date().toISOString(),
         } as any);
       }
     } catch (error) {
@@ -212,7 +217,12 @@ export default function TrackingPage() {
         <Button variant="ghost" onClick={() => router.back()} className="rounded-xl">
           <ArrowLeft className="mr-2" size={16} /> Volver
         </Button>
-        <Badge className="bg-blue-50 text-blue-700 border-blue-100">Tracking en vivo</Badge>
+        <div className="flex items-center gap-2">
+          {loadData?.tracking?.returnStartedAt && !loadData?.tracking?.returnArrivedAt && (
+            <Badge className="bg-orange-50 text-orange-700 border-orange-100">Tramo Regreso</Badge>
+          )}
+          <Badge className="bg-blue-50 text-blue-700 border-blue-100">Tracking en vivo</Badge>
+        </div>
       </div>
 
       <Card className="border-none shadow-xl">
@@ -230,6 +240,10 @@ export default function TrackingPage() {
           <div className="p-4 rounded-2xl bg-slate-50">
             <p className="text-[10px] uppercase font-black text-slate-400">Velocidad</p>
             <p className="text-sm font-black text-slate-800 flex items-center gap-1"><Gauge size={14} /> {Number(loadData?.tracking?.currentSpeed || 0)} km/h</p>
+          </div>
+          <div className="p-4 rounded-2xl bg-slate-50">
+            <p className="text-[10px] uppercase font-black text-slate-400">Km Recorridos</p>
+            <p className="text-sm font-black text-slate-800 flex items-center gap-1"><Route size={14} /> {Number(loadData?.tracking?.distanceTraveledKm || 0).toFixed(1)} km</p>
           </div>
           <div className="p-4 rounded-2xl bg-slate-50">
             <p className="text-[10px] uppercase font-black text-slate-400">Restante</p>

@@ -104,7 +104,7 @@ export default function TripReportPage() {
   }, [tenantId, id, toast]);
 
   const stats = useMemo(() => {
-    if (!load?.tracking) return { avgSpeed: 0, maxSpeed: 0, totalKm: 0, totalFuel: 0, fuelCost: 0, otherCost: 0, totalCost: 0, durationMinutes: 0, drivingMinutes: 0, idleMinutes: 0 };
+    if (!load?.tracking) return { avgSpeed: 0, maxSpeed: 0, totalKm: 0, outboundKm: 0, returnKm: 0, hasReturn: false, totalFuel: 0, fuelCost: 0, otherCost: 0, totalCost: 0, durationMinutes: 0, drivingMinutes: 0, idleMinutes: 0 };
     
     const history = load.tracking.history || [];
     const totalKm = load.tracking.distanceTraveledKm || 0;
@@ -143,10 +143,17 @@ export default function TripReportPage() {
     const totalFuel = approvedExpenses.filter(e => e.category === 'fuel').reduce((acc, e) => acc + (e.liters || 0), 0);
     const otherCost = approvedExpenses.filter(e => e.category !== 'fuel').reduce((acc, e) => acc + (e.amount || 0), 0);
 
+    const hasReturn = !!load.tracking.returnStartedAt;
+    const outboundKm = hasReturn ? (load.tracking.outboundDistanceKm || 0) : totalKm;
+    const returnKm = hasReturn ? Math.max(0, totalKm - outboundKm) : 0;
+
     return {
       avgSpeed: Math.round(avgSpeed),
       maxSpeed: Math.round(maxSpeed),
       totalKm: totalKm.toFixed(1),
+      outboundKm: outboundKm.toFixed(1),
+      returnKm: returnKm.toFixed(1),
+      hasReturn,
       totalFuel: totalFuel.toFixed(1),
       fuelCost,
       otherCost,
@@ -249,6 +256,9 @@ export default function TripReportPage() {
             <Navigation size={20} className="text-blue-400" />
             <p className="text-[10px] uppercase font-bold text-white/50">Kilómetros Totales</p>
             <p className="text-3xl font-black italic">{stats.totalKm} <span className="text-xs font-normal opacity-50 uppercase">km</span></p>
+            {stats.hasReturn && (
+              <p className="text-[10px] font-bold text-white/60">Ida: {stats.outboundKm} km · Regreso: {stats.returnKm} km</p>
+            )}
           </CardContent>
         </Card>
         <Card className="border-none shadow-sm">

@@ -539,6 +539,11 @@ export interface Load {
     lastPauseType?: string;
     pauseStartedAt?: any;
     estimatedFuelLiters?: number;
+    // Tramo de regreso a base: se inicia manualmente por el chofer tras terminar las entregas de ida.
+    returnStartedAt?: any;
+    returnArrivedAt?: any;
+    // Snapshot de distanceTraveledKm al iniciar el regreso, para poder separar km de ida vs. regreso.
+    outboundDistanceKm?: number;
   };
 
   proofOfDelivery?: ProofOfDelivery;
