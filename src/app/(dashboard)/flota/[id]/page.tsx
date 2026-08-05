@@ -515,8 +515,12 @@ export default function TruckDetailPage() {
                           <span className="font-bold">${costCalculation.fixedPerKm.toFixed(2)}</span>
                         </div>
                         <div className="flex justify-between items-center text-xs">
-                          <span>Mantenimiento y Gomas</span>
-                          <span className="font-bold">${(costCalculation.oilPerKm + costCalculation.tiresPerKm).toFixed(2)}</span>
+                          <span>Aceite y Filtro</span>
+                          <span className="font-bold">${costCalculation.oilPerKm.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span>Neumáticos</span>
+                          <span className="font-bold">${costCalculation.tiresPerKm.toFixed(2)}</span>
                         </div>
                         <div className="flex justify-between items-center text-xs text-orange-400">
                           <span>Gasoil (Media móvil)</span>

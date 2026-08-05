@@ -362,7 +362,16 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                    <div className="p-6 bg-slate-50 rounded-3xl border space-y-4">
                       <p className="text-[10px] font-black uppercase text-blue-600 tracking-widest">Mantenimiento y Lubricación</p>
                       <div className="grid grid-cols-2 gap-4">
-                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase">Costo Service</Label><Input type="number" className="bg-white" value={formData.costs?.variable.preventiveMaintenance.cost} onChange={e => setFormData({...formData, costs: {...formData.costs!, variable: {...formData.costs!.variable, preventiveMaintenance: {...formData.costs!.variable.preventiveMaintenance, cost: parseFloat(e.target.value) || 0}}}})} /></div>
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase">Costo Service (Aceite + Filtro)</Label><Input type="number" className="bg-white" value={formData.costs?.variable.preventiveMaintenance.cost} onChange={e => setFormData({...formData, costs: {...formData.costs!, variable: {...formData.costs!.variable, preventiveMaintenance: {...formData.costs!.variable.preventiveMaintenance, cost: parseFloat(e.target.value) || 0}}}})} /></div>
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase">Dura cada (KM)</Label><Input type="number" className="bg-white" value={formData.costs?.variable.preventiveMaintenance.frequencyKm} onChange={e => setFormData({...formData, costs: {...formData.costs!, variable: {...formData.costs!.variable, preventiveMaintenance: {...formData.costs!.variable.preventiveMaintenance, frequencyKm: parseFloat(e.target.value) || 1}}}})} /></div>
+                      </div>
+                   </div>
+
+                   <div className="p-6 bg-slate-50 rounded-3xl border space-y-4">
+                      <p className="text-[10px] font-black uppercase text-blue-600 tracking-widest">Neumáticos</p>
+                      <div className="grid grid-cols-2 gap-4">
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase">Costo Juego Completo</Label><Input type="number" className="bg-white" value={formData.costs?.variable.tires.costFullSet} onChange={e => setFormData({...formData, costs: {...formData.costs!, variable: {...formData.costs!.variable, tires: {...formData.costs!.variable.tires, costFullSet: parseFloat(e.target.value) || 0}}}})} /></div>
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase">Dura cada (KM)</Label><Input type="number" className="bg-white" value={formData.costs?.variable.tires.lifeSpanKm} onChange={e => setFormData({...formData, costs: {...formData.costs!, variable: {...formData.costs!.variable, tires: {...formData.costs!.variable.tires, lifeSpanKm: parseFloat(e.target.value) || 1}}}})} /></div>
                       </div>
                    </div>
                 </div>
