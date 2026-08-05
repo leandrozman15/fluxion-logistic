@@ -41,6 +41,16 @@ const DEFAULT_DOCS: Omit<VehicleDocument, 'status'>[] = [
   { id: 'cnrt', name: 'Habilitación CNRT', category: 'authorization', description: 'Obligatorio para fletes a terceros.', isRequired: false }
 ];
 
+const FIXED_COST_LABELS: Record<string, string> = {
+  salaryWithSocial: 'Sueldo + Cargas Sociales',
+  insuranceTotal: 'Seguro Total Mensual',
+  patenteMonthly: 'Patente Mensualizada',
+  satelliteGps: 'GPS Satelital',
+  garageAdmin: 'Cochera / Administración',
+  taxesHabilitations: 'Impuestos y Habilitaciones',
+  amortization: 'Amortización',
+};
+
 export default function TruckDetailPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -487,7 +497,7 @@ export default function TruckDetailPage() {
                    <CardContent className="pt-4 space-y-2">
                       {truck.costs?.fixed && Object.entries(truck.costs.fixed).map(([k,v]) => (
                         <div key={k} className="flex justify-between text-xs border-b border-slate-50 py-1">
-                          <span className="text-slate-500 capitalize">{k.replace(/([A-Z])/g, ' $1')}</span>
+                          <span className="text-slate-500">{FIXED_COST_LABELS[k] || k}</span>
                           <span className="font-bold">${(v as number).toLocaleString()}</span>
                         </div>
                       ))}
