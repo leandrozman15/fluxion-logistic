@@ -191,6 +191,18 @@ function LayoutContent() {
 
   const activeHub = useMemo(() => hubs?.find(h => h.id === selectedHubId), [hubs, selectedHubId]);
 
+  // Si el hubId de la URL quedó desactualizado (ej. el link se generó antes de que la sede
+  // cambiara de id, o la sede fue recreada) el hub activo nunca resuelve y todos los guardados
+  // quedan silenciosamente bloqueados. Ante esto, autoseleccionamos la primera sede disponible.
+  useEffect(() => {
+    if (loading || hubs.length === 0) return;
+    const matches = hubs.some((h) => h.id === selectedHubId);
+    if (!matches) {
+      setSelectedHubId(hubs[0].id);
+      toast({ title: "Sede reasignada", description: "El enlace hacía referencia a una sede que ya no existe. Se seleccionó la primera sede disponible." });
+    }
+  }, [loading, hubs, selectedHubId, toast]);
+
   const selectedProduct = useMemo(() => {
     if (!slotForm.productId) return null;
     return products.find((product) => product.id === slotForm.productId) || null;
@@ -245,7 +257,9 @@ function LayoutContent() {
   }, [activeHub]);
 
   const persistSlotOverrides = async (nextOverrides: Record<string, WarehouseSlot>) => {
-    if (!selectedHubId || !activeHub) return;
+    if (!selectedHubId || !activeHub) {
+      throw new Error("No se pudo identificar la sede activa. Recargá la página e intentá de nuevo.");
+    }
     await updateHub(selectedHubId, {
       settings: {
         ...(activeHub.settings || {}),
@@ -291,7 +305,10 @@ function LayoutContent() {
   }, [totalPositions, assignedSlots]);
 
   const handleSaveConfig = async () => {
-    if (!tenantId || !selectedHubId || !activeHub) return;
+    if (!tenantId || !selectedHubId || !activeHub) {
+      toast({ variant: "destructive", title: "Error al guardar", description: "No se pudo identificar la sede activa. Recargá la página e intentá de nuevo." });
+      return;
+    }
     setIsSaving(true);
     try {
       const corridorsArray = configForm.corridors.split(',').map(s => s.trim().toUpperCase()).filter(s => s !== "");
@@ -426,7 +443,10 @@ function LayoutContent() {
     lotInfo?: { lotNumber?: string; entryDate?: string; quantityUnits?: number }
   ) => {
     const product = products.find((row) => row.id === productId);
-    if (!product || !selectedHubId || !activeHub) return;
+    if (!product) return;
+    if (!selectedHubId || !activeHub) {
+      throw new Error("No se pudo identificar la sede activa. Recargá la página e intentá de nuevo.");
+    }
 
     const existingWarehouseIdx = (product.warehouses || []).findIndex((entry) => entry.hubId === selectedHubId);
     const nextWarehouses = [...(product.warehouses || [])];
@@ -463,7 +483,10 @@ function LayoutContent() {
   };
 
   const handleSaveSlot = async () => {
-    if (!tenantId || !selectedHubId || !selectedSlotCoord || !activeHub) return;
+    if (!tenantId || !selectedHubId || !selectedSlotCoord || !activeHub) {
+      toast({ variant: "destructive", title: "Error al guardar", description: "No se pudo identificar la sede activa. Recargá la página e intentá de nuevo." });
+      return;
+    }
     setIsSaving(true);
     try {
       const nextOverrides = { ...slotOverrides };
@@ -579,7 +602,10 @@ function LayoutContent() {
   };
 
   const handleClearSlot = async () => {
-    if (!tenantId || !selectedHubId || !selectedSlotCoord) return;
+    if (!tenantId || !selectedHubId || !selectedSlotCoord) {
+      toast({ variant: "destructive", title: "Error al borrar", description: "No se pudo identificar la sede o el slot seleccionado. Recargá la página e intentá de nuevo." });
+      return;
+    }
     setIsSaving(true);
     try {
       const currentOccupant = assignedSlots[selectedSlotCoord];
