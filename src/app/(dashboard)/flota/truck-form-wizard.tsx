@@ -160,6 +160,10 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
       });
 
       cleanData.capacityKg = finalCapacity;
+      // "none" es el sentinel de "Sin Chofer Fijo" del <Select>; assignedDriverId es FK real en el backend.
+      if (cleanData.assignedDriverId === 'none') {
+        cleanData.assignedDriverId = undefined;
+      }
       if (truckId) {
         await updateTruck(truckId, cleanData);
       } else {
