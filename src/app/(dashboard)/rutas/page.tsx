@@ -24,7 +24,7 @@ import {
   MessageCircle,
   Headset
 } from "lucide-react";
-import { Load, LoadStatus } from "@/app/lib/types";
+import { Driver, Load, LoadStatus } from "@/app/lib/types";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
@@ -34,6 +34,7 @@ import { normalizePhone, buildWaMeUrl } from "@/lib/utils/whatsapp";
 import { listLoads } from "@/lib/loads-api";
 import { listDrivers } from "@/lib/drivers-api";
 import { getTenantProfile } from "@/lib/settings-api";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export default function DriverRoutesPage() {
   const { tenantId, role } = useTenant();
@@ -47,6 +48,7 @@ export default function DriverRoutesPage() {
   const [loading, setLoading] = useState(true);
   const [rawRoutes, setRawRoutes] = useState<Load[]>([]);
   const [myDriverId, setMyDriverId] = useState<string | null>(null);
+  const [myDriver, setMyDriver] = useState<Driver | null>(null);
 
   const dateRange = useMemo(() => {
     const dates = [];
@@ -76,13 +78,15 @@ export default function DriverRoutesPage() {
         setRawRoutes(routesData);
         setTenant(tenantData);
         const myEmail = user?.email?.toLowerCase().trim();
-        const myDriver = myEmail ? driversData.find(d => d.email?.toLowerCase().trim() === myEmail) : null;
-        setMyDriverId(myDriver?.id || null);
+        const foundDriver = myEmail ? driversData.find(d => d.email?.toLowerCase().trim() === myEmail) : null;
+        setMyDriverId(foundDriver?.id || null);
+        setMyDriver(foundDriver || null);
       } catch {
         if (!active) return;
         setRawRoutes([]);
         setTenant(null);
         setMyDriverId(null);
+        setMyDriver(null);
       } finally {
         if (active) setLoading(false);
       }
@@ -188,16 +192,19 @@ export default function DriverRoutesPage() {
           </div>
           <div>
             <h1 className="text-2xl font-black text-slate-900 italic tracking-tighter leading-none">Mi Agenda</h1>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Asistente Digital para Conducción</p>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{myDriver ? `Hola, ${myDriver.firstName}!` : 'Asistente Digital para Conducción'}</p>
           </div>
         </div>
         <div className="flex gap-2">
           <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 border border-blue-100" onClick={() => handleContactCentral('call')}>
             <Headset size={20} />
           </Button>
-          <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full bg-white shadow-sm border border-slate-100 text-blue-600" asChild>
-            <Link href="/rutas/perfil"><User size={20} /></Link>
-          </Button>
+          <Link href="/rutas/perfil">
+            <Avatar className="w-10 h-10 border border-slate-100 shadow-sm">
+              <AvatarImage src={myDriver?.avatarUrl} className="object-cover" />
+              <AvatarFallback className="bg-blue-50 text-blue-600">{myDriver ? `${myDriver.firstName[0]}${myDriver.lastName[0]}` : <User size={18} />}</AvatarFallback>
+            </Avatar>
+          </Link>
         </div>
       </div>
 

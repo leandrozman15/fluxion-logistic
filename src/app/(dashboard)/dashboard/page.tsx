@@ -164,6 +164,32 @@ export default function MonitorOperativoPage() {
     };
   }, [tenantId, toast]);
 
+  // Refresco silencioso de loads/trucks para reflejar en vivo la posición GPS que el chofer
+  // va transmitiendo desde la app (rutas/[id]/page.tsx no notifica al dashboard de otra forma).
+  useEffect(() => {
+    if (!tenantId) return;
+    let active = true;
+
+    const interval = setInterval(async () => {
+      try {
+        const [truckRows, loadRows] = await Promise.all([listTrucks(), listLoads()]);
+        if (!active) return;
+        setTrucks(truckRows);
+        setLoads((prev) => {
+          const byId = new Map(loadRows.map((l) => [l.id, l]));
+          return prev.map((l) => byId.get(l.id) || l).concat(loadRows.filter((l) => !prev.some((p) => p.id === l.id)));
+        });
+      } catch {
+        // Silencioso: si falla un refresco puntual, se reintenta en el próximo ciclo.
+      }
+    }, 20000);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [tenantId]);
+
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const tomorrowStr = format(addDays(new Date(), 1), "yyyy-MM-dd");
   const nextWeekStr = format(addDays(new Date(), 7), "yyyy-MM-dd");
@@ -261,6 +287,15 @@ export default function MonitorOperativoPage() {
     const hours = distanceRemaining / currentSpeed;
     const etaDate = addMinutes(new Date(), Math.round(hours * 60));
     return format(etaDate, "HH:mm") + " hs";
+  };
+
+  // Si el último ping de tracking supera este umbral, consideramos que el GPS del chofer se desconectó.
+  const GPS_STALE_MS = 3 * 60 * 1000;
+  const getGpsConnection = (lastUpdateAt: string | null | undefined) => {
+    if (!lastUpdateAt) return { connected: false, label: 'GPS sin señal' };
+    const elapsedMs = Date.now() - new Date(lastUpdateAt).getTime();
+    if (elapsedMs > GPS_STALE_MS) return { connected: false, label: `GPS sin señal (${Math.round(elapsedMs / 60000)} min)` };
+    return { connected: true, label: 'GPS en vivo' };
   };
 
   const getPlannedTotalKm = (load: Load) => {
@@ -413,8 +448,20 @@ export default function MonitorOperativoPage() {
                                   </span>
                                 </div>
                                 {load.status === 'on_route' && load.tracking && (
-                                  <div className="flex items-center gap-1.5 text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 w-fit">
-                                     <Zap size={10} className="animate-pulse fill-current" /> ETA GPS: {calculateETA(load.tracking.distanceRemainingKm, load.tracking.currentSpeed)}
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <div className="flex items-center gap-1.5 text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 w-fit">
+                                       <Zap size={10} className="animate-pulse fill-current" /> ETA GPS: {calculateETA(load.tracking.distanceRemainingKm, load.tracking.currentSpeed)}
+                                    </div>
+                                    {(() => {
+                                      const gps = getGpsConnection(load.tracking.lastUpdateAt as any);
+                                      return (
+                                        <div className={cn("flex items-center gap-1.5 text-[10px] font-black px-2 py-0.5 rounded-full border w-fit",
+                                          gps.connected ? "text-green-600 bg-green-50 border-green-100" : "text-red-600 bg-red-50 border-red-100")}>
+                                          <div className={cn("w-1.5 h-1.5 rounded-full", gps.connected ? "bg-green-500 animate-pulse" : "bg-red-500")} />
+                                          {gps.label}
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
                                 )}
                             </div>
