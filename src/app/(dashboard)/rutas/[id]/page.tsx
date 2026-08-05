@@ -26,9 +26,16 @@ import {
   Radio,
   Play,
   Truck as TruckIcon,
-  X
+  X,
+  Fuel,
+  Ticket,
+  Utensils,
+  BedDouble,
+  Receipt,
+  DollarSign,
+  Wallet
 } from "lucide-react";
-import { Load, ProofOfDelivery } from "@/app/lib/types";
+import { Load, ProofOfDelivery, ExpenseCategory } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { SignaturePad } from "@/components/SignaturePad";
@@ -39,6 +46,7 @@ import { getLoad, updateLoad } from "@/lib/loads-api";
 import { updateTruck } from "@/lib/trucks-api";
 import { getTenantProfile } from "@/lib/settings-api";
 import { calculateDistance } from "@/lib/utils/tracking-math";
+import { createExpense } from "@/lib/expenses-api";
 
 const INCIDENT_REASONS = [
   { id: 'absent', label: 'Cliente Ausente' },
@@ -54,6 +62,14 @@ const EMERGENCY_TYPES = [
   { id: 'accident', label: 'SINIESTRO / ACCIDENTE', icon: AlertTriangle, color: 'bg-red-800' }
 ];
 
+const EXPENSE_CATEGORIES: { id: ExpenseCategory; label: string; icon: typeof Fuel }[] = [
+  { id: 'fuel', label: 'Combustible', icon: Fuel },
+  { id: 'toll', label: 'Peaje', icon: Ticket },
+  { id: 'meal', label: 'Comida', icon: Utensils },
+  { id: 'lodging', label: 'Hospedaje', icon: BedDouble },
+  { id: 'other', label: 'Otro', icon: Receipt },
+];
+
 export default function RouteDetailPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -65,6 +81,17 @@ export default function RouteDetailPage() {
   const [isPodOpen, setIsPodOpen] = useState(false);
   const [isFailedOpen, setIsFailedOpen] = useState(false);
   const [isEmergencyOpen, setIsEmergencyOpen] = useState(false);
+  const [isExpenseOpen, setIsExpenseOpen] = useState(false);
+  const [isSubmittingExpense, setIsSubmittingExpense] = useState(false);
+  const [expenseForm, setExpenseForm] = useState({
+    category: 'fuel' as ExpenseCategory,
+    amount: '',
+    liters: '',
+    pricePerLiter: '',
+    description: '',
+    location: '',
+    receiptNumber: '',
+  });
   const [gpsStatus, setGpsStatus] = useState<'off' | 'requesting' | 'active' | 'error'>('off');
   const [load, setLoad] = useState<Load | null>(null);
   const [tenant, setTenant] = useState<any>(null);
@@ -546,6 +573,56 @@ export default function RouteDetailPage() {
     }
   };
 
+  const openExpenseDialog = (category: ExpenseCategory) => {
+    setExpenseForm({ category, amount: '', liters: '', pricePerLiter: '', description: '', location: '', receiptNumber: '' });
+    setIsExpenseOpen(true);
+  };
+
+  // Combustible: recalcula el monto total automáticamente a partir de litros x precio,
+  // pero el chofer puede seguir editando el monto a mano si lo necesita.
+  const handleFuelQuantityChange = (field: 'liters' | 'pricePerLiter', value: string) => {
+    setExpenseForm((f) => {
+      const next = { ...f, [field]: value };
+      const liters = parseFloat(field === 'liters' ? value : f.liters);
+      const price = parseFloat(field === 'pricePerLiter' ? value : f.pricePerLiter);
+      if (liters > 0 && price > 0) {
+        next.amount = (liters * price).toFixed(2);
+      }
+      return next;
+    });
+  };
+
+  const handleRegisterExpense = async () => {
+    if (!load || !tenantId) return;
+    const amountNum = parseFloat(expenseForm.amount);
+    if (!amountNum || amountNum <= 0) {
+      toast({ variant: "destructive", title: "Ingresá un monto válido" });
+      return;
+    }
+
+    setIsSubmittingExpense(true);
+    try {
+      await createExpense({
+        loadId: load.id,
+        truckId: load.assignedTruckId || undefined,
+        driverId: load.assignedDriverId || undefined,
+        category: expenseForm.category,
+        amount: amountNum,
+        description: expenseForm.description || EXPENSE_CATEGORIES.find((c) => c.id === expenseForm.category)?.label || 'Gasto de viaje',
+        location: expenseForm.location || undefined,
+        receiptNumber: expenseForm.receiptNumber || undefined,
+        liters: expenseForm.category === 'fuel' && expenseForm.liters ? parseFloat(expenseForm.liters) : undefined,
+        pricePerLiter: expenseForm.category === 'fuel' && expenseForm.pricePerLiter ? parseFloat(expenseForm.pricePerLiter) : undefined,
+      } as any);
+      toast({ title: "Gasto registrado", description: "Queda pendiente de auditoría por la central." });
+      setIsExpenseOpen(false);
+    } catch (e) {
+      toast({ variant: "destructive", title: "Error al registrar el gasto" });
+    } finally {
+      setIsSubmittingExpense(false);
+    }
+  };
+
   if (loadLoading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (!load) return <div className="p-10 text-center">Viaje no encontrado.</div>;
 
@@ -566,7 +643,24 @@ export default function RouteDetailPage() {
         </div>
       </div>
 
-      {load.status === 'assigned' ? (
+      <div className="space-y-2">
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Registrar Gastos</p>
+        <div className="grid grid-cols-5 gap-2">
+          {EXPENSE_CATEGORIES.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => openExpenseDialog(c.id)}
+              className="p-2.5 bg-white rounded-2xl border-2 border-slate-100 shadow-sm flex flex-col items-center gap-1 active:scale-95 transition-all"
+            >
+              <c.icon size={18} className="text-blue-600" />
+              <span className="text-[7px] font-black uppercase text-slate-500 leading-tight text-center">{c.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {load.status === 'assigned' || load.status === 'pending' ? (
         <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-white">
           <CardHeader className="bg-slate-900 text-white p-8 text-center">
              <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl"><TruckIcon size={32} /></div>
@@ -690,6 +784,71 @@ export default function RouteDetailPage() {
            </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={isExpenseOpen} onOpenChange={setIsExpenseOpen}>
+        <DialogContent className="max-w-[95vw] rounded-[2.5rem] p-6 max-h-[85vh] overflow-y-auto">
+           <DialogHeader>
+             <DialogTitle className="uppercase italic flex items-center gap-2"><Wallet size={18} className="text-blue-600" /> Registrar Gasto</DialogTitle>
+             <DialogDescription>Queda pendiente de auditoría por la central.</DialogDescription>
+           </DialogHeader>
+           <div className="space-y-4 py-2">
+              <div className="grid grid-cols-5 gap-2">
+                {EXPENSE_CATEGORIES.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setExpenseForm((f) => ({ ...f, category: c.id }))}
+                    className={cn(
+                      "p-2.5 rounded-2xl border-2 flex flex-col items-center gap-1 transition-all",
+                      expenseForm.category === c.id ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-400 border-slate-100"
+                    )}
+                  >
+                    <c.icon size={18} />
+                    <span className="text-[7px] font-black uppercase leading-tight text-center">{c.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {expenseForm.category === 'fuel' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-black uppercase text-slate-400">Litros</Label>
+                    <Input type="number" className="h-12 rounded-xl" value={expenseForm.liters} onChange={(e) => handleFuelQuantityChange('liters', e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-black uppercase text-slate-400">Precio x Litro</Label>
+                    <Input type="number" className="h-12 rounded-xl" value={expenseForm.pricePerLiter} onChange={(e) => handleFuelQuantityChange('pricePerLiter', e.target.value)} />
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-black uppercase text-slate-400">Monto Total</Label>
+                <Input type="number" className="h-12 rounded-xl font-black" value={expenseForm.amount} onChange={(e) => setExpenseForm((f) => ({ ...f, amount: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-black uppercase text-slate-400">Descripción</Label>
+                <Input className="h-12 rounded-xl" placeholder="Ej: YPF Ruta 9 km 300" value={expenseForm.description} onChange={(e) => setExpenseForm((f) => ({ ...f, description: e.target.value }))} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-slate-400">Lugar</Label>
+                  <Input className="h-12 rounded-xl" value={expenseForm.location} onChange={(e) => setExpenseForm((f) => ({ ...f, location: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-slate-400">N° Comprobante</Label>
+                  <Input className="h-12 rounded-xl" value={expenseForm.receiptNumber} onChange={(e) => setExpenseForm((f) => ({ ...f, receiptNumber: e.target.value }))} />
+                </div>
+              </div>
+           </div>
+           <DialogFooter>
+              <Button className="w-full h-14 bg-blue-600 text-white font-black rounded-2xl" onClick={handleRegisterExpense} disabled={isSubmittingExpense || !expenseForm.amount}>
+                 {isSubmittingExpense ? <Loader2 className="animate-spin mr-2" /> : <DollarSign className="mr-2" />} GUARDAR GASTO
+              </Button>
+           </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+

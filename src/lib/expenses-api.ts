@@ -27,6 +27,18 @@ export async function listExpenses() {
   return getListData(response).map(normalizeExpense);
 }
 
+export async function createExpense(data: Partial<Expense>) {
+  const response = await backendRequest<any>('/api/expenses', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  const raw = response.data || response.payload;
+  if (!raw) {
+    throw new Error('Failed to create expense');
+  }
+  return normalizeExpense(raw);
+}
+
 export async function updateExpense(id: string, data: Partial<Expense>) {
   const response = await backendRequest<any>(`/api/expenses/${id}`, {
     method: 'PUT',
