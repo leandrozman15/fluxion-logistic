@@ -15,13 +15,15 @@ import {
   Loader2,
   Activity,
   User,
-  XCircle
+  XCircle,
+  Route
 } from "lucide-react";
 import { Load, Driver } from "@/app/lib/types";
 import { Progress } from "@/components/ui/progress";
 import Link from "next/link";
 import { listLoads } from "@/lib/loads-api";
 import { listDrivers } from "@/lib/drivers-api";
+import { format } from "date-fns";
 
 export default function MercadoLibrePage() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -67,12 +69,18 @@ export default function MercadoLibrePage() {
   }, [loads, searchTerm]);
 
   const stats = useMemo(() => {
+    const todayStr = format(new Date(), "yyyy-MM-dd");
+    // "Entregas Hoy" solo debe contar los repartos ML de la fecha actual, no todo el histórico.
+    const todayLoads = meliLoads.filter(l => (l.pickupDate || "").slice(0, 10) === todayStr);
+
     let total = 0;
     let delivered = 0;
     let failed = 0;
     let pending = 0;
+    let totalKm = 0;
 
-    meliLoads.forEach(l => {
+    todayLoads.forEach(l => {
+      totalKm += l.tracking?.distanceTraveledKm || 0;
       l.outboundStops?.forEach(s => {
         total++;
         if (s.deliveredAt) delivered++;
@@ -81,7 +89,7 @@ export default function MercadoLibrePage() {
       });
     });
 
-    return { total, delivered, failed, pending };
+    return { total, delivered, failed, pending, totalKm: Math.round(totalKm) };
   }, [meliLoads]);
 
   return (
@@ -98,7 +106,7 @@ export default function MercadoLibrePage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card className="border-none shadow-sm bg-white">
           <CardContent className="pt-4 flex items-center justify-between">
             <div>
@@ -135,6 +143,15 @@ export default function MercadoLibrePage() {
             <Timer size={32} className="opacity-20" />
           </CardContent>
         </Card>
+        <Card className="border-none shadow-sm bg-yellow-50">
+          <CardContent className="pt-4 flex items-center justify-between text-yellow-800">
+            <div>
+              <p className="text-[10px] uppercase font-bold opacity-60 tracking-widest">Km Recorridos Hoy</p>
+              <p className="text-2xl font-black">{stats.totalKm}</p>
+            </div>
+            <Route size={32} className="opacity-20" />
+          </CardContent>
+        </Card>
       </div>
 
       <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-white">
@@ -168,6 +185,7 @@ export default function MercadoLibrePage() {
                   <TableHead className="text-[10px] font-black uppercase">Avance Reparto</TableHead>
                   <TableHead className="text-[10px] font-black uppercase text-center">Exitosas</TableHead>
                   <TableHead className="text-[10px] font-black uppercase text-center">Fallas</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase text-center">Km</TableHead>
                   <TableHead className="text-right text-[10px] font-black uppercase pr-8">Monitor</TableHead>
                 </TableRow>
               </TableHeader>
@@ -200,6 +218,7 @@ export default function MercadoLibrePage() {
                       </TableCell>
                       <TableCell className="text-center font-black text-green-600">{delivered}</TableCell>
                       <TableCell className="text-center font-black text-red-600">{failed}</TableCell>
+                      <TableCell className="text-center font-black text-slate-700">{Math.round(load.tracking?.distanceTraveledKm || 0)}</TableCell>
                       <TableCell className="pr-8 text-right">
                         <Button variant="ghost" size="icon" className="rounded-full text-blue-600" asChild>
                           <Link href={`/tracking/${load.id}`}>

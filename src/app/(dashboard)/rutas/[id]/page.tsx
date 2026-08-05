@@ -272,6 +272,15 @@ export default function RouteDetailPage() {
     return null;
   }, [load, phase]);
 
+  // Posición secuencial del destino actual dentro de la hoja de ruta (1 de N), para que
+  // el chofer vea claramente "destino 1, destino 2..." a medida que avanza.
+  const stopIndex = useMemo(() => {
+    if (!load || !currentStop) return { current: 0, total: 0 };
+    const list = (activeStopsField === 'returnStops' ? load.returnStops : load.outboundStops) || [];
+    const idx = list.findIndex(s => s === currentStop);
+    return { current: idx >= 0 ? idx + 1 : 0, total: list.length };
+  }, [load, currentStop, activeStopsField]);
+
   const handleStartTrip = async () => {
     if (!load || !tenantId) return;
     setIsUpdating(true);
@@ -559,7 +568,10 @@ export default function RouteDetailPage() {
             <CardContent className="p-8 space-y-6">
                <div className="flex justify-between items-start">
                   <div className="space-y-1">
-                    <p className="text-[10px] font-black uppercase text-blue-400 tracking-widest">{phase === 'return' ? 'Entrega en Regreso' : 'Siguiente Entrega'}</p>
+                    <p className="text-[10px] font-black uppercase text-blue-400 tracking-widest">
+                      {phase === 'return' ? 'Entrega en Regreso' : 'Siguiente Entrega'}
+                      {stopIndex.total > 0 && ` · Destino ${stopIndex.current} de ${stopIndex.total}`}
+                    </p>
                     <h2 className="text-2xl font-black uppercase italic tracking-tighter leading-tight">{currentStop.name}</h2>
                   </div>
                   <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center text-blue-400"><MapPin size={24} /></div>

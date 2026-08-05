@@ -19,6 +19,7 @@ import { format, addHours } from "date-fns";
 import { getTenantProfile } from "@/lib/settings-api";
 import { createLoad, updateLoad } from "@/lib/loads-api";
 import { listDrivers } from "@/lib/drivers-api";
+import { sequenceByNearestNeighbor } from "@/lib/utils/tracking-math";
 
 function MercadoLibreScanner() {
   const router = useRouter();
@@ -113,11 +114,31 @@ function MercadoLibreScanner() {
     setStep(1);
   };
 
+  const getCurrentPositionAsync = (): Promise<GeolocationPosition | null> =>
+    new Promise((resolve) => {
+      if (typeof window === 'undefined' || !('geolocation' in navigator)) {
+        resolve(null);
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve(pos),
+        () => resolve(null),
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    });
+
   const handleStartReparto = async () => {
     if (!tenantId || scannedDestinations.length === 0) return;
     setIsSubmitting(true);
     try {
-      const stops = scannedDestinations.map((d) => ({
+      // Ordena las paradas por vecino más cercano partiendo de la posición actual del chofer,
+      // en vez de simplemente respetar el orden en que se fueron escaneando las etiquetas.
+      const currentPos = await getCurrentPositionAsync();
+      const orderedDestinations = currentPos
+        ? sequenceByNearestNeighbor(scannedDestinations, currentPos.coords.latitude, currentPos.coords.longitude)
+        : scannedDestinations;
+
+      const stops = orderedDestinations.map((d) => ({
         id: Math.random().toString(36).substring(7),
         name: d.recipient.name,
         address: `${d.address.street} ${d.address.number}`,
@@ -143,7 +164,7 @@ function MercadoLibreScanner() {
           status: 'on_route',
           updatedAt: new Date().toISOString(),
         } as any);
-        toast({ title: "Reparto iniciado", description: "Hoja de ruta sincronizada." });
+        toast({ title: "Reparto iniciado", description: `Ruta ordenada por cercanía: ${stops.length} paradas.` });
         router.push(`/rutas/${preAssignedLoadId}`);
       } else {
         const orderNum = `ML-${new Date().getFullYear()}-${Math.floor(Math.random() * 9000)}`;
@@ -164,8 +185,8 @@ function MercadoLibreScanner() {
           updatedAt: new Date().toISOString(),
           tracking: {
             tripStartedAt: new Date().toISOString(),
-            currentLat: -34.6,
-            currentLng: -58.3,
+            currentLat: currentPos?.coords.latitude ?? -34.6,
+            currentLng: currentPos?.coords.longitude ?? -58.3,
             currentSpeed: 0,
             distanceTraveledKm: 0,
             distanceRemainingKm: 20,

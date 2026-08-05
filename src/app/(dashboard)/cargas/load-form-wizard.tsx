@@ -278,7 +278,7 @@ export default function LoadFormWizard({ loadId }: LoadFormWizardProps) {
           number: remito.number,
           pendingRemitoId: remito.id,
           cotNumber: remito.cotNumber,
-          fileUrl: remito.fileUrl,
+          fileUrl: remito.fileUrl || '',
           uploadedAt: new Date().toISOString(),
           leg: 'outbound'
         }]

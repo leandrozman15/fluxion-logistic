@@ -83,3 +83,41 @@ export function calculateLiveDelay(
   // El resultado es la diferencia entre el tiempo real consumido y el tiempo ideal para esa distancia
   return Math.round(elapsedMinutes - expectedMinutes);
 }
+
+/**
+ * Ordena un conjunto de puntos con coordenadas por vecino más cercano (heurística greedy),
+ * partiendo de un punto de inicio dado. Los puntos sin lat/lng van al final (requieren
+ * resolución manual de dirección antes de poder ubicarlos en la secuencia).
+ */
+export function sequenceByNearestNeighbor<T extends { lat?: number | null; lng?: number | null }>(
+  points: T[],
+  startLat: number,
+  startLng: number
+): T[] {
+  const withCoords = points.filter((p): p is T & { lat: number; lng: number } => typeof p.lat === 'number' && typeof p.lng === 'number');
+  const withoutCoords = points.filter((p) => !(typeof p.lat === 'number' && typeof p.lng === 'number'));
+
+  const pool = [...withCoords];
+  const ordered: T[] = [];
+  let curLat = startLat;
+  let curLng = startLng;
+
+  while (pool.length > 0) {
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    pool.forEach((p, idx) => {
+      const dist = calculateDistance(curLat, curLng, p.lat, p.lng);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = idx;
+      }
+    });
+    const [next] = pool.splice(bestIdx, 1);
+    ordered.push(next);
+    curLat = next.lat;
+    curLng = next.lng;
+  }
+
+  return [...ordered, ...withoutCoords];
+}
+

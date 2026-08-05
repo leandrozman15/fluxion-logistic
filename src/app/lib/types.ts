@@ -422,6 +422,7 @@ export interface Load {
   assignedTruckId?: string;
   
   isRoundTrip: boolean;
+  assignedCompanionIds?: string[];
 
   pickupDate: string;
   pickupTime: string;
@@ -484,7 +485,7 @@ export interface Load {
     dockName?: string;
   };
 
-  international?: {
+  international?: Partial<{
     operationType: 'import' | 'export' | 'transit';
     exitCustoms: string;
     entryCustoms: string;
@@ -502,7 +503,7 @@ export interface Load {
     customsIvaUsd: number;
     totalCustomsCostsUsd: number;
     isMalvinaPresented: boolean;
-  };
+  }>;
 
   budget?: {
     initialAdvance: number;
