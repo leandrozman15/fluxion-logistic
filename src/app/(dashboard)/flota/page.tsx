@@ -21,7 +21,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Truck as TruckType, TruckStatus, Driver, Maintenance } from "@/app/lib/types";
+import { Truck as TruckType, TruckStatus, Driver, Maintenance, Expense } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -30,6 +30,7 @@ import { es } from "date-fns/locale";
 import { deleteTruck, listTrucks } from "@/lib/trucks-api";
 import { listDrivers } from "@/lib/drivers-api";
 import { listMaintenance } from "@/lib/maintenance-api";
+import { listExpenses } from "@/lib/expenses-api";
 
 export default function FlotaPage() {
   const { tenantId } = useTenant();
@@ -40,6 +41,7 @@ export default function FlotaPage() {
   const [trucks, setTrucks] = useState<TruckType[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [maintenanceRecords, setMaintenanceRecords] = useState<Maintenance[]>([]);
+  const [fuelExpenses, setFuelExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -51,6 +53,7 @@ export default function FlotaPage() {
           setTrucks([]);
           setDrivers([]);
           setMaintenanceRecords([]);
+          setFuelExpenses([]);
           setLoading(false);
         }
         return;
@@ -58,17 +61,19 @@ export default function FlotaPage() {
 
       try {
         if (active) setLoading(true);
-        const [truckRows, driverRows, maintenanceRows] = await Promise.all([listTrucks(), listDrivers(), listMaintenance()]);
+        const [truckRows, driverRows, maintenanceRows, expenseRows] = await Promise.all([listTrucks(), listDrivers(), listMaintenance(), listExpenses()]);
         if (active) {
           setTrucks(truckRows);
           setDrivers(driverRows);
           setMaintenanceRecords(maintenanceRows);
+          setFuelExpenses(expenseRows.filter((expense) => expense.category === 'fuel'));
         }
       } catch (error) {
         if (active) {
           setTrucks([]);
           setDrivers([]);
           setMaintenanceRecords([]);
+          setFuelExpenses([]);
           toast({ variant: 'destructive', title: 'Error al cargar flota', description: (error as Error).message });
         }
       } finally {
@@ -140,9 +145,14 @@ export default function FlotaPage() {
     const tiresPerKm = (costs.variable.tires?.costFullSet || 0) / (costs.variable.tires?.lifeSpanKm || 1);
     const reservePerKm = costs.variable.unforeseenReservePerKm || 0;
 
-    // CÁLCULO DINÁMICO DE COMBUSTIBLE
-    const avgFuelPrice = 1100;
-    const fuelPerKm = (avgFuelPrice * (truck.avgConsumption || 32)) / 100;
+    // Combustible: promedio de precio real cargado por el chofer (mismo criterio que flota/[id]/page.tsx),
+    // no un precio fijo estimado — evita que esta lista y el detalle de la unidad muestren costos distintos.
+    let fuelPerKm = 0;
+    const validTickets = fuelExpenses.filter((e) => e.truckId === truck.id && !!e.pricePerLiter && e.pricePerLiter > 0);
+    if (validTickets.length > 0) {
+      const avgPrice = validTickets.reduce((acc, e) => acc + (e.pricePerLiter || 0), 0) / validTickets.length;
+      fuelPerKm = (avgPrice * (truck.avgConsumption || 32)) / 100;
+    }
     
     return fixedPerKm + oilPerKm + tiresPerKm + reservePerKm + fuelPerKm;
   };
@@ -151,7 +161,7 @@ export default function FlotaPage() {
     if (!trucks || trucks.length === 0) return 0;
     const total = trucks.reduce((acc, t) => acc + calculateTheoreticalCost(t), 0);
     return total / trucks.length;
-  }, [trucks]);
+  }, [trucks, fuelExpenses]);
 
   return (
     <div className="space-y-6">
