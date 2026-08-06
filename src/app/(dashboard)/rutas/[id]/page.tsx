@@ -78,6 +78,7 @@ export default function RouteDetailPage() {
   const { toast } = useToast();
   
   const [isUpdating, setIsUpdating] = useState(false);
+  const [emergencyTypeInProgress, setEmergencyTypeInProgress] = useState<string | null>(null);
   const [isPodOpen, setIsPodOpen] = useState(false);
   const [isFailedOpen, setIsFailedOpen] = useState(false);
   const [isEmergencyOpen, setIsEmergencyOpen] = useState(false);
@@ -545,31 +546,36 @@ export default function RouteDetailPage() {
   const handleTriggerEmergency = async (type: string, label: string) => {
     if (!tenantId || !load?.assignedTruckId || !load) return;
     setIsUpdating(true);
+    setEmergencyTypeInProgress(type);
+    toast({ variant: "destructive", title: "Enviando alerta...", description: "Notificando a la central, un momento." });
     try {
-      await updateTruck(load.assignedTruckId, {
-        hasActiveAlert: true,
-        alertType: type as any,
-        updatedAt: new Date().toISOString(),
-      });
-
-      const updatedLoad = await updateLoad(load.id, {
-        status: 'incident',
-        tracking: {
-          ...(load.tracking || {}),
-          alerts: [
-            ...((load.tracking as any)?.alerts || []),
-            { type: 'critical', message: `S.O.S: ${label}`, timestamp: new Date().toISOString() },
-          ],
-        },
-        updatedAt: new Date().toISOString(),
-      } as any);
+      // Ambas escrituras son independientes entre sí: corren en paralelo para no duplicar el tiempo de espera.
+      const [, updatedLoad] = await Promise.all([
+        updateTruck(load.assignedTruckId, {
+          hasActiveAlert: true,
+          alertType: type as any,
+          updatedAt: new Date().toISOString(),
+        }),
+        updateLoad(load.id, {
+          status: 'incident',
+          tracking: {
+            ...(load.tracking || {}),
+            alerts: [
+              ...((load.tracking as any)?.alerts || []),
+              { type: 'critical', message: `S.O.S: ${label}`, timestamp: new Date().toISOString() },
+            ],
+          },
+          updatedAt: new Date().toISOString(),
+        } as any),
+      ]);
       setLoad(updatedLoad);
       toast({ variant: "destructive", title: "ALERTA ENVIADA" });
       setIsEmergencyOpen(false);
     } catch (e) {
-      toast({ variant: "destructive", title: "Error" });
+      toast({ variant: "destructive", title: "Error", description: "No se pudo enviar la alerta, reintentá." });
     } finally {
       setIsUpdating(false);
+      setEmergencyTypeInProgress(null);
     }
   };
 
@@ -768,7 +774,10 @@ export default function RouteDetailPage() {
            <DialogHeader><DialogTitle className="text-red-700 uppercase">Protocolo SOS</DialogTitle></DialogHeader>
            <div className="flex flex-col gap-3 py-4">
               {EMERGENCY_TYPES.map(e => (
-                <Button key={e.id} className={cn("h-16 justify-start px-6 rounded-2xl text-white", e.color)} onClick={() => handleTriggerEmergency(e.id, e.label)} disabled={isUpdating}>{e.label}</Button>
+                <Button key={e.id} className={cn("h-16 justify-start px-6 rounded-2xl text-white", e.color)} onClick={() => handleTriggerEmergency(e.id, e.label)} disabled={isUpdating}>
+                  {emergencyTypeInProgress === e.id ? <Loader2 className="animate-spin mr-2" size={18} /> : null}
+                  {emergencyTypeInProgress === e.id ? "ENVIANDO..." : e.label}
+                </Button>
               ))}
            </div>
         </DialogContent>
