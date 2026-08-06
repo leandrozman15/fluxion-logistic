@@ -19,7 +19,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { getLoadById, updateLoad } from "@/lib/loads-api";
+import { getLoad, updateLoad } from "@/lib/loads-api";
 import { listTrucks, updateTruck } from "@/lib/trucks-api";
 
 const RouteMap = dynamic(() => import("@/components/maps/route-map"), { ssr: false });
@@ -55,7 +55,7 @@ export default function TrackingPage() {
 
       try {
         if (active && showSpinner) setLoading(true);
-        const load = await getLoadById(loadId);
+        const load = await getLoad(loadId);
         if (!active) return;
         setLoadData(load);
 
