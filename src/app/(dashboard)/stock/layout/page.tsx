@@ -370,8 +370,8 @@ function LayoutContent() {
     });
 
     setSlotForm({
-      coordinate: coord,
       ...existingData,
+      coordinate: coord,
       currentWeightKg: currentProduct?.unitWeightKg || 0,
       capacityKg: existingData.capacityKg || 1000,
       quantityUnits: Math.max(Number(existingData.quantityUnits ?? currentProduct?.stockQuantity ?? 0), currentProduct ? 1 : 0),
@@ -437,49 +437,73 @@ function LayoutContent() {
     setSlotMaterials((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const updateProductLocation = async (
-    productId: string,
-    location: string | undefined,
-    lotInfo?: { lotNumber?: string; entryDate?: string; quantityUnits?: number }
+  // Recalcula la cantidad de un producto en el hub activo SUMANDO todos los slots que lo
+  // contienen (no solo el que se acaba de editar). Antes, un producto guardado en 2+ slots
+  // del mismo hub pisaba su única entrada en warehouses[] con la cantidad del último slot
+  // editado, perdiendo la suma real en el total de inventario.
+  const reconcileHubProductStock = async (
+    productIds: string[],
+    overridesForHub: Record<string, WarehouseSlot>
   ) => {
-    const product = products.find((row) => row.id === productId);
-    if (!product) return;
     if (!selectedHubId || !activeHub) {
       throw new Error("No se pudo identificar la sede activa. Recargá la página e intentá de nuevo.");
     }
 
-    const existingWarehouseIdx = (product.warehouses || []).findIndex((entry) => entry.hubId === selectedHubId);
-    const nextWarehouses = [...(product.warehouses || [])];
+    for (const productId of productIds) {
+      const product = products.find((row) => row.id === productId);
+      if (!product) continue;
 
-    if (existingWarehouseIdx >= 0) {
-      nextWarehouses[existingWarehouseIdx] = {
-        ...nextWarehouses[existingWarehouseIdx],
-        hubName: activeHub.name,
-        location,
-        stockQuantity: location
-          ? lotInfo?.quantityUnits ?? nextWarehouses[existingWarehouseIdx].stockQuantity
-          : 0,
-        lotNumber: lotInfo?.lotNumber ?? nextWarehouses[existingWarehouseIdx].lotNumber,
-        entryDate: lotInfo?.entryDate ?? nextWarehouses[existingWarehouseIdx].entryDate,
-      };
-    } else if (location) {
-      nextWarehouses.push({
-        hubId: selectedHubId,
-        hubName: activeHub.name,
-        location,
-        stockQuantity: lotInfo?.quantityUnits ?? product.stockQuantity ?? 0,
-        minStock: product.minStockAlert || 0,
-        maxStock: product.maxStockAlert || 0,
-        lotNumber: lotInfo?.lotNumber,
-        entryDate: lotInfo?.entryDate,
-      });
+      const matchingSlots = Object.values(overridesForHub).filter((slot) =>
+        slot.status === 'occupied' && (
+          (slot.materials || []).some((m) => m.productId === productId) ||
+          (!slot.materials?.length && slot.productId === productId)
+        )
+      );
+
+      const totalInHub = matchingSlots.reduce((sum, slot) => {
+        const material = (slot.materials || []).find((m) => m.productId === productId);
+        return sum + Number(material?.quantityUnits ?? slot.quantityUnits ?? 0);
+      }, 0);
+
+      const firstSlot = matchingSlots[0];
+      const firstMaterial = firstSlot ? (firstSlot.materials || []).find((m) => m.productId === productId) : undefined;
+      const location = matchingSlots.length > 1
+        ? matchingSlots.map((s) => s.coordinate).join(', ')
+        : firstSlot?.coordinate;
+
+      const existingIdx = (product.warehouses || []).findIndex((entry) => entry.hubId === selectedHubId);
+      const nextWarehouses = [...(product.warehouses || [])];
+
+      if (totalInHub <= 0) {
+        if (existingIdx >= 0) nextWarehouses.splice(existingIdx, 1);
+      } else if (existingIdx >= 0) {
+        nextWarehouses[existingIdx] = {
+          ...nextWarehouses[existingIdx],
+          hubName: activeHub.name,
+          location,
+          stockQuantity: totalInHub,
+          lotNumber: firstMaterial?.lotNumber ?? firstSlot?.lotNumber,
+          entryDate: firstMaterial?.entryDate ?? firstSlot?.entryDate,
+        };
+      } else {
+        nextWarehouses.push({
+          hubId: selectedHubId,
+          hubName: activeHub.name,
+          location,
+          stockQuantity: totalInHub,
+          minStock: product.minStockAlert || 0,
+          maxStock: product.maxStockAlert || 0,
+          lotNumber: firstMaterial?.lotNumber ?? firstSlot?.lotNumber,
+          entryDate: firstMaterial?.entryDate ?? firstSlot?.entryDate,
+        });
+      }
+
+      // La cantidad total del producto es la suma del stock en todas sus sedes/ubicaciones.
+      const totalStock = nextWarehouses.reduce((sum, w) => sum + Number(w.stockQuantity || 0), 0);
+
+      const updated = await updateProduct(product.id, { warehouses: nextWarehouses, stockQuantity: totalStock });
+      setProducts((prev) => prev.map((row) => (row.id === product.id ? updated : row)));
     }
-
-    // La cantidad total del producto es la suma del stock en todas sus sedes/ubicaciones.
-    const totalStock = nextWarehouses.reduce((sum, w) => sum + Number(w.stockQuantity || 0), 0);
-
-    const updated = await updateProduct(product.id, { warehouses: nextWarehouses, stockQuantity: totalStock });
-    setProducts((prev) => prev.map((row) => (row.id === product.id ? updated : row)));
   };
 
   const handleSaveSlot = async () => {
@@ -521,20 +545,7 @@ function LayoutContent() {
           ...(currentOccupant?.materials || []).map((item) => item.productId),
           currentOccupant?.productId,
         ].filter(Boolean) as string[]));
-
-        for (const prevProductId of previousProductIds) {
-          await updateProductLocation(prevProductId, undefined);
-        }
-
         const nextProductIds = Array.from(new Set(materialsToSave.map((item) => item.productId)));
-        for (const productId of nextProductIds) {
-          const material = materialsToSave.find((item) => item.productId === productId);
-          await updateProductLocation(productId, selectedSlotCoord, {
-            lotNumber: material?.lotNumber,
-            entryDate: material?.entryDate,
-            quantityUnits: material?.quantityUnits,
-          });
-        }
 
         const totalUnits = materialsToSave.reduce((sum, item) => sum + Number(item.quantityUnits || 0), 0);
         const primaryMaterial = materialsToSave[0];
@@ -562,15 +573,15 @@ function LayoutContent() {
           materials: materialsToSave,
           lastAuditAt: new Date().toISOString(),
         } as WarehouseSlot;
+
+        // Reconcilia con el estado FINAL de los slots del hub (ya incluye este slot recién
+        // editado), así un producto presente en 2+ slots suma correctamente su stock total.
+        await reconcileHubProductStock(Array.from(new Set([...previousProductIds, ...nextProductIds])), nextOverrides);
       } else {
         const previousProductIds = Array.from(new Set([
           ...(currentOccupant?.materials || []).map((item) => item.productId),
           currentOccupant?.productId,
         ].filter(Boolean) as string[]));
-
-        for (const prevProductId of previousProductIds) {
-          await updateProductLocation(prevProductId, undefined);
-        }
 
         if (slotForm.status === 'blocked' || slotForm.status === 'reserved') {
           nextOverrides[selectedSlotCoord] = {
@@ -588,6 +599,10 @@ function LayoutContent() {
         } else {
           delete nextOverrides[selectedSlotCoord];
         }
+
+        // El slot dejó de estar ocupado por sus productos anteriores: reconciliar para que
+        // esos productos pierdan la cantidad de ESTE slot pero mantengan la de otros slots.
+        await reconcileHubProductStock(previousProductIds, nextOverrides);
       }
 
       await persistSlotOverrides(nextOverrides);
@@ -615,12 +630,13 @@ function LayoutContent() {
         currentOccupant?.productId,
       ].filter(Boolean) as string[]));
 
-      for (const productId of productIds) {
-        await updateProductLocation(productId, undefined);
-      }
-
       const nextOverrides = { ...slotOverrides };
       delete nextOverrides[selectedSlotCoord];
+
+      // Reconcilia con el estado final (sin este slot) para que los productos que lo
+      // ocupaban mantengan la suma correcta de sus OTROS slots en el mismo hub.
+      await reconcileHubProductStock(productIds, nextOverrides);
+
       await persistSlotOverrides(nextOverrides);
       toast({ title: "Ubicación Liberada" });
       setSlotMaterials([]);

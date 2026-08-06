@@ -345,8 +345,12 @@ export default function StockPage() {
                                </TableCell>
                                <TableCell className="px-8 py-4">
                                   <div className="flex items-center gap-3">
-                                     <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-blue-600 border border-slate-100 group-hover:bg-blue-600 group-hover:text-white transition-all">
-                                        <Box size={20} />
+                                     <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-blue-600 border border-slate-100 overflow-hidden group-hover:border-blue-200 transition-all">
+                                        {product.photoUrl ? (
+                                          <img src={product.photoUrl} className="w-full h-full object-cover" alt={product.name} />
+                                        ) : (
+                                          <Box size={20} className="group-hover:text-blue-700" />
+                                        )}
                                      </div>
                                      <div>
                                         <p className="font-black text-slate-900 text-sm tracking-tight">{product.name}</p>
