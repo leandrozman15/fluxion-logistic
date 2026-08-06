@@ -13,11 +13,12 @@ import {
   User, Calendar, DollarSign, Calculator, Package,
   Truck, Briefcase, Landmark, MapPin, Receipt
 } from "lucide-react";
-import { Quotation, QuotationStatus } from "@/app/lib/types";
+import { Quotation, QuotationStatus, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { generateQuotationPDF } from "@/lib/pdf-service";
 import { getQuotationById, updateQuotation } from "@/lib/quotations-api";
+import { getTenantProfile } from "@/lib/settings-api";
 
 const statusConfig: Record<QuotationStatus, { label: string, color: string }> = {
   draft: { label: 'Borrador', color: 'bg-slate-500' },
@@ -39,6 +40,7 @@ export default function QuotationDetailPage() {
   const [quote, setQuote] = useState<Quotation | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [tenantProfile, setTenantProfile] = useState<Tenant | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -67,6 +69,7 @@ export default function QuotationDetailPage() {
     }
 
     loadQuote();
+    getTenantProfile().then((profile) => { if (active) setTenantProfile(profile as unknown as Tenant); }).catch(() => {});
     return () => {
       active = false;
     };
@@ -90,7 +93,7 @@ export default function QuotationDetailPage() {
     if (!quote) return;
     setIsDownloading(true);
     try {
-      await generateQuotationPDF(quote, undefined);
+      await generateQuotationPDF(quote, tenantProfile || undefined);
     } catch (e) {
       toast({ variant: "destructive", title: "Error al generar PDF" });
     } finally {

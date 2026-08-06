@@ -30,12 +30,13 @@ import {
     AlertDialogHeader, 
     AlertDialogTitle 
 } from "@/components/ui/alert-dialog";
-import { Quotation, QuotationStatus } from "@/app/lib/types";
+import { Quotation, QuotationStatus, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { generateQuotationPDF } from "@/lib/pdf-service";
 import { deleteQuotation, listQuotations } from "@/lib/quotations-api";
+import { getTenantProfile } from "@/lib/settings-api";
 
 export default function PresupuestosPage() {
   const { tenantId } = useTenant();
@@ -45,6 +46,7 @@ export default function PresupuestosPage() {
   const [quotes, setQuotes] = useState<Quotation[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDownloadingId, setIsDownloadingId] = useState<string | null>(null);
+  const [tenantProfile, setTenantProfile] = useState<Tenant | null>(null);
   
   // AlertDialog state
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -77,6 +79,7 @@ export default function PresupuestosPage() {
     }
 
     loadQuotes();
+    getTenantProfile().then((profile) => { if (active) setTenantProfile(profile as unknown as Tenant); }).catch(() => {});
     return () => {
       active = false;
     };
@@ -93,7 +96,7 @@ export default function PresupuestosPage() {
   const handleDownloadPDF = async (quote: Quotation) => {
     setIsDownloadingId(quote.id);
     try {
-      await generateQuotationPDF(quote, undefined);
+      await generateQuotationPDF(quote, tenantProfile || undefined);
       toast({ title: "PDF Generado", description: `Se ha descargado la cotización ${quote.number}.` });
     } catch (e) {
       toast({ variant: "destructive", title: "Error al generar PDF" });

@@ -10,10 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Archive, Calendar, Download, Eye, Loader2, RotateCcw, Search } from "lucide-react";
-import { Quotation, QuotationStatus } from "@/app/lib/types";
+import { Quotation, QuotationStatus, Tenant } from "@/app/lib/types";
 import { generateQuotationPDF } from "@/lib/pdf-service";
 import { useToast } from "@/hooks/use-toast";
 import { listQuotations, updateQuotation } from "@/lib/quotations-api";
+import { getTenantProfile } from "@/lib/settings-api";
 
 const ARCHIVE_STATUSES: QuotationStatus[] = ['accepted', 'rejected', 'expired', 'ordered'];
 
@@ -42,6 +43,7 @@ export default function PresupuestosArchivoPage() {
   const [loading, setLoading] = useState(true);
   const [isDownloadingId, setIsDownloadingId] = useState<string | null>(null);
   const [isReopeningId, setIsReopeningId] = useState<string | null>(null);
+  const [tenantProfile, setTenantProfile] = useState<Tenant | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -70,6 +72,7 @@ export default function PresupuestosArchivoPage() {
     }
 
     loadQuotes();
+    getTenantProfile().then((profile) => { if (active) setTenantProfile(profile as unknown as Tenant); }).catch(() => {});
     return () => {
       active = false;
     };
@@ -93,7 +96,7 @@ export default function PresupuestosArchivoPage() {
   const handleDownloadPDF = async (quote: Quotation) => {
     setIsDownloadingId(quote.id);
     try {
-      await generateQuotationPDF(quote, undefined);
+      await generateQuotationPDF(quote, tenantProfile || undefined);
       toast({ title: 'PDF Generado', description: `Se ha descargado la cotización ${quote.number}.` });
     } catch {
       toast({ variant: 'destructive', title: 'Error al generar PDF' });
