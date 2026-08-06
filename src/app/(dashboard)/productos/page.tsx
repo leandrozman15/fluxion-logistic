@@ -48,6 +48,8 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { generateProductPDF } from "@/lib/pdf-service";
 import { deleteProduct, listProducts } from "@/lib/products-api";
+import { getTenantProfile } from "@/lib/settings-api";
+import type { Tenant } from "@/app/lib/types";
 
 export default function ProductosPage() {
   const { tenantId } = useTenant();
@@ -61,6 +63,7 @@ export default function ProductosPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteSku, setDeleteSku] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [tenantProfile, setTenantProfile] = useState<Tenant | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -89,6 +92,7 @@ export default function ProductosPage() {
     }
 
     loadData();
+    getTenantProfile().then((profile) => { if (active) setTenantProfile(profile as unknown as Tenant); }).catch(() => {});
     return () => {
       active = false;
     };
@@ -107,7 +111,7 @@ export default function ProductosPage() {
   const handleDownloadDirect = async (product: Product) => {
     setIsDownloadingId(product.id);
     try {
-      await generateProductPDF(product, undefined);
+      await generateProductPDF(product, tenantProfile || undefined);
       toast({ title: "PDF Descargado", description: `Se ha generado la ficha técnica de ${product.sku}.` });
     } catch {
       toast({ variant: "destructive", title: "Error al generar PDF" });

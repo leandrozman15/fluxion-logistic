@@ -44,191 +44,217 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
   const doc = new jsPDF("p", "mm", "a4");
   const margin = 15;
   const pageWidth = 210;
+  const pageHeight = 297;
+  const contentWidth = pageWidth - margin * 2;
 
+  const drawSectionTitle = (title: string, y: number) => {
+    doc.setFillColor(BLUE_LOGISTIC[0], BLUE_LOGISTIC[1], BLUE_LOGISTIC[2]);
+    doc.rect(margin, y - 4, 1.4, 5, "F");
+    doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.text(title, margin + 4, y);
+  };
+
+  const footerBand = () => {
+    doc.setFillColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
+    doc.rect(0, pageHeight - 10, pageWidth, 10, "F");
+    doc.setTextColor(255);
+    doc.setFontSize(6.5);
+    doc.setFont("helvetica", "normal");
+    doc.text(`${tenant?.name || "LOGÍSTICA AR"} · Ficha Técnica generada el ${format(new Date(), "dd/MM/yyyy HH:mm")}`, margin, pageHeight - 4);
+    doc.text(product.sku, pageWidth - margin, pageHeight - 4, { align: "right" });
+  };
+
+  // ===== HEADER =====
   doc.setFillColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-  doc.rect(0, 0, pageWidth, 40, "F");
-  
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(22);
-  doc.text(tenant?.name || "LOGÍSTICA AR", margin, 20);
-  
-  doc.setFontSize(8);
-  doc.setFont("helvetica", "normal");
-  doc.text(`CUIT: ${tenant?.settings?.cuit || "30-XXXXXXXX-X"}`, margin, 26);
-  doc.text("FICHA TÉCNICA CERTIFICADA V3.0", margin, 30);
+  doc.rect(0, 0, pageWidth, 26, "F");
 
+  doc.setTextColor(255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.text(tenant?.name || "LOGÍSTICA AR", margin, 12);
+  doc.setFontSize(6.5);
+  doc.setFont("helvetica", "normal");
+  doc.text(`CUIT ${tenant?.settings?.cuit || "30-XXXXXXXX-X"}  ·  Ficha Técnica Certificada`, margin, 18);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.text("DATA SHEET", pageWidth - margin, 10, { align: "right" });
+  doc.setFontSize(15);
+  doc.text(product.sku, pageWidth - margin, 18, { align: "right" });
+
+  // ===== TÍTULO DE PRODUCTO =====
+  doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
   doc.setFontSize(18);
   doc.setFont("helvetica", "bold");
-  doc.text("DATA SHEET", pageWidth - 70, 25, { align: "right" });
-  doc.setFontSize(28);
-  doc.text(product.sku, pageWidth - margin, 34, { align: "right" });
+  const nameLines = doc.splitTextToSize(product.name.toUpperCase(), contentWidth - 60);
+  doc.text(nameLines, margin, 38);
 
-  doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-  doc.setFontSize(24);
-  const nameLines = doc.splitTextToSize(product.name.toUpperCase(), pageWidth - (margin * 2));
-  doc.text(nameLines, margin, 55);
-  
-  const brandY = 55 + (nameLines.length * 9);
-  doc.setTextColor(150, 150, 150);
-  doc.setFontSize(14);
-  doc.text(product.brand || "MARCA NO ESPECIFICADA", margin, brandY);
+  doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  const brandY = 38 + nameLines.length * 6 + 2;
+  doc.text(product.brand || "Marca no especificada", margin, brandY);
 
-  const contentY = brandY + 12;
-  
-  let photoHeight = 0;
+  // Código de barras (GTIN si existe, si no el SKU) al lado del título.
+  const barcodeValue = product.gtin || product.sku;
+  const barcodeUrl = getBarcodeDataUrl(barcodeValue);
+  if (barcodeUrl) {
+    try {
+      doc.addImage(barcodeUrl, "PNG", margin, brandY + 4, 45, 12);
+      doc.setFontSize(6.5);
+      doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
+      doc.text(barcodeValue, margin, brandY + 18);
+    } catch {}
+  }
+
+  // Foto de producto, esquina superior derecha, con marco sutil.
+  const photoSize = 32;
+  const photoX = pageWidth - margin - photoSize;
+  const photoY = 32;
   if (product.photoUrl) {
     try {
-      doc.setDrawColor(200, 200, 200);
-      doc.setLineWidth(0.5);
-      doc.rect(pageWidth - margin - 55, contentY, 55, 55);
-      doc.addImage(product.photoUrl, 'JPEG', pageWidth - margin - 54, contentY + 1, 53, 53);
-      photoHeight = 60;
-    } catch (e) {
-      console.warn("No se pudo añadir la foto al PDF:", e);
-    }
+      doc.setDrawColor(SLATE_BORDER[0], SLATE_BORDER[1], SLATE_BORDER[2]);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(photoX, photoY, photoSize, photoSize, 1.5, 1.5, "S");
+      doc.addImage(product.photoUrl, "JPEG", photoX + 1, photoY + 1, photoSize - 2, photoSize - 2);
+    } catch {}
   }
 
+  // ===== DESCRIPCIÓN =====
+  const descY = brandY + 26;
+  drawSectionTitle("DESCRIPCIÓN DEL ARTÍCULO", descY);
   doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "bold");
-  doc.text("DESCRIPCIÓN DEL ARTÍCULO", margin, contentY - 2);
-  doc.line(margin, contentY, margin + 40, contentY);
-
-  doc.setFont("helvetica", "italic");
-  doc.setFontSize(11);
-  const descWidth = product.photoUrl ? pageWidth - (margin * 2) - 65 : pageWidth - (margin * 2);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9.5);
+  const descWidth = product.photoUrl ? contentWidth - photoSize - 6 : contentWidth;
   const descLines = doc.splitTextToSize(product.description || "Sin descripción técnica disponible.", descWidth);
-  doc.text(descLines, margin, contentY + 8);
+  doc.text(descLines, margin, descY + 6);
 
-  const descTotalHeight = descLines.length * 6;
-  const sectionSplitY = contentY + Math.max(descTotalHeight + 15, photoHeight);
+  // ===== TARJETAS DE MÉTRICAS RÁPIDAS =====
+  const metricsY = Math.max(descY + descLines.length * 4.5 + 10, photoY + photoSize + 6);
+  const metrics = [
+    { label: "PESO BRUTO", value: `${product.unitWeightKg} KG` },
+    { label: "VOLUMEN", value: `${product.unitVolumeM3} M³` },
+    { label: "U. POR CAJA", value: `${product.unitsPerBox || 0}` },
+    { label: "U. POR PALLET", value: `${product.unitsPerPallet || 0}` },
+    { label: "EMBALAJE", value: product.packagingType.toUpperCase() },
+  ];
+  const metricW = contentWidth / metrics.length;
+  metrics.forEach((m, i) => {
+    const x = margin + metricW * i;
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(SLATE_BORDER[0], SLATE_BORDER[1], SLATE_BORDER[2]);
+    doc.roundedRect(x + 1, metricsY, metricW - 2, 20, 1.5, 1.5, "FD");
+    doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6);
+    doc.text(m.label, x + 4, metricsY + 6);
+    doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
+    doc.setFontSize(11);
+    doc.text(m.value, x + 4, metricsY + 15);
+  });
 
-  const gridY = sectionSplitY;
-  const colW = (pageWidth - (margin * 2)) / 5;
-  
-  doc.setDrawColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-  doc.setLineWidth(0.5);
-  doc.rect(margin, gridY, pageWidth - (margin * 2), 25);
-  
-  for (let i = 1; i < 5; i++) {
-    doc.line(margin + (colW * i), gridY, margin + (colW * i), gridY + 25);
+  // ===== TABLA MERCOSUR / SEGURIDAD =====
+  const tableY = metricsY + 32;
+  drawSectionTitle("IDENTIFICACIÓN MERCOSUR / SEGURIDAD", tableY);
+
+  autoTable(doc, {
+    startY: tableY + 4,
+    margin: { left: margin, right: margin },
+    head: [["PARÁMETRO", "VALOR REGISTRADO"]],
+    body: [
+      ["Posición NCM", product.ncmCode || "No definida"],
+      ["Origen", product.origin === "nacional" ? "Nacional" : "Importado"],
+      ["Requisito frío", product.requiresReefer ? "Sí (equipo reefer)" : "No (carga seca)"],
+      ["Nivel de riesgo", product.dangerLevel === "none" ? "Carga general" : `Peligro: ${product.dangerLevel.toUpperCase()}`],
+      ["N° ONU", product.onuNumber || "N/A"],
+    ],
+    theme: "striped",
+    headStyles: { fillColor: SLATE_DARK as any, fontSize: 8 },
+    styles: { fontSize: 8.5, cellPadding: 2.5 },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+  });
+
+  // ===== TABLA TRAZABILIDAD =====
+  let cursorY = (doc as any).lastAutoTable.finalY + 12;
+  drawSectionTitle("TRAZABILIDAD Y ALMACENAMIENTO", cursorY);
+
+  autoTable(doc, {
+    startY: cursorY + 4,
+    margin: { left: margin, right: margin },
+    head: [["PARÁMETRO", "VALOR REGISTRADO"]],
+    body: [
+      ["GTIN / Código de barras", product.gtin || "No asignado"],
+      ["Tipo de unidad", product.unitType.toUpperCase()],
+      ["Dimensiones (L x A x H)", product.dimensions ? `${product.dimensions.l} x ${product.dimensions.w} x ${product.dimensions.h} cm` : "No registradas"],
+      ["Control por lote", product.isLotTracked ? "Sí" : "No"],
+      ["Control por N° de serie", product.isSerialTracked ? "Sí" : "No"],
+      ["Control de vencimiento", product.expiryControl ? "Sí" : "No"],
+      ...(product.requiresReefer && product.tempRange ? [["Rango de temperatura", `${product.tempRange.min}°C a ${product.tempRange.max}°C`]] : []),
+    ],
+    theme: "striped",
+    headStyles: { fillColor: BLUE_LOGISTIC as any, fontSize: 8 },
+    styles: { fontSize: 8.5, cellPadding: 2.5 },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+  });
+
+  cursorY = (doc as any).lastAutoTable.finalY + 12;
+  if (cursorY > pageHeight - 60) {
+    footerBand();
+    doc.addPage();
+    cursorY = 20;
   }
 
-  const labels = ["PESO BRUTO", "VOLUMEN", "U. POR CAJA", "U. POR PALLET", "EMBALAJE"];
-  const values = [
-    `${product.unitWeightKg} KG`,
-    `${product.unitVolumeM3} M3`,
-    `${product.unitsPerBox || 0}`,
-    `${product.unitsPerPallet || 0}`,
-    product.packagingType.toUpperCase()
-  ];
-
-  labels.forEach((l, i) => {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.text(l, margin + (colW * i) + 2, gridY + 6);
-    doc.setFontSize(12);
-    doc.text(values[i], margin + (colW * i) + 2, gridY + 18);
-  });
-
-  const tableY = gridY + 40;
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "bold");
-  doc.text("IDENTIFICACIÓN MERCOSUR / SEGURIDAD", margin, tableY - 5);
-  doc.line(margin, tableY - 3, pageWidth - margin, tableY - 3);
-
-  autoTable(doc, {
-    startY: tableY,
-    margin: { left: margin, right: margin },
-    head: [["PARÁMETRO", "VALOR REGISTRADO"]],
-    body: [
-      ["POSICIÓN NCM", product.ncmCode || "NO DEFINIDA"],
-      ["ORIGEN", product.origin.toUpperCase()],
-      ["REQUISITO FRÍO", product.requiresReefer ? "SÍ (EQUIPO REEFER)" : "NO (CARGA SECA)"],
-      ["NIVEL DE RIESGO", product.dangerLevel === 'none' ? "CARGA GENERAL" : `PELIGRO: ${product.dangerLevel.toUpperCase()}`],
-      ["N° ONU", product.onuNumber || "N/A"]
-    ],
-    theme: "striped",
-    headStyles: { fillColor: SLATE_DARK as any },
-    styles: { fontSize: 9 }
-  });
-
-  let cursorY = (doc as any).lastAutoTable.finalY + 15;
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-  doc.text("TRAZABILIDAD Y ALMACENAMIENTO", margin, cursorY - 5);
-  doc.line(margin, cursorY - 3, pageWidth - margin, cursorY - 3);
-
-  autoTable(doc, {
-    startY: cursorY,
-    margin: { left: margin, right: margin },
-    head: [["PARÁMETRO", "VALOR REGISTRADO"]],
-    body: [
-      ["GTIN / CÓDIGO DE BARRAS", product.gtin || "NO ASIGNADO"],
-      ["TIPO DE UNIDAD", product.unitType.toUpperCase()],
-      ["DIMENSIONES (L x A x H)", product.dimensions ? `${product.dimensions.l} x ${product.dimensions.w} x ${product.dimensions.h} CM` : "NO REGISTRADAS"],
-      ["CONTROL POR LOTE", product.isLotTracked ? "SÍ" : "NO"],
-      ["CONTROL POR N° DE SERIE", product.isSerialTracked ? "SÍ" : "NO"],
-      ["CONTROL DE VENCIMIENTO", product.expiryControl ? "SÍ" : "NO"],
-      ...(product.requiresReefer && product.tempRange ? [["RANGO DE TEMPERATURA", `${product.tempRange.min}°C A ${product.tempRange.max}°C`]] : [])
-    ],
-    theme: "striped",
-    headStyles: { fillColor: BLUE_LOGISTIC as any },
-    styles: { fontSize: 9 }
-  });
-
-  cursorY = (doc as any).lastAutoTable.finalY + 15;
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "bold");
-  doc.text("DISTRIBUCIÓN EN DEPÓSITO (LOTE / UBICACIÓN)", margin, cursorY - 5);
-  doc.line(margin, cursorY - 3, pageWidth - margin, cursorY - 3);
+  // ===== TABLA DISTRIBUCIÓN EN DEPÓSITO =====
+  drawSectionTitle("DISTRIBUCIÓN EN DEPÓSITO (LOTE / UBICACIÓN)", cursorY);
 
   if (product.warehouses && product.warehouses.length > 0) {
     autoTable(doc, {
-      startY: cursorY,
+      startY: cursorY + 4,
       margin: { left: margin, right: margin },
       head: [["SEDE", "UBICACIÓN RACK", "N° LOTE", "INGRESO", "STOCK"]],
       body: product.warehouses.map((w) => [
         w.hubName || "S/D",
-        w.location || "SIN POSICIÓN",
+        w.location || "Sin posición",
         w.lotNumber || "S/D",
         w.entryDate || "S/D",
-        `${w.stockQuantity} ${product.unitType.toUpperCase()}${w.stockQuantity === 1 ? "" : "S"}`
+        `${w.stockQuantity} ${product.unitType.toUpperCase()}${w.stockQuantity === 1 ? "" : "S"}`,
       ]),
       theme: "grid",
-      headStyles: { fillColor: SLATE_DARK as any },
-      styles: { fontSize: 8 }
+      headStyles: { fillColor: SLATE_DARK as any, fontSize: 8 },
+      styles: { fontSize: 8, cellPadding: 2.5 },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
     });
-    cursorY = (doc as any).lastAutoTable.finalY + 15;
+    cursorY = (doc as any).lastAutoTable.finalY + 10;
   } else {
-    doc.setFontSize(9);
+    doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
+    doc.setFontSize(8.5);
     doc.setFont("helvetica", "italic");
-    doc.setTextColor(150);
-    doc.text("Sin ubicaciones de depósito configuradas para este producto.", margin, cursorY + 3);
-    doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
-    cursorY += 15;
+    doc.text("Sin ubicaciones de depósito configuradas para este producto.", margin, cursorY + 6);
+    cursorY += 14;
   }
 
-  let footerY = Math.max(cursorY, 250);
-  if (footerY > 260) {
+  // ===== SELLO DE APROBACIÓN =====
+  let stampY = Math.max(cursorY + 4, pageHeight - 35);
+  if (stampY > pageHeight - 20) {
+    footerBand();
     doc.addPage();
-    footerY = 240;
+    stampY = 20;
   }
+  doc.setDrawColor(EMERALD_SALE[0], EMERALD_SALE[1], EMERALD_SALE[2]);
+  doc.setLineWidth(0.6);
+  doc.roundedRect(pageWidth - margin - 42, stampY, 42, 18, 1.5, 1.5, "S");
+  doc.setTextColor(EMERALD_SALE[0], EMERALD_SALE[1], EMERALD_SALE[2]);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.5);
+  doc.text("APROBADO OK", pageWidth - margin - 21, stampY + 8, { align: "center" });
+  doc.setFontSize(6);
+  doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
+  doc.text("AUDITORÍA CENTRAL", pageWidth - margin - 21, stampY + 14, { align: "center" });
 
-  doc.setDrawColor(0);
-  doc.setLineWidth(1);
-  doc.rect(pageWidth - 60, footerY, 45, 25);
-  doc.setFontSize(10);
-  doc.text("APROBADO OK", pageWidth - 57, footerY + 10);
-  doc.setFontSize(7);
-  doc.text("AUDITORÍA CENTRAL", pageWidth - 57, footerY + 18);
-
-  doc.setFontSize(8);
-  doc.setTextColor(150);
-  doc.text(`Documento generado automáticamente el ${format(new Date(), "dd/MM/yyyy HH:mm")}`, margin, Math.min(footerY + 35, 290));
-
+  footerBand();
   doc.save(`Ficha_${product.sku}.pdf`);
 };
 

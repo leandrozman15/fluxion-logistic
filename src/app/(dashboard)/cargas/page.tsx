@@ -34,7 +34,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Load, LoadStatus, Truck as TruckType, Driver } from "@/app/lib/types";
+import { Load, LoadStatus, Truck as TruckType, Driver, Tenant, Expense } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -44,6 +44,8 @@ import Link from "next/link";
 import { deleteLoad, listLoads, updateLoad } from "@/lib/loads-api";
 import { listTrucks } from "@/lib/trucks-api";
 import { listDrivers } from "@/lib/drivers-api";
+import { listExpenses } from "@/lib/expenses-api";
+import { getTenantProfile } from "@/lib/settings-api";
 
 export default function CargasPage() {
   const { tenantId } = useTenant();
@@ -57,6 +59,7 @@ export default function CargasPage() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loadsLoading, setLoadsLoading] = useState(true);
   const [isDownloadingId, setIsDownloadingId] = useState<string | null>(null);
+  const [tenantProfile, setTenantProfile] = useState<Tenant | null>(null);
   
   // AlertDialog state
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -104,6 +107,7 @@ export default function CargasPage() {
     }
 
     loadData();
+    getTenantProfile().then((profile) => { if (active) setTenantProfile(profile as unknown as Tenant); }).catch(() => {});
     return () => {
       active = false;
     };
@@ -134,9 +138,11 @@ export default function CargasPage() {
       const truck = trucks?.find(t => t.id === load.assignedTruckId) || null;
 
       if (type === 'orden') {
-        await generateLoadOrderPDF(load, driver, truck, undefined);
+        await generateLoadOrderPDF(load, driver, truck, tenantProfile || undefined);
       } else {
-        await generateLoadWalletPDF(load, [], driver, truck, undefined);
+        const allExpenses = await listExpenses();
+        const loadExpenses = allExpenses.filter((expense: Expense) => expense.loadId === load.id);
+        await generateLoadWalletPDF(load, loadExpenses, driver, truck, tenantProfile || undefined);
       }
       
       toast({ title: "Archivo descargado con éxito" });
