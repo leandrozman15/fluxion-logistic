@@ -45,7 +45,7 @@ export interface Truck {
   hasActiveAlert?: boolean; 
   alertType?: 'security' | 'mechanical' | 'accident';
   ownershipType: OwnershipType;
-  haulingType: 'standard' | 'bitren' | 'chassis';
+  haulingType: 'standard' | 'bitren' | 'chassis' | 'acoplado';
   location?: {
     city: string;
     province: string;
@@ -62,12 +62,30 @@ export interface Truck {
     brand: string;
     model: string;
     type: string;
+    lengthMeters?: number;
+    widthMeters?: number;
+    heightMeters?: number;
+    axles?: number;
+    capacityKg?: number;
+    tareKg?: number;
   };
   bitren?: {
     type: 'type_a' | 'type_b';
     firstSemiPlate: string;
     secondSemiPlate: string;
     totalAxles: number;
+    lengthMeters?: number;
+    capacityKg?: number;
+  };
+  fullTrailer?: {
+    plate: string;
+    brand: string;
+    model: string;
+    type: string;
+    lengthMeters?: number;
+    axles?: number;
+    capacityKg?: number;
+    tareKg?: number;
   };
   costs?: TruckCosts;
   updatedAt: any;

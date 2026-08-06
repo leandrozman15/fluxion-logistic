@@ -16,7 +16,7 @@ import {
 import { Quotation, QuotationStatus, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { generateQuotationPDF } from "@/lib/pdf-service";
+
 import { getQuotationById, updateQuotation } from "@/lib/quotations-api";
 import { getTenantProfile } from "@/lib/settings-api";
 
@@ -93,6 +93,7 @@ export default function QuotationDetailPage() {
     if (!quote) return;
     setIsDownloading(true);
     try {
+      const { generateQuotationPDF } = await import("@/lib/pdf-service");
       await generateQuotationPDF(quote, tenantProfile || undefined);
     } catch (e) {
       toast({ variant: "destructive", title: "Error al generar PDF" });

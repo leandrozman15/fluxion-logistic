@@ -437,7 +437,7 @@ export default function TruckDetailPage() {
                             <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Conexión 5ta Rueda Central</p>
                          </div>
                       </div>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-6 border-t border-blue-100 pt-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-6 border-t border-blue-100 pt-4">
                          <div className="space-y-1">
                             <p className="text-[10px] uppercase font-bold text-blue-400">Tipo de Bitrén</p>
                             <p className="text-xs font-black uppercase text-blue-800">{truck.bitren.type === 'type_a' ? 'Tipo A (22,40m)' : 'Tipo B (30,25m)'}</p>
@@ -447,11 +447,34 @@ export default function TruckDetailPage() {
                             <p className="text-xs font-black text-blue-800">{truck.bitren.totalAxles} Ejes</p>
                          </div>
                          <div className="space-y-1">
-                            <p className="text-[10px] uppercase font-bold text-blue-400">PBTC Máx.</p>
-                            <p className="text-xs font-black text-blue-800">{truck.bitren.type === 'type_a' ? '60 Toneladas' : '75 Toneladas'}</p>
+                            <p className="text-[10px] uppercase font-bold text-blue-400">Largo Total</p>
+                            <p className="text-xs font-black text-blue-800">{truck.bitren.lengthMeters ? `${truck.bitren.lengthMeters} m` : (truck.bitren.type === 'type_a' ? '22,40 m' : '30,25 m')}</p>
+                         </div>
+                         <div className="space-y-1">
+                            <p className="text-[10px] uppercase font-bold text-blue-400">Capacidad de Carga</p>
+                            <p className="text-xs font-black text-blue-800">{truck.bitren.capacityKg ? `${truck.bitren.capacityKg.toLocaleString()} KG` : (truck.bitren.type === 'type_a' ? '60.000 KG' : '75.000 KG')}</p>
                          </div>
                       </div>
                    </CardContent>
+                 </Card>
+               ) : truck.haulingType === 'acoplado' && truck.fullTrailer ? (
+                 <Card className="border-slate-100 bg-slate-50/50 shadow-sm">
+                    <CardHeader className="py-4 border-b bg-white"><CardTitle className="text-sm flex items-center gap-2"><Box size={16}/> Acoplado (Zorra/Dolly)</CardTitle></CardHeader>
+                    <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-6 pt-6">
+                       <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Patente Acoplado</p><p className="text-lg font-mono font-bold text-slate-700">{truck.fullTrailer.plate || 'S/D'}</p></div>
+                       <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Marca/Modelo</p><p className="text-sm font-bold text-slate-700">{truck.fullTrailer.brand} {truck.fullTrailer.model}</p></div>
+                       <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Tipo</p><Badge variant="outline" className="uppercase text-[9px]">{truck.fullTrailer.type}</Badge></div>
+                       <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Ejes</p><p className="text-sm font-bold text-slate-700">{truck.fullTrailer.axles ?? 'S/D'}</p></div>
+                       <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Largo</p><p className="text-sm font-bold text-slate-700">{truck.fullTrailer.lengthMeters ? `${truck.fullTrailer.lengthMeters} m` : 'S/D'}</p></div>
+                       <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Capacidad de Carga</p><p className="text-sm font-black text-green-700">{truck.fullTrailer.capacityKg ? `${truck.fullTrailer.capacityKg.toLocaleString()} KG` : 'S/D'}</p></div>
+                    </CardContent>
+                 </Card>
+               ) : truck.haulingType === 'chassis' ? (
+                 <Card className="border-slate-100 bg-slate-50/50 shadow-sm">
+                    <CardHeader className="py-4 border-b bg-white"><CardTitle className="text-sm flex items-center gap-2"><Info size={16}/> Chasis Rígido</CardTitle></CardHeader>
+                    <CardContent className="pt-6">
+                       <p className="text-xs font-bold text-slate-500 uppercase">Esta unidad no arrastra semirremolque ni acoplado. Capacidad definida por PBTC/Tara del tractor.</p>
+                    </CardContent>
                  </Card>
                ) : (
                  <Card className="border-slate-100 bg-slate-50/50 shadow-sm">
@@ -460,9 +483,13 @@ export default function TruckDetailPage() {
                        <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Patente Semi</p><p className="text-lg font-mono font-bold text-slate-700">{truck.semiTrailer?.plate || 'S/D'}</p></div>
                        <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Marca/Modelo</p><p className="text-sm font-bold text-slate-700">{truck.semiTrailer?.brand} {truck.semiTrailer?.model}</p></div>
                        <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Tipo Batea</p><Badge variant="outline" className="uppercase text-[9px]">{truck.semiTrailer?.type}</Badge></div>
+                       <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Ejes del Semi</p><p className="text-sm font-bold text-slate-700">{truck.semiTrailer?.axles ?? 'S/D'}</p></div>
+                       <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Dimensiones (L x A x H)</p><p className="text-sm font-bold text-slate-700">{truck.semiTrailer?.lengthMeters ? `${truck.semiTrailer.lengthMeters} x ${truck.semiTrailer.widthMeters ?? '-'} x ${truck.semiTrailer.heightMeters ?? '-'} m` : 'S/D'}</p></div>
+                       <div className="space-y-1"><p className="text-[10px] uppercase font-bold text-slate-400">Capacidad de Carga</p><p className="text-sm font-black text-green-700">{truck.semiTrailer?.capacityKg ? `${truck.semiTrailer.capacityKg.toLocaleString()} KG` : 'S/D'}</p></div>
                     </CardContent>
                  </Card>
                )}
+
             </TabsContent>
 
             <TabsContent value="docs" className="space-y-4 animate-in fade-in">

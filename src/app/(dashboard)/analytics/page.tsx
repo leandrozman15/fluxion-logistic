@@ -193,16 +193,44 @@ export default function AnalyticsPage() {
   }, [drivers, filteredData]);
 
   // Ranking de Camiones (Costo por KM)
+  // Nota: NO se basa en telemetría GPS real (load.tracking.distanceTraveledKm), que rara vez se
+  // completa para todos los viajes — se usa el mismo costo teórico (fijos+variables/km + combustible
+  // promedio real) que ya calcula flota/page.tsx, así el ranking siempre tiene datos si el camión
+  // tiene su Ficha de Costos cargada.
+  const fuelExpensesAll = useMemo(
+    () => allExpenses?.filter(e => e.category === 'fuel' && e.status === 'approved') || [],
+    [allExpenses]
+  );
+
+  const calculateTheoreticalCostPerKm = (truck: Truck) => {
+    if (!truck.costs) return 0;
+    const costs = truck.costs;
+    const kmMensuales = costs.operational.estimatedMonthlyKm || 1;
+
+    const sumFixed = Object.values(costs.fixed).reduce((a, b) => a + (b as number), 0);
+    const fixedPerKm = sumFixed / kmMensuales;
+
+    const oilPerKm = (costs.variable.preventiveMaintenance?.cost || 0) / (costs.variable.preventiveMaintenance?.frequencyKm || 1);
+    const tiresPerKm = (costs.variable.tires?.costFullSet || 0) / (costs.variable.tires?.lifeSpanKm || 1);
+    const reservePerKm = costs.variable.unforeseenReservePerKm || 0;
+
+    let fuelPerKm = 0;
+    const validTickets = fuelExpensesAll.filter((e) => e.truckId === truck.id && !!e.pricePerLiter && e.pricePerLiter > 0);
+    if (validTickets.length > 0) {
+      const avgPrice = validTickets.reduce((acc, e) => acc + (e.pricePerLiter || 0), 0) / validTickets.length;
+      fuelPerKm = (avgPrice * (truck.avgConsumption || 32)) / 100;
+    }
+
+    return fixedPerKm + oilPerKm + tiresPerKm + reservePerKm + fuelPerKm;
+  };
+
   const truckRanking = useMemo(() => {
-    if (!trucks || !filteredData.loads || !filteredData.expenses) return [];
+    if (!trucks || !filteredData.loads) return [];
 
     return trucks.map(truck => {
       const truckLoads = filteredData.loads.filter(l => l.assignedTruckId === truck.id);
-      const truckExpenses = filteredData.expenses.filter(e => e.truckId === truck.id && e.status === 'approved');
-      
       const totalKm = truckLoads.reduce((acc, l) => acc + (l.tracking?.distanceTraveledKm || 0), 0);
-      const totalCost = truckExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
-      
+
       return {
         id: truck.id,
         plate: truck.plate,
@@ -210,11 +238,10 @@ export default function AnalyticsPage() {
         model: truck.model,
         avatar: truck.avatarUrl,
         km: Math.round(totalKm),
-        cost: totalCost,
-        costPerKm: totalKm > 0 ? totalCost / totalKm : 0
+        costPerKm: calculateTheoreticalCostPerKm(truck)
       };
-    }).filter(t => t.km > 0).sort((a, b) => a.costPerKm - b.costPerKm); // De menor a mayor costo (más eficientes arriba)
-  }, [trucks, filteredData]);
+    }).filter(t => t.costPerKm > 0).sort((a, b) => a.costPerKm - b.costPerKm); // De menor a mayor costo (más eficientes arriba)
+  }, [trucks, filteredData, fuelExpensesAll]);
 
   // Distribución de Gastos por Categoría
   const expenseDistribution = useMemo(() => {
@@ -436,7 +463,7 @@ export default function AnalyticsPage() {
                    </div>
                  ))}
                  {truckRanking.length === 0 && (
-                   <div className="p-20 text-center text-slate-300 italic text-xs font-bold uppercase tracking-widest">Sin datos de telemetría suficientes para calcular costos.</div>
+                   <div className="p-20 text-center text-slate-300 italic text-xs font-bold uppercase tracking-widest">Cargá la Ficha de Costos de al menos una unidad en Flota para calcular el costo por KM.</div>
                  )}
               </div>
            </CardContent>

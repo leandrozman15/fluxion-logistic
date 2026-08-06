@@ -14,7 +14,7 @@ import { Progress } from "@/components/ui/progress";
 import { 
   Truck, ArrowLeft, Save, Loader2, 
   Scale, CheckCircle2, ChevronRight, ChevronLeft, Info, Camera, DollarSign, Zap, Gauge, Fuel,
-  ShieldCheck, Wrench, RefreshCw, Smartphone, TrendingUp, User, X, Users
+  ShieldCheck, Wrench, RefreshCw, Smartphone, TrendingUp, User, X, Users, Container
 } from "lucide-react";
 import { Truck as TruckType, TruckCosts, Driver } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -35,6 +35,28 @@ const INITIAL_COSTS: TruckCosts = {
   operational: { estimatedMonthlyKm: 10000 }
 };
 
+const INITIAL_SEMI_TRAILER: NonNullable<TruckType['semiTrailer']> = { plate: "", brand: "", model: "", type: "batea", lengthMeters: 13.6, widthMeters: 2.6, heightMeters: 2.8, axles: 3, capacityKg: 30000, tareKg: 7000 };
+const INITIAL_BITREN: NonNullable<TruckType['bitren']> = { type: 'type_a', firstSemiPlate: "", secondSemiPlate: "", totalAxles: 8, lengthMeters: 22.4, capacityKg: 60000 };
+const INITIAL_FULL_TRAILER: NonNullable<TruckType['fullTrailer']> = { plate: "", brand: "", model: "", type: "acoplado_playo", lengthMeters: 10, axles: 2, capacityKg: 20000, tareKg: 5000 };
+
+const SEMI_TRAILER_TYPES = [
+  { value: "batea", label: "Batea" },
+  { value: "sider", label: "Sider / Lonado" },
+  { value: "furgon", label: "Furgón" },
+  { value: "tanque", label: "Tanque" },
+  { value: "volcador", label: "Volcador / Vuelco" },
+  { value: "refrigerado", label: "Refrigerado / Termo" },
+  { value: "cerealero", label: "Cerealero / Tolva" },
+  { value: "porta_contenedor", label: "Porta Contenedor" },
+];
+
+const FULL_TRAILER_TYPES = [
+  { value: "acoplado_playo", label: "Acoplado Playo" },
+  { value: "acoplado_sider", label: "Acoplado Sider" },
+  { value: "acoplado_tanque", label: "Acoplado Tanque" },
+  { value: "acoplado_cerealero", label: "Acoplado Cerealero / Tolva" },
+];
+
 export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
   const { tenantId } = useTenant();
   useUser();
@@ -52,6 +74,9 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
     axles: 2, grossCombinedWeightKg: 45000, unladenWeightKg: 15000, capacityKg: 30000,
     odometerKm: 0, avgConsumption: 32, status: "available",
     ownershipType: 'company', haulingType: 'standard',
+    semiTrailer: INITIAL_SEMI_TRAILER,
+    bitren: INITIAL_BITREN,
+    fullTrailer: INITIAL_FULL_TRAILER,
     location: { city: "", province: "Buenos Aires", country: "Argentina", lat: 0, lng: 0 },
     avatarUrl: "", assignedDriverId: "none", assignedCompanionIds: [],
     costs: INITIAL_COSTS
@@ -84,6 +109,9 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
             costs: truckRow.costs || INITIAL_COSTS,
             assignedDriverId: truckRow.assignedDriverId || "none",
             assignedCompanionIds: truckRow.assignedCompanionIds || [],
+            semiTrailer: { ...INITIAL_SEMI_TRAILER, ...truckRow.semiTrailer },
+            bitren: { ...INITIAL_BITREN, ...truckRow.bitren },
+            fullTrailer: { ...INITIAL_FULL_TRAILER, ...truckRow.fullTrailer },
           });
         }
       } catch (error) {
@@ -297,6 +325,7 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
         )}
 
         {step === 2 && (
+          <div className="space-y-6">
           <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden">
              <CardHeader className="bg-blue-600 text-white p-8"><CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2"><Scale size={18}/> 2. Parámetros Técnicos y de Carga</CardTitle></CardHeader>
              <CardContent className="p-8 space-y-8">
@@ -318,7 +347,106 @@ export default function TruckFormWizard({ truckId }: TruckFormWizardProps) {
                 </div>
              </CardContent>
           </Card>
+
+          <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden">
+             <CardHeader className="bg-slate-900 text-white p-8"><CardTitle className="text-sm uppercase tracking-widest flex items-center gap-2"><Container size={18} className="text-blue-400"/> Configuración de Arrastre</CardTitle></CardHeader>
+             <CardContent className="p-8 space-y-8">
+                <div className="space-y-1.5">
+                   <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">¿Qué arrastra el tractor?</Label>
+                   <Select value={formData.haulingType} onValueChange={(v: any) => setFormData({...formData, haulingType: v})}>
+                      <SelectTrigger className="h-12 bg-slate-50 border-none rounded-xl font-bold"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                         <SelectItem value="standard">Semirremolque Estándar (Tractor + Semi)</SelectItem>
+                         <SelectItem value="bitren">Bitrén (Doble Semirremolque)</SelectItem>
+                         <SelectItem value="acoplado">Camión + Acoplado (Chasis + Zorra/Dolly)</SelectItem>
+                         <SelectItem value="chassis">Chasis Rígido (Sin Remolque)</SelectItem>
+                      </SelectContent>
+                   </Select>
+                </div>
+
+                {formData.haulingType === 'standard' && (
+                   <div className="p-6 bg-slate-50 rounded-3xl border space-y-6">
+                      <p className="text-[10px] font-black uppercase text-blue-600 tracking-widest">Datos del Semirremolque</p>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400">Patente Semi</Label><Input className="h-11 bg-white font-mono font-bold uppercase" value={formData.semiTrailer?.plate} onChange={e => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, plate: e.target.value.toUpperCase()}})} /></div>
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400">Marca</Label><Input className="h-11 bg-white font-bold" value={formData.semiTrailer?.brand} onChange={e => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, brand: e.target.value}})} /></div>
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400">Modelo</Label><Input className="h-11 bg-white font-bold" value={formData.semiTrailer?.model} onChange={e => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, model: e.target.value}})} /></div>
+                         <div className="space-y-1.5">
+                            <Label className="text-[9px] font-black uppercase text-slate-400">Tipo de Batea</Label>
+                            <Select value={formData.semiTrailer?.type} onValueChange={(v: any) => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, type: v}})}>
+                               <SelectTrigger className="h-11 bg-white font-bold"><SelectValue /></SelectTrigger>
+                               <SelectContent>{SEMI_TRAILER_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+                            </Select>
+                         </div>
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400">Ejes del Semi</Label><Input type="number" className="h-11 bg-white font-bold" value={formData.semiTrailer?.axles} onChange={e => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, axles: parseInt(e.target.value) || 0}})} /></div>
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400">Capacidad de Carga (KG)</Label><Input type="number" className="h-11 bg-white font-black" value={formData.semiTrailer?.capacityKg} onChange={e => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, capacityKg: parseInt(e.target.value) || 0}})} /></div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 border-t pt-6">
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400">Largo (m)</Label><Input type="number" step="0.01" className="h-11 bg-white font-bold" value={formData.semiTrailer?.lengthMeters} onChange={e => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, lengthMeters: parseFloat(e.target.value) || 0}})} /></div>
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400">Ancho (m)</Label><Input type="number" step="0.01" className="h-11 bg-white font-bold" value={formData.semiTrailer?.widthMeters} onChange={e => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, widthMeters: parseFloat(e.target.value) || 0}})} /></div>
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400">Alto (m)</Label><Input type="number" step="0.01" className="h-11 bg-white font-bold" value={formData.semiTrailer?.heightMeters} onChange={e => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, heightMeters: parseFloat(e.target.value) || 0}})} /></div>
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400">Tara (KG)</Label><Input type="number" className="h-11 bg-white font-bold" value={formData.semiTrailer?.tareKg} onChange={e => setFormData({...formData, semiTrailer: {...formData.semiTrailer!, tareKg: parseInt(e.target.value) || 0}})} /></div>
+                      </div>
+                   </div>
+                )}
+
+                {formData.haulingType === 'bitren' && (
+                   <div className="p-6 bg-blue-50 rounded-3xl border border-blue-100 space-y-6">
+                      <p className="text-[10px] font-black uppercase text-blue-600 tracking-widest">Datos del Bitrén</p>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400">1er Semirremolque (Patente)</Label><Input className="h-11 bg-white font-mono font-bold uppercase" value={formData.bitren?.firstSemiPlate} onChange={e => setFormData({...formData, bitren: {...formData.bitren!, firstSemiPlate: e.target.value.toUpperCase()}})} /></div>
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400">2do Semirremolque (Patente)</Label><Input className="h-11 bg-white font-mono font-bold uppercase" value={formData.bitren?.secondSemiPlate} onChange={e => setFormData({...formData, bitren: {...formData.bitren!, secondSemiPlate: e.target.value.toUpperCase()}})} /></div>
+                         <div className="space-y-1.5">
+                            <Label className="text-[9px] font-black uppercase text-slate-400">Tipo de Bitrén</Label>
+                            <Select value={formData.bitren?.type} onValueChange={(v: any) => setFormData({...formData, bitren: {...formData.bitren!, type: v}})}>
+                               <SelectTrigger className="h-11 bg-white font-bold"><SelectValue /></SelectTrigger>
+                               <SelectContent><SelectItem value="type_a">Tipo A (22,40m / 60 Ton)</SelectItem><SelectItem value="type_b">Tipo B (30,25m / 75 Ton)</SelectItem></SelectContent>
+                            </Select>
+                         </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 border-t border-blue-100 pt-6">
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400">Ejes Totales</Label><Input type="number" className="h-11 bg-white font-bold" value={formData.bitren?.totalAxles} onChange={e => setFormData({...formData, bitren: {...formData.bitren!, totalAxles: parseInt(e.target.value) || 0}})} /></div>
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400">Largo Total (m)</Label><Input type="number" step="0.01" className="h-11 bg-white font-bold" value={formData.bitren?.lengthMeters} onChange={e => setFormData({...formData, bitren: {...formData.bitren!, lengthMeters: parseFloat(e.target.value) || 0}})} /></div>
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400">Capacidad Total (KG)</Label><Input type="number" className="h-11 bg-white font-black" value={formData.bitren?.capacityKg} onChange={e => setFormData({...formData, bitren: {...formData.bitren!, capacityKg: parseInt(e.target.value) || 0}})} /></div>
+                      </div>
+                   </div>
+                )}
+
+                {formData.haulingType === 'acoplado' && (
+                   <div className="p-6 bg-slate-50 rounded-3xl border space-y-6">
+                      <p className="text-[10px] font-black uppercase text-blue-600 tracking-widest">Datos del Acoplado (Zorra/Dolly)</p>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400">Patente Acoplado</Label><Input className="h-11 bg-white font-mono font-bold uppercase" value={formData.fullTrailer?.plate} onChange={e => setFormData({...formData, fullTrailer: {...formData.fullTrailer!, plate: e.target.value.toUpperCase()}})} /></div>
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400">Marca</Label><Input className="h-11 bg-white font-bold" value={formData.fullTrailer?.brand} onChange={e => setFormData({...formData, fullTrailer: {...formData.fullTrailer!, brand: e.target.value}})} /></div>
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400">Modelo</Label><Input className="h-11 bg-white font-bold" value={formData.fullTrailer?.model} onChange={e => setFormData({...formData, fullTrailer: {...formData.fullTrailer!, model: e.target.value}})} /></div>
+                         <div className="space-y-1.5">
+                            <Label className="text-[9px] font-black uppercase text-slate-400">Tipo de Acoplado</Label>
+                            <Select value={formData.fullTrailer?.type} onValueChange={(v: any) => setFormData({...formData, fullTrailer: {...formData.fullTrailer!, type: v}})}>
+                               <SelectTrigger className="h-11 bg-white font-bold"><SelectValue /></SelectTrigger>
+                               <SelectContent>{FULL_TRAILER_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+                            </Select>
+                         </div>
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400">Ejes del Acoplado</Label><Input type="number" className="h-11 bg-white font-bold" value={formData.fullTrailer?.axles} onChange={e => setFormData({...formData, fullTrailer: {...formData.fullTrailer!, axles: parseInt(e.target.value) || 0}})} /></div>
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400">Capacidad de Carga (KG)</Label><Input type="number" className="h-11 bg-white font-black" value={formData.fullTrailer?.capacityKg} onChange={e => setFormData({...formData, fullTrailer: {...formData.fullTrailer!, capacityKg: parseInt(e.target.value) || 0}})} /></div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 border-t pt-6">
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400">Largo (m)</Label><Input type="number" step="0.01" className="h-11 bg-white font-bold" value={formData.fullTrailer?.lengthMeters} onChange={e => setFormData({...formData, fullTrailer: {...formData.fullTrailer!, lengthMeters: parseFloat(e.target.value) || 0}})} /></div>
+                         <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400">Tara (KG)</Label><Input type="number" className="h-11 bg-white font-bold" value={formData.fullTrailer?.tareKg} onChange={e => setFormData({...formData, fullTrailer: {...formData.fullTrailer!, tareKg: parseInt(e.target.value) || 0}})} /></div>
+                      </div>
+                   </div>
+                )}
+
+                {formData.haulingType === 'chassis' && (
+                   <div className="p-6 bg-slate-50 rounded-3xl border flex items-center gap-4 text-slate-500">
+                      <Info size={24} className="text-slate-400 shrink-0" />
+                      <p className="text-xs font-bold uppercase">Chasis rígido: la unidad no arrastra semirremolque ni acoplado. La capacidad de carga es la definida en PBTC/Tara.</p>
+                   </div>
+                )}
+             </CardContent>
+          </Card>
+          </div>
         )}
+
 
         {step === 3 && (
           <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden">

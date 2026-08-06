@@ -34,7 +34,7 @@ import { Quotation, QuotationStatus, Tenant } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { generateQuotationPDF } from "@/lib/pdf-service";
+
 import { deleteQuotation, listQuotations } from "@/lib/quotations-api";
 import { getTenantProfile } from "@/lib/settings-api";
 
@@ -96,6 +96,7 @@ export default function PresupuestosPage() {
   const handleDownloadPDF = async (quote: Quotation) => {
     setIsDownloadingId(quote.id);
     try {
+      const { generateQuotationPDF } = await import("@/lib/pdf-service");
       await generateQuotationPDF(quote, tenantProfile || undefined);
       toast({ title: "PDF Generado", description: `Se ha descargado la cotización ${quote.number}.` });
     } catch (e) {

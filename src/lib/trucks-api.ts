@@ -26,6 +26,7 @@ function normalizeTruck(raw: any): Truck {
     documentation: raw.documentation || [],
     semiTrailer: raw.semiTrailer,
     bitren: raw.bitren,
+    fullTrailer: raw.fullTrailer,
     costs: raw.costs,
     updatedAt: raw.updatedAt,
     createdAt: raw.createdAt,

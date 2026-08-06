@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Archive, Calendar, Download, Eye, Loader2, RotateCcw, Search } from "lucide-react";
 import { Quotation, QuotationStatus, Tenant } from "@/app/lib/types";
-import { generateQuotationPDF } from "@/lib/pdf-service";
+
 import { useToast } from "@/hooks/use-toast";
 import { listQuotations, updateQuotation } from "@/lib/quotations-api";
 import { getTenantProfile } from "@/lib/settings-api";
@@ -96,6 +96,7 @@ export default function PresupuestosArchivoPage() {
   const handleDownloadPDF = async (quote: Quotation) => {
     setIsDownloadingId(quote.id);
     try {
+      const { generateQuotationPDF } = await import("@/lib/pdf-service");
       await generateQuotationPDF(quote, tenantProfile || undefined);
       toast({ title: 'PDF Generado', description: `Se ha descargado la cotización ${quote.number}.` });
     } catch {

@@ -39,7 +39,7 @@ import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { generateLoadOrderPDF, generateLoadWalletPDF } from "@/lib/pdf-service";
+
 import Link from "next/link";
 import { deleteLoad, listLoads, updateLoad } from "@/lib/loads-api";
 import { listTrucks } from "@/lib/trucks-api";
@@ -134,6 +134,7 @@ export default function CargasPage() {
     setIsDownloadingId(`${load.id}-${type}`);
     
     try {
+      const { generateLoadOrderPDF, generateLoadWalletPDF } = await import("@/lib/pdf-service");
       const driver = drivers?.find(d => d.id === load.assignedDriverId) || null;
       const truck = trucks?.find(t => t.id === load.assignedTruckId) || null;
 

@@ -46,7 +46,7 @@ import {
 import { Product } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { generateProductPDF } from "@/lib/pdf-service";
+
 import { deleteProduct, listProducts } from "@/lib/products-api";
 import { getTenantProfile } from "@/lib/settings-api";
 import type { Tenant } from "@/app/lib/types";
@@ -111,6 +111,7 @@ export default function ProductosPage() {
   const handleDownloadDirect = async (product: Product) => {
     setIsDownloadingId(product.id);
     try {
+      const { generateProductPDF } = await import("@/lib/pdf-service");
       await generateProductPDF(product, tenantProfile || undefined);
       toast({ title: "PDF Descargado", description: `Se ha generado la ficha técnica de ${product.sku}.` });
     } catch {
