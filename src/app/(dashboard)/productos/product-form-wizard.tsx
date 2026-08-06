@@ -373,12 +373,24 @@ export default function ProductFormWizard({ productId }: ProductFormWizardProps)
                    </div>
                 </div>
                 <Table>
-                   <TableHeader className="bg-slate-100"><TableRow><TableHead className="px-8 text-[10px] font-black uppercase">Sede / Depósito</TableHead><TableHead className="text-center text-[10px] font-black uppercase">Posición Rack</TableHead><TableHead className="text-right pr-8 text-[10px] font-black uppercase w-40">Stock Actual</TableHead></TableRow></TableHeader>
+                   <TableHeader className="bg-slate-100">
+                     <TableRow>
+                       <TableHead className="px-8 text-[10px] font-black uppercase">Sede / Depósito</TableHead>
+                       <TableHead className="text-center text-[10px] font-black uppercase">Posición Rack</TableHead>
+                       <TableHead className="text-center text-[10px] font-black uppercase">N° Lote</TableHead>
+                       <TableHead className="text-center text-[10px] font-black uppercase">Fecha Ingreso</TableHead>
+                       <TableHead className="text-center text-[10px] font-black uppercase">Vencimiento</TableHead>
+                       <TableHead className="text-right pr-8 text-[10px] font-black uppercase w-32">Stock Actual</TableHead>
+                     </TableRow>
+                   </TableHeader>
                    <TableBody>
                       {formData.warehouses?.map(w => (
                         <TableRow key={w.hubId}>
                            <TableCell className="px-8 py-4"><p className="font-bold text-slate-700">{w.hubName}</p></TableCell>
                            <TableCell className="text-center"><Input placeholder="Ej: P1-R4-N2" className="h-8 bg-slate-50 border-none text-[10px] font-mono text-center mx-auto w-32" value={w.location} onChange={e => handleWarehouseChange(w.hubId, 'location', e.target.value)} /></TableCell>
+                           <TableCell className="text-center"><Input placeholder="Ej: LT-1024" className="h-8 bg-slate-50 border-none text-[10px] font-mono text-center mx-auto w-28" value={w.lotNumber || ''} onChange={e => handleWarehouseChange(w.hubId, 'lotNumber', e.target.value)} /></TableCell>
+                           <TableCell className="text-center"><Input type="date" className="h-8 bg-slate-50 border-none text-[10px] font-mono text-center mx-auto w-32" value={w.entryDate || ''} onChange={e => handleWarehouseChange(w.hubId, 'entryDate', e.target.value)} /></TableCell>
+                           <TableCell className="text-center"><Input type="date" className="h-8 bg-slate-50 border-none text-[10px] font-mono text-center mx-auto w-32" value={w.expirationDate || ''} onChange={e => handleWarehouseChange(w.hubId, 'expirationDate', e.target.value)} /></TableCell>
                            <TableCell className="pr-8 text-right"><Input type="number" className="h-9 bg-white border-slate-200 text-center font-black text-blue-600" value={w.stockQuantity} onChange={e => handleWarehouseChange(w.hubId, 'stockQuantity', parseInt(e.target.value) || 0)} /></TableCell>
                         </TableRow>
                       ))}

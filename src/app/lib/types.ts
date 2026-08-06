@@ -114,6 +114,7 @@ export interface ProductWarehouse {
   maxStock: number;
   lotNumber?: string;
   entryDate?: string;
+  expirationDate?: string;
 }
 
 export interface ProductVariant {

@@ -58,7 +58,8 @@ export default function StockPage() {
     productId: "",
     type: 'in' as StockMovementType,
     quantity: 1,
-    reason: ""
+    reason: "",
+    sourceHubId: null as string | null
   });
 
   useEffect(() => {
@@ -119,13 +120,28 @@ export default function StockPage() {
       const product = products?.find(p => p.id === adjustmentForm.productId);
       if (!product) throw new Error("Producto no encontrado");
 
-      const delta = adjustmentForm.type === 'in' ? adjustmentForm.quantity : -adjustmentForm.quantity;
+      const isDecrement = adjustmentForm.type !== 'in';
+      const positions = product.warehouses || [];
+      let updatedWarehouses = positions;
+
+      if (isDecrement && positions.length > 0) {
+        if (!adjustmentForm.sourceHubId) throw new Error("Seleccione de qué posición se descuenta el stock.");
+        const idx = positions.findIndex(w => w.hubId === adjustmentForm.sourceHubId);
+        if (idx === -1) throw new Error("La posición seleccionada ya no existe.");
+        if (positions[idx].stockQuantity < adjustmentForm.quantity) {
+          throw new Error(`Stock insuficiente en esa posición (disponible: ${positions[idx].stockQuantity}).`);
+        }
+        updatedWarehouses = positions.map((w, i) => i === idx ? { ...w, stockQuantity: w.stockQuantity - adjustmentForm.quantity } : w);
+      }
+
+      const delta = isDecrement ? -adjustmentForm.quantity : adjustmentForm.quantity;
       const newStock = (product.stockQuantity || 0) + delta;
 
       if (newStock < 0) throw new Error("El stock no puede ser negativo.");
 
       const updated = await updateProduct(product.id, {
         stockQuantity: newStock,
+        warehouses: updatedWarehouses,
       });
       setProducts((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
       
@@ -134,13 +150,18 @@ export default function StockPage() {
         toast({ title: "Nota registrada localmente", description: adjustmentForm.reason });
       }
       setIsAdjusting(false);
-      setAdjustmentForm({ productId: "", type: 'in', quantity: 1, reason: "" });
+      setAdjustmentForm({ productId: "", type: 'in', quantity: 1, reason: "", sourceHubId: null });
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error en ajuste", description: e.message });
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const adjustmentProduct = products?.find(p => p.id === adjustmentForm.productId) || null;
+  const isDecrementMovement = adjustmentForm.type !== 'in';
+  const availableSourcePositions = adjustmentProduct?.warehouses?.filter(w => w.stockQuantity > 0) || [];
+  const needsSourceSelection = isDecrementMovement && availableSourcePositions.length > 0;
 
   return (
     <div className="space-y-6">
@@ -164,7 +185,7 @@ export default function StockPage() {
             <div className="space-y-6 py-6">
                <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">1. Seleccionar Producto</Label>
-                  <Select value={adjustmentForm.productId} onValueChange={v => setAdjustmentForm({...adjustmentForm, productId: v})}>
+                  <Select value={adjustmentForm.productId} onValueChange={v => setAdjustmentForm({...adjustmentForm, productId: v, sourceHubId: null})}>
                     <SelectTrigger className="h-12 bg-slate-50 border-none rounded-xl font-bold">
                        <SelectValue placeholder="Elegir del catálogo..." />
                     </SelectTrigger>
@@ -177,7 +198,7 @@ export default function StockPage() {
                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">2. Tipo Movimiento</Label>
-                    <Select value={adjustmentForm.type} onValueChange={(v: any) => setAdjustmentForm({...adjustmentForm, type: v})}>
+                    <Select value={adjustmentForm.type} onValueChange={(v: any) => setAdjustmentForm({...adjustmentForm, type: v, sourceHubId: null})}>
                       <SelectTrigger className="h-12 bg-slate-50 border-none rounded-xl font-bold">
                         <SelectValue />
                       </SelectTrigger>
@@ -194,6 +215,43 @@ export default function StockPage() {
                   </div>
                </div>
 
+               {isDecrementMovement && adjustmentProduct && (
+                  <div className="space-y-2">
+                     <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Posición de origen (de dónde se descuenta)</Label>
+                     {availableSourcePositions.length === 0 ? (
+                        <p className="text-[10px] font-bold text-slate-400 italic bg-slate-50 rounded-xl p-3">Este producto no tiene posiciones físicas configuradas. Se descontará del total general.</p>
+                     ) : (
+                        <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                           {availableSourcePositions.map(w => (
+                              <button
+                                 type="button"
+                                 key={w.hubId}
+                                 onClick={() => setAdjustmentForm({ ...adjustmentForm, sourceHubId: w.hubId })}
+                                 className={cn(
+                                    "w-full text-left p-3 rounded-xl border-2 transition-all",
+                                    adjustmentForm.sourceHubId === w.hubId ? "border-blue-600 bg-blue-50" : "border-slate-100 bg-slate-50 hover:border-slate-200"
+                                 )}
+                              >
+                                 <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                       <MapPin size={14} className="text-blue-500" />
+                                       <span className="text-xs font-black text-slate-800">{w.hubName}</span>
+                                       {w.location && <span className="text-[10px] font-mono font-bold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">{w.location}</span>}
+                                    </div>
+                                    <span className="text-sm font-black italic text-blue-700">{w.stockQuantity} disp.</span>
+                                 </div>
+                                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-[9px] font-bold text-slate-400 uppercase">
+                                    <span>Lote: {w.lotNumber || 'S/D'}</span>
+                                    <span className="flex items-center gap-1"><Calendar size={10} /> Ingreso: {w.entryDate || 'S/D'}</span>
+                                    <span className={cn("flex items-center gap-1", w.expirationDate && "text-amber-600")}><Calendar size={10} /> Vence: {w.expirationDate || 'S/D'}</span>
+                                 </div>
+                              </button>
+                           ))}
+                        </div>
+                     )}
+                  </div>
+               )}
+
                <div className="space-y-2">
                   <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">4. Motivo / Observación</Label>
                   <Input placeholder="Ej: Compra a proveedor, rotura, etc." className="h-12 bg-slate-50 border-none rounded-xl font-bold" value={adjustmentForm.reason} onChange={e => setAdjustmentForm({...adjustmentForm, reason: e.target.value})} />
@@ -201,7 +259,7 @@ export default function StockPage() {
             </div>
             <DialogFooter>
                <Button variant="ghost" onClick={() => setIsAdjusting(false)} className="font-bold text-slate-400 uppercase text-xs">Cancelar</Button>
-               <Button onClick={handleStockAdjustment} disabled={isSubmitting || !adjustmentForm.productId} className="bg-blue-600 h-12 px-8 rounded-xl font-black uppercase shadow-lg shadow-blue-100">
+               <Button onClick={handleStockAdjustment} disabled={isSubmitting || !adjustmentForm.productId || (needsSourceSelection && !adjustmentForm.sourceHubId)} className="bg-blue-600 h-12 px-8 rounded-xl font-black uppercase shadow-lg shadow-blue-100">
                   {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2" size={16} />}
                   CONFIRMAR CAMBIO
                </Button>
@@ -345,6 +403,10 @@ export default function StockPage() {
                                                   <div className="space-y-1">
                                                      <p className="text-[8px] font-black text-slate-400 uppercase">Fecha Ingreso</p>
                                                      <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5"><Calendar size={12} className="text-slate-300" /> {w.entryDate || 'S/D'}</p>
+                                                  </div>
+                                                  <div className="space-y-1">
+                                                     <p className="text-[8px] font-black text-slate-400 uppercase">Vencimiento</p>
+                                                     <p className={cn("text-xs font-bold flex items-center gap-1.5", w.expirationDate ? "text-amber-600" : "text-slate-800")}><Calendar size={12} className="text-slate-300" /> {w.expirationDate || 'S/D'}</p>
                                                   </div>
                                                   <div className="col-span-2 pt-2 border-t mt-1 flex justify-between items-center">
                                                      <span className="text-[10px] font-black text-slate-900 uppercase">Existencia en esta posición:</span>
