@@ -108,6 +108,13 @@ export default function RouteDetailPage() {
   useEffect(() => {
     loadRef.current = load;
   }, [load]);
+  // Ref para leer siempre el último valor configurado sin reiniciar el watchPosition.
+  const tenantRef = useRef<any>(null);
+  useEffect(() => {
+    tenantRef.current = tenant;
+  }, [tenant]);
+  // Marca de tiempo del último envío real al backend, para respetar gpsIntervalSeconds.
+  const lastGpsSyncRef = useRef<number>(0);
 
   const [podForm, setPodForm] = useState<Partial<ProofOfDelivery>>({
     receiverName: "",
@@ -188,6 +195,13 @@ export default function RouteDetailPage() {
 
       const success = async (pos: GeolocationPosition) => {
         setGpsStatus('active');
+        // Respeta el intervalo configurado en Ajustes (gpsIntervalSeconds, default 30s):
+        // el navegador puede disparar 'success' con mucha más frecuencia que la deseada.
+        const intervalMs = (tenantRef.current?.settings?.gpsIntervalSeconds || 30) * 1000;
+        const now = Date.now();
+        if (now - lastGpsSyncRef.current < intervalMs) return;
+        lastGpsSyncRef.current = now;
+
         const { latitude, longitude, speed } = pos.coords;
         const currentSpeed = speed ? Math.round(speed * 3.6) : 0;
         // Usa siempre la última versión conocida del viaje (no la congelada al montar

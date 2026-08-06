@@ -111,7 +111,7 @@ export default function NewTenantPage() {
         settings: {
           onboardingCompleted: false,
           mapProvider: 'google',
-          gpsIntervalSeconds: 60,
+          gpsIntervalSeconds: 30,
           cuit: formData.cuit,
           country: formData.country,
           adminEmail: formData.adminEmail,

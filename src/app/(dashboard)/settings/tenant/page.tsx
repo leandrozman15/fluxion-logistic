@@ -19,6 +19,7 @@ import {
   MapPin,
   Info,
   Smartphone,
+  Radio,
 } from "lucide-react";
 import { TenantSettings, Country } from "@/app/lib/types";
 import { compressImage } from "@/lib/utils/image-compression";
@@ -32,7 +33,7 @@ const DEFAULT_SETTINGS: TenantSettings = {
   mapProvider: "google",
   mapApiKey: "",
   fleetEngineEnabled: false,
-  gpsIntervalSeconds: 60,
+  gpsIntervalSeconds: 30,
   centralPhone: "",
   logoUrl: "",
   cuit: "",
@@ -257,6 +258,29 @@ export default function TenantSettingsPage() {
                   value={settings.centralPhone}
                   onChange={(e) => setSettings({ ...settings, centralPhone: e.target.value })}
                 />
+              </div>
+            </div>
+
+            <div className="p-6 bg-emerald-50 border-2 border-emerald-100 rounded-3xl flex items-start gap-4">
+              <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-emerald-600 shadow-sm border border-emerald-100 shrink-0">
+                <Radio size={24} />
+              </div>
+              <div className="space-y-1 flex-1">
+                <Label className="text-xs font-black uppercase text-emerald-800">Frecuencia de Señal GPS</Label>
+                <p className="text-[10px] text-emerald-600 leading-relaxed font-medium mb-3">
+                  Cada cuántos segundos la app del chofer envía su posición al panel central mientras está en ruta.
+                </p>
+                <div className="flex items-center gap-3">
+                  <Input
+                    type="number"
+                    min={5}
+                    step={5}
+                    className="h-12 w-32 bg-white border-emerald-200 rounded-xl font-mono font-black text-xl text-emerald-900"
+                    value={settings.gpsIntervalSeconds}
+                    onChange={(e) => setSettings({ ...settings, gpsIntervalSeconds: Math.max(5, Number(e.target.value) || 30) })}
+                  />
+                  <span className="text-xs font-black uppercase text-emerald-700">segundos</span>
+                </div>
               </div>
             </div>
 
