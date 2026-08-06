@@ -38,9 +38,43 @@ function getBarcodeDataUrl(value: string): string | null {
 }
 
 /**
+ * Descarga una imagen remota (foto de producto, logo del tenant, etc.) y la convierte a data URL.
+ * jsPDF.addImage no acepta URLs remotas directamente (solo data URIs o base64 crudo), por eso hay
+ * que resolverla a data URL ANTES de pasarla a addImage.
+ */
+async function loadImageAsDataUrl(url?: string | null): Promise<string | null> {
+  if (!url) return null;
+  if (url.startsWith("data:")) return url;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+function dataUrlImageFormat(dataUrl: string): string {
+  const match = /^data:image\/(\w+);/.exec(dataUrl);
+  const ext = (match?.[1] || "jpeg").toUpperCase();
+  return ext === "JPG" ? "JPEG" : ext;
+}
+
+/**
  * FICHA TÉCNICA DE PRODUCTO (A4)
  */
 export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
+  const [logoDataUrl, photoDataUrl] = await Promise.all([
+    loadImageAsDataUrl(tenant?.settings?.logoUrl),
+    loadImageAsDataUrl(product.photoUrl),
+  ]);
+
   const doc = new jsPDF("p", "mm", "a4");
   const margin = 15;
   const pageWidth = 210;
@@ -70,13 +104,20 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
   doc.setFillColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
   doc.rect(0, 0, pageWidth, 26, "F");
 
+  if (logoDataUrl) {
+    try {
+      doc.addImage(logoDataUrl, dataUrlImageFormat(logoDataUrl), margin, 4, 18, 18);
+    } catch {}
+  }
+  const headerTextX = logoDataUrl ? margin + 22 : margin;
+
   doc.setTextColor(255);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
-  doc.text(tenant?.name || "LOGÍSTICA AR", margin, 12);
+  doc.text(tenant?.name || "LOGÍSTICA AR", headerTextX, 12);
   doc.setFontSize(6.5);
   doc.setFont("helvetica", "normal");
-  doc.text(`CUIT ${tenant?.settings?.cuit || "30-XXXXXXXX-X"}  ·  Ficha Técnica Certificada`, margin, 18);
+  doc.text(`CUIT ${tenant?.settings?.cuit || "30-XXXXXXXX-X"}  ·  Ficha Técnica Certificada`, headerTextX, 18);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
@@ -113,12 +154,12 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
   const photoSize = 32;
   const photoX = pageWidth - margin - photoSize;
   const photoY = 32;
-  if (product.photoUrl) {
+  if (photoDataUrl) {
     try {
       doc.setDrawColor(SLATE_BORDER[0], SLATE_BORDER[1], SLATE_BORDER[2]);
       doc.setLineWidth(0.3);
       doc.roundedRect(photoX, photoY, photoSize, photoSize, 1.5, 1.5, "S");
-      doc.addImage(product.photoUrl, "JPEG", photoX + 1, photoY + 1, photoSize - 2, photoSize - 2);
+      doc.addImage(photoDataUrl, dataUrlImageFormat(photoDataUrl), photoX + 1, photoY + 1, photoSize - 2, photoSize - 2);
     } catch {}
   }
 
@@ -128,7 +169,7 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
   doc.setTextColor(SLATE_DARK[0], SLATE_DARK[1], SLATE_DARK[2]);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9.5);
-  const descWidth = product.photoUrl ? contentWidth - photoSize - 6 : contentWidth;
+  const descWidth = photoDataUrl ? contentWidth - photoSize - 6 : contentWidth;
   const descLines = doc.splitTextToSize(product.description || "Sin descripción técnica disponible.", descWidth);
   doc.text(descLines, margin, descY + 6);
 
@@ -200,49 +241,10 @@ export const generateProductPDF = async (product: Product, tenant?: Tenant) => {
     alternateRowStyles: { fillColor: [248, 250, 252] },
   });
 
-  cursorY = (doc as any).lastAutoTable.finalY + 12;
-  if (cursorY > pageHeight - 60) {
-    footerBand();
-    doc.addPage();
-    cursorY = 20;
-  }
-
-  // ===== TABLA DISTRIBUCIÓN EN DEPÓSITO =====
-  drawSectionTitle("DISTRIBUCIÓN EN DEPÓSITO (LOTE / UBICACIÓN)", cursorY);
-
-  if (product.warehouses && product.warehouses.length > 0) {
-    autoTable(doc, {
-      startY: cursorY + 4,
-      margin: { left: margin, right: margin },
-      head: [["SEDE", "UBICACIÓN RACK", "N° LOTE", "INGRESO", "STOCK"]],
-      body: product.warehouses.map((w) => [
-        w.hubName || "S/D",
-        w.location || "Sin posición",
-        w.lotNumber || "S/D",
-        w.entryDate || "S/D",
-        `${w.stockQuantity} ${product.unitType.toUpperCase()}${w.stockQuantity === 1 ? "" : "S"}`,
-      ]),
-      theme: "grid",
-      headStyles: { fillColor: SLATE_DARK as any, fontSize: 8 },
-      styles: { fontSize: 8, cellPadding: 2.5 },
-      alternateRowStyles: { fillColor: [248, 250, 252] },
-    });
-    cursorY = (doc as any).lastAutoTable.finalY + 10;
-  } else {
-    doc.setTextColor(SLATE_MUTED[0], SLATE_MUTED[1], SLATE_MUTED[2]);
-    doc.setFontSize(8.5);
-    doc.setFont("helvetica", "italic");
-    doc.text("Sin ubicaciones de depósito configuradas para este producto.", margin, cursorY + 6);
-    cursorY += 14;
-  }
+  cursorY = (doc as any).lastAutoTable.finalY + 10;
 
   // ===== SELLO DE APROBACIÓN =====
-  let stampY = Math.max(cursorY + 4, pageHeight - 35);
-  if (stampY > pageHeight - 20) {
-    footerBand();
-    doc.addPage();
-    stampY = 20;
-  }
+  const stampY = Math.max(cursorY + 4, pageHeight - 35);
   doc.setDrawColor(EMERALD_SALE[0], EMERALD_SALE[1], EMERALD_SALE[2]);
   doc.setLineWidth(0.6);
   doc.roundedRect(pageWidth - margin - 42, stampY, 42, 18, 1.5, 1.5, "S");
