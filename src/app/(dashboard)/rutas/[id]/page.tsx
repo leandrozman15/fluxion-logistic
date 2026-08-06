@@ -47,6 +47,7 @@ import { updateTruck } from "@/lib/trucks-api";
 import { getTenantProfile } from "@/lib/settings-api";
 import { calculateDistance } from "@/lib/utils/tracking-math";
 import { createExpense } from "@/lib/expenses-api";
+import { enqueueOfflineAction, isLikelyOfflineError } from "@/lib/offline-queue";
 
 const INCIDENT_REASONS = [
   { id: 'absent', label: 'Cliente Ausente' },
@@ -251,22 +252,35 @@ export default function RouteDetailPage() {
             ],
           };
 
-          const updatedLoad = await updateLoad(current.id, {
-            tracking,
-            updatedAt: new Date().toISOString(),
-          } as any);
-          setLoad(updatedLoad);
+          // Actualiza el estado local antes de la red: así el próximo ping calcula la
+          // distancia desde acá, sin perder el recorrido aunque falle la sincronización.
+          const occurredAt = new Date().toISOString();
+          setLoad((prev) => (prev ? ({ ...prev, tracking, updatedAt: occurredAt } as Load) : prev));
 
-          if (current.assignedTruckId) {
-            await updateTruck(current.assignedTruckId, {
-              location: {
-                ...(updatedLoad as any).location,
-                lat: latitude,
-                lng: longitude,
-                city: "En Tránsito",
-              } as any,
-              updatedAt: new Date().toISOString(),
-            });
+          const truckLocationPatch = current.assignedTruckId
+            ? { ...(current as any).location, lat: latitude, lng: longitude, city: "En Tránsito" }
+            : undefined;
+
+          try {
+            const updatedLoad = await updateLoad(current.id, { tracking, updatedAt: occurredAt } as any);
+            setLoad(updatedLoad);
+
+            if (current.assignedTruckId && truckLocationPatch) {
+              await updateTruck(current.assignedTruckId, { location: truckLocationPatch as any, updatedAt: occurredAt });
+            }
+          } catch (e) {
+            if (isLikelyOfflineError(e)) {
+              // Solo se guarda la posición MÁS RECIENTE pendiente (mismo id) para no acumular
+              // pings viejos: al volver la señal se sincroniza únicamente la última posición real.
+              await enqueueOfflineAction({
+                id: `gps_ping-${current.id}`,
+                type: 'gps_ping',
+                description: 'Posición GPS',
+                payload: { loadId: current.id, assignedTruckId: current.assignedTruckId, tracking, truckLocationPatch, occurredAt },
+              });
+            } else {
+              console.error("GPS Sync Error:", e);
+            }
           }
         } catch (e) {
           console.error("GPS Sync Error:", e);
@@ -342,35 +356,48 @@ export default function RouteDetailPage() {
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
+        const occurredAt = new Date().toISOString();
+        const tracking = {
+          ...(load.tracking || {}),
+          tripStartedAt: occurredAt,
+          currentLat: pos.coords.latitude,
+          currentLng: pos.coords.longitude,
+        };
+        const truckLocationPatch = load.assignedTruckId
+          ? { ...(load as any).location, lat: pos.coords.latitude, lng: pos.coords.longitude }
+          : undefined;
+
         try {
           const updatedLoad = await updateLoad(load.id, {
             status: 'on_route',
-            tracking: {
-              ...(load.tracking || {}),
-              tripStartedAt: new Date().toISOString(),
-              currentLat: pos.coords.latitude,
-              currentLng: pos.coords.longitude,
-            },
-            updatedAt: new Date().toISOString(),
+            tracking,
+            updatedAt: occurredAt,
           } as any);
           setLoad(updatedLoad);
 
-          if (load.assignedTruckId) {
+          if (load.assignedTruckId && truckLocationPatch) {
             await updateTruck(load.assignedTruckId, {
               status: 'in_trip',
-              location: {
-                ...(load as any).location,
-                lat: pos.coords.latitude,
-                lng: pos.coords.longitude,
-              } as any,
-              updatedAt: new Date().toISOString(),
+              location: truckLocationPatch as any,
+              updatedAt: occurredAt,
             });
           }
 
           setGpsStatus('active');
           toast({ title: "Jornada Iniciada", description: "GPS transmitiendo en vivo." });
         } catch (e) {
-          toast({ variant: "destructive", title: "Error" });
+          if (isLikelyOfflineError(e)) {
+            await enqueueOfflineAction({
+              type: 'start_trip',
+              description: 'Inicio de jornada',
+              payload: { loadId: load.id, assignedTruckId: load.assignedTruckId, tracking, truckLocationPatch, occurredAt },
+            });
+            setLoad((prev) => (prev ? ({ ...prev, status: 'on_route', tracking, updatedAt: occurredAt } as Load) : prev));
+            setGpsStatus('active');
+            toast({ title: "Trabajando sin conexión", description: "La jornada se inició en el dispositivo y se sincronizará al recuperar señal." });
+          } else {
+            toast({ variant: "destructive", title: "Error" });
+          }
         } finally {
           setIsUpdating(false);
         }
@@ -404,19 +431,31 @@ export default function RouteDetailPage() {
   const handleStartReturn = async () => {
     if (!load || !tenantId) return;
     setIsUpdating(true);
+    const occurredAt = new Date().toISOString();
+    const tracking = {
+      ...(load.tracking || {}),
+      returnStartedAt: occurredAt,
+      outboundDistanceKm: load.tracking?.distanceTraveledKm || 0,
+    };
     try {
       const updatedLoad = await updateLoad(load.id, {
-        tracking: {
-          ...(load.tracking || {}),
-          returnStartedAt: new Date().toISOString(),
-          outboundDistanceKm: load.tracking?.distanceTraveledKm || 0,
-        },
-        updatedAt: new Date().toISOString(),
+        tracking,
+        updatedAt: occurredAt,
       } as any);
       setLoad(updatedLoad);
       toast({ title: "Regreso Iniciado", description: "El GPS sigue transmitiendo, ahora contabilizando km de regreso." });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error" });
+      if (isLikelyOfflineError(e)) {
+        await enqueueOfflineAction({
+          type: 'start_return',
+          description: 'Inicio de regreso',
+          payload: { loadId: load.id, tracking, occurredAt },
+        });
+        setLoad((prev) => (prev ? ({ ...prev, tracking, updatedAt: occurredAt } as Load) : prev));
+        toast({ title: "Trabajando sin conexión", description: "El regreso se inició en el dispositivo y se sincronizará al recuperar señal." });
+      } else {
+        toast({ variant: "destructive", title: "Error" });
+      }
     } finally {
       setIsUpdating(false);
     }
@@ -425,27 +464,39 @@ export default function RouteDetailPage() {
   const handleConfirmReturnArrival = async () => {
     if (!load || !tenantId) return;
     setIsUpdating(true);
+    const occurredAt = new Date().toISOString();
+    const tracking = {
+      ...(load.tracking || {}),
+      returnArrivedAt: occurredAt,
+    };
     try {
       const updatedLoad = await updateLoad(load.id, {
         status: 'delivered',
-        tracking: {
-          ...(load.tracking || {}),
-          returnArrivedAt: new Date().toISOString(),
-        },
-        updatedAt: new Date().toISOString(),
+        tracking,
+        updatedAt: occurredAt,
       } as any);
       setLoad(updatedLoad);
 
       if (load.assignedTruckId) {
         await updateTruck(load.assignedTruckId, {
           status: 'available',
-          updatedAt: new Date().toISOString(),
+          updatedAt: occurredAt,
         });
       }
 
       toast({ title: "Regreso Completado", description: "Jornada finalizada." });
     } catch (e) {
-      toast({ variant: "destructive", title: "Error" });
+      if (isLikelyOfflineError(e)) {
+        await enqueueOfflineAction({
+          type: 'confirm_return_arrival',
+          description: 'Llegada de regreso',
+          payload: { loadId: load.id, tracking, assignedTruckId: load.assignedTruckId, occurredAt },
+        });
+        setLoad((prev) => (prev ? ({ ...prev, status: 'delivered', tracking, updatedAt: occurredAt } as Load) : prev));
+        toast({ title: "Trabajando sin conexión", description: "La llegada se registró en el dispositivo y se sincronizará al recuperar señal." });
+      } else {
+        toast({ variant: "destructive", title: "Error" });
+      }
     } finally {
       setIsUpdating(false);
     }
@@ -454,22 +505,32 @@ export default function RouteDetailPage() {
   const handleConfirmDelivery = async () => {
     if (!load || !currentStop || !tenantId) return;
     setIsUpdating(true);
-    
+
+    const storagePrefix = `tenants/${tenantId}/loads/${load.id}/pod/${currentStop.id}`;
+    const receiverName = podForm.receiverName!;
+    const notes = podForm.notes || "";
+    const receiverSignatureDataUrl = podForm.receiverSignatureUrl || "";
+    const driverSignatureDataUrl = podForm.driverSignatureUrl || "";
+    const photoDataUrl = podForm.photoUrl || "";
+    const occurredAt = new Date().toISOString();
+
+    const currentStops = (load[activeStopsField] || []) as typeof load.outboundStops;
+    const allFinished = currentStops.every(s => s.id === currentStop.id || !!s.deliveredAt || !!s.failedAt);
+    const closesTrip = phase === 'outbound' && allFinished && !needsReturn;
+
     try {
-      const storagePrefix = `tenants/${tenantId}/loads/${load.id}/pod/${currentStop.id}`;
-      
       // 1. Procesar y Subir Imágenes a Storage para evitar límites de Firestore Document
-      let receiverSigUrl = podForm.receiverSignatureUrl || "";
+      let receiverSigUrl = receiverSignatureDataUrl;
       if (receiverSigUrl.startsWith('data:image')) {
         receiverSigUrl = await uploadBase64(`${storagePrefix}/receiver_sig.png`, receiverSigUrl);
       }
 
-      let driverSigUrl = podForm.driverSignatureUrl || "";
+      let driverSigUrl = driverSignatureDataUrl;
       if (driverSigUrl.startsWith('data:image')) {
         driverSigUrl = await uploadBase64(`${storagePrefix}/driver_sig.png`, driverSigUrl);
       }
 
-      let photoUrl = podForm.photoUrl || "";
+      let photoUrl = photoDataUrl;
       if (photoUrl.startsWith('data:image')) {
         const compressed = await compressImage(photoUrl, 1024, 768, 0.6);
         photoUrl = await uploadBase64(`${storagePrefix}/delivery_photo.jpg`, compressed);
@@ -477,34 +538,29 @@ export default function RouteDetailPage() {
 
       const finalPod: ProofOfDelivery = {
         status: 'delivered',
-        receiverName: podForm.receiverName!,
+        receiverName,
         receiverSignatureUrl: receiverSigUrl,
         driverSignatureUrl: driverSigUrl,
         photoUrl: photoUrl,
-        notes: podForm.notes || "",
-        confirmedAt: new Date().toISOString()
+        notes,
+        confirmedAt: occurredAt
       };
 
-      const currentStops = (load[activeStopsField] || []) as typeof load.outboundStops;
       const updatedStops = currentStops.map(s => 
-        s.id === currentStop.id ? { ...s, deliveredAt: new Date().toISOString(), proofOfDelivery: finalPod } : s
+        s.id === currentStop.id ? { ...s, deliveredAt: occurredAt, proofOfDelivery: finalPod } : s
       );
 
-      const allFinished = updatedStops.every(s => !!s.deliveredAt || !!s.failedAt);
-      // Solo se cierra el viaje acá si es de ida simple (sin regreso); con regreso, la fase de
-      // "awaiting_return_start"/"awaiting_return_arrival" es la que finalmente marca 'delivered'.
-      const closesTrip = phase === 'outbound' && allFinished && !needsReturn;
       const updatedLoad = await updateLoad(load.id, {
         [activeStopsField]: updatedStops,
         status: closesTrip ? 'delivered' : load.status,
-        updatedAt: new Date().toISOString(),
+        updatedAt: occurredAt,
       } as any);
       setLoad(updatedLoad);
 
       if (closesTrip && load.assignedTruckId) {
         await updateTruck(load.assignedTruckId, {
           status: 'available',
-          updatedAt: new Date().toISOString(),
+          updatedAt: occurredAt,
         });
       }
 
@@ -512,8 +568,48 @@ export default function RouteDetailPage() {
       setIsPodOpen(false);
       setPodForm({ receiverName: "", receiverSignatureUrl: "", driverSignatureUrl: "", photoUrl: "", notes: "", status: 'delivered' });
     } catch (e: any) {
-      console.error(e);
-      toast({ variant: "destructive", title: "Error al guardar", description: "Verifique su conexión e intente nuevamente." });
+      if (isLikelyOfflineError(e)) {
+        // Guarda la entrega con las firmas/foto en base64 (se re-suben recién al sincronizar),
+        // y avanza localmente como si hubiera funcionado, para no frenarle el viaje al chofer.
+        const localPod: ProofOfDelivery = {
+          status: 'delivered',
+          receiverName,
+          receiverSignatureUrl: receiverSignatureDataUrl,
+          driverSignatureUrl: driverSignatureDataUrl,
+          photoUrl: photoDataUrl,
+          notes,
+          confirmedAt: occurredAt,
+        };
+        const updatedStops = currentStops.map(s =>
+          s.id === currentStop.id ? { ...s, deliveredAt: occurredAt, proofOfDelivery: localPod } : s
+        );
+        await enqueueOfflineAction({
+          type: 'confirm_delivery',
+          description: `Entrega ${currentStop.address || currentStop.id}`,
+          payload: {
+            loadId: load.id,
+            activeStopsField,
+            updatedStops,
+            stopId: currentStop.id,
+            nextStatus: closesTrip ? 'delivered' : undefined,
+            assignedTruckId: load.assignedTruckId,
+            receiverName,
+            notes,
+            receiverSignatureDataUrl,
+            driverSignatureDataUrl,
+            photoDataUrl,
+            storagePrefix,
+            occurredAt,
+          },
+        });
+        setLoad((prev) => (prev ? ({ ...prev, [activeStopsField]: updatedStops, status: closesTrip ? 'delivered' : prev.status, updatedAt: occurredAt } as Load) : prev));
+        toast({ title: "Trabajando sin conexión", description: "La entrega se guardó en el dispositivo y se sincronizará automáticamente al recuperar señal." });
+        setIsPodOpen(false);
+        setPodForm({ receiverName: "", receiverSignatureUrl: "", driverSignatureUrl: "", photoUrl: "", notes: "", status: 'delivered' });
+      } else {
+        console.error(e);
+        toast({ variant: "destructive", title: "Error al guardar", description: "Verifique su conexión e intente nuevamente." });
+      }
     } finally {
       setIsUpdating(false);
     }
@@ -522,36 +618,56 @@ export default function RouteDetailPage() {
   const handleReportFailure = async (reason: any) => {
     if (!load || !currentStop || !tenantId) return;
     setIsUpdating(true);
-    try {
-      const currentStops = (load[activeStopsField] || []) as typeof load.outboundStops;
-      const updatedStops = currentStops.map(s => 
-        s.id === currentStop.id ? { 
-          ...s, 
-          failedAt: new Date().toISOString(),
-          proofOfDelivery: { status: 'failed' as const, failedReason: reason, confirmedAt: new Date().toISOString(), receiverName: "FALLIDO", receiverSignatureUrl: "" }
-        } : s
-      );
+    const occurredAt = new Date().toISOString();
+    const currentStops = (load[activeStopsField] || []) as typeof load.outboundStops;
+    const updatedStops = currentStops.map(s => 
+      s.id === currentStop.id ? { 
+        ...s, 
+        failedAt: occurredAt,
+        proofOfDelivery: { status: 'failed' as const, failedReason: reason, confirmedAt: occurredAt, receiverName: "FALLIDO", receiverSignatureUrl: "" }
+      } : s
+    );
 
-      const allFinished = updatedStops.every(s => !!s.deliveredAt || !!s.failedAt);
-      const closesTrip = phase === 'outbound' && allFinished && !needsReturn;
+    const allFinished = updatedStops.every(s => !!s.deliveredAt || !!s.failedAt);
+    const closesTrip = phase === 'outbound' && allFinished && !needsReturn;
+
+    try {
       const updatedLoad = await updateLoad(load.id, {
         [activeStopsField]: updatedStops,
         status: closesTrip ? 'delivered' : load.status,
-        updatedAt: new Date().toISOString(),
+        updatedAt: occurredAt,
       } as any);
       setLoad(updatedLoad);
 
       if (closesTrip && load.assignedTruckId) {
         await updateTruck(load.assignedTruckId, {
           status: 'available',
-          updatedAt: new Date().toISOString(),
+          updatedAt: occurredAt,
         });
       }
 
       toast({ title: "Incidente Registrado" });
       setIsFailedOpen(false);
     } catch (e) {
-      toast({ variant: "destructive", title: "Error" });
+      if (isLikelyOfflineError(e)) {
+        await enqueueOfflineAction({
+          type: 'report_failure',
+          description: `Incidente ${currentStop.address || currentStop.id}`,
+          payload: {
+            loadId: load.id,
+            activeStopsField,
+            updatedStops,
+            nextStatus: closesTrip ? 'delivered' : undefined,
+            assignedTruckId: load.assignedTruckId,
+            occurredAt,
+          },
+        });
+        setLoad((prev) => (prev ? ({ ...prev, [activeStopsField]: updatedStops, status: closesTrip ? 'delivered' : prev.status, updatedAt: occurredAt } as Load) : prev));
+        toast({ title: "Trabajando sin conexión", description: "El incidente se guardó en el dispositivo y se sincronizará al recuperar señal." });
+        setIsFailedOpen(false);
+      } else {
+        toast({ variant: "destructive", title: "Error" });
+      }
     } finally {
       setIsUpdating(false);
     }
@@ -562,31 +678,44 @@ export default function RouteDetailPage() {
     setIsUpdating(true);
     setEmergencyTypeInProgress(type);
     toast({ variant: "destructive", title: "Enviando alerta...", description: "Notificando a la central, un momento." });
+    const occurredAt = new Date().toISOString();
+    const alerts = [
+      ...((load.tracking as any)?.alerts || []),
+      { type: 'critical', message: `S.O.S: ${label}`, timestamp: occurredAt },
+    ];
     try {
       // Ambas escrituras son independientes entre sí: corren en paralelo para no duplicar el tiempo de espera.
       const [, updatedLoad] = await Promise.all([
         updateTruck(load.assignedTruckId, {
           hasActiveAlert: true,
           alertType: type as any,
-          updatedAt: new Date().toISOString(),
+          updatedAt: occurredAt,
         }),
         updateLoad(load.id, {
           status: 'incident',
           tracking: {
             ...(load.tracking || {}),
-            alerts: [
-              ...((load.tracking as any)?.alerts || []),
-              { type: 'critical', message: `S.O.S: ${label}`, timestamp: new Date().toISOString() },
-            ],
+            alerts,
           },
-          updatedAt: new Date().toISOString(),
+          updatedAt: occurredAt,
         } as any),
       ]);
       setLoad(updatedLoad);
       toast({ variant: "destructive", title: "ALERTA ENVIADA" });
       setIsEmergencyOpen(false);
     } catch (e) {
-      toast({ variant: "destructive", title: "Error", description: "No se pudo enviar la alerta, reintentá." });
+      if (isLikelyOfflineError(e)) {
+        await enqueueOfflineAction({
+          type: 'emergency',
+          description: `SOS: ${label}`,
+          payload: { loadId: load.id, assignedTruckId: load.assignedTruckId, emergencyType: type, alerts, occurredAt },
+        });
+        setLoad((prev) => (prev ? ({ ...prev, status: 'incident', tracking: { ...(prev.tracking || {}), alerts }, updatedAt: occurredAt } as Load) : prev));
+        toast({ title: "Trabajando sin conexión", description: "La alerta se guardó en el dispositivo y se enviará a la central apenas vuelva la señal." });
+        setIsEmergencyOpen(false);
+      } else {
+        toast({ variant: "destructive", title: "Error", description: "No se pudo enviar la alerta, reintentá." });
+      }
     } finally {
       setIsUpdating(false);
       setEmergencyTypeInProgress(null);
@@ -621,23 +750,34 @@ export default function RouteDetailPage() {
     }
 
     setIsSubmittingExpense(true);
+    const expensePayload = {
+      loadId: load.id,
+      truckId: load.assignedTruckId || undefined,
+      driverId: load.assignedDriverId || undefined,
+      category: expenseForm.category,
+      amount: amountNum,
+      description: expenseForm.description || EXPENSE_CATEGORIES.find((c) => c.id === expenseForm.category)?.label || 'Gasto de viaje',
+      location: expenseForm.location || undefined,
+      receiptNumber: expenseForm.receiptNumber || undefined,
+      liters: expenseForm.category === 'fuel' && expenseForm.liters ? parseFloat(expenseForm.liters) : undefined,
+      pricePerLiter: expenseForm.category === 'fuel' && expenseForm.pricePerLiter ? parseFloat(expenseForm.pricePerLiter) : undefined,
+    };
     try {
-      await createExpense({
-        loadId: load.id,
-        truckId: load.assignedTruckId || undefined,
-        driverId: load.assignedDriverId || undefined,
-        category: expenseForm.category,
-        amount: amountNum,
-        description: expenseForm.description || EXPENSE_CATEGORIES.find((c) => c.id === expenseForm.category)?.label || 'Gasto de viaje',
-        location: expenseForm.location || undefined,
-        receiptNumber: expenseForm.receiptNumber || undefined,
-        liters: expenseForm.category === 'fuel' && expenseForm.liters ? parseFloat(expenseForm.liters) : undefined,
-        pricePerLiter: expenseForm.category === 'fuel' && expenseForm.pricePerLiter ? parseFloat(expenseForm.pricePerLiter) : undefined,
-      } as any);
+      await createExpense(expensePayload as any);
       toast({ title: "Gasto registrado", description: "Queda pendiente de auditoría por la central." });
       setIsExpenseOpen(false);
     } catch (e) {
-      toast({ variant: "destructive", title: "Error al registrar el gasto" });
+      if (isLikelyOfflineError(e)) {
+        await enqueueOfflineAction({
+          type: 'expense',
+          description: `Gasto: ${expensePayload.description}`,
+          payload: expensePayload,
+        });
+        toast({ title: "Trabajando sin conexión", description: "El gasto se guardó en el dispositivo y se sincronizará al recuperar señal." });
+        setIsExpenseOpen(false);
+      } else {
+        toast({ variant: "destructive", title: "Error al registrar el gasto" });
+      }
     } finally {
       setIsSubmittingExpense(false);
     }
