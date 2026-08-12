@@ -9,7 +9,13 @@ import {
   persistentLocalCache, 
   persistentMultipleTabManager 
 } from 'firebase/firestore';
-import { getAuth, Auth } from 'firebase/auth';
+import {
+  getAuth,
+  initializeAuth,
+  indexedDBLocalPersistence,
+  browserLocalPersistence,
+  Auth
+} from 'firebase/auth';
 import { firebaseConfig, isFirebaseConfigValid } from './config';
 
 // Global instances to ensure singleton behavior across the client
@@ -53,8 +59,20 @@ export function initializeFirebase(): {
     }
 
     // Initialize Auth Singleton
+    // Nota: usamos initializeAuth (no getAuth) SIN popupRedirectResolver a propósito:
+    // este proyecto solo usa signInWithEmailAndPassword (sin Google/popup/redirect),
+    // así que evitamos que el SDK cargue el iframe de auth de Firebase
+    // (__/auth/iframe.js, ~93KB) + gapi_iframes (~34KB), que solo hacen falta para
+    // flujos de popup/redirect. Ahorra ~250-500ms de bloqueo de main thread en la carga.
     if (!authInstance && appInstance) {
-      authInstance = getAuth(appInstance);
+      try {
+        authInstance = initializeAuth(appInstance, {
+          persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+        });
+      } catch {
+        // Si ya fue inicializado por otro punto de entrada (ej. HMR en dev), caer a getAuth.
+        authInstance = getAuth(appInstance);
+      }
     }
 
     return { 
