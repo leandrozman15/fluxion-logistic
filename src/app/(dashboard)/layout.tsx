@@ -263,7 +263,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (!loading && role === 'driver') {
-      const isDriverPath = pathname === '/rutas' || pathname.startsWith('/rutas/');
+      // La Hoja de Ruta (/cargas/[id]/orden) se abre desde el botón "HOJA RUTA" de /rutas,
+      // así que también hay que permitírsela al chofer aunque no empiece con /rutas.
+      const isDriverPath = pathname === '/rutas' || pathname.startsWith('/rutas/') || /^\/cargas\/[^/]+\/orden/.test(pathname);
       const isAdminPath = pathname !== '/' && !isDriverPath;
       if (isAdminPath) {
         router.replace('/rutas');
