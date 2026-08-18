@@ -1,5 +1,11 @@
 import { Truck } from '@/app/lib/types';
 import { backendRequest, getListData } from '@/lib/backend-api';
+import { withCache, invalidateCachePrefix } from '@/lib/utils/request-cache';
+
+const TRUCKS_LIST_CACHE_KEY = 'trucks:list';
+// Igual que con los choferes: la flota se pide en casi todas las pantallas y no cambia
+// segundo a segundo, así que cachearla un rato corto evita repetir la request en cada navegación.
+const TRUCKS_LIST_TTL_MS = 30_000;
 
 function normalizeTruck(raw: any): Truck {
   return {
@@ -34,8 +40,10 @@ function normalizeTruck(raw: any): Truck {
 }
 
 export async function listTrucks() {
-  const response = await backendRequest<any[]>('/api/trucks?page=1&pageSize=500');
-  return getListData(response).map(normalizeTruck);
+  return withCache(TRUCKS_LIST_CACHE_KEY, TRUCKS_LIST_TTL_MS, async () => {
+    const response = await backendRequest<any[]>('/api/trucks?page=1&pageSize=500');
+    return getListData(response).map(normalizeTruck);
+  });
 }
 
 export async function getTruck(id: string) {
@@ -56,6 +64,7 @@ export async function createTruck(data: Partial<Truck>) {
   if (!raw) {
     throw new Error('Failed to create truck');
   }
+  invalidateCachePrefix('trucks:');
   return normalizeTruck(raw);
 }
 
@@ -68,9 +77,11 @@ export async function updateTruck(id: string, data: Partial<Truck>) {
   if (!raw) {
     throw new Error('Failed to update truck');
   }
+  invalidateCachePrefix('trucks:');
   return normalizeTruck(raw);
 }
 
 export async function deleteTruck(id: string) {
   await backendRequest(`/api/trucks/${id}`, { method: 'DELETE' });
+  invalidateCachePrefix('trucks:');
 }

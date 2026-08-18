@@ -1,5 +1,12 @@
 import { Driver } from '@/app/lib/types';
 import { backendRequest, getListData } from '@/lib/backend-api';
+import { withCache, invalidateCachePrefix } from '@/lib/utils/request-cache';
+
+const DRIVERS_LIST_CACHE_KEY = 'drivers:list';
+// Se pide en casi todas las pantallas del dashboard (choferes, flota, cargas, rutas, analytics...);
+// el roster de choferes no cambia segundo a segundo, así que un TTL corto evita repetir la misma
+// request de red en cada navegación sin arriesgar datos desactualizados por mucho tiempo.
+const DRIVERS_LIST_TTL_MS = 30_000;
 
 function normalizeDriver(raw: any): Driver {
   return {
@@ -46,8 +53,10 @@ function normalizeDriver(raw: any): Driver {
 }
 
 export async function listDrivers() {
-  const response = await backendRequest<any[]>('/api/drivers?page=1&pageSize=500');
-  return getListData(response).map(normalizeDriver);
+  return withCache(DRIVERS_LIST_CACHE_KEY, DRIVERS_LIST_TTL_MS, async () => {
+    const response = await backendRequest<any[]>('/api/drivers?page=1&pageSize=500');
+    return getListData(response).map(normalizeDriver);
+  });
 }
 
 export async function getDriver(id: string) {
@@ -68,6 +77,7 @@ export async function createDriver(data: Partial<Driver>) {
   if (!raw) {
     throw new Error('Failed to create driver');
   }
+  invalidateCachePrefix('drivers:');
   return normalizeDriver(raw);
 }
 
@@ -80,9 +90,11 @@ export async function updateDriver(id: string, data: Partial<Driver>) {
   if (!raw) {
     throw new Error('Failed to update driver');
   }
+  invalidateCachePrefix('drivers:');
   return normalizeDriver(raw);
 }
 
 export async function deleteDriver(id: string) {
   await backendRequest(`/api/drivers/${id}`, { method: 'DELETE' });
+  invalidateCachePrefix('drivers:');
 }

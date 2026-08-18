@@ -1,4 +1,11 @@
 import { backendRequest } from '@/lib/backend-api';
+import { withCache, invalidateCache } from '@/lib/utils/request-cache';
+
+const TENANT_PROFILE_CACHE_KEY = 'tenant:profile';
+// El perfil del tenant (nombre, plan, módulos habilitados) se pide en el layout del dashboard
+// y en más de una decena de pantallas individuales; casi nunca cambia durante la sesión, así
+// que un TTL algo más largo que las listas de flota/choferes es seguro.
+const TENANT_PROFILE_TTL_MS = 60_000;
 
 type TenantProfile = {
   id: string;
@@ -42,16 +49,18 @@ const TENANT_PATHS = ['/api/tenants/me', '/api/tenant', '/api/settings/tenant'];
 const DAILY_STATS_PATHS = ['/api/daily-stats', '/api/stats/daily', '/api/tenant/daily-stats'];
 
 export async function getTenantProfile() {
-  for (const path of TENANT_PATHS) {
-    try {
-      const response = await backendRequest<any>(path);
-      const raw = response.data || response.payload;
-      if (raw) return normalizeTenant(raw);
-    } catch {
-      // Try next known endpoint shape.
+  return withCache(TENANT_PROFILE_CACHE_KEY, TENANT_PROFILE_TTL_MS, async () => {
+    for (const path of TENANT_PATHS) {
+      try {
+        const response = await backendRequest<any>(path);
+        const raw = response.data || response.payload;
+        if (raw) return normalizeTenant(raw);
+      } catch {
+        // Try next known endpoint shape.
+      }
     }
-  }
-  throw new Error('No tenant settings endpoint available');
+    throw new Error('No tenant settings endpoint available');
+  });
 }
 
 export async function updateTenantProfile(data: Partial<TenantProfile>) {
@@ -62,7 +71,10 @@ export async function updateTenantProfile(data: Partial<TenantProfile>) {
         body: JSON.stringify(data),
       });
       const raw = response.data || response.payload;
-      if (raw) return normalizeTenant(raw);
+      if (raw) {
+        invalidateCache(TENANT_PROFILE_CACHE_KEY);
+        return normalizeTenant(raw);
+      }
     } catch {
       // Try next known endpoint shape.
     }
