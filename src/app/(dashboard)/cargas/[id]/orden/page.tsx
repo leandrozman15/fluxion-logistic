@@ -6,7 +6,7 @@ import { useTenant } from "@/hooks/use-tenant";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
-  ArrowLeft, Loader2, ClipboardCheck, ShieldCheck, Truck, User, MapPin, Download
+  ArrowLeft, Loader2, ClipboardCheck, ShieldCheck, Truck, User, MapPin, Download, X
 } from "lucide-react";
 import { Load, Driver, Truck as TruckType } from "@/app/lib/types";
 import { QRCodeSVG } from "qrcode.react";
@@ -19,7 +19,7 @@ function LoadOrderContent() {
   const { id } = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { tenantId } = useTenant();
+  const { tenantId, role } = useTenant();
   
   const [load, setLoad] = useState<Load | null>(null);
   const [loadLoading, setLoadLoading] = useState(true);
@@ -94,11 +94,15 @@ function LoadOrderContent() {
   const confirmationUrl = typeof window !== 'undefined' ? `${window.location.origin}/rutas/${load.id}` : '';
   const orgName = "LOGÍSTICA AR";
 
+  // Para el chofer, "cerrar" siempre vuelve al menú de viajes (no al historial del browser,
+  // que puede no incluir /rutas si se entró por otro camino, ej. desde el detalle de un chofer).
+  const handleClose = () => role === 'driver' ? router.push('/rutas') : router.back();
+
   // Encontrar la última firma para mostrar en el cierre si el viaje terminó
   const lastPod = [...(load.outboundStops || [])].reverse().find(s => !!s.proofOfDelivery?.receiverSignatureUrl)?.proofOfDelivery;
 
   return (
-    <div className="min-h-screen bg-slate-800 py-8 print:bg-white print:py-0 overflow-y-auto">
+    <div className="fixed inset-0 z-50 min-h-screen bg-slate-800 py-8 print:bg-white print:py-0 overflow-y-auto">
       <div className="max-w-[210mm] mx-auto space-y-6">
         <div className="flex justify-between items-center px-4 print:hidden">
           <Button variant="outline" onClick={() => router.back()} className="text-white border-white/20 hover:bg-white/10 rounded-xl bg-slate-900/50">
@@ -108,6 +112,9 @@ function LoadOrderContent() {
              <Badge className="bg-blue-600 text-white border-none">PREVIO A4 VECTORIAL</Badge>
              <Button onClick={() => window.print()} className="bg-white text-slate-900 hover:bg-blue-50 rounded-xl font-black shadow-2xl px-10 h-12">
                <Download className="mr-2 h-5 w-5" /> GENERAR PDF A4
+             </Button>
+             <Button onClick={handleClose} className="bg-red-600 hover:bg-red-700 text-white rounded-xl font-black shadow-2xl h-12 px-6">
+               <X className="mr-2 h-5 w-5" /> CERRAR
              </Button>
           </div>
         </div>
