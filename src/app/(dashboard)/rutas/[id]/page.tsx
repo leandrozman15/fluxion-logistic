@@ -35,7 +35,7 @@ import {
   DollarSign,
   Wallet
 } from "lucide-react";
-import { Load, ProofOfDelivery, ExpenseCategory } from "@/app/lib/types";
+import { Load, ProofOfDelivery, ExpenseCategory, Truck as TruckType } from "@/app/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { SignaturePad } from "@/components/SignaturePad";
@@ -43,7 +43,7 @@ import { normalizePhone, buildWaMeUrl } from "@/lib/utils/whatsapp";
 import { compressImage } from "@/lib/utils/image-compression";
 import { uploadBase64 } from "@/lib/storage-service";
 import { getLoad, updateLoad, listLoads } from "@/lib/loads-api";
-import { updateTruck } from "@/lib/trucks-api";
+import { getTruck, updateTruck } from "@/lib/trucks-api";
 import { getTenantProfile } from "@/lib/settings-api";
 import { calculateDistance } from "@/lib/utils/tracking-math";
 import { createExpense } from "@/lib/expenses-api";
@@ -90,10 +90,12 @@ export default function RouteDetailPage() {
     amount: '',
     liters: '',
     pricePerLiter: '',
+    odometerKm: '',
     description: '',
     location: '',
     receiptNumber: '',
   });
+  const [truck, setTruck] = useState<TruckType | null>(null);
   const [gpsStatus, setGpsStatus] = useState<'off' | 'requesting' | 'active' | 'error'>('off');
   const [load, setLoad] = useState<Load | null>(null);
   const [tenant, setTenant] = useState<any>(null);
@@ -174,6 +176,19 @@ export default function RouteDetailPage() {
       if (intervalId) clearInterval(intervalId);
     };
   }, [tenantId, id]);
+
+  // Trae el cami\u00f3n asignado (para prefill/validaci\u00f3n del od\u00f3metro al cargar combustible).
+  useEffect(() => {
+    let active = true;
+    if (!load?.assignedTruckId) {
+      setTruck(null);
+      return;
+    }
+    getTruck(load.assignedTruckId)
+      .then((t) => { if (active) setTruck(t); })
+      .catch(() => { if (active) setTruck(null); });
+    return () => { active = false; };
+  }, [load?.assignedTruckId]);
 
   useEffect(() => {
     if (!load || load.status !== 'on_route' || !tenantId) {
@@ -787,7 +802,16 @@ export default function RouteDetailPage() {
   };
 
   const openExpenseDialog = (category: ExpenseCategory) => {
-    setExpenseForm({ category, amount: '', liters: '', pricePerLiter: '', description: '', location: '', receiptNumber: '' });
+    setExpenseForm({
+      category,
+      amount: '',
+      liters: '',
+      pricePerLiter: '',
+      odometerKm: category === 'fuel' && truck?.odometerKm ? String(truck.odometerKm) : '',
+      description: '',
+      location: '',
+      receiptNumber: '',
+    });
     setIsExpenseOpen(true);
   };
 
@@ -813,6 +837,12 @@ export default function RouteDetailPage() {
       return;
     }
 
+    const odometerNum = expenseForm.category === 'fuel' && expenseForm.odometerKm ? parseFloat(expenseForm.odometerKm) : undefined;
+    if (odometerNum !== undefined && truck && odometerNum < truck.odometerKm) {
+      toast({ variant: "destructive", title: "Odómetro inválido", description: `No puede ser menor al actual (${truck.odometerKm.toLocaleString()} km).` });
+      return;
+    }
+
     setIsSubmittingExpense(true);
     const expensePayload = {
       loadId: load.id,
@@ -825,9 +855,20 @@ export default function RouteDetailPage() {
       receiptNumber: expenseForm.receiptNumber || undefined,
       liters: expenseForm.category === 'fuel' && expenseForm.liters ? parseFloat(expenseForm.liters) : undefined,
       pricePerLiter: expenseForm.category === 'fuel' && expenseForm.pricePerLiter ? parseFloat(expenseForm.pricePerLiter) : undefined,
+      odometerKm: odometerNum,
     };
     try {
       await createExpense(expensePayload as any);
+      // Actualiza el odómetro real del camión con la carga de combustible (best-effort,
+      // no bloquea el flujo de registrar el gasto si esta llamada falla, ej. sin conexión).
+      if (odometerNum !== undefined && load.assignedTruckId) {
+        try {
+          const updatedTruck = await updateTruck(load.assignedTruckId, { odometerKm: odometerNum });
+          setTruck(updatedTruck);
+        } catch {
+          // No crítico: el gasto ya quedó registrado con el odómetro cargado.
+        }
+      }
       toast({ title: "Gasto registrado", description: "Queda pendiente de auditoría por la central." });
       setIsExpenseOpen(false);
     } catch (e) {
@@ -909,7 +950,7 @@ export default function RouteDetailPage() {
                <div className="p-5 bg-white/5 rounded-3xl border border-white/10"><p className="text-sm font-bold leading-tight">{currentStop.address}</p></div>
                <div className="grid grid-cols-2 gap-3">
                   <Button className="h-14 bg-blue-600 rounded-2xl font-black text-xs uppercase" onClick={() => handleAction('nav')}>NAVEGAR</Button>
-                  <Button variant="outline" className="h-14 text-white rounded-2xl font-black text-xs uppercase" onClick={() => handleAction('call')}>LLAMAR</Button>
+                  <Button className="h-14 bg-white/10 border border-white/20 text-white hover:bg-white/20 hover:text-white rounded-2xl font-black text-xs uppercase" onClick={() => handleAction('call')}>LLAMAR</Button>
                </div>
             </CardContent>
           </Card>
@@ -1049,14 +1090,26 @@ export default function RouteDetailPage() {
               </div>
 
               {expenseForm.category === 'fuel' && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px] font-black uppercase text-slate-400">Litros</Label>
-                    <Input type="number" className="h-12 rounded-xl" value={expenseForm.liters} onChange={(e) => handleFuelQuantityChange('liters', e.target.value)} />
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-black uppercase text-slate-400">Litros</Label>
+                      <Input type="number" className="h-12 rounded-xl" value={expenseForm.liters} onChange={(e) => handleFuelQuantityChange('liters', e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-black uppercase text-slate-400">Precio x Litro</Label>
+                      <Input type="number" className="h-12 rounded-xl" value={expenseForm.pricePerLiter} onChange={(e) => handleFuelQuantityChange('pricePerLiter', e.target.value)} />
+                    </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] font-black uppercase text-slate-400">Precio x Litro</Label>
-                    <Input type="number" className="h-12 rounded-xl" value={expenseForm.pricePerLiter} onChange={(e) => handleFuelQuantityChange('pricePerLiter', e.target.value)} />
+                    <Label className="text-[10px] font-black uppercase text-slate-400">Odómetro Actual (KM)</Label>
+                    <Input
+                      type="number"
+                      className="h-12 rounded-xl font-mono"
+                      placeholder={truck ? `Actual: ${truck.odometerKm.toLocaleString()} km` : 'KM del tablero'}
+                      value={expenseForm.odometerKm}
+                      onChange={(e) => setExpenseForm((f) => ({ ...f, odometerKm: e.target.value }))}
+                    />
                   </div>
                 </div>
               )}

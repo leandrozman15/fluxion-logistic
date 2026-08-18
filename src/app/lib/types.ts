@@ -714,6 +714,7 @@ export interface Expense {
   status: 'registered' | 'approved' | 'rejected';
   liters?: number; 
   pricePerLiter?: number;
+  odometerKm?: number;
   createdAt: any;
   updatedAt: any;
 }

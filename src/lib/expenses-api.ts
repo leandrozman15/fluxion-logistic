@@ -17,6 +17,7 @@ function normalizeExpense(raw: any): Expense {
     status: raw.status || 'registered',
     liters: raw.liters,
     pricePerLiter: raw.pricePerLiter,
+    odometerKm: raw.odometerKm !== undefined && raw.odometerKm !== null ? Number(raw.odometerKm) : undefined,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
   } as Expense;
