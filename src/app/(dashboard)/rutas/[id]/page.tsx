@@ -42,7 +42,7 @@ import { SignaturePad } from "@/components/SignaturePad";
 import { normalizePhone, buildWaMeUrl } from "@/lib/utils/whatsapp";
 import { compressImage } from "@/lib/utils/image-compression";
 import { uploadBase64 } from "@/lib/storage-service";
-import { getLoad, updateLoad } from "@/lib/loads-api";
+import { getLoad, updateLoad, listLoads } from "@/lib/loads-api";
 import { updateTruck } from "@/lib/trucks-api";
 import { getTenantProfile } from "@/lib/settings-api";
 import { calculateDistance } from "@/lib/utils/tracking-math";
@@ -221,8 +221,9 @@ export default function RouteDetailPage() {
           const maxSpeed = Math.max(current.tracking?.maxSpeed || 0, currentSpeed);
 
           const outboundDone = current.outboundStops.every(s => !!s.deliveredAt || !!s.failedAt);
-          const needsReturn = current.isRoundTrip || (current.returnStops?.length || 0) > 0;
-          const inReturnPhase = outboundDone && needsReturn && !!current.tracking?.returnStartedAt;
+          // No filtramos por isRoundTrip/returnStops acá: el regreso "vacío" a base (sin
+          // paradas configuradas) también setea returnStartedAt y debe seguir acumulando km.
+          const inReturnPhase = outboundDone && !!current.tracking?.returnStartedAt;
           const activeStop = inReturnPhase
             ? (current.returnStops || []).find(s => !s.deliveredAt && !s.failedAt)
             : current.outboundStops.find(s => !s.deliveredAt && !s.failedAt);
@@ -308,6 +309,40 @@ export default function RouteDetailPage() {
   }, [load?.outboundStops]);
 
   const needsReturn = !!load && (load.isRoundTrip || (load.returnStops?.length || 0) > 0);
+
+  // Si el viaje no tiene regreso configurado, se busca (apenas se conoce el viaje, sin
+  // esperar a que termine la ida) si el chofer tiene otro viaje en cola (mismo
+  // assignedDriverId, todavía no finalizado). Sin próximo viaje, al terminar la ida se le
+  // pide volver a base y ese tramo se contabiliza como km muerto (sin carga, sin ganancia).
+  const [nextTripCheck, setNextTripCheck] = useState<'idle' | 'checking' | 'has_next' | 'none'>('idle');
+
+  useEffect(() => {
+    let active = true;
+    if (!load || needsReturn) {
+      setNextTripCheck('idle');
+      return;
+    }
+    setNextTripCheck('checking');
+    listLoads()
+      .then((all) => {
+        if (!active) return;
+        const hasNext = all.some(l =>
+          l.id !== load.id &&
+          l.assignedDriverId === load.assignedDriverId &&
+          ['pending', 'assigned', 'on_route'].includes(l.status)
+        );
+        setNextTripCheck(hasNext ? 'has_next' : 'none');
+      })
+      .catch(() => {
+        if (!active) return;
+        // Ante la duda (fallo de red) no forzamos el regreso vacío: se comporta como antes.
+        setNextTripCheck('has_next');
+      });
+    return () => { active = false; };
+  }, [load?.id, load?.assignedDriverId, needsReturn]);
+
+  const isEmptyReturn = nextTripCheck === 'none';
+  const needsReturnEffective = needsReturn || isEmptyReturn;
   const returnStarted = !!load?.tracking?.returnStartedAt;
 
   const returnStopsDone = useMemo(() => {
@@ -316,12 +351,18 @@ export default function RouteDetailPage() {
 
   const returnArrived = !!load?.tracking?.returnArrivedAt;
 
+  // Mientras no haya regreso configurado, hay que resolver si el chofer tiene otro viaje
+  // en cola antes de decidir si el viaje se cierra solo o pide volver a base sin carga.
+  const resolvingNextTrip = outboundDone && !needsReturn && nextTripCheck !== 'has_next' && nextTripCheck !== 'none';
+
   // Fases del viaje: entregas de ida -> (si aplica) inicio de regreso -> entregas de regreso -> llegada a base.
-  const phase: 'outbound' | 'awaiting_return_start' | 'return' | 'awaiting_return_arrival' | 'finished' = !load
+  const phase: 'outbound' | 'checking_next' | 'awaiting_return_start' | 'return' | 'awaiting_return_arrival' | 'finished' = !load
     ? 'outbound'
     : !outboundDone
     ? 'outbound'
-    : !needsReturn
+    : resolvingNextTrip
+    ? 'checking_next'
+    : !needsReturnEffective
     ? 'finished'
     : !returnStarted
     ? 'awaiting_return_start'
@@ -436,6 +477,9 @@ export default function RouteDetailPage() {
       ...(load.tracking || {}),
       returnStartedAt: occurredAt,
       outboundDistanceKm: load.tracking?.distanceTraveledKm || 0,
+      // Marca el regreso como "vacío" (sin carga) cuando no hay más viajes en cola: ese
+      // tramo no genera ganancia y se contabiliza como km muerto en Analíticas.
+      isEmptyReturn,
     };
     try {
       const updatedLoad = await updateLoad(load.id, {
@@ -443,7 +487,7 @@ export default function RouteDetailPage() {
         updatedAt: occurredAt,
       } as any);
       setLoad(updatedLoad);
-      toast({ title: "Regreso Iniciado", description: "El GPS sigue transmitiendo, ahora contabilizando km de regreso." });
+      toast({ title: isEmptyReturn ? "Regreso a Base Iniciado" : "Regreso Iniciado", description: "El GPS sigue transmitiendo, ahora contabilizando km de regreso." });
     } catch (e) {
       if (isLikelyOfflineError(e)) {
         await enqueueOfflineAction({
@@ -502,6 +546,26 @@ export default function RouteDetailPage() {
     }
   };
 
+  // Red de seguridad: si al confirmar la última entrega todavía no sabíamos si había un
+  // próximo viaje (nextTripCheck no había resuelto), la jornada queda marcada con las
+  // paradas completas pero sin cerrar. Apenas se resuelve que SÍ hay próximo viaje, se
+  // cierra automáticamente acá (si resuelve que NO hay, el chofer ve el botón de volver
+  // a base y el cierre lo hace handleConfirmReturnArrival).
+  useEffect(() => {
+    if (!load || !tenantId) return;
+    if (outboundDone && !needsReturn && nextTripCheck === 'has_next' && load.status !== 'delivered') {
+      const occurredAt = new Date().toISOString();
+      updateLoad(load.id, { status: 'delivered', updatedAt: occurredAt } as any)
+        .then((updatedLoad) => {
+          setLoad(updatedLoad);
+          if (load.assignedTruckId) {
+            updateTruck(load.assignedTruckId, { status: 'available', updatedAt: occurredAt }).catch(() => {});
+          }
+        })
+        .catch(() => {});
+    }
+  }, [load?.id, load?.status, outboundDone, needsReturn, nextTripCheck, tenantId]);
+
   const handleConfirmDelivery = async () => {
     if (!load || !currentStop || !tenantId) return;
     setIsUpdating(true);
@@ -516,7 +580,7 @@ export default function RouteDetailPage() {
 
     const currentStops = (load[activeStopsField] || []) as typeof load.outboundStops;
     const allFinished = currentStops.every(s => s.id === currentStop.id || !!s.deliveredAt || !!s.failedAt);
-    const closesTrip = phase === 'outbound' && allFinished && !needsReturn;
+    const closesTrip = phase === 'outbound' && allFinished && !needsReturn && nextTripCheck === 'has_next';
 
     try {
       // 1. Procesar y Subir Imágenes a Storage para evitar límites de Firestore Document
@@ -629,7 +693,7 @@ export default function RouteDetailPage() {
     );
 
     const allFinished = updatedStops.every(s => !!s.deliveredAt || !!s.failedAt);
-    const closesTrip = phase === 'outbound' && allFinished && !needsReturn;
+    const closesTrip = phase === 'outbound' && allFinished && !needsReturn && nextTripCheck === 'has_next';
 
     try {
       const updatedLoad = await updateLoad(load.id, {
@@ -857,21 +921,33 @@ export default function RouteDetailPage() {
 
           <Button variant="destructive" className="w-full h-16 rounded-2xl font-black text-lg animate-pulse" onClick={() => setIsEmergencyOpen(true)}>S.O.S / EMERGENCIA</Button>
         </div>
+      ) : phase === 'checking_next' ? (
+        <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-white">
+          <CardHeader className="bg-slate-900 text-white p-8 text-center">
+             <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl"><Loader2 size={32} className="animate-spin" /></div>
+             <CardTitle className="text-xl font-black uppercase italic tracking-tighter">Entregas de Ida Completas</CardTitle>
+             <CardDescription className="text-white/80 font-bold">Verificando próximos viajes asignados...</CardDescription>
+          </CardHeader>
+        </Card>
       ) : phase === 'awaiting_return_start' ? (
         <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-white">
           <CardHeader className="bg-orange-500 text-white p-8 text-center">
              <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl"><TruckIcon size={32} /></div>
-             <CardTitle className="text-xl font-black uppercase italic tracking-tighter">Entregas de Ida Completas</CardTitle>
-             <CardDescription className="text-white/80 font-bold">Iniciá el regreso a base para seguir contabilizando los km.</CardDescription>
+             <CardTitle className="text-xl font-black uppercase italic tracking-tighter">{isEmptyReturn ? 'Sin Más Viajes Asignados' : 'Entregas de Ida Completas'}</CardTitle>
+             <CardDescription className="text-white/80 font-bold">
+               {isEmptyReturn ? 'No tenés otro viaje en cola. Volvé a base: esos km se registran como km muerto (sin carga).' : 'Iniciá el regreso a base para seguir contabilizando los km.'}
+             </CardDescription>
           </CardHeader>
-          <CardFooter className="p-8"><Button className="w-full h-20 bg-orange-500 hover:bg-orange-600 text-white font-black text-xl rounded-3xl" onClick={handleStartReturn} disabled={isUpdating}>{isUpdating ? <Loader2 className="animate-spin mr-2" /> : <Play className="mr-2 fill-current" />} INICIAR REGRESO</Button></CardFooter>
+          <CardFooter className="p-8"><Button className="w-full h-20 bg-orange-500 hover:bg-orange-600 text-white font-black text-xl rounded-3xl" onClick={handleStartReturn} disabled={isUpdating}>{isUpdating ? <Loader2 className="animate-spin mr-2" /> : <Play className="mr-2 fill-current" />} {isEmptyReturn ? 'VOLVER A BASE' : 'INICIAR REGRESO'}</Button></CardFooter>
         </Card>
       ) : phase === 'awaiting_return_arrival' ? (
         <Card className="border-none shadow-2xl rounded-[2.5rem] overflow-hidden bg-white">
           <CardHeader className="bg-slate-900 text-white p-8 text-center">
              <div className="w-16 h-16 bg-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl"><MapPin size={32} /></div>
              <CardTitle className="text-xl font-black uppercase italic tracking-tighter">En Camino a Base</CardTitle>
-             <CardDescription className="text-white/80 font-bold">Confirmá tu llegada para cerrar la jornada y los km de regreso.</CardDescription>
+             <CardDescription className="text-white/80 font-bold">
+               {isEmptyReturn ? 'Confirmá tu llegada para cerrar la jornada. Este tramo se contabiliza como km muerto (sin carga).' : 'Confirmá tu llegada para cerrar la jornada y los km de regreso.'}
+             </CardDescription>
           </CardHeader>
           <CardFooter className="p-8"><Button className="w-full h-20 bg-green-600 hover:bg-green-700 text-white font-black text-xl rounded-3xl" onClick={handleConfirmReturnArrival} disabled={isUpdating}>{isUpdating ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle2 className="mr-2" />} CONFIRMAR LLEGADA A BASE</Button></CardFooter>
         </Card>

@@ -564,6 +564,9 @@ export interface Load {
     returnArrivedAt?: any;
     // Snapshot de distanceTraveledKm al iniciar el regreso, para poder separar km de ida vs. regreso.
     outboundDistanceKm?: number;
+    // true cuando el regreso es "vacío" (el chofer no tenía más viajes en cola): esos km
+    // no generan ganancia y se contabilizan como km muerto en Analíticas.
+    isEmptyReturn?: boolean;
   };
 
   proofOfDelivery?: ProofOfDelivery;

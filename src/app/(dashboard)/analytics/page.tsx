@@ -21,7 +21,8 @@ import {
   Trophy,
   Activity,
   ShieldCheck,
-  Gauge
+  Gauge,
+  PackageX
 } from "lucide-react";
 import { Load, Expense, Truck, Driver } from "@/app/lib/types";
 import { 
@@ -243,6 +244,41 @@ export default function AnalyticsPage() {
     }).filter(t => t.costPerKm > 0).sort((a, b) => a.costPerKm - b.costPerKm); // De menor a mayor costo (más eficientes arriba)
   }, [trucks, filteredData, fuelExpensesAll]);
 
+  // Km Muerto por Regreso Vacío: tramos de regreso a base sin más viajes en cola (marcados
+  // por el chofer en la app), que no generan ganancia porque no hay carga transportada.
+  const emptyReturnStats = useMemo(() => {
+    const truckMap = new Map((trucks || []).map(t => [t.id, t]));
+    let totalEmptyKm = 0;
+    let tripsCount = 0;
+    const perTruck = new Map<string, { plate: string; emptyKm: number }>();
+
+    filteredData.loads.forEach(load => {
+      if (!load.tracking?.isEmptyReturn || !load.tracking?.returnArrivedAt) return;
+      const totalKm = load.tracking.distanceTraveledKm || 0;
+      const outboundKm = load.tracking.outboundDistanceKm || 0;
+      const emptyKm = Math.max(0, totalKm - outboundKm);
+      if (emptyKm <= 0) return;
+
+      totalEmptyKm += emptyKm;
+      tripsCount += 1;
+
+      const truck = load.assignedTruckId ? truckMap.get(load.assignedTruckId) : undefined;
+      const key = load.assignedTruckId || 'sin-unidad';
+      const plate = truck?.plate || 'Sin Unidad';
+      const prev = perTruck.get(key);
+      perTruck.set(key, { plate, emptyKm: (prev?.emptyKm || 0) + emptyKm });
+    });
+
+    const chartData = Array.from(perTruck.values())
+      .sort((a, b) => b.emptyKm - a.emptyKm)
+      .slice(0, 8)
+      .map(t => ({ name: t.plate, km: Math.round(t.emptyKm) }));
+
+    const emptyKmPercent = operationalStats.totalRealKm > 0 ? (totalEmptyKm / operationalStats.totalRealKm) * 100 : 0;
+
+    return { totalEmptyKm, tripsCount, emptyKmPercent, chartData };
+  }, [filteredData, trucks, operationalStats.totalRealKm]);
+
   // Distribución de Gastos por Categoría
   const expenseDistribution = useMemo(() => {
     const categories: Record<string, number> = {};
@@ -415,6 +451,47 @@ export default function AnalyticsPage() {
                    * El "KM Muerto" representa la distancia recorrida que no estaba prevista en las hojas de ruta oficiales de LogísticaAr. Un desvío mayor al 15% requiere auditoría de supervisión.
                  </p>
               </div>
+           </CardContent>
+        </Card>
+
+        {/* KM MUERTO POR REGRESO VACÍO (SIN CARGA) */}
+        <Card className="lg:col-span-12 border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-white">
+           <CardHeader className="bg-slate-50 border-b p-8 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-sm uppercase font-black tracking-widest flex items-center gap-2"><PackageX size={18} className="text-red-500" /> Km Muerto por Regreso Vacío</CardTitle>
+                <CardDescription className="text-[8px] font-bold uppercase text-slate-400">Km recorridos en regresos a base sin carga asignada: no generan ganancia</CardDescription>
+              </div>
+              <Badge className="bg-red-600 text-white border-none font-black text-[10px]">{emptyReturnStats.tripsCount} VIAJES</Badge>
+           </CardHeader>
+           <CardContent className="p-8 space-y-8">
+              <div className="grid grid-cols-2 gap-8">
+                 <div className="space-y-1">
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Km Muerto Total</p>
+                    <p className="text-4xl font-black italic tracking-tighter text-red-500">{Math.round(emptyReturnStats.totalEmptyKm).toLocaleString()} <span className="text-xs font-normal opacity-50 uppercase">km</span></p>
+                 </div>
+                 <div className="space-y-1">
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">% del Km Recorrido</p>
+                    <p className="text-4xl font-black italic tracking-tighter text-slate-900">{emptyReturnStats.emptyKmPercent.toFixed(1)}%</p>
+                 </div>
+              </div>
+              {emptyReturnStats.chartData.length > 0 ? (
+                <div className="h-[280px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={emptyReturnStats.chartData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.1} />
+                      <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} />
+                      <YAxis fontSize={9} axisLine={false} tickLine={false} />
+                      <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }} />
+                      <Bar name="Km Muerto" dataKey="km" fill="#ef4444" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="p-16 text-center text-slate-300 italic text-xs font-bold uppercase tracking-widest">Sin regresos vacíos registrados en el período seleccionado.</div>
+              )}
+              <p className="text-[10px] text-slate-400 italic leading-relaxed">
+                * Se contabiliza cuando el chofer confirma un "Regreso a Base" sin tener más viajes asignados en cola: el tramo recorrido desde la última entrega hasta la base no genera facturación.
+              </p>
            </CardContent>
         </Card>
 
